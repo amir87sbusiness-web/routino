@@ -1,0 +1,24 @@
+# Automatic HTTPS. Required: iOS ATS and Android's cleartext policy both refuse
+# plain http, and the Capacitor WebView origin is https://localhost — mixed
+# content would block every API call.
+#
+# ZeroSSL is configured as a fallback issuer because Let's Encrypt's ACME
+# endpoints are not reliably reachable from Iranian IPs. Caddy tries them in
+# order, so a failure at one does not leave you without a certificate.
+
+{
+	email {$ACME_EMAIL}
+	cert_issuer acme
+	cert_issuer zerossl
+}
+
+{$API_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy api:3000
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		-Server
+	}
+}

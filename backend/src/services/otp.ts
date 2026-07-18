@@ -1,0 +1,144 @@
+/**
+ * One-time codes for phone sign-in.
+ *
+ * The threat model is your SMS bill, not account takeover. Every send costs real
+ * Toman at Kavenegar, so an unthrottled endpoint is a direct invoice — layered
+ * limits are load-bearing, not defence in depth.
+ *
+ * Limit state lives in Postgres rather than memory: it must be durable across
+ * restarts, and an in-memory counter silently stops working the day you run two
+ * API instances.
+ */
+import { createHash, randomInt, timingSafeEqual } from "node:crypto";
+import { and, count, desc, eq, gt, isNull, lt } from "drizzle-orm";
+import type { Database } from "../db/client.js";
+import { otpCodes } from "../db/schema.js";
+import type { Env } from "../env.js";
+
+/** Per-phone and per-IP windows. The per-minute rule is what stops a tight loop;
+ * the daily rules bound the worst case. */
+const LIMITS = {
+  phonePerMinute: 1,
+  phonePerHour: 5,
+  phonePerDay: 10,
+  ipPerHour: 20,
+  /** Circuit breaker: a hard global stop so a novel abuse pattern cannot run up
+   * an unbounded bill overnight before anyone notices. */
+  globalPerDay: 2000,
+} as const;
+
+/** 6 digits, from a CSPRNG. `Math.random()` is predictable and would make codes
+ * guessable from a few samples. */
+export const generateCode = (): string => String(randomInt(100_000, 1_000_000));
+
+/** Peppered so a database dump alone cannot be brute-forced back to codes — a
+ * 6-digit space is exhaustible in milliseconds without one. */
+const hashCode = (code: string, env: Env): string =>
+  createHash("sha256").update(`${code}${env.OTP_PEPPER}`).digest("hex");
+
+const constantTimeEquals = (a: string, b: string): boolean => {
+  const ab = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (ab.length !== bb.length) return false;
+  return timingSafeEqual(ab, bb);
+};
+
+/* Uses the query builder rather than raw SQL: `db.execute()` returns a bare
+ * array on node-postgres but a `{ rows }` object on PGlite, whereas `select()`
+ * yields a plain array on both. */
+async function countSince(db: Database, column: "phone" | "ip", value: string, seconds: number, now: Date) {
+  const since = new Date(now.getTime() - seconds * 1000);
+  const col = column === "phone" ? otpCodes.phone : otpCodes.ip;
+  const [row] = await db
+    .select({ n: count() })
+    .from(otpCodes)
+    .where(and(eq(col, value), gt(otpCodes.createdAt, since)));
+  return row?.n ?? 0;
+}
+
+export interface RateVerdict {
+  ok: boolean;
+  retryAfter?: number;
+  reason?: "phone_minute" | "phone_hour" | "phone_day" | "ip_hour" | "global_day";
+}
+
+export async function checkSendRate(db: Database, phone: string, ip: string | null, now: Date): Promise<RateVerdict> {
+  if ((await countSince(db, "phone", phone, 60, now)) >= LIMITS.phonePerMinute) {
+    return { ok: false, retryAfter: 60, reason: "phone_minute" };
+  }
+  if ((await countSince(db, "phone", phone, 3600, now)) >= LIMITS.phonePerHour) {
+    return { ok: false, retryAfter: 3600, reason: "phone_hour" };
+  }
+  if ((await countSince(db, "phone", phone, 86400, now)) >= LIMITS.phonePerDay) {
+    return { ok: false, retryAfter: 86400, reason: "phone_day" };
+  }
+  if (ip && (await countSince(db, "ip", ip, 3600, now)) >= LIMITS.ipPerHour) {
+    return { ok: false, retryAfter: 3600, reason: "ip_hour" };
+  }
+
+  const since = new Date(now.getTime() - 86_400_000);
+  const [row] = await db.select({ n: count() }).from(otpCodes).where(gt(otpCodes.createdAt, since));
+  if ((row?.n ?? 0) >= LIMITS.globalPerDay) {
+    // Deliberately a hard stop. If this ever fires, something is wrong and it
+    // should page you rather than quietly keep spending.
+    return { ok: false, retryAfter: 3600, reason: "global_day" };
+  }
+
+  return { ok: true };
+}
+
+/** Creates and stores a code. Returns the plaintext ONCE, for the SMS provider —
+ * it is never persisted, logged, or returned to a client. */
+export async function createCode(db: Database, env: Env, phone: string, ip: string | null, now: Date): Promise<string> {
+  const code = generateCode();
+  await db.insert(otpCodes).values({
+    phone,
+    codeHash: hashCode(code, env),
+    expiresAt: new Date(now.getTime() + env.OTP_TTL_SECONDS * 1000),
+    ip,
+    createdAt: now,
+  });
+  return code;
+}
+
+export type VerifyResult = { ok: true } | { ok: false; reason: "no_code" | "expired" | "too_many" | "wrong" };
+
+/**
+ * Verifies and consumes a code.
+ *
+ * Only the newest unconsumed code counts: requesting a second code must
+ * invalidate the first, or an attacker gains one extra guess per request.
+ */
+export async function verifyCode(db: Database, env: Env, phone: string, code: string, now: Date): Promise<VerifyResult> {
+  const [row] = await db
+    .select()
+    .from(otpCodes)
+    .where(and(eq(otpCodes.phone, phone), isNull(otpCodes.consumedAt)))
+    .orderBy(desc(otpCodes.createdAt))
+    .limit(1);
+
+  if (!row) return { ok: false, reason: "no_code" };
+  if (row.expiresAt <= now) return { ok: false, reason: "expired" };
+  if (row.attempts >= env.OTP_MAX_ATTEMPTS) return { ok: false, reason: "too_many" };
+
+  // Count the attempt BEFORE checking, so a crash mid-verify can't hand out a
+  // free guess.
+  await db
+    .update(otpCodes)
+    .set({ attempts: row.attempts + 1 })
+    .where(eq(otpCodes.id, row.id));
+
+  if (!constantTimeEquals(row.codeHash, hashCode(code, env))) return { ok: false, reason: "wrong" };
+
+  // Single-use: consume on success.
+  await db.update(otpCodes).set({ consumedAt: now }).where(eq(otpCodes.id, row.id));
+  return { ok: true };
+}
+
+/** Housekeeping — codes are useless after a day, and they are the rate-limit
+ * ledger, so they must outlive the longest window (24h) before being purged. */
+export async function purgeOldCodes(db: Database, now: Date): Promise<void> {
+  await db.delete(otpCodes).where(lt(otpCodes.createdAt, new Date(now.getTime() - 86_400_000)));
+}
+
+export { LIMITS };

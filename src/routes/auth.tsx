@@ -1,0 +1,233 @@
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
+import { Button, Input, Logo } from "@/components/ui";
+import { ApiError } from "@/lib/api/client";
+import { entitlementToSubscription, importSubscription, requestOtp, verifyOtp } from "@/lib/api/auth";
+import { faNum } from "@/lib/dates";
+import { normalizePhone, toAsciiDigits, toLocalPhone } from "@/lib/phone";
+import { useAppMaybe } from "@/state/app";
+
+export const Route = createFileRoute("/auth")({
+  component: AuthPage,
+});
+
+// ورود واقعی با کد پیامکی. در توسعه، سرور کد را در ترمینال چاپ می‌کند
+// (SMS_PROVIDER=console) پس بدون کاوه‌نگار هم قابل تست است.
+// فقط برای دموی آفلاین این را true کن — با true هیچ حساب سروری ساخته نمی‌شود
+// و خرید اشتراک کار نمی‌کند.
+const SKIP_SMS = false;
+
+// ═══════════════ TEST-ONLY — بعداً حذف شود ═══════════════
+// دکمه‌ی «ورود تستی بدون پیامک» زیر دکمه‌ی اصلی. فقط برای تست روی گوشی تا موقع
+// نبودنِ بک‌اند گیر نیفتی. ورود محلی است (بدون حساب سروری، بدون توکن) — پس خرید
+// اشتراک واقعی با آن کار نمی‌کند؛ برای آن از دکمه‌ی تستیِ صفحه‌ی اشتراک استفاده کن.
+// برای حذف: این ثابت را false کن یا بلاکِ نشان‌دارِ TEST-ONLY در JSX را پاک کن.
+const TEST_LOGIN_BUTTON = true;
+
+function AuthPage() {
+  const ctx = useAppMaybe();
+  const navigate = useNavigate();
+  const [phone, setPhone] = useState("");
+  const [step, setStep] = useState<"phone" | "otp">("phone");
+  const [code, setCode] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  if (!ctx?.db) return null;
+  const { db, update, t, lang } = ctx;
+
+  /** Turns an ApiError into something a Persian-speaking human can act on. */
+  const explain = (err: unknown): string => {
+    if (!(err instanceof ApiError)) {
+      return t("یه مشکلی پیش اومد. دوباره تلاش کن.", "Something went wrong. Try again.");
+    }
+    if (err.offline) {
+      return t(
+        "برای ورود به اینترنت نیاز داری. اتصالت رو چک کن.",
+        "Signing in needs an internet connection. Check your connection.",
+      );
+    }
+    switch (err.code) {
+      case "invalid_phone":
+        return t("شماره موبایل معتبر وارد کن (مثل ۰۹۱۲…)", "Enter a valid mobile number (09…)");
+      case "rate_limited": {
+        const mins = Math.ceil((err.retryAfter ?? 60) / 60);
+        return err.retryAfter && err.retryAfter > 60
+          ? t(`درخواست زیاد بود. ${faNum(mins, lang)} دقیقه دیگه تلاش کن.`, `Too many requests. Try again in ${mins} min.`)
+          : t("یه لحظه صبر کن و دوباره بزن.", "Please wait a moment and try again.");
+      }
+      case "sms_failed":
+        return t("ارسال پیامک ناموفق بود. دوباره تلاش کن.", "Could not send the code. Try again.");
+      case "bad_code":
+        return t("کد اشتباهه یا منقضی شده.", "The code is wrong or has expired.");
+      case "blocked":
+        return t("این حساب مسدود شده.", "This account is blocked.");
+      default:
+        return err.message;
+    }
+  };
+
+  const sendCode = async () => {
+    const canonical = normalizePhone(phone);
+    if (!canonical) {
+      setError(t("شماره موبایل معتبر وارد کن (مثل ۰۹۱۲…)", "Enter a valid mobile number (09…)"));
+      return;
+    }
+    setError("");
+    if (SKIP_SMS) {
+      // ورود محلی بدون کد پیامکی: فقط auth را ست می‌کنیم و وارد اپ می‌شویم.
+      update((d) => ({ ...d, auth: { phone: canonical, verifiedAt: Date.now() } }));
+      navigate({ to: "/" });
+      return;
+    }
+    setBusy(true);
+    try {
+      await requestOtp(canonical);
+      setStep("otp");
+    } catch (err) {
+      setError(explain(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // TEST-ONLY: ورود محلی بدون پیامک/بک‌اند. شماره‌ی واردشده را می‌گیرد یا یک
+  // شماره‌ی پیش‌فرض. فقط db.auth را ست می‌کند (بدون توکن سروری).
+  const testLogin = () => {
+    const canonical = normalizePhone(phone) ?? "989120000000";
+    update((d) => ({ ...d, auth: { phone: canonical, verifiedAt: Date.now() } }));
+    navigate({ to: "/" });
+  };
+
+  const verify = async () => {
+    const canonical = normalizePhone(phone);
+    if (!canonical) {
+      setError(t("شماره موبایل معتبر وارد کن (مثل ۰۹۱۲…)", "Enter a valid mobile number (09…)"));
+      setStep("phone");
+      return;
+    }
+    setError("");
+    setBusy(true);
+    try {
+      const res = await verifyOtp(canonical, code, navigator.userAgent.slice(0, 64));
+
+      // Rescue a subscription that only ever existed in this device's storage.
+      // Bounded and single-use server-side; failure here must not block sign-in,
+      // since the local copy still gates the paywall today.
+      let entitlement = res.entitlement;
+      const local = db.subscription;
+      if (local && local.expiresAt > Date.now()) {
+        try {
+          const imported = await importSubscription({
+            planId: local.planId,
+            expiresAt: local.expiresAt,
+            startedAt: local.startedAt,
+            trial: local.trial,
+          });
+          entitlement = imported.entitlement;
+        } catch {
+          /* keep the sign-in; the next sync will reconcile */
+        }
+      }
+
+      const now = Date.now();
+      const subscription = entitlementToSubscription(entitlement, now);
+      update((d) => ({
+        ...d,
+        auth: { phone: canonical, verifiedAt: now },
+        // Server-issued now. The client no longer invents a trial.
+        subscription: subscription ?? d.subscription,
+      }));
+      navigate({ to: "/" });
+    } catch (err) {
+      setError(explain(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-6 py-screen-safe">
+      <div className="w-full max-w-sm">
+        <div className="mb-8 flex flex-col items-center gap-3">
+          <Logo className="h-16 w-16" />
+          <h1 className="text-xl font-black text-foreground">{t("ورود به روتینو", "Sign in to Routino")}</h1>
+          <p className="text-center text-xs text-muted-foreground">
+            {SKIP_SMS
+              ? t("با شماره موبایلت وارد شو", "Sign in with your phone number")
+              : t("با شماره موبایل و کد پیامکی وارد شو", "Sign in with your phone number and SMS code")}
+          </p>
+        </div>
+
+        {step === "phone" ? (
+          <div className="flex flex-col gap-3">
+            <Input
+              dir="ltr"
+              inputMode="tel"
+              placeholder="09xxxxxxxxx"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && void sendCode()}
+              className="text-center text-base tracking-widest"
+            />
+            {error && <p className="text-center text-xs text-destructive">{error}</p>}
+            <Button onClick={() => void sendCode()} disabled={busy}>
+              {busy
+                ? t("در حال ارسال…", "Sending…")
+                : SKIP_SMS
+                  ? t("ورود", "Sign in")
+                  : t("ارسال کد پیامکی", "Send SMS code")}
+            </Button>
+
+            {/* ═══ TEST-ONLY: ورود بدون پیامک — این بلاک را برای حذف پاک کن ═══ */}
+            {TEST_LOGIN_BUTTON && (
+              <button
+                type="button"
+                onClick={testLogin}
+                className="rounded-xl border border-dashed border-muted-foreground/40 py-2 text-xs text-muted-foreground"
+              >
+                🧪 {t("ورود تستی (بدون پیامک)", "Test sign-in (no SMS)")}
+              </button>
+            )}
+            {/* ═══ پایان TEST-ONLY ═══ */}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <p className="text-center text-xs text-muted-foreground">
+              {t(
+                `کد ارسال‌شده به ${faNum(toLocalPhone(normalizePhone(phone) ?? phone), lang)} را وارد کن`,
+                `Enter the code sent to ${toLocalPhone(normalizePhone(phone) ?? phone)}`,
+              )}
+            </p>
+            <Input
+              dir="ltr"
+              inputMode="numeric"
+              maxLength={6}
+              placeholder="——————"
+              value={code}
+              // Convert Persian digits rather than stripping them: `\d` matches
+              // ASCII only, so a plain strip would delete a code typed on a
+              // Persian keyboard and leave an empty field.
+              onChange={(e) => setCode(toAsciiDigits(e.target.value).replace(/\D/g, ""))}
+              onKeyDown={(e) => e.key === "Enter" && void verify()}
+              className="text-center text-xl tracking-[0.5em]"
+            />
+            {error && <p className="text-center text-xs text-destructive">{error}</p>}
+            <Button onClick={() => void verify()} disabled={busy || code.length < 4}>
+              {busy ? t("در حال بررسی…", "Checking…") : t("تأیید و ورود", "Verify & sign in")}
+            </Button>
+            <Button variant="ghost" onClick={() => (setStep("phone"), setError(""))} disabled={busy}>
+              {t("تغییر شماره", "Change number")}
+            </Button>
+          </div>
+        )}
+
+        {db.auth && (
+          <Button variant="ghost" className="mt-4 w-full" onClick={() => navigate({ to: "/" })}>
+            {t("بازگشت به برنامه", "Back to app")}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}

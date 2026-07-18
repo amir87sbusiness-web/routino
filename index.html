@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>روتینو — عادت‌ساز روزانه</title>
+    <meta name="description" content="عادت‌های خوب بساز، کارهات رو مدیریت کن و هر روز پیشرفتت رو ببین. کاملاً آفلاین." />
+
+    <!-- Without this the manifest is dead code and the app cannot be installed
+         at all, however complete the manifest itself is. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <!-- Colours the Android address bar / task switcher. Two entries so the bar
+         matches the app in both themes instead of flashing white. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F97316" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0A0A0A" />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/icons/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="icon" href="/icons/favicon-16.png" sizes="16x16" type="image/png" />
+
+    <!-- iOS ignores the manifest's icons entirely and uses this one. -->
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <!-- iOS also ignores `display: standalone`; these are how an installed app
+         loses the Safari chrome there. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="روتینو" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- A personal habit journal has no business in search results. -->
+    <meta name="robots" content="noindex" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/client.tsx"></script>
+  </body>
+</html>

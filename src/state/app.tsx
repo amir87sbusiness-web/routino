@@ -1,0 +1,285 @@
+/**
+ * Global app provider: hydrates the local DB (offline-first), exposes update(),
+ * applies theme/dir/brand color, runs the reminder scheduler and anti
+ * clock-tampering guard.
+ *
+ * Persistence is an effect, not part of `update()`. Two consequences worth
+ * knowing:
+ *  - `update()` stays pure, so React can invoke it during render and
+ *    double-invoke it under StrictMode without writing anything twice.
+ *  - Writes are fire-and-forget, so the UI never awaits storage. That is what
+ *    makes offline indistinguishable from online, structurally rather than by
+ *    discipline.
+ */
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { entitlementToSubscription, fetchEntitlement, hasSession } from "@/lib/api/auth";
+import { todayKey, type Calendar, type Lang } from "@/lib/dates";
+import { diffDb } from "@/lib/db/diff";
+import { hydrate } from "@/lib/db/hydrate";
+import { localChanged, saveLocal, toLocalState } from "@/lib/db/local";
+import { applyChanges } from "@/lib/db/persist";
+import { uid, type Db } from "@/lib/store";
+import { dueHabitsOn, isCompleted, getLog } from "@/lib/logic";
+import { requestNativePermission, syncRecurringReminders } from "@/lib/native-notifications";
+import { syncNativeBars } from "@/lib/native";
+
+type Updater = (fn: (db: Db) => Db) => void;
+
+interface AppCtx {
+  db: Db | null;
+  update: Updater;
+  lang: Lang;
+  cal: Calendar;
+  t: (fa: string, en: string) => string;
+}
+
+const Ctx = createContext<AppCtx | null>(null);
+
+export function useApp(): AppCtx & { db: Db } {
+  const ctx = useContext(Ctx);
+  if (!ctx || !ctx.db) throw new Error("useApp must be used under a loaded AppProvider");
+  return ctx as AppCtx & { db: Db };
+}
+
+export function useAppMaybe() {
+  return useContext(Ctx);
+}
+
+const TAMPER_TOLERANCE = 5 * 60 * 1000; // 5 minutes backwards is suspicious
+
+export function AppProvider({ children }: { children: ReactNode }) {
+  const [db, setDb] = useState<Db | null>(null);
+  const dbRef = useRef<Db | null>(null);
+  dbRef.current = db;
+
+  /** The last state written to storage; the diff baseline. */
+  const lastPersisted = useRef<Db | null>(null);
+
+  const update: Updater = useCallback((fn) => {
+    setDb((prev) => (prev ? fn(prev) : prev));
+  }, []);
+
+  // Hydrate on mount (client only). AppShell already renders a splash while
+  // `db` is null, which covers the async gap.
+  useEffect(() => {
+    let cancelled = false;
+    void hydrate().then(({ db: loaded }) => {
+      if (cancelled) return;
+      const now = Date.now();
+      // anti clock-tampering: system clock moved backwards past last-seen
+      const tampered = now < loaded.meta.lastSeen - TAMPER_TOLERANCE;
+      lastPersisted.current = loaded; // baseline: what's already on disk
+      setDb({
+        ...loaded,
+        meta: {
+          ...loaded.meta,
+          sessions: loaded.meta.sessions + 1,
+          lastSeen: Math.max(now, loaded.meta.lastSeen),
+          tampered: tampered || loaded.meta.tampered,
+        },
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Persist whatever changed since the last write. Diffing against
+  // `lastPersisted` rather than the previous render lets React's batching
+  // coalesce several updates into one diff — fewer writes, same result.
+  useEffect(() => {
+    if (!db || db === lastPersisted.current) return;
+    const prev = lastPersisted.current;
+    const changes = diffDb(prev, db);
+    // Set before the await so a second update can't interleave and re-diff the
+    // same changes.
+    lastPersisted.current = db;
+    if (localChanged(prev, db)) saveLocal(toLocalState(db));
+    if (changes.length) void applyChanges(changes); // never awaited by the UI
+  }, [db]);
+
+  // Refresh the entitlement cache from the server once per app start.
+  // The paywall gates on the LOCAL `db.subscription`; this keeps that local
+  // copy honest (a payment made on another device, an admin grant, an expiry).
+  // Offline or signed-out: silently keep whatever we have — offline must stay
+  // indistinguishable from online.
+  const entitlementFetched = useRef(false);
+  useEffect(() => {
+    if (!db || entitlementFetched.current || !hasSession()) return;
+    entitlementFetched.current = true;
+    void fetchEntitlement()
+      .then(({ entitlement }) => {
+        const sub = entitlementToSubscription(entitlement);
+        // `none` (null) is NOT applied: a legacy local subscription that hasn't
+        // been imported yet must not be wiped by an empty server answer.
+        if (!sub) return;
+        setDb((prev) => (prev ? { ...prev, subscription: sub } : prev));
+      })
+      .catch(() => {
+        /* offline or expired session — the local cache stays authoritative */
+      });
+  }, [db]);
+
+  // heartbeat: keep lastSeen fresh so the clock-tampering guard stays accurate.
+  // `meta` is device-local, so this touches localStorage only — it no longer
+  // rewrites the entire database every 60 seconds.
+  useEffect(() => {
+    const iv = setInterval(() => {
+      setDb((prev) => {
+        if (!prev) return prev;
+        const now = Date.now();
+        const tampered = now < prev.meta.lastSeen - TAMPER_TOLERANCE;
+        if (prev.meta.lastSeen >= now && !tampered) return prev;
+        return {
+          ...prev,
+          meta: {
+            ...prev.meta,
+            lastSeen: Math.max(now, prev.meta.lastSeen),
+            tampered: prev.meta.tampered || tampered,
+          },
+        };
+      });
+    }, 60_000);
+    return () => clearInterval(iv);
+  }, []);
+
+  // apply theme / dir / lang / brand color
+  useEffect(() => {
+    if (!db) return;
+    const el = document.documentElement;
+    const isDark = db.settings.theme === "dark";
+    el.classList.toggle("dark", isDark);
+    // نوارهای سیستمِ نیتیو را با تم هماهنگ کن (روی وب no-op).
+    syncNativeBars(isDark);
+    el.dir = db.settings.lang === "fa" ? "rtl" : "ltr";
+    el.lang = db.settings.lang;
+    if (db.settings.brandColor) {
+      el.style.setProperty("--primary", db.settings.brandColor);
+      el.style.setProperty("--ring", db.settings.brandColor);
+    } else {
+      el.style.removeProperty("--primary");
+      el.style.removeProperty("--ring");
+    }
+  }, [db?.settings.theme, db?.settings.lang, db?.settings.brandColor, db]);
+
+  // native reminder scheduling (Capacitor only; no-op on web).
+  // Re-syncs whenever notification settings, habit reminder times, or the
+  // journal reminder change, so the OS-level schedule always matches the DB.
+  useEffect(() => {
+    if (!db) return;
+    if (db.settings.notificationsEnabled) {
+      requestNativePermission().then((granted) => {
+        if (granted) syncRecurringReminders(db);
+      });
+    } else {
+      syncRecurringReminders(db); // will clear pending recurring notifications
+    }
+  }, [
+    db?.settings.notificationsEnabled,
+    db?.settings.journalReminder,
+    db?.habits,
+  ]);
+
+  // reminder scheduler (habits, tasks, journal) — checks every 30s.
+  // Kept as-is: this still drives in-app/foreground browser notifications on
+  // web, and continues to populate the in-app notification center/history on
+  // native too. The native OS-level alarms above are what fire when the
+  // native app is backgrounded or closed.
+  useEffect(() => {
+    const check = () => {
+      const cur = dbRef.current;
+      if (!cur || !cur.settings.notificationsEnabled || !cur.auth) return;
+      const now = new Date();
+      const hhmm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+      const dk = todayKey();
+      const fired = new Set(cur.meta.firedReminders);
+      const newNotifs: { title: string; body: string }[] = [];
+      const newFired: string[] = [];
+      const fa = cur.settings.lang === "fa";
+      const cal = cur.settings.calendar;
+
+      for (const h of dueHabitsOn(cur, dk, cal)) {
+        if (!h.reminderTime || h.reminderTime !== hhmm) continue;
+        if (isCompleted(h, getLog(cur, h.id, dk))) continue;
+        const k = `habit|${h.id}|${dk}|${hhmm}`;
+        if (fired.has(k)) continue;
+        newFired.push(k);
+        newNotifs.push({
+          title: fa ? "یادآوری عادت" : "Habit reminder",
+          body: fa ? `وقتشه: ${h.name}` : `Time for: ${h.name}`,
+        });
+      }
+      for (const task of cur.tasks) {
+        if (!task.reminderAt || task.done) continue;
+        const rt = new Date(task.reminderAt);
+        if (Math.abs(rt.getTime() - now.getTime()) > 45_000) continue;
+        const k = `task|${task.id}`;
+        if (fired.has(k)) continue;
+        newFired.push(k);
+        newNotifs.push({
+          title: fa ? "یادآوری کار" : "Task reminder",
+          body: task.title,
+        });
+      }
+      if (cur.settings.journalReminder === hhmm) {
+        const k = `journal|${dk}|${hhmm}`;
+        if (!fired.has(k) && !cur.journal[dk]?.text) {
+          newFired.push(k);
+          newNotifs.push({
+            title: fa ? "ژورنال روتینو" : "Routino Journal",
+            body: fa ? "وقت ژورنال‌نویسیه ✍️" : "Time to write your journal ✍️",
+          });
+        }
+      }
+      if (newNotifs.length === 0) return;
+      // browser notifications (best-effort)
+      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        for (const n of newNotifs) {
+          try {
+            new Notification(n.title, { body: n.body });
+          } catch {
+            /* unsupported */
+          }
+        }
+      }
+      // No write here: the persist effect picks this up. Both `notifications`
+      // and `meta.firedReminders` are device-local, so it lands in localStorage
+      // rather than touching the database.
+      setDb((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          notifications: [
+            ...newNotifs.map((n) => ({ id: uid(), title: n.title, body: n.body, at: Date.now(), read: false })),
+            ...prev.notifications,
+          ].slice(0, 100),
+          meta: {
+            ...prev.meta,
+            firedReminders: [...prev.meta.firedReminders, ...newFired].slice(-300),
+          },
+        };
+      });
+    };
+    const iv = setInterval(check, 30_000);
+    check();
+    return () => clearInterval(iv);
+  }, []);
+
+  const lang: Lang = db?.settings.lang ?? "fa";
+  const cal: Calendar = db?.settings.calendar ?? "jalali";
+
+  const t = useCallback((faStr: string, enStr: string) => (lang === "fa" ? faStr : enStr), [lang]);
+
+  const value = useMemo<AppCtx>(() => ({ db, update, lang, cal, t }), [db, update, lang, cal, t]);
+
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}

@@ -1,0 +1,41 @@
+{
+  "id": "/",
+  "name": "روتینو — عادت‌ساز روزانه",
+  "short_name": "روتینو",
+  "description": "عادت‌های خوب بساز، کارهات رو مدیریت کن و هر روز پیشرفتت رو ببین. کاملاً آفلاین.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#F97316",
+  "lang": "fa",
+  "dir": "rtl",
+  "categories": ["productivity", "lifestyle", "health"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "عادت‌های امروز",
+      "short_name": "امروز",
+      "url": "/",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "تایمر تمرکز",
+      "short_name": "تایمر",
+      "url": "/timer",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "ژورنال",
+      "short_name": "ژورنال",
+      "url": "/journal",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
