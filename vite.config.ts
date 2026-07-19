@@ -16,7 +16,10 @@ const outDir = isMobile ? 'www' : 'dist';
 
 export default defineConfig({
   plugins: [
-    TanStackRouterVite(),
+    // autoCodeSplitting: هر صفحه یک فایل جدا می‌شود تا لود اول فقط چیزهای لازم
+    // را بیاورد (سریع‌تر روی نت ضعیف). PWA همه را precache می‌کند، پس آفلاین
+    // هیچ فرقی نمی‌کند.
+    TanStackRouterVite({ autoCodeSplitting: true }),
     react(),
     tailwindcss(),
     VitePWA({

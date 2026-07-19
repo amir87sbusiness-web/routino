@@ -1,13 +1,18 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Bell, CalendarDays, ChevronDown, Globe, LogOut, Moon, Palette, Plus, Sun, Tags, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { AlertTriangle, Archive, Bell, CalendarDays, ChevronDown, Download, Globe, LogOut, Moon, Palette, Plus, Sun, Tags, Trash2, Upload } from "lucide-react";
+import { useRef, useState, type ChangeEvent } from "react";
+import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { Button, CatIcon, CATEGORY_ICONS, Card, ColorWheel, Input, Modal, TimePicker24 } from "@/components/ui";
 import { logout } from "@/lib/api/auth";
+import { backupSummary, copyBackupToClipboard, downloadBackup, parseBackup, restoreDb, type Backup } from "@/lib/backup";
+import { isNative, shareBackupNative } from "@/lib/backup-native";
 import { dateKey, faNum, formatDate } from "@/lib/dates";
 import { toLocalPhone } from "@/lib/phone";
 import { CATEGORY_COLOR_CHOICES } from "@/lib/presets";
+import { applyDemoContent } from "@/lib/seed-demo";
 import { uid } from "@/lib/store";
+import { wipeContent } from "@/lib/wipe";
 import { useAppMaybe } from "@/state/app";
 
 export const Route = createFileRoute("/settings")({
@@ -22,6 +27,9 @@ export const Route = createFileRoute("/settings")({
 // دقیقاً وسط شبکه می‌نشیند (بین ۴ رنگ اول و ۴ خانهٔ بعدی رندر می‌شود).
 const BRAND_COLORS = ["", "#EF4444", "#EAB308", "#22C55E", "#06B6D4", "#3B82F6", "#8B5CF6", "#EC4899"];
 
+// ⚠️ TEST-ONLY — دکمهٔ «ساخت یک سال دادهٔ آزمایشی». برای انتشار false بماند.
+const SHOW_DEMO_SEED = false;
+
 function SettingsPage() {
   const ctx = useAppMaybe();
   const navigate = useNavigate();
@@ -33,9 +41,63 @@ function SettingsPage() {
   const [catIcon, setCatIcon] = useState("star");
   const [catColor, setCatColor] = useState(CATEGORY_COLOR_CHOICES[0]);
   const [deleteCat, setDeleteCat] = useState<{ id: string; name: string } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [pendingImport, setPendingImport] = useState<Backup | null>(null);
+  const [wipeOpen, setWipeOpen] = useState(false);
 
   if (!ctx?.db) return null;
   const { db, update, t, lang, cal } = ctx;
+
+  // Export the whole local DB to a file the user keeps.
+  // Native: Android's WebView silently drops blob downloads (the click
+  // "succeeds", no file appears), so use the share sheet instead — the user
+  // picks where the file goes. Web: normal download. Last resort: clipboard.
+  const exportData = async () => {
+    if (isNative()) {
+      try {
+        await shareBackupNative(db);
+        return; // the share sheet is its own confirmation
+      } catch {
+        /* plugin unavailable or user storage issue — try the paths below */
+      }
+    } else if (downloadBackup(db)) {
+      toast.success(t("فایل پشتیبان دانلود شد", "Backup file downloaded"));
+      return;
+    }
+    const copied = await copyBackupToClipboard(db);
+    if (copied) toast.success(t("نسخهٔ پشتیبان در کلیپ‌بورد کپی شد", "Backup copied to clipboard"));
+    else toast.error(t("تهیهٔ پشتیبان ناموفق بود", "Backup failed"));
+  };
+
+  const onFilePicked = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // let the user re-pick the same file after a cancel
+    if (!file) return;
+    try {
+      setPendingImport(parseBackup(await file.text()));
+    } catch {
+      toast.error(t("این فایل یک پشتیبان معتبر روتینو نیست", "This isn't a valid Routino backup"));
+    }
+  };
+
+  const confirmImport = () => {
+    if (!pendingImport) return;
+    update((d) => restoreDb(d, pendingImport));
+    setPendingImport(null);
+    toast.success(t("اطلاعاتت بازگردانی شد", "Your data was restored"));
+  };
+
+  const confirmWipe = () => {
+    update(wipeContent);
+    setWipeOpen(false);
+    toast.success(t("همهٔ داده‌ها پاک شد", "All data was erased"));
+  };
+
+  // ═══ TEST-ONLY: یک سال دادهٔ آزمایشی برای تست همهٔ صفحه‌ها — بعداً حذف شود ═══
+  const seedDemo = () => {
+    update((d) => applyDemoContent(wipeContent(d)));
+    toast.success(t("یک سال دادهٔ آزمایشی ساخته شد", "Seeded one year of demo data"));
+  };
   const s = db.settings;
   // رنگ دلخواه = رنگی که در لیست پیش‌فرض‌ها نیست.
   const isCustomBrand = !!s.brandColor && !BRAND_COLORS.includes(s.brandColor);
@@ -339,6 +401,116 @@ function SettingsPage() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      {/* backup & restore — the recovery net while data is device-only */}
+      <Card className="flex flex-col gap-3">
+        <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+          <Archive className="h-4 w-4 text-primary" /> {t("پشتیبان‌گیری و بازیابی", "Backup & restore")}
+        </div>
+        <p className="text-[11px] leading-5 text-muted-foreground">
+          {t(
+            "اطلاعاتت فقط روی همین دستگاه ذخیره می‌شه. یک فایل پشتیبان بگیر و جای امن نگهش دار تا اگه اپ رو پاک کردی یا گوشی عوض کردی، اطلاعاتت نپره.",
+            "Your data is stored only on this device. Export a backup file and keep it somewhere safe, so nothing is lost if you reinstall the app or switch devices.",
+          )}
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="secondary" onClick={exportData}>
+            <Download className="h-4 w-4" /> {t("گرفتن پشتیبان", "Export")}
+          </Button>
+          <Button variant="secondary" onClick={() => fileRef.current?.click()}>
+            <Upload className="h-4 w-4" /> {t("بازیابی", "Import")}
+          </Button>
+        </div>
+        <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={onFilePicked} />
+        {/* ═══ TEST-ONLY: دادهٔ آزمایشی یک‌ساله — با SHOW_DEMO_SEED کنترل می‌شود ═══ */}
+        {SHOW_DEMO_SEED && (
+          <button
+            type="button"
+            onClick={seedDemo}
+            className="rounded-xl border border-dashed border-muted-foreground/40 py-2 text-xs text-muted-foreground"
+          >
+            🧪 {t("ساخت یک سال دادهٔ آزمایشی (جایگزین دیتای فعلی)", "Seed 1 year of demo data (replaces current)")}
+          </button>
+        )}
+        {/* ═══ پایان TEST-ONLY ═══ */}
+      </Card>
+
+      {/* danger zone: erase everything on this device */}
+      <Card className="flex flex-col gap-3 border-destructive/30">
+        <div className="flex items-center gap-2 text-sm font-bold text-destructive">
+          <AlertTriangle className="h-4 w-4" /> {t("پاک کردن همهٔ داده‌ها", "Erase all data")}
+        </div>
+        <p className="text-[11px] leading-5 text-muted-foreground">
+          {t(
+            "همهٔ عادت‌ها، ثبت‌ها، کارها، ژورنال و تاریخچهٔ تایمر از این دستگاه پاک می‌شه. حساب و اشتراکت می‌مونه. این کار قابل بازگشت نیست — اول یه پشتیبان بگیر.",
+            "Erases every habit, log, task, journal entry and timer session from this device. Your account and subscription stay. This cannot be undone — export a backup first.",
+          )}
+        </p>
+        <Button variant="destructive" onClick={() => setWipeOpen(true)}>
+          <Trash2 className="h-4 w-4" /> {t("پاک کردن همهٔ داده‌ها", "Erase all data")}
+        </Button>
+      </Card>
+
+      {/* wipe confirm */}
+      <Modal open={wipeOpen} onClose={() => setWipeOpen(false)} title={t("پاک کردن همهٔ داده‌ها", "Erase all data")}>
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-muted-foreground">
+            {t(
+              `${faNum(db.habits.length, lang)} عادت، ${faNum(Object.keys(db.logs).length, lang)} ثبت و ${faNum(Object.keys(db.journal).length, lang)} روز ژورنال برای همیشه پاک می‌شن. مطمئنی؟`,
+              `${db.habits.length} habits, ${Object.keys(db.logs).length} logs and ${Object.keys(db.journal).length} journal days will be erased forever. Are you sure?`,
+            )}
+          </p>
+          <div className="flex gap-2">
+            <Button variant="destructive" className="flex-1" onClick={confirmWipe}>
+              {t("آره، همه رو پاک کن", "Yes, erase everything")}
+            </Button>
+            <Button variant="ghost" className="flex-1" onClick={() => setWipeOpen(false)}>
+              {t("انصراف", "Cancel")}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* restore confirm — restoring REPLACES current data, so ask first */}
+      <Modal open={!!pendingImport} onClose={() => setPendingImport(null)} title={t("بازیابی اطلاعات", "Restore data")}>
+        {pendingImport && (
+          <div className="flex flex-col gap-4">
+            <p className="text-sm text-muted-foreground">
+              {t(
+                "این فایل جایگزین اطلاعات فعلی روی این دستگاه می‌شه و قابل بازگشت نیست. مطمئنی؟",
+                "This will replace the current data on this device and can't be undone. Continue?",
+              )}
+            </p>
+            <div className="rounded-xl border border-border p-3 text-[11px] leading-6 text-foreground">
+              <p>
+                {t("تاریخ پشتیبان", "Backup date")}:{" "}
+                <span dir="ltr">{formatDate(dateKey(new Date(pendingImport.exportedAt)), cal, lang)}</span>
+              </p>
+              <p>
+                {faNum(backupSummary(pendingImport.db).habits, lang)} {t("عادت", "habits")} ·{" "}
+                {faNum(backupSummary(pendingImport.db).logs, lang)} {t("ثبت", "logs")} ·{" "}
+                {faNum(backupSummary(pendingImport.db).journal, lang)} {t("ژورنال", "journal")}
+              </p>
+            </div>
+            {pendingImport.db.auth?.phone && db.auth?.phone && pendingImport.db.auth.phone !== db.auth.phone && (
+              <p className="rounded-xl bg-destructive/10 p-3 text-[11px] leading-5 text-destructive">
+                {t(
+                  `⚠️ این پشتیبان مال شمارهٔ ${faNum(toLocalPhone(pendingImport.db.auth.phone), lang)} است، نه حساب فعلی.`,
+                  `⚠️ This backup belongs to ${toLocalPhone(pendingImport.db.auth.phone)}, not the current account.`,
+                )}
+              </p>
+            )}
+            <div className="flex gap-2">
+              <Button variant="destructive" className="flex-1" onClick={confirmImport}>
+                {t("بازیابی و جایگزینی", "Restore")}
+              </Button>
+              <Button variant="ghost" className="flex-1" onClick={() => setPendingImport(null)}>
+                {t("انصراف", "Cancel")}
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
 
       {/* account */}

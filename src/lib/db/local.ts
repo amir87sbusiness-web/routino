@@ -53,6 +53,7 @@ export function defaultLocal(): LocalState {
       tampered: false,
       celebrated: [],
       firedReminders: [],
+      dataOwner: null,
     },
     theme: "light",
     notificationsEnabled: true,

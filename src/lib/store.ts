@@ -169,6 +169,10 @@ export interface Db {
     tampered: boolean;
     celebrated: string[]; // `${habitId}|${monthKey}|${milestone}`
     firedReminders: string[]; // `${kind}|${id}|${dateKey}|${HH:MM}`
+    /** Phone that owns the data on this device. Survives sign-out so the SAME
+     * account logging back in finds everything; a DIFFERENT phone signing in
+     * triggers a content wipe (see lib/wipe.ts) so accounts never mix. */
+    dataOwner: string | null;
   };
 }
 
@@ -207,6 +211,7 @@ export function defaultDb(categories: Category[]): Db {
       tampered: false,
       celebrated: [],
       firedReminders: [],
+      dataOwner: null,
     },
   };
 }

@@ -2,9 +2,10 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Button, Input, Logo } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
-import { entitlementToSubscription, importSubscription, requestOtp, verifyOtp } from "@/lib/api/auth";
+import { clearTokens, entitlementToSubscription, importSubscription, requestOtp, verifyOtp } from "@/lib/api/auth";
 import { faNum } from "@/lib/dates";
 import { normalizePhone, toAsciiDigits, toLocalPhone } from "@/lib/phone";
+import { loginAs } from "@/lib/wipe";
 import { useAppMaybe } from "@/state/app";
 
 export const Route = createFileRoute("/auth")({
@@ -22,7 +23,7 @@ const SKIP_SMS = false;
 // نبودنِ بک‌اند گیر نیفتی. ورود محلی است (بدون حساب سروری، بدون توکن) — پس خرید
 // اشتراک واقعی با آن کار نمی‌کند؛ برای آن از دکمه‌ی تستیِ صفحه‌ی اشتراک استفاده کن.
 // برای حذف: این ثابت را false کن یا بلاکِ نشان‌دارِ TEST-ONLY در JSX را پاک کن.
-const TEST_LOGIN_BUTTON = true;
+const TEST_LOGIN_BUTTON = false;
 
 function AuthPage() {
   const ctx = useAppMaybe();
@@ -75,8 +76,10 @@ function AuthPage() {
     }
     setError("");
     if (SKIP_SMS) {
-      // ورود محلی بدون کد پیامکی: فقط auth را ست می‌کنیم و وارد اپ می‌شویم.
-      update((d) => ({ ...d, auth: { phone: canonical, verifiedAt: Date.now() } }));
+      // ورود محلی بدون کد پیامکی. loginAs جداسازی حساب‌ها را هم انجام می‌دهد:
+      // شماره‌ی متفاوت → پاک‌سازی دیتای صاحب قبلی.
+      if (db.meta.dataOwner && db.meta.dataOwner !== canonical) clearTokens();
+      update((d) => loginAs(d, canonical));
       navigate({ to: "/" });
       return;
     }
@@ -92,10 +95,13 @@ function AuthPage() {
   };
 
   // TEST-ONLY: ورود محلی بدون پیامک/بک‌اند. شماره‌ی واردشده را می‌گیرد یا یک
-  // شماره‌ی پیش‌فرض. فقط db.auth را ست می‌کند (بدون توکن سروری).
+  // شماره‌ی پیش‌فرض. loginAs جداسازی حساب‌ها را انجام می‌دهد (شماره‌ی متفاوت →
+  // دیتا و اشتراکِ صاحب قبلی پاک می‌شود). توکن سروریِ حساب قبلی هم پاک می‌شود
+  // تا ریفرش بعدی، اشتراکِ حساب قبلی را روی حساب جدید ننشاند.
   const testLogin = () => {
     const canonical = normalizePhone(phone) ?? "989120000000";
-    update((d) => ({ ...d, auth: { phone: canonical, verifiedAt: Date.now() } }));
+    if (db.meta.dataOwner && db.meta.dataOwner !== canonical) clearTokens();
+    update((d) => loginAs(d, canonical));
     navigate({ to: "/" });
   };
 
@@ -114,8 +120,12 @@ function AuthPage() {
       // Rescue a subscription that only ever existed in this device's storage.
       // Bounded and single-use server-side; failure here must not block sign-in,
       // since the local copy still gates the paywall today.
+      // Owner guard: only rescue when the local subscription actually belongs to
+      // the phone signing in — importing the previous owner's plan onto a new
+      // account would move a paid entitlement across accounts.
       let entitlement = res.entitlement;
-      const local = db.subscription;
+      const ownLocalData = db.meta.dataOwner === null || db.meta.dataOwner === canonical;
+      const local = ownLocalData ? db.subscription : null;
       if (local && local.expiresAt > Date.now()) {
         try {
           const imported = await importSubscription({
@@ -131,13 +141,11 @@ function AuthPage() {
       }
 
       const now = Date.now();
+      // Server-issued now. loginAs applies account isolation: a different phone
+      // wipes the previous owner's content and never inherits their local
+      // subscription; the same phone keeps everything.
       const subscription = entitlementToSubscription(entitlement, now);
-      update((d) => ({
-        ...d,
-        auth: { phone: canonical, verifiedAt: now },
-        // Server-issued now. The client no longer invents a trial.
-        subscription: subscription ?? d.subscription,
-      }));
+      update((d) => loginAs(d, canonical, subscription, now));
       navigate({ to: "/" });
     } catch (err) {
       setError(explain(err));

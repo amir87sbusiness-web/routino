@@ -25,9 +25,10 @@ import { entitlementToSubscription, fetchEntitlement, hasSession } from "@/lib/a
 import { todayKey, type Calendar, type Lang } from "@/lib/dates";
 import { diffDb } from "@/lib/db/diff";
 import { hydrate } from "@/lib/db/hydrate";
-import { localChanged, saveLocal, toLocalState } from "@/lib/db/local";
+import { loadLocal, localChanged, mergeSettings, saveLocal, toLocalState } from "@/lib/db/local";
 import { applyChanges } from "@/lib/db/persist";
-import { uid, type Db } from "@/lib/store";
+import { DEFAULT_CATEGORIES } from "@/lib/presets";
+import { defaultDb, uid, type Db } from "@/lib/store";
 import { dueHabitsOn, isCompleted, getLog } from "@/lib/logic";
 import { requestNativePermission, syncRecurringReminders } from "@/lib/native-notifications";
 import { syncNativeBars } from "@/lib/native";
@@ -72,7 +73,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // `db` is null, which covers the async gap.
   useEffect(() => {
     let cancelled = false;
-    void hydrate().then(({ db: loaded }) => {
+    const apply = (loaded: Db) => {
       if (cancelled) return;
       const now = Date.now();
       // anti clock-tampering: system clock moved backwards past last-seen
@@ -85,9 +86,31 @@ export function AppProvider({ children }: { children: ReactNode }) {
           sessions: loaded.meta.sessions + 1,
           lastSeen: Math.max(now, loaded.meta.lastSeen),
           tampered: tampered || loaded.meta.tampered,
+          // Migration for installs that predate per-account isolation: the data
+          // on this device belongs to whoever is signed in right now.
+          dataOwner: loaded.meta.dataOwner ?? loaded.auth?.phone ?? null,
         },
       });
-    });
+    };
+    hydrate()
+      .then(({ db: loaded }) => apply(loaded))
+      .catch(() => {
+        // IndexedDB refused to open (rare: private mode, corrupted profile).
+        // Without this the app would sit on the splash screen forever. Boot
+        // from the localStorage slice + defaults instead: the session is
+        // memory-only for bulk data, but the user can still get in — and still
+        // export a backup of whatever this fallback could recover.
+        const local = loadLocal();
+        const fresh = defaultDb(DEFAULT_CATEGORIES);
+        apply({
+          ...fresh,
+          settings: mergeSettings({}, local, fresh.settings),
+          auth: local.auth,
+          subscription: local.subscription,
+          notifications: local.notifications,
+          meta: local.meta,
+        });
+      });
     return () => {
       cancelled = true;
     };

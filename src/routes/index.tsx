@@ -22,18 +22,20 @@ function TodayPage() {
   const ctx = useAppMaybe();
   const { celebration, clear: clearCelebration } = useCelebration(ctx?.db);
   const [dk, setDk] = useState(todayKey());
+  const [ringPct, setRingPct] = useState(0);
+  // امتیاز روز را قبل از هر return شرطی حساب می‌کنیم تا ترتیب هوک‌ها همیشه ثابت بماند
+  // (قانون هوک‌های ری‌اکت: نباید هوکی بعد از return شرطی صدا زده شود).
+  const score = ctx?.db ? dayScore(ctx.db, dk, ctx.cal) : null;
+  // حلقه‌ی درصد از صفر با انیمیشن پر می‌شود (موقع باز شدن صفحه و تغییر روز/امتیاز).
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setRingPct(score ?? 0));
+    return () => cancelAnimationFrame(id);
+  }, [score]);
   if (!ctx?.db) return null;
   const { db, update, t, lang, cal } = ctx;
 
   const isToday = dk === todayKey();
   const due = dueHabitsOn(db, dk, cal);
-  const score = dayScore(db, dk, cal);
-  // حلقه‌ی درصد از صفر با انیمیشن پر می‌شود (موقع باز شدن صفحه و تغییر روز/امتیاز).
-  const [ringPct, setRingPct] = useState(0);
-  useEffect(() => {
-    const id = requestAnimationFrame(() => setRingPct(score ?? 0));
-    return () => cancelAnimationFrame(id);
-  }, [score]);
   const hour = new Date().getHours();
   const greeting =
     hour < 12 ? t("صبح بخیر ☀️", "Good morning ☀️") : hour < 18 ? t("ظهر بخیر 🌤", "Good afternoon 🌤") : t("عصر بخیر 🌙", "Good evening 🌙");

@@ -28,7 +28,7 @@ export const Route = createFileRoute("/subscribe")({
 // دکمه‌ی «تمدید تستی» که بدون پرداخت، اشتراک محلی می‌دهد تا بتوانی بقیه‌ی اپ را
 // تست کنی. دکمه‌ی پرداخت واقعی (زیبال/درگاه) دست‌نخورده کنارش می‌ماند.
 // برای حذف: این ثابت را false کن یا بلاکِ نشان‌دارِ TEST-ONLY در JSX را پاک کن.
-const TEST_GRANT_BUTTON = true;
+const TEST_GRANT_BUTTON = false;
 
 /** Bundled catalog as a fallback so the page can RENDER offline — buying still
  * needs the server, and the button says so. */

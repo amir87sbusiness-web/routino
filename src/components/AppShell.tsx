@@ -72,13 +72,16 @@ export function AppShell({ children }: { children: ReactNode }) {
     else if (gate === "subscribe") navigate({ to: "/subscribe" });
   }, [gate, navigate]);
 
-  // Ask the browser to keep our data once the user is actually signed in.
-  // IndexedDB is the only copy of their habits until sync exists, and Safari
-  // evicts origin storage after 7 days without interaction. Gated on sign-in
-  // because browsers weigh engagement when deciding whether to grant it.
+  // Ask the browser to keep our data as soon as onboarding is done — before the
+  // auth/subscribe screens — so everything entered from then on is under durable
+  // storage. IndexedDB is the only copy of their habits until sync exists, and
+  // Safari evicts origin storage after 7 days without interaction; this stops
+  // that. Not fired on the first onboarding paint on purpose: a few browsers
+  // prompt for it, and engagement makes the grant likelier. The call no-ops when
+  // durability is already granted, so re-running it is free.
   useEffect(() => {
-    if (gate === "ok") void requestPersistentStorage();
-  }, [gate]);
+    if (db?.settings.onboarded) void requestPersistentStorage();
+  }, [db?.settings.onboarded]);
 
   // periodic feedback popup: every 5 sessions
   useEffect(() => {
