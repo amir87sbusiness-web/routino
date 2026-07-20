@@ -37,12 +37,25 @@ describe("overview + users", () => {
 
     const ov = await (await h.call("GET", "/v1/admin/overview", { headers: admin() })).json();
     expect(ov.users.total).toBe(2);
+    // Money-safety + ops fields the panel surfaces.
+    expect(ov.alerts.verifyFailed).toBe(0);
+    expect(ov.payments.pending).toBe(0);
 
     const found = await (
       await h.call("GET", "/v1/admin/users?q=0912333", { headers: admin() })
     ).json();
     expect(found.users).toHaveLength(1);
     expect(found.users[0].phone).toBe("989123334444");
+  });
+
+  it("surfaces a verify_failed payment as an alert (never should happen)", async () => {
+    const { user } = await signIn(h);
+    await h.raw(
+      `insert into payments (user_id, plan_id, months, amount_toman, amount_rial, status)
+       values ('${user.id}', 'm1', 1, 59000, 590000, 'verify_failed')`,
+    );
+    const ov = await (await h.call("GET", "/v1/admin/overview", { headers: admin() })).json();
+    expect(ov.alerts.verifyFailed).toBe(1);
   });
 });
 
@@ -70,6 +83,38 @@ describe("manual grant", () => {
       body: {},
     });
     expect(res.status).toBe(400);
+  });
+});
+
+describe("user detail", () => {
+  it("returns devices, payments, grants and entitlement for support", async () => {
+    const { user, access } = await signIn(h);
+    await h.call("POST", "/v1/payments/checkout", {
+      headers: auth(access),
+      body: { planId: "m1" },
+    });
+
+    const d = await (
+      await h.call("GET", `/v1/admin/users/${user.id}`, { headers: admin() })
+    ).json();
+    expect(d.user.phone).toBe("989123334444");
+    expect(d.entitlement.planId).toBe("trial");
+    expect(d.devices).toHaveLength(1); // the sign-in device
+    expect(d.grants).toHaveLength(1); // the trial grant
+    expect(d.payments).toHaveLength(1); // the pending checkout
+  });
+
+  it("404s an unknown user and 400s a malformed id", async () => {
+    expect(
+      (
+        await h.call("GET", "/v1/admin/users/11111111-1111-1111-1111-111111111111", {
+          headers: admin(),
+        })
+      ).status,
+    ).toBe(404);
+    expect((await h.call("GET", "/v1/admin/users/not-a-uuid", { headers: admin() })).status).toBe(
+      400,
+    );
   });
 });
 

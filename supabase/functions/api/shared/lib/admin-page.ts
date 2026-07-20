@@ -156,13 +156,18 @@ const localPhone = (p) => (p || "").startsWith("98") ? "0" + p.slice(2) : p;
 
 async function loadOverview() {
   const o = await api("/overview");
-  $("#ovCards").innerHTML = [
+  // verify_failed = مغایرت مبلغ با درگاه. هرگز نباید رخ دهد؛ اگر شد همان روز پیگیری کن.
+  const alert = (o.alerts && o.alerts.verifyFailed > 0)
+    ? '<div class="card" style="grid-column:1/-1;background:#fee2e2;border-color:#fca5a5"><div class="k" style="color:#991b1b">⚠️ پرداخت با خطای تأیید (مغایرت مبلغ) — همین امروز پیگیری کن</div><div class="v" style="color:#991b1b">' + fa(o.alerts.verifyFailed) + '</div></div>'
+    : "";
+  $("#ovCards").innerHTML = alert + [
     ["کل کاربران", fa(o.users.total)],
     ["کاربر جدید (۲۴س)", fa(o.users.last24h)],
     ["اشتراک فعال", fa(o.activeSubscriptions)],
     ["پرداخت موفق", fa(o.payments.paidTotal)],
     ["درآمد کل (تومان)", fa(o.payments.revenueToman)],
     ["درآمد ۲۴س (تومان)", fa(o.payments.revenueTomanLast24h)],
+    ["در انتظار درگاه", fa(o.payments.pending)],
     ["پیامک ۲۴س", fa(o.otpSentLast24h)],
   ].map(([k, v]) => '<div class="card"><div class="k">' + k + '</div><div class="v">' + v + "</div></div>").join("");
 }
@@ -203,6 +208,10 @@ window.openUser = async (id) => {
     "<h4>تاریخچه دسترسی</h4><div class='wrap'><table>" +
     "<tr><th>تاریخ</th><th>منبع</th><th>مدت</th><th>تا</th></tr>" +
     d.grants.map((g) => "<tr><td>" + dt(g.createdAt) + "</td><td>" + esc(g.source) + "</td><td>" + fa(g.months) + " ماه " + fa(g.days) + " روز</td><td>" + dt(g.expiresAfter) + "</td></tr>").join("") +
+    "</table></div>" +
+    "<h4>دستگاه‌ها</h4><div class='wrap'><table>" +
+    "<tr><th>نام</th><th>آخرین فعالیت</th><th>ساخت</th><th>وضعیت</th></tr>" +
+    (d.devices.length ? d.devices : []).map((v) => "<tr><td>" + esc(v.name || "—") + "</td><td>" + dt(v.lastSeenAt) + "</td><td>" + dt(v.createdAt) + "</td><td>" + (v.revokedAt ? "<span class='pill mut'>باطل‌شده</span>" : "<span class='pill ok'>فعال</span>") + "</td></tr>").join("") +
     "</table></div>";
   dlg.showModal();
   $("#gGo").onclick = async () => {
