@@ -1,3 +1,4 @@
+// AUTO-GENERATED from backend/src — do not edit. Run `node scripts/sync-edge-shared.mjs`.
 /** Environment, validated at boot. Fail fast and loudly beats a 3am null. */
 // Explicit node:process import (not the global) so this file also runs on Deno,
 // where the edge entry calls loadEnv(Deno.env.toObject()) but the default-arg

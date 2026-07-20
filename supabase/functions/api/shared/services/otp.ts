@@ -1,3 +1,4 @@
+// AUTO-GENERATED from backend/src — do not edit. Run `node scripts/sync-edge-shared.mjs`.
 /**
  * One-time codes for phone sign-in.
  *
@@ -14,9 +15,9 @@
 import { Buffer } from "node:buffer";
 import { createHash, randomInt, timingSafeEqual } from "node:crypto";
 import { and, count, desc, eq, gt, isNull, lt } from "drizzle-orm";
-import type { Database } from "../db/client.js";
-import { otpCodes } from "../db/schema.js";
-import type { Env } from "../env.js";
+import type { Database } from "../db/client.ts";
+import { otpCodes } from "../db/schema.ts";
+import type { Env } from "../env.ts";
 
 /** Per-phone and per-IP windows. The per-minute rule is what stops a tight loop;
  * the daily rules bound the worst case. */

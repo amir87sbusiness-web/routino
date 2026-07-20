@@ -1,5 +1,10 @@
 # انتشار رایگان روتینو روی routino.me
 
+> ⚠️ **مسیر بک‌اند این فایل (Render) منسوخ شد** — Render برای اکانت جدید کارت
+> بانکی خواست. بک‌اند حالا روی **Supabase Edge Functions** می‌رود:
+> [`DEPLOY-SUPABASE-EDGE.md`](DEPLOY-SUPABASE-EDGE.md). بخش‌های فرانت
+> (Cloudflare Pages، قدم‌های ۴ و ۵) و Supabase (قدم ۲) این فایل همچنان معتبرند.
+
 راهنمای قدم‌به‌قدم برای لانچ با سرویس‌های رایگان خارجی:
 **Cloudflare Pages + Render + Supabase + GitHub**، با درگاه ایرانی (زیبال) و
 پیامک داخلی (کاوه‌نگار).

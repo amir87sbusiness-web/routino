@@ -1,3 +1,4 @@
+// AUTO-GENERATED from backend/src — do not edit. Run `node scripts/sync-edge-shared.mjs`.
 /**
  * Access and refresh tokens.
  *
@@ -12,10 +13,10 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq, isNull } from "drizzle-orm";
 import { SignJWT, jwtVerify } from "jose";
-import type { Database } from "../db/client.js";
-import { devices } from "../db/schema.js";
-import type { Env } from "../env.js";
-import { unauthorized } from "../lib/http-errors.js";
+import type { Database } from "../db/client.ts";
+import { devices } from "../db/schema.ts";
+import type { Env } from "../env.ts";
+import { unauthorized } from "../lib/http-errors.ts";
 
 export interface AccessClaims {
   sub: string; // userId

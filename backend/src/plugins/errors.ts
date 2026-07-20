@@ -1,25 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { ZodError } from "zod";
+import { HttpError } from "../lib/http-errors.js";
 
-export class HttpError extends Error {
-  constructor(
-    readonly statusCode: number,
-    readonly code: string,
-    message: string,
-  ) {
-    super(message);
-  }
-}
-
-export const badRequest = (code: string, msg: string) => new HttpError(400, code, msg);
-export const unauthorized = (code = "unauthorized", msg = "Unauthorized") => new HttpError(401, code, msg);
-export const forbidden = (code = "forbidden", msg = "Forbidden") => new HttpError(403, code, msg);
-export const notFound = (code = "not_found", msg = "Not found") => new HttpError(404, code, msg);
-export const tooMany = (msg = "Too many requests", retryAfter?: number) => {
-  const e = new HttpError(429, "rate_limited", msg);
-  (e as HttpError & { retryAfter?: number }).retryAfter = retryAfter;
-  return e;
-};
+// The error classes/helpers moved to lib/http-errors.ts (framework-free, shared
+// with the edge port). Re-exported here so existing imports keep working.
+export { HttpError, badRequest, unauthorized, forbidden, notFound, tooMany } from "../lib/http-errors.js";
 
 export function registerErrorHandler(app: FastifyInstance): void {
   app.setErrorHandler((err, req, reply) => {

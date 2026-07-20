@@ -11,8 +11,9 @@ export default defineConfig({
     // rather than a mock of them.
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
-    // The backend is a separate project with its own runner (node env, PGlite).
-    // Without this, `npm test` here silently runs those under jsdom too.
-    exclude: ["**/node_modules/**", "**/dist/**", "backend/**"],
+    // The backend and the edge-function suite are separate projects with their
+    // own runners (node env, PGlite). Without this, `npm test` here silently
+    // runs those under jsdom too.
+    exclude: ["**/node_modules/**", "**/dist/**", "backend/**", "supabase/**"],
   },
 });

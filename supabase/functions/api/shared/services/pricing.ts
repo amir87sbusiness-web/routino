@@ -1,3 +1,4 @@
+// AUTO-GENERATED from backend/src — do not edit. Run `node scripts/sync-edge-shared.mjs`.
 /**
  * Price computation — server-authoritative.
  *
@@ -7,9 +8,9 @@
  * from here.
  */
 import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
-import type { Database } from "../db/client.js";
-import { discounts, plans, redemptions } from "../db/schema.js";
-import { badRequest, notFound } from "../lib/http-errors.js";
+import type { Database } from "../db/client.ts";
+import { discounts, plans, redemptions } from "../db/schema.ts";
+import { badRequest, notFound } from "../lib/http-errors.ts";
 
 export interface Quote {
   planId: string;

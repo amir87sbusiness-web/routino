@@ -54,7 +54,8 @@ const gradient = `
 
 /** The app icon: a rounded tile. Radius ~22% approximates the platform squircle
  * closely enough to look intentional where the OS does not mask it. */
-const tileSvg = () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+const tileSvg =
+  () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
 ${gradient}
   <rect width="512" height="512" rx="114" fill="url(#bg)" />
 ${LOGO}
@@ -88,7 +89,8 @@ ${LOGO}
  *   - foreground: just the mark, inset into the adaptive safe zone (center ~60%), transparent
  *   - icon-only:  the rounded tile, for launchers/OSes without adaptive icons
  */
-const backgroundSvg = () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="1024" height="1024">
+const backgroundSvg =
+  () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="1024" height="1024">
 ${gradient}
   <rect width="512" height="512" fill="url(#bg)" />
 </svg>`;
