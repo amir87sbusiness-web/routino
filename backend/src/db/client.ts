@@ -8,7 +8,7 @@
  */
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import type { PgliteDatabase } from "drizzle-orm/pglite";
-import type { schema } from "./schema";
+import type { schema } from "./schema.js";
 
 type S = typeof schema;
 
