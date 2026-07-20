@@ -9,9 +9,9 @@ import { buildApp } from "./app.js";
 import type { Database } from "./db/client.js";
 import { SCHEMA_SQL, SEED_DISCOUNTS_SQL, SEED_PLANS_SQL } from "./db/ddl.js";
 import { schema } from "./db/schema.js";
-import { loadEnv } from "./env.js";
+import { loadEnv, pspProviderNames } from "./env.js";
 import { consoleSms, kavenegarSms, type SmsProvider } from "./providers/sms/index.js";
-import { fakePsp, zibalPsp, type PspProvider } from "./providers/psp/index.js";
+import { createRouter, fakePsp, zarinpalPsp, zibalPsp, type PspProvider } from "./providers/psp/index.js";
 
 const env = loadEnv();
 
@@ -48,7 +48,20 @@ if (env.DB_DRIVER === "pglite") {
 const sms: SmsProvider =
   env.SMS_PROVIDER === "kavenegar" ? kavenegarSms(env.KAVENEGAR_API_KEY!, env.KAVENEGAR_TEMPLATE) : consoleSms();
 
-const psp: PspProvider = env.PSP_PROVIDER === "zibal" ? zibalPsp(env.ZIBAL_MERCHANT) : fakePsp(env.PUBLIC_API_URL);
+// One or more gateways, behind a router that picks the fastest healthy one per
+// checkout and fails over. A single configured gateway is a thin pass-through.
+const makePsp = (name: ReturnType<typeof pspProviderNames>[number]): PspProvider => {
+  switch (name) {
+    case "zibal":
+      return zibalPsp(env.ZIBAL_MERCHANT);
+    case "zarinpal":
+      return zarinpalPsp(env.ZARINPAL_MERCHANT);
+    case "fake":
+      return fakePsp(env.PUBLIC_API_URL);
+  }
+};
+const pspNames = pspProviderNames(env);
+const psp = createRouter(pspNames.map(makePsp));
 
 const app = await buildApp({ db, env, sms, psp });
 
@@ -69,4 +82,4 @@ process.on("SIGTERM", close);
 process.on("SIGINT", close);
 
 await app.listen({ port: env.PORT, host: "0.0.0.0" });
-console.log(`  [api] listening on :${env.PORT}  (sms=${env.SMS_PROVIDER}, psp=${env.PSP_PROVIDER})`);
+console.log(`  [api] listening on :${env.PORT}  (sms=${env.SMS_PROVIDER}, psp=${pspNames.join("+")})`);

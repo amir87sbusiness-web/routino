@@ -173,7 +173,14 @@ export const payments = pgTable(
     /** web | android | ios — decides where the callback page sends the user
      * back to (web URL vs custom-scheme deep link). */
     platform: text("platform"),
+    /** Which gateway took this payment (fake | zibal | zarinpal). Null until the
+     * checkout registers it with a gateway. Verify/callback route back to this. */
+    provider: text("provider"),
+    /** Numeric gateway token for zibal/fake (Zibal's trackId). Null for zarinpal,
+     * which identifies transactions by the string `authority` below. */
     trackId: bigint("track_id", { mode: "number" }).unique(),
+    /** ZarinPal's 36-char string transaction token. Null for numeric gateways. */
+    authority: text("authority").unique(),
     refNumber: text("ref_number"),
     cardNumber: text("card_number"),
     pspResult: integer("psp_result"),

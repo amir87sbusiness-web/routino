@@ -22,7 +22,7 @@ import { payments } from "../db/schema.js";
 import { toLocalPhone } from "../lib/phone.js";
 import { requireUser } from "../plugins/auth.js";
 import { badRequest, notFound, tooMany } from "../plugins/errors.js";
-import { ZIBAL_RESULT, ZIBAL_STATUS } from "../providers/psp/index.js";
+import { ZIBAL_RESULT, ZIBAL_STATUS, type PspName } from "../providers/psp/index.js";
 import { grantInterval, readEntitlement } from "../services/entitlement.js";
 import { checkDiscount, quote, redeemDiscount } from "../services/pricing.js";
 
@@ -42,6 +42,19 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const MAX_CHECKOUTS_PER_HOUR = 10;
 
 type PaymentRow = typeof payments.$inferSelect;
+
+/** Which gateway owns a payment, for routing verify/callback back to it. Falls
+ * back for rows written before `provider` existed: an `authority` means ZarinPal,
+ * otherwise Zibal. */
+function paymentProvider(p: PaymentRow): PspName {
+  return (p.provider as PspName | null) ?? (p.authority ? "zarinpal" : "zibal");
+}
+
+/** The opaque gateway token for a payment: ZarinPal's string authority, else the
+ * numeric trackId as a string. Undefined only if it never reached a gateway. */
+function paymentRef(p: PaymentRow): string | undefined {
+  return p.authority ?? (p.trackId != null ? String(p.trackId) : undefined);
+}
 
 export const paymentRoutes: FastifyPluginAsync = async (app) => {
   const { db, env, psp } = app.deps;
@@ -145,6 +158,8 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
       };
     }
 
+    // The router picks the fastest healthy gateway and fails over if it rejects;
+    // `res.provider` is whichever one actually took the payment.
     const res = await psp.request({
       amountRial: q.finalRial,
       callbackUrl: `${env.PUBLIC_API_URL}/v1/payments/callback`,
@@ -153,25 +168,30 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
       mobile: toLocalPhone(user.phone),
     });
 
-    if (!res.ok || !res.trackId) {
+    if (!res.ok || !res.ref) {
       await db
         .update(payments)
-        .set({ status: "failed", pspResult: res.result, updatedAt: t })
+        .set({ status: "failed", provider: res.provider, pspResult: res.result, updatedAt: t })
         .where(eq(payments.id, payment.id));
-      req.log.error({ paymentId: payment.id, result: res.result }, "psp request failed");
+      req.log.error({ paymentId: payment.id, provider: res.provider, result: res.result }, "psp request failed");
       throw badRequest("psp_failed", "Payment gateway rejected the request. Try again.");
     }
 
+    // Store the token in the column its gateway uses: numeric trackId for
+    // zibal/fake, string authority for zarinpal. Exactly one is set.
+    const numericTrackId = res.provider === "zarinpal" ? null : Number(res.ref);
+    const authority = res.provider === "zarinpal" ? res.ref : null;
+
     await db
       .update(payments)
-      .set({ status: "redirected", trackId: res.trackId, updatedAt: t })
+      .set({ status: "redirected", provider: res.provider, trackId: numericTrackId, authority, updatedAt: t })
       .where(eq(payments.id, payment.id));
 
     return {
       free: false,
       paymentId: payment.id,
-      trackId: res.trackId,
-      paymentUrl: psp.startUrl(res.trackId),
+      trackId: numericTrackId ?? undefined,
+      paymentUrl: psp.startUrl(res.provider, res.ref),
       amountToman: q.finalToman,
     };
   });
@@ -185,13 +205,20 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
    * mark a payment paid, and the verified amount must equal what we charged.
    */
   app.get("/payments/callback", async (req, reply) => {
+    // Zibal redirects with `?trackId=&success=&status=&orderId=`; ZarinPal with
+    // `?Authority=&Status=OK|NOK`. Both land here — we identify the payment by
+    // whichever token is present, then route by the provider on its row.
     const qs = req.query as Record<string, string | undefined>;
     const trackId = Number(qs.trackId);
+    const authorityParam = qs.Authority;
     const t = now();
 
     let payment: PaymentRow | undefined;
     if (Number.isSafeInteger(trackId) && trackId > 0) {
       [payment] = await db.select().from(payments).where(eq(payments.trackId, trackId)).limit(1);
+    }
+    if (!payment && authorityParam) {
+      [payment] = await db.select().from(payments).where(eq(payments.authority, authorityParam)).limit(1);
     }
     if (!payment && qs.orderId && UUID_RE.test(qs.orderId)) {
       [payment] = await db.select().from(payments).where(eq(payments.id, qs.orderId)).limit(1);
@@ -206,9 +233,11 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
       return sendResultPage(reply, env, { outcome: "paid", payment });
     }
 
-    // The user canceled at the gateway. Verify would also tell us, but skipping
-    // the round-trip for the common cancel case keeps the page fast.
-    if (qs.success !== "1") {
+    // The user canceled at the gateway. Zibal signals it with `success!=1`,
+    // ZarinPal with `Status!=OK`. Verify would also tell us, but skipping the
+    // round-trip for the common cancel case keeps the page fast.
+    const userApproved = qs.success === "1" || qs.Status === "OK";
+    if (!userApproved) {
       await db
         .update(payments)
         .set({ status: "canceled", pspStatus: Number(qs.status) || null, updatedAt: t })
@@ -216,13 +245,15 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
       return sendResultPage(reply, env, { outcome: "canceled", payment });
     }
 
-    // From here on, `success=1` in the query string is a CLAIM, nothing more —
-    // anyone can type that URL. Even a payment previously marked failed or
-    // canceled is re-verified: a stale local status must never beat the
+    // From here on, the gateway's "approved" flag in the query string is a CLAIM,
+    // nothing more — anyone can type that URL. Even a payment previously marked
+    // failed or canceled is re-verified: a stale local status must never beat the
     // gateway's server-to-server answer, or a paid user loses their grant.
+    const ref = paymentRef(payment);
+    if (!ref) return sendResultPage(reply, env, { outcome: "pending", payment });
     let v;
     try {
-      v = await psp.verify(payment.trackId ?? trackId);
+      v = await psp.verify(paymentProvider(payment), ref, payment.amountRial);
     } catch (err) {
       req.log.error({ err, paymentId: payment.id }, "psp verify unreachable");
       // Do NOT mark failed: the money may have moved. Leave the row as-is; the
@@ -293,10 +324,10 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
 
     // Self-heal: user returned but the callback never fired (network, closed
     // tab). One verify round-trip settles it.
-    if (payment.status === "redirected" && payment.trackId) {
+    if (payment.status === "redirected" && (payment.trackId != null || payment.authority)) {
       const t = now();
       try {
-        const v = await psp.verify(payment.trackId);
+        const v = await psp.verify(paymentProvider(payment), paymentRef(payment)!, payment.amountRial);
         if (
           (v.result === ZIBAL_RESULT.OK && v.status === ZIBAL_STATUS.PAID_VERIFIED) ||
           v.result === ZIBAL_RESULT.ALREADY_VERIFIED

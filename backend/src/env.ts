@@ -51,11 +51,26 @@ const schema = z.object({
   KAVENEGAR_API_KEY: z.string().optional(),
   KAVENEGAR_TEMPLATE: z.string().default("routino-otp"),
 
-  /** `fake` serves a local gateway page — the whole payment state machine is
-   * testable with no external dependency. Swap to `zibal` via env only. */
-  PSP_PROVIDER: z.enum(["fake", "zibal"]).default("fake"),
+  /**
+   * Default single gateway. `fake` serves a local gateway page — the whole
+   * payment state machine is testable with no external dependency. For one live
+   * gateway, set this to `zibal` or `zarinpal`. To run BOTH (server picks the
+   * fastest healthy one per checkout, with automatic failover), set
+   * `PSP_PROVIDERS` instead — it overrides this when non-empty.
+   */
+  PSP_PROVIDER: z.enum(["fake", "zibal", "zarinpal"]).default("fake"),
+  /**
+   * Optional comma-separated gateway list, e.g. `zarinpal,zibal`. When set it
+   * defines the active gateways AND their tiebreak order; the router routes each
+   * checkout to the fastest healthy one and fails over. Empty = use
+   * `PSP_PROVIDER` (single gateway).
+   */
+  PSP_PROVIDERS: z.string().default(""),
   /** Zibal's sandbox merchant is the literal string "zibal". */
   ZIBAL_MERCHANT: z.string().default("zibal"),
+  /** ZarinPal merchant id (36-char UUID). No usable sandbox default — required
+   * in production only when zarinpal is among the active gateways. */
+  ZARINPAL_MERCHANT: z.string().default("dev-only-zarinpal-merchant"),
 
   /** Public base URL of THIS server. Zibal redirects a browser here, so it must
    * be reachable from the user's device — `localhost` works for web dev but can
@@ -72,6 +87,23 @@ const schema = z.object({
 
 export type Env = z.infer<typeof schema>;
 
+/** The active payment gateways, in tiebreak/priority order. `PSP_PROVIDERS`
+ * (comma list) wins when set; otherwise the single `PSP_PROVIDER`. Unknown or
+ * duplicate names are dropped. */
+export function pspProviderNames(env: Pick<Env, "PSP_PROVIDER" | "PSP_PROVIDERS">): ("fake" | "zibal" | "zarinpal")[] {
+  const known = ["fake", "zibal", "zarinpal"] as const;
+  const raw = env.PSP_PROVIDERS.trim()
+    ? env.PSP_PROVIDERS.split(",").map((s) => s.trim())
+    : [env.PSP_PROVIDER];
+  const out: ("fake" | "zibal" | "zarinpal")[] = [];
+  for (const name of raw) {
+    if ((known as readonly string[]).includes(name) && !out.includes(name as (typeof known)[number])) {
+      out.push(name as (typeof known)[number]);
+    }
+  }
+  return out;
+}
+
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const parsed = schema.safeParse(source);
   if (!parsed.success) {
@@ -87,7 +119,13 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     }
     // PGlite is single-connection; it is a development and test engine only.
     if (parsed.data.DB_DRIVER === "pglite") throw new Error("DB_DRIVER=pglite is not supported in production");
-    if (parsed.data.PSP_PROVIDER === "fake") throw new Error("PSP_PROVIDER=fake is not allowed in production");
+
+    const psps = pspProviderNames(parsed.data);
+    if (psps.length === 0) throw new Error("no payment gateway configured (set PSP_PROVIDER or PSP_PROVIDERS)");
+    if (psps.includes("fake")) throw new Error("the 'fake' gateway is not allowed in production");
+    if (psps.includes("zarinpal") && parsed.data.ZARINPAL_MERCHANT.startsWith("dev-only")) {
+      throw new Error("ZARINPAL_MERCHANT is required when zarinpal is an active gateway");
+    }
   }
   return parsed.data;
 }

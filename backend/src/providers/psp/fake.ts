@@ -56,10 +56,11 @@ export function fakePsp(publicApiUrl: string) {
         outcome: "pending",
         verifiedOnce: false,
       });
-      return { ok: true, trackId, result: ZIBAL_RESULT.OK };
+      return { ok: true, ref: String(trackId), result: ZIBAL_RESULT.OK };
     },
 
-    async verify(trackId: number): Promise<PspVerifyResult> {
+    async verify(ref: string): Promise<PspVerifyResult> {
+      const trackId = Number(ref);
       const t = txns.get(trackId);
       if (!t) return { result: 203, message: "invalid trackId" };
       if (t.outcome === "canceled") return { result: 202, status: ZIBAL_STATUS.CANCELED_BY_USER };
@@ -81,8 +82,8 @@ export function fakePsp(publicApiUrl: string) {
       };
     },
 
-    startUrl(trackId: number) {
-      return `${publicApiUrl}/v1/dev/gateway?trackId=${trackId}`;
+    startUrl(ref: string) {
+      return `${publicApiUrl}/v1/dev/gateway?trackId=${Number(ref)}`;
     },
   };
 

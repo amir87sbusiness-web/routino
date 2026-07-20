@@ -33,10 +33,18 @@ export function zibalPsp(merchant: string): PspProvider {
         description: input.description,
         mobile: input.mobile,
       });
-      return { ok: body.result === 100, trackId: body.trackId, result: body.result, message: body.message };
+      return {
+        ok: body.result === 100,
+        ref: body.trackId != null ? String(body.trackId) : undefined,
+        result: body.result,
+        message: body.message,
+      };
     },
 
-    async verify(trackId: number): Promise<PspVerifyResult> {
+    // amountRial is unused: Zibal's verify echoes the amount back and the caller
+    // asserts it. It is in the signature only so every provider verifies alike.
+    async verify(ref: string): Promise<PspVerifyResult> {
+      const trackId = Number(ref);
       const body = await post<{
         result: number;
         amount?: number;
@@ -57,8 +65,8 @@ export function zibalPsp(merchant: string): PspProvider {
       };
     },
 
-    startUrl(trackId: number) {
-      return `${BASE}/start/${trackId}`;
+    startUrl(ref: string) {
+      return `${BASE}/start/${Number(ref)}`;
     },
   };
 }

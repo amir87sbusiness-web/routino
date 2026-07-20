@@ -103,7 +103,7 @@ subscribe.tsx (فرانت)
 2. فرانت: الگوی `pay/result` در `src/client.tsx`
 3. اندروید: intent-filter در `android/app/src/main/AndroidManifest.xml` (و مشابهش در iOS)
 
-**پارامترهای callback** (`trackId`, `success`, `status`, `orderId`) قرارداد زیباله — درگاه فیک (`backend/src/routes/dev-gateway.ts`) هم عمداً همین شکل رو تقلید می‌کنه تا تست واقعی باشه.
+**پارامترهای callback** بسته به درگاه فرق دارن: زیبال `trackId`, `success`, `status`, `orderId` می‌فرسته (درگاه فیک هم عمداً همین رو تقلید می‌کنه)، زرین‌پال `Authority`, `Status=OK|NOK`. روت `callback` هر دو شکل رو می‌شناسه، پرداخت رو با هر توکنی که اومده پیدا می‌کنه، و بعد بر اساس درگاهِ ذخیره‌شده روی سطر پرداخت (`payments.provider`) تأیید می‌کنه.
 
 ### 🌍 قرارداد ۶: آدرس‌ها و CORS
 | متغیر | کجا | باید چی باشه |

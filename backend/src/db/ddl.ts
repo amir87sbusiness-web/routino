@@ -99,7 +99,9 @@ create table if not exists payments (
   offer_percent integer,
   status text not null default 'pending',
   platform text,
+  provider text,
   track_id bigint unique,
+  authority text unique,
   ref_number text,
   card_number text,
   psp_result integer,
@@ -153,6 +155,10 @@ create table if not exists admins (
 -- table if not exists" silently skips existing tables, so new columns must be
 -- added explicitly here.
 alter table payments add column if not exists platform text;
+alter table payments add column if not exists provider text;
+alter table payments add column if not exists authority text;
+-- authority is unique per transaction (multiple NULLs allowed for numeric gateways).
+create unique index if not exists payments_authority on payments (authority);
 `;
 
 /** Must match `src/lib/presets.ts` PLANS on the client, or the price shown and

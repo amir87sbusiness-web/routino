@@ -13,7 +13,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import type { Database } from "./db/client.js";
 import type { Env } from "./env.js";
 import type { SmsProvider } from "./providers/sms/index.js";
-import type { PspProvider } from "./providers/psp/index.js";
+import type { PspRouter } from "./providers/psp/index.js";
 import { authPlugin } from "./plugins/auth.js";
 import { registerErrorHandler } from "./plugins/errors.js";
 import { adminRoutes } from "./routes/admin.js";
@@ -29,7 +29,8 @@ export interface Deps {
   db: Database;
   env: Env;
   sms: SmsProvider;
-  psp: PspProvider;
+  /** One or more gateways behind a router (fastest-healthy + failover). */
+  psp: PspRouter;
   /** Injectable so tests can control time instead of sleeping. */
   now: () => number;
 }

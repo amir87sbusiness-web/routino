@@ -12,8 +12,9 @@ import type { FastifyPluginAsync } from "fastify";
 import type { fakePsp } from "../providers/psp/fake.js";
 
 export const devGatewayRoutes: FastifyPluginAsync = async (app) => {
-  if (app.deps.psp.name !== "fake") return;
-  const psp = app.deps.psp as ReturnType<typeof fakePsp>;
+  const fake = app.deps.psp.get("fake");
+  if (!fake) return;
+  const psp = fake as ReturnType<typeof fakePsp>;
 
   app.get("/dev/gateway", async (req, reply) => {
     const trackId = Number((req.query as { trackId?: string }).trackId);

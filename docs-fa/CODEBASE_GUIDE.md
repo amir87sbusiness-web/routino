@@ -204,6 +204,8 @@ routino1.0/
 | [sms/kavenegar.ts](../backend/src/providers/sms/kavenegar.ts) | ارسال واقعی با کاوه‌نگار (verify/lookup — قالبش باید در پنل کاوه‌نگار تایید شده باشه) |
 | [psp/fake.ts](../backend/src/providers/psp/fake.ts) | درگاه تقلبی تست |
 | [psp/zibal.ts](../backend/src/providers/psp/zibal.ts) | درگاه واقعی زیبال (مرچنت `"zibal"` = حالت سندباکس) |
+| [psp/zarinpal.ts](../backend/src/providers/psp/zarinpal.ts) | درگاه واقعی زرین‌پال (REST v4؛ توکن رشته‌ای `authority`، مبلغ ریالی) |
+| [psp/router.ts](../backend/src/providers/psp/router.ts) | روتر چند-درگاه: سریع‌ترین سالم + جایگزینی خودکار (با یک درگاه فقط رد می‌کنه) |
 
 ---
 
