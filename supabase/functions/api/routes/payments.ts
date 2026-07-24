@@ -8,7 +8,7 @@
  */
 import { Hono } from "hono";
 import { z } from "zod";
-import { makeAuthenticate, readJson, requireUser, type AppEnv, type Deps } from "../deps.ts";
+import { html, makeAuthenticate, readJson, requireUser, type AppEnv, type Deps } from "../deps.ts";
 import { badRequest } from "../shared/lib/http-errors.ts";
 import { renderResultPage } from "../shared/lib/pay-result-page.ts";
 import {
@@ -53,7 +53,7 @@ export function paymentRoutes(deps: Deps) {
   /** The PSP redirects the user's browser here after the gateway. Public. */
   r.get("/payments/callback", async (c) => {
     const result = await handlePaymentCallback(db, psp, c.req.query(), now());
-    return c.html(renderResultPage(env, result));
+    return html(c, renderResultPage(env, result));
   });
 
   r.get("/payments/:id", auth, async (c) => {

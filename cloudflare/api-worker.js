@@ -7,6 +7,12 @@
  *  - It stamps `x-proxy-secret`, so the function can refuse anything that did
  *    NOT come through this worker (the raw URL is dead), and `x-client-ip`
  *    (from cf-connecting-ip) becomes a trustworthy source for OTP rate limits.
+ *  - It repairs HTML responses. Supabase force-downgrades HTML on *.supabase.co
+ *    to `text/plain` + a `sandbox` CSP (anti-phishing for the shared domain),
+ *    which would render the admin panel and the payment-result page as raw
+ *    source with their inline scripts blocked. The function marks HTML with
+ *    `x-routino-html`; here — on OUR domain — we restore `text/html` and drop
+ *    the sandbox CSP.
  *
  * Deploy (Cloudflare dashboard, no CLI needed):
  *  1. Workers & Pages → Create → Worker → paste this file → Deploy.
@@ -16,8 +22,7 @@
  *
  * Path mapping: api.routino.me/<path> → <SUPABASE>/functions/v1/api/<path>.
  * The function's Hono app has basePath("/api"), so public paths (/v1/...,
- * /admin, /health) are byte-identical to the old Fastify deployment — the
- * frontend, the payment callbacks and the admin panel need no changes.
+ * /admin, /health) are byte-identical to the old Fastify deployment.
  */
 
 const ORIGIN = "https://axychfrteevhfdhgvfuv.supabase.co/functions/v1/api";
@@ -31,13 +36,27 @@ export default {
     headers.set("x-proxy-secret", env.PROXY_SECRET ?? "");
     headers.set("x-client-ip", request.headers.get("cf-connecting-ip") ?? "");
 
-    return fetch(target, {
+    const resp = await fetch(target, {
       method: request.method,
       headers,
       body: request.body,
-      // Pass gateway redirects (e.g. nothing today, but harmless) through to
-      // the browser instead of following them server-side.
       redirect: "manual",
     });
+
+    // Repair HTML pages the Supabase gateway downgraded to text/plain + sandbox.
+    if (resp.headers.get("x-routino-html") === "1") {
+      const h = new Headers(resp.headers);
+      h.set("content-type", "text/html; charset=utf-8");
+      h.delete("content-security-policy");
+      h.delete("x-content-type-options");
+      h.delete("x-routino-html");
+      return new Response(resp.body, {
+        status: resp.status,
+        statusText: resp.statusText,
+        headers: h,
+      });
+    }
+
+    return resp;
   },
 };

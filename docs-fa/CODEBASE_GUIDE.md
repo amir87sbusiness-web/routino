@@ -106,6 +106,10 @@ routino1.0/
 | [src/lib/pwa.ts](../src/lib/pwa.ts) | نصب PWA، سرویس‌ورکر، درخواست ذخیره‌سازی پایدار | معمولاً دست نمی‌زنی |
 | [src/lib/native.ts](../src/lib/native.ts) | هماهنگی نوار وضعیت اندروید/iOS با تم | معمولاً دست نمی‌زنی |
 | [src/lib/native-notifications.ts](../src/lib/native-notifications.ts) | نوتیفیکیشن‌های سیستم‌عاملی موبایل (وقتی اپ بسته‌ست هم کار می‌کنن) | متن نوتیف‌های عادت/ژورنال/کار در موبایل |
+| [src/lib/wipe.ts](../src/lib/wipe.ts) | جداسازی دیتا موقع تعویض شماره ورود (`loginAs`, `wipeContent`) — صدا زده می‌شه از `auth.tsx` | معمولاً دست نمی‌زنی |
+| [src/lib/seed-demo.ts](../src/lib/seed-demo.ts) | دکمه‌ی «دیتای نمایشی» در تنظیمات — یک سال دیتای ساختگی می‌سازه برای دمو/تست (`applyDemoContent`) | فقط برای دمو، تو نسخه‌ی واقعی کاربر لازم نیست |
+| [src/lib/backup-native.ts](../src/lib/backup-native.ts) | خروجی فایل پشتیبان روی موبایل (share sheet کپسیتور، چون دانلود مستقیم مرورگر اونجا کار نمی‌کنه) | معمولاً دست نمی‌زنی |
+| [src/lib/utils.ts](../src/lib/utils.ts) | تابع کمکی `cn` (ترکیب کلاس‌های Tailwind) | معمولاً دست نمی‌زنی |
 
 ### 💾 ذخیره‌سازی محلی (`src/lib/db/`) — ⚠️ منطقه حساس
 
@@ -241,9 +245,9 @@ routino1.0/
 
 | کجا | چی | چطور خاموش می‌شه |
 |---|---|---|
-| [src/routes/auth.tsx](../src/routes/auth.tsx) | `TEST_LOGIN_BUTTON = true` → دکمه «ورود تستی بدون پیامک» | مقدارش رو `false` کن |
+| [src/routes/auth.tsx](../src/routes/auth.tsx) | `TEST_LOGIN_BUTTON` → دکمه «ورود تستی بدون پیامک» — الان از قبل `false` است | اگه برای تست خودت روشنش کردی، قبل از انتشار دوباره `false` کن |
 | [src/routes/auth.tsx](../src/routes/auth.tsx) | `SKIP_SMS = false` → اگه `true` بشه کلاً بدون سرور وارد می‌شه (فقط دمو) | `false` بمونه |
-| [src/routes/subscribe.tsx](../src/routes/subscribe.tsx) | `TEST_GRANT_BUTTON = true` → دکمه «تمدید تستی بدون پرداخت» | مقدارش رو `false` کن |
+| [src/routes/subscribe.tsx](../src/routes/subscribe.tsx) | `TEST_GRANT_BUTTON` → دکمه «تمدید تستی بدون پرداخت» — الان از قبل `false` است | اگه برای تست خودت روشنش کردی، قبل از انتشار دوباره `false` کن |
 | env سرور | `PSP_PROVIDER=fake` → درگاه تقلبی | در پروداکشن خودش خطا می‌ده؛ `zibal` بذار |
 | env سرور | `SMS_PROVIDER=console` → کد در ترمینال | در پروداکشن `kavenegar` بذار |
 | env سرور | همه‌ی secretهای `dev-only...` | در پروداکشن سرور اصلاً بالا نمیاد تا عوضشون نکنی (عمداً) |

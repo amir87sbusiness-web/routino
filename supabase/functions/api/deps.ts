@@ -6,6 +6,7 @@
  */
 import { eq } from "drizzle-orm";
 import type { Context, Next } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { users } from "./shared/db/schema.ts";
 import type { Database } from "./shared/db/client.ts";
 import type { Env } from "./shared/env.ts";
@@ -40,6 +41,23 @@ export async function readJson(c: Context): Promise<unknown> {
   } catch {
     return {};
   }
+}
+
+/**
+ * Serve an HTML page.
+ *
+ * The Supabase Edge Functions gateway force-downgrades HTML responses on the
+ * *.supabase.co domain to `text/plain` and slaps a `sandbox` CSP on them (an
+ * anti-phishing measure for the shared domain). That would render the admin
+ * panel and the payment-result page as raw source with their inline scripts
+ * blocked. So we mark HTML responses with `x-routino-html`, and the Cloudflare
+ * Worker in front of api.routino.me — which serves from OUR domain — restores
+ * `text/html` and strips the sandbox CSP. Locally (Fastify / tests) the header
+ * is simply harmless.
+ */
+export function html(c: Context, body: string, status?: ContentfulStatusCode) {
+  c.header("x-routino-html", "1");
+  return c.html(body, status);
 }
 
 /**

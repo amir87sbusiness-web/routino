@@ -60,7 +60,7 @@ backend/
 | `PSP_PROVIDER` | `fake` | یک درگاه: `fake` / `zibal` / `zarinpal` |
 | `PSP_PROVIDERS` | — | چند درگاه با کاما، مثل `zarinpal,zibal` (سرور سریع‌ترین سالم رو انتخاب می‌کنه + جایگزینی خودکار). اگه پر باشه جای `PSP_PROVIDER` رو می‌گیره |
 | `ZIBAL_MERCHANT` | `zibal` | مرچنت زیبال (کلمه‌ی `zibal` = حالت سندباکس) |
-| `ZARINPAL_MERCHANT` | — | مرچنت زرین‌پال (۳۶ نویسه؛ فقط وقتی زرین‌پال فعاله) |
+| `ZARINPAL_MERCHANT` | `dev-only-zarinpal-merchant` | مرچنت زرین‌پال (۳۶ نویسه؛ فقط وقتی زرین‌پال فعاله). مقدار پیش‌فرض `dev-only-...` مثل `ADMIN_TOKEN`/`JWT_SECRET` عمداً با محافظ production قاطی می‌شه — باید حتماً قبل لایو رفتن عوض بشه |
 | `PUBLIC_API_URL` | `http://localhost:3000` | آدرس عمومی همین سرور (درگاه، مرورگرِ کاربر رو به اینجا برمی‌گردونه — از گوشی باید قابل دسترس باشه) |
 | `PUBLIC_WEB_URL` | `http://localhost:5180` | آدرس نسخه وب اپ (برای برگشت بعد از پرداخت وب) |
 | `APP_DEEP_LINK` | `routino://pay/result` | لینک برگشت به اپ موبایل بعد از پرداخت |
@@ -114,14 +114,16 @@ Fastify رو می‌سازه، CORS و فشرده‌سازی و helmet رو فع
 
 ### `backend/src/routes/payments.ts` — 💳 مسیر پول (⚠️ حساس‌ترین فایل بک‌اند)
 
-| متد و آدرس | چیکار می‌کنه |
-|---|---|
-| `POST /v1/payments/quote` | پیش‌فاکتور: قیمت پایه + بررسی کد تخفیف. کد نامعتبر = «دلیل» برمی‌گرده نه خطا (که UI پیام درست نشون بده) |
-| `POST /v1/payments/checkout` | ساخت سطر پرداخت (مبلغ **سمت سرور** حساب می‌شه) ← ثبت در درگاه ← برگردوندن `paymentUrl`. سقف ۱۰ خرید در ساعت برای هر کاربر. تخفیف ۱۰۰٪ = بدون درگاه، مستقیم فعال می‌شه |
-| `GET /v1/payments/callback` | 🌐 مرورگرِ کاربر بعد از درگاه به اینجا برمی‌گرده. `success=1` توی آدرس **هیچ ارزشی نداره** (هرکی می‌تونه تایپش کنه) — تایید واقعی فقط با تماس سرور-به-سرور (`psp.verify`) انجام می‌شه و **مبلغِ تاییدشده باید دقیقاً با مبلغ ما برابر باشه** وگرنه `verify_failed` + لاگ اضطراری. بعدش صفحه HTML نتیجه رو نشون می‌ده (`sendResultPage` — پایین همین فایل) که کاربر رو به وب یا دیپ‌لینک اپ برمی‌گردونه |
-| `GET /v1/payments/:id` | استعلام وضعیت برای اپ. **خود-درمانی:** اگه پرداختی در حالت `redirected` گیر کرده (callback هیچ‌وقت نرسیده)، همین‌جا دوباره از درگاه استعلام و در صورت موفقیت فعال می‌شه |
+⚠️ خود `routes/payments.ts` فقط آداپتور نازک Fastify‌ئه (پارس ورودی، رندر پاسخ). **کل منطق پول واقعاً تو `services/payment-flow.ts` زندگی می‌کنه** (بدون وابستگی به فریم‌ورک، عیناً با نسخه‌ی Supabase Edge مشترکه) و صفحه‌ی HTML نتیجه در `lib/pay-result-page.ts` (تابع `renderResultPage`) است. اگه دنبال تغییر رفتار پرداخت اومدی، باید بری سراغ `payment-flow.ts` نه این فایل.
 
-**قفل ضد دوباره‌شارژ (`applyPaid`):** فعال‌سازی فقط با `UPDATE ... WHERE applied_at IS NULL` انجام می‌شه — یعنی حتی اگه درگاه ۱۰ بار callback بزنه یا کاربر ۱۰ بار رفرش کنه، اشتراک فقط **یک بار** اضافه می‌شه. اگه وسط کار خطا بخوره، قفل آزاد می‌شه که تلاش بعدی جبران کنه (پولِ داده‌شده هیچ‌وقت نباید بسوزه).
+| متد و آدرس | چیکار می‌کنه | تابع اصلی در `payment-flow.ts` |
+|---|---|---|
+| `POST /v1/payments/quote` | پیش‌فاکتور: قیمت پایه + بررسی کد تخفیف. کد نامعتبر = «دلیل» برمی‌گرده نه خطا (که UI پیام درست نشون بده) | (مستقیم از `services/pricing.ts`) |
+| `POST /v1/payments/checkout` | ساخت سطر پرداخت (مبلغ **سمت سرور** حساب می‌شه) ← ثبت در درگاه ← برگردوندن `paymentUrl`. سقف ۱۰ خرید در ساعت برای هر کاربر. تخفیف ۱۰۰٪ = بدون درگاه، مستقیم فعال می‌شه | `checkoutPayment` |
+| `GET /v1/payments/callback` | 🌐 مرورگرِ کاربر بعد از درگاه به اینجا برمی‌گرده. `success=1` توی آدرس **هیچ ارزشی نداره** (هرکی می‌تونه تایپش کنه) — تایید واقعی فقط با تماس سرور-به-سرور (`psp.verify`) انجام می‌شه و **مبلغِ تاییدشده باید دقیقاً با مبلغ ما برابر باشه** وگرنه `verify_failed` + لاگ اضطراری. بعدش صفحه HTML نتیجه رو نشون می‌ده که کاربر رو به وب یا دیپ‌لینک اپ برمی‌گردونه | `handlePaymentCallback` |
+| `GET /v1/payments/:id` | استعلام وضعیت برای اپ. **خود-درمانی:** اگه پرداختی در حالت `redirected` گیر کرده (callback هیچ‌وقت نرسیده)، همین‌جا دوباره از درگاه استعلام و در صورت موفقیت فعال می‌شه | `pollPayment` |
+
+**قفل ضد دوباره‌شارژ (`applyPaid` در `services/payment-flow.ts`):** فعال‌سازی فقط با `UPDATE ... WHERE applied_at IS NULL` انجام می‌شه — یعنی حتی اگه درگاه ۱۰ بار callback بزنه یا کاربر ۱۰ بار رفرش کنه، اشتراک فقط **یک بار** اضافه می‌شه. اگه وسط کار خطا بخوره، قفل آزاد می‌شه که تلاش بعدی جبران کنه (پولِ داده‌شده هیچ‌وقت نباید بسوزه).
 
 ### `backend/src/routes/subscriptions.ts` — اشتراک
 
@@ -137,7 +139,7 @@ Fastify رو می‌سازه، CORS و فشرده‌سازی و helmet رو فع
 |---|---|---|
 | `backend/src/routes/plans.ts` | `GET /v1/plans` | عمومی — لیست پلن‌های فعال با قیمت (فرانت صفحه اشتراک از این می‌خونه) |
 | `backend/src/routes/admin.ts` | `GET /v1/admin/overview`، `GET/POST /v1/admin/users...`، `POST .../block`، `POST .../grant`، `GET /v1/admin/payments`، `GET/POST /v1/admin/discounts...` | API ادمین: آمار کلی (کاربر/درآمد/OTP)، جستجوی کاربر با شماره، مشاهده جزئیات (دستگاه‌ها/پرداخت‌ها/گرنت‌ها)، بلاک (نشست‌ها هم قطع می‌شن)، هدیه اشتراک، مدیریت کدهای تخفیف. احراز: هدر `x-admin-token` |
-| `backend/src/routes/admin-panel.ts` | `GET /admin` | 🖥️ **پنل ادمین** — یک صفحه HTML کامل (بدون فریم‌ورک) که با همون APIهای بالا کار می‌کنه. ظاهر، متن‌ها و تب‌های پنل همه داخل همین فایل‌اند |
+| `backend/src/routes/admin-panel.ts` | `GET /admin` | 🖥️ **پنل ادمین** — فقط یه مسیر کوتاهه که HTML رو از `lib/admin-page.ts` (ثابت `ADMIN_PAGE`) برمی‌گردونه. ظاهر، متن‌ها و تب‌های پنل همه تو `lib/admin-page.ts` هستن، نه اینجا |
 | `backend/src/routes/dev-gateway.ts` | `GET /v1/dev/gateway` | درگاه تقلبی تست: صفحه «پرداخت موفق / انصراف». فقط وقتی `PSP_PROVIDER=fake` فعاله |
 | `backend/src/routes/health.ts` | `GET /health`، `GET /health/ready` | چک سلامت (دومی دیتابیس رو هم تست می‌کنه — مناسب مانیتورینگ) |
 
@@ -171,6 +173,12 @@ Fastify رو می‌سازه، CORS و فشرده‌سازی و helmet رو فع
 ### `backend/src/services/tokens.ts` — توکن‌ها
 - **Access:** JWT امضاشده، ۱۵ دقیقه، بدون مراجعه به دیتابیس چک می‌شه
 - **Refresh:** رشته تصادفی مات، ۱۸۰ روز، با هر استفاده **عوض می‌شه** (قبلی می‌میره)، قابل ابطال (بلاک کاربر = ابطال همه دستگاه‌ها با `revokeAllDevices`)
+
+### `backend/src/services/payment-flow.ts` — 💳 ماشین حالت پرداخت (منطق واقعی مسیر پول)
+- `checkoutPayment` / `handlePaymentCallback` / `pollPayment` / `applyPaid` — همون‌هایی که بالاتر تو جدول `routes/payments.ts` بهشون اشاره شد. عیناً (بدون تغییر) با `supabase/functions/api/shared/` سینک می‌شه؛ تست parity جلوی جدایی رو می‌گیره.
+
+### `backend/src/services/admin.ts` — منطق API های پنل ادمین
+- `adminOverview`, `adminListUsers`, `adminUserDetail`, `adminSetBlocked`, `adminGrant`, `adminListPayments`, `adminListDiscounts`, `adminCreateDiscount`, `adminUpdateDiscount` — همه‌ی چیزی که `routes/admin.ts` صداشون می‌زنه
 
 ---
 
@@ -212,6 +220,9 @@ Fastify رو می‌سازه، CORS و فشرده‌سازی و helmet رو فع
 | `subscriptions.test.ts` | انتقال اشتراک قدیمی و محدودیت‌هاش |
 | `admin.test.ts` | پنل ادمین |
 | `phone.parity.test.ts` | ⚠️ **یکسان‌بودن نرمال‌سازی شماره بین فرانت و بک** — اگه یکی رو عوض کنی این تست می‌شکنه (عمداً) |
+| `app.test.ts` | ساخت اپ Fastify، health check ها |
+| `psp.test.ts` | درگاه‌های پرداخت (زیبال/زرین‌پال/فیک) مستقل از مسیر HTTP |
+| `edge-parity.test.ts` | یکسان‌بودن `backend/src` با کپیِ سینک‌شده در `supabase/functions/api/shared/` — اگه فراموش کنی `sync:edge` بزنی این می‌شکنه |
 | `helpers/` | ابزار ساخت اپ تستی |
 
 ---
@@ -236,7 +247,7 @@ Fastify رو می‌سازه، CORS و فشرده‌سازی و helmet رو فع
 
 ## ۱۰. ⚠️ چیزهایی که در بک‌اند دست نزنی مگر با فهم کامل
 
-1. **`routes/payments.ts`** — منطق `applied_at` و مقایسه مبلغ. جابه‌جایی یک شرط = یا دوباره‌شارژ مفتی یا سوختن پول کاربر.
+1. **`services/payment-flow.ts`** (نه `routes/payments.ts`) — منطق `applied_at` و مقایسه مبلغ. جابه‌جایی یک شرط = یا دوباره‌شارژ مفتی یا سوختن پول کاربر.
 2. **`lib/phone.ts`** — باید بایت‌به‌بایت با `src/lib/phone.ts` فرانت یکی بمونه (تست parity داره).
 3. **`services/entitlement.ts`** — تنها نویسنده‌ی `entitlements`؛ دفترکل `grants` هیچ‌وقت ویرایش نمی‌شه.
 4. **ترتیب چک‌ها در `services/otp.ts`** — «تلاش قبل از مقایسه شمرده می‌شه» عمدیه (کرش وسط کار = حدس مفتی نده).

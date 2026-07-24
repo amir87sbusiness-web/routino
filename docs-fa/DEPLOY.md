@@ -3,9 +3,11 @@
 راهنمای کامل: از اجرای محلی تا لانچ روی آروان کلاد.
 
 > **می‌خواهی رایگان و روی routino.me لانچ کنی؟** این فایل مسیر آروان‌کلاد (هاست
-> ایرانی) است. برای انتشار رایگان با Cloudflare Pages + Render + Supabase، از
-> [`DEPLOY-FREE-STACK.md`](DEPLOY-FREE-STACK.md) استفاده کن. بخش «۱. اجرای محلی»
-> و «۷. قبل از لانچ واقعی» همین فایل برای هر دو مسیر معتبرند.
+> ایرانی) است. مسیر فعلی و رسمی لانچ رایگان
+> [`DEPLOY-SUPABASE-EDGE.md`](DEPLOY-SUPABASE-EDGE.md) است (Cloudflare Pages +
+> Supabase Edge Function). مسیر قدیمی‌تر Render در
+> [`DEPLOY-FREE-STACK.md`](DEPLOY-FREE-STACK.md) دیگر توصیه نمی‌شود. بخش «۱.
+> اجرای محلی» و «۷. قبل از لانچ واقعی» همین فایل برای هر سه مسیر معتبرند.
 
 ---
 

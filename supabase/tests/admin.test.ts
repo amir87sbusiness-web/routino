@@ -26,6 +26,10 @@ describe("admin auth", () => {
   it("serves the panel shell publicly (reveals nothing without a token)", async () => {
     const res = await h.call("GET", "/admin");
     expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    // The marker the Cloudflare Worker keys on to repair the Supabase gateway's
+    // text/plain downgrade + sandbox CSP.
+    expect(res.headers.get("x-routino-html")).toBe("1");
     expect(await res.text()).toContain("پنل مدیریت");
   });
 });

@@ -30,6 +30,7 @@
 | ۳ | خودکار — وقتی توکن رو به انقضاست یا ۴۰۱ خورد | `auth.ts` ← `refreshTokens` | `POST /v1/auth/token/refresh` | `backend/src/routes/auth.ts` |
 | ۴ | `routes/settings.tsx` — دکمه «خروج» | `auth.ts` ← `logout` | `POST /v1/auth/logout` | `backend/src/routes/auth.ts` |
 | ۵ | `state/app.tsx` — یک بار در هر اجرا | `auth.ts` ← `fetchEntitlement` | `GET /v1/subscriptions/me` | `backend/src/routes/subscriptions.ts` |
+| ۵ب | (فقط پنل ادمین/دیباگ) | — | `GET /v1/subscriptions/grants` | `backend/src/routes/subscriptions.ts` — دفترکل تمدیدهای یک کاربر |
 | ۶ | `routes/auth.tsx` — بعد از ورود، اگه اشتراک قدیمی محلی باشه | `auth.ts` ← `importSubscription` | `POST /v1/subscriptions/import` | `backend/src/routes/subscriptions.ts` |
 | ۷ | `routes/subscribe.tsx` — موقع باز شدن صفحه | `payments.ts` ← `fetchPlans` | `GET /v1/plans` | `backend/src/routes/plans.ts` |
 | ۸ | `routes/subscribe.tsx` — دکمه «اعمال» کد تخفیف | `payments.ts` ← `fetchQuote` | `POST /v1/payments/quote` | `backend/src/routes/payments.ts` |

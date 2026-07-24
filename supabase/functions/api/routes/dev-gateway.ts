@@ -4,7 +4,7 @@
  * backend/src/routes/dev-gateway.ts — same redirect contract as Zibal.
  */
 import { Hono } from "hono";
-import type { AppEnv, Deps } from "../deps.ts";
+import { html, type AppEnv, type Deps } from "../deps.ts";
 import type { fakePsp } from "../shared/providers/psp/fake.ts";
 
 export function devGatewayRoutes(deps: Deps) {
@@ -16,10 +16,10 @@ export function devGatewayRoutes(deps: Deps) {
   r.get("/dev/gateway", (c) => {
     const trackId = Number(c.req.query("trackId"));
     const txn = psp._txns.get(trackId);
-    if (!txn) return c.html("<h1>تراکنش پیدا نشد</h1>", 404);
+    if (!txn) return html(c, "<h1>تراکنش پیدا نشد</h1>", 404);
 
     const toman = Math.floor(txn.amountRial / 10).toLocaleString("en-US");
-    const html = `<!doctype html>
+    const page = `<!doctype html>
 <html lang="fa" dir="rtl">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -48,7 +48,7 @@ export function devGatewayRoutes(deps: Deps) {
 </div>
 </body>
 </html>`;
-    return c.html(html);
+    return html(c, page);
   });
 
   r.get("/dev/gateway/settle", (c) => {

@@ -83,7 +83,9 @@ export function adminRoutes(deps: Deps) {
     return c.json({ users });
   });
 
-  r.get("/admin/users/:id", async (c) => c.json(await adminUserDetail(db, c.req.param("id"), now())));
+  r.get("/admin/users/:id", async (c) =>
+    c.json(await adminUserDetail(db, c.req.param("id"), now())),
+  );
 
   r.post("/admin/users/:id/block", async (c) => {
     const { blocked } = blockBody.parse(await readJson(c));
@@ -95,7 +97,11 @@ export function adminRoutes(deps: Deps) {
   r.post("/admin/users/:id/grant", async (c) => {
     const body = grantBody.parse(await readJson(c));
     const res = await adminGrant(db, c.req.param("id"), body, now());
-    console.info("admin grant", { userId: c.req.param("id"), months: body.months, days: body.days });
+    console.info("admin grant", {
+      userId: c.req.param("id"),
+      months: body.months,
+      days: body.days,
+    });
     return c.json(res);
   });
 
@@ -109,10 +115,18 @@ export function adminRoutes(deps: Deps) {
 
   r.get("/admin/discounts", async (c) => c.json({ discounts: await adminListDiscounts(db) }));
 
-  r.post("/admin/discounts", async (c) => c.json(await adminCreateDiscount(db, discountCreateBody.parse(await readJson(c)))));
+  r.post("/admin/discounts", async (c) =>
+    c.json(await adminCreateDiscount(db, discountCreateBody.parse(await readJson(c)))),
+  );
 
   r.post("/admin/discounts/:code", async (c) =>
-    c.json(await adminUpdateDiscount(db, c.req.param("code"), discountUpdateBody.parse(await readJson(c)))),
+    c.json(
+      await adminUpdateDiscount(
+        db,
+        c.req.param("code"),
+        discountUpdateBody.parse(await readJson(c)),
+      ),
+    ),
   );
 
   return r;

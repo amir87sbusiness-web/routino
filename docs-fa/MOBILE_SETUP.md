@@ -29,7 +29,7 @@
 ## مرحله ۱ — نصب پکیج‌ها
 
 ```bash
-cd routino-1.2
+cd routino1.0
 npm install
 ```
 

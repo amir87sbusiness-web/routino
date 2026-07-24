@@ -86,6 +86,8 @@ describe("checkout → gateway → callback", () => {
 
     const cb = await settleAndCallback(body.trackId, "paid");
     expect(cb.status).toBe(200);
+    // Result page must be marked HTML so the Worker renders it (not raw text).
+    expect(cb.headers.get("x-routino-html")).toBe("1");
     expect(await cb.text()).toContain("پرداخت موفق");
 
     const [p] = await h.query<{
