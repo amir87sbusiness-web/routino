@@ -145,7 +145,7 @@ routino1.0/
 | [analytics.tsx](../src/routes/analytics.tsx) | **آنالیز**: این‌هفته/هفته‌قبل، نمودار کلی، شبکه تقویمی هر عادت، لیست کارهای انجام‌شده/نشده | بازه‌های نمودار (`RANGES`) |
 | [settings.tsx](../src/routes/settings.tsx) | **تنظیمات**: حساب، زبان، تقویم، تم، رنگ برند (۸ رنگ + چرخ رنگ)، مدیریت دسته‌ها، نوتیف، ساعت ژورنال، خروج | لیست رنگ‌های برند (`BRAND_COLORS`)، چیدمان تنظیمات |
 | [onboarding.tsx](../src/routes/onboarding.tsx) | **خوش‌آمدگویی**: ۳ اسلاید معرفی + تنظیمات اولیه | متن و ایموجی اسلایدها (آرایه `slides`) |
-| [auth.tsx](../src/routes/auth.tsx) | **ورود**: شماره موبایل → کد پیامکی → ورود. اشتراک قدیمی محلی رو هم به سرور منتقل می‌کنه | ⚠️ `SKIP_SMS` و `TEST_LOGIN_BUTTON` (بخش ۷ رو ببین)، متن خطاها |
+| [auth.tsx](../src/routes/auth.tsx) | **ورود**: پیش‌فرض **رمز عبور** (شماره موبایل یا نام کاربری + رمز)؛ لینک «ورود با کد پیامکی» به‌عنوان جایگزین (بار اول/فراموشی رمز). اشتراک قدیمی محلی رو هم به سرور منتقل می‌کنه | ⚠️ `SKIP_SMS` (بخش ۷)، متن خطاها، ترتیب دو روش ورود |
 | [subscribe.tsx](../src/routes/subscribe.tsx) | **دیوار اشتراک**: لیست پلن‌ها (از سرور، با نسخه آفلاین پشتیبان)، کد تخفیف، دکمه پرداخت | ⚠️ `TEST_GRANT_BUTTON` (بخش ۷)، متن‌های صفحه خرید |
 | [pay.result.tsx](../src/routes/pay.result.tsx) | **نتیجه پرداخت**: بعد از برگشت از درگاه، وضعیت رو از سرور می‌پرسه (تا ۱ دقیقه تلاش می‌کنه) | متن‌های موفق/لغو/ناموفق |
 
@@ -182,7 +182,7 @@ routino1.0/
 
 | فایل | آدرس‌ها | نقش |
 |---|---|---|
-| [auth.ts](../backend/src/routes/auth.ts) | `/v1/auth/otp/request` `/verify` `/token/refresh` `/logout` | ورود با پیامک. **کاربر جدید = ۷ روز رایگان** (ثابت `TRIAL_DAYS` خط ۱۱) |
+| [auth.ts](../backend/src/routes/auth.ts) | `/v1/auth/otp/request` `/verify` · **`/password/login`** · **`/account` (GET)** · **`/username`** · **`/password`** · `/token/refresh` `/logout` | ورود با پیامک **و ورود با رمز** (شماره/نام‌کاربری). تنظیم نام کاربری و رمز از تنظیمات (نیازمند توکن). هش رمز = scrypt در [services/password.ts](../backend/src/services/password.ts)؛ سقف تلاش‌ها در [services/login-throttle.ts](../backend/src/services/login-throttle.ts). **کاربر جدید = ۷ روز رایگان** (`TRIAL_DAYS`) |
 | [payments.ts](../backend/src/routes/payments.ts) | `/v1/payments/quote` `/checkout` `/callback` `/:id` | 💰 **مسیر پول** — قیمت فقط سمت سرور حساب می‌شه، مبلغ تاییدشده درگاه با مبلغ ما مقایسه می‌شه، گرنت دوباره ساختاراً غیرممکنه (`applied_at`). صفحه HTML نتیجه پرداخت هم همین‌جاست (`sendResultPage`) |
 | [subscriptions.ts](../backend/src/routes/subscriptions.ts) | `/v1/subscriptions/me` `/import` `/grants` | وضعیت اشتراک + انتقال یک‌باره اشتراک قدیمی محلی (محدود به `IMPORT_MAX_DAYS`=۴۰۰ روز، فقط یک بار) |
 | [plans.ts](../backend/src/routes/plans.ts) | `/v1/plans` | لیست عمومی پلن‌ها (از جدول `plans` دیتابیس) |
@@ -245,7 +245,6 @@ routino1.0/
 
 | کجا | چی | چطور خاموش می‌شه |
 |---|---|---|
-| [src/routes/auth.tsx](../src/routes/auth.tsx) | `TEST_LOGIN_BUTTON` → دکمه «ورود تستی بدون پیامک» — الان از قبل `false` است | اگه برای تست خودت روشنش کردی، قبل از انتشار دوباره `false` کن |
 | [src/routes/auth.tsx](../src/routes/auth.tsx) | `SKIP_SMS = false` → اگه `true` بشه کلاً بدون سرور وارد می‌شه (فقط دمو) | `false` بمونه |
 | [src/routes/subscribe.tsx](../src/routes/subscribe.tsx) | `TEST_GRANT_BUTTON` → دکمه «تمدید تستی بدون پرداخت» — الان از قبل `false` است | اگه برای تست خودت روشنش کردی، قبل از انتشار دوباره `false` کن |
 | env سرور | `PSP_PROVIDER=fake` → درگاه تقلبی | در پروداکشن خودش خطا می‌ده؛ `zibal` بذار |
@@ -272,7 +271,7 @@ npm test               # تست‌های بک‌اند
 - در حالت توسعه، کد پیامکی ورود **در ترمینالِ بک‌اند** چاپ می‌شه (`[sms:console] OTP for ... -> 123456`).
 - پرداخت تستی: درگاه فیک صفحه «پرداخت موفق/انصراف» نشون می‌ده.
 - پنل ادمین: `http://localhost:3000/admin` — توکن پیش‌فرض dev: `dev-only-admin-token`.
-- جزئیات استقرار روی سرور واقعی: [DEPLOY.md](DEPLOY.md) · راه‌اندازی موبایل: [MOBILE_SETUP.md](MOBILE_SETUP.md)
+- استقرار روی سرور واقعی (مسیر فعلی) + **وضعیت فعلی لانچ** (چی بالاست، چی هنوز تستیه): [DEPLOY-SUPABASE-EDGE.md](DEPLOY-SUPABASE-EDGE.md) · راه‌اندازی موبایل: [MOBILE_SETUP.md](MOBILE_SETUP.md)
 
 ---
 
@@ -295,6 +294,7 @@ npm test               # تست‌های بک‌اند
 - **State:** single in-memory `Db` object (`src/lib/store.ts`) in `AppProvider` (`src/state/app.tsx`). All mutations via `update(fn)`; immutable spreads preserve refs → `diffDb(prev,next)` (`lib/db/diff.ts`) reference-equality diff → `applyChanges` writes RecordRows (key,data,updatedAt,deleted,dirty,seq) to Dexie tables. Device-local slice (auth, subscription, notifications, meta, theme, notificationsEnabled) → localStorage `routino:local:v1` via `lib/db/local.ts`. Legacy blob `routino:v1` imported once by `migrate.ts` (never deleted).
 - **Gate:** `AppShell` → onboarding → auth (`db.auth`, device-local) → `subscriptionActive(db)` (local cache + `meta.tampered` check) → app. Entitlement refreshed once per boot from `GET /v1/subscriptions/me` (never applies `none`).
 - **Auth tokens:** localStorage `routino:auth:v1` (`lib/api/auth.ts`), access ~15min JWT, opaque rotating refresh; single-flight refresh; offline never signs out.
+- **Password auth:** phone-first UI defaults to password (`/auth/password/login`, identifier = canonical phone OR lowercased username — disambiguated by whether `normalizePhone` succeeds, since usernames must start with a letter). Hash = scrypt (`services/password.ts`, edge-safe, NOT the unused `argon2` dep). Brute-force limits per-identifier(8)/per-IP(50) over `login_attempts` ledger (`services/login-throttle.ts`); generic `bad_credentials` + DUMMY_HASH verify on miss = no user enumeration. Set username/password from settings when signed in (`/auth/username`, `/auth/password`). Provision without SMS: admin panel «تنظیم/ریست رمز» → `POST /admin/users/set-password` (creates + 7-day trial), OR `OWNER_PHONE`/`OWNER_PASSWORD`/`OWNER_USERNAME` env bootstrap on boot (`services/owner-bootstrap.ts`, idempotent, never overwrites an existing password).
 - **Sync:** NOT implemented yet (outbox `dirty:1` + server `records` table + per-user `seq` cursor ready; Phase 4/5 pending).
 - **Payments:** client names planId+code only. checkout → psp.request → redirect; callback verifies server-to-server, asserts `v.amount === payment.amountRial`, grants via `applied_at IS NULL` claim; `GET /payments/:id` self-heals stuck `redirected`. Free (100% off) grants directly. Toman→Rial ×10 only in `pricing.ts`.
 - **Entitlement:** `grants` append-only ledger + `entitlements` materialized; `grantInterval` stacks with `make_interval` (real calendar months); import (`/subscriptions/import`) once-only, capped IMPORT_MAX_DAYS, `ensureExpiresAt` (max, no stacking).

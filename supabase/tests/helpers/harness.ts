@@ -123,8 +123,8 @@ export async function makeHarness(overrides: Record<string, string> = {}): Promi
     },
     async truncate() {
       await db.execute(sql`
-        truncate users, records, devices, otp_codes, discounts, redemptions,
-                 payments, grants, entitlements, feedback, admins
+        truncate users, records, devices, otp_codes, login_attempts, discounts,
+                 redemptions, payments, grants, entitlements, feedback, admins
         restart identity cascade
       `);
       await db.delete(schema.plans);

@@ -101,8 +101,8 @@ export async function makeHarness(overrides: Partial<NodeJS.ProcessEnv> = {}): P
     async truncate() {
       // Fresh PGlite per file is ~150ms; truncating between tests is ~1ms.
       await db.execute(sql`
-        truncate users, records, devices, otp_codes, discounts, redemptions,
-                 payments, grants, entitlements, feedback, admins
+        truncate users, records, devices, otp_codes, login_attempts, discounts,
+                 redemptions, payments, grants, entitlements, feedback, admins
         restart identity cascade
       `);
       await db.delete(schema.plans);

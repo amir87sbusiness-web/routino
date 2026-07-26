@@ -18,6 +18,7 @@ import {
   adminListUsers,
   adminOverview,
   adminSetBlocked,
+  adminSetPassword,
   adminUpdateDiscount,
   adminUserDetail,
 } from "../shared/services/admin.ts";
@@ -37,6 +38,11 @@ const grantBody = z.object({
 });
 
 const blockBody = z.object({ blocked: z.boolean() });
+
+const setPasswordBody = z.object({
+  phone: z.string().min(1).max(32),
+  password: z.string().min(1).max(128),
+});
 
 const discountCreateBody = z.object({
   code: z
@@ -102,6 +108,14 @@ export function adminRoutes(deps: Deps) {
       months: body.months,
       days: body.days,
     });
+    return c.json(res);
+  });
+
+  // Fixed path, so it never collides with `/admin/users/:id`.
+  r.post("/admin/users/set-password", async (c) => {
+    const body = setPasswordBody.parse(await readJson(c));
+    const res = await adminSetPassword(db, body, now());
+    console.info("admin set password", { phone: res.phone, created: res.created });
     return c.json(res);
   });
 

@@ -20,6 +20,7 @@ import {
   adminListUsers,
   adminOverview,
   adminSetBlocked,
+  adminSetPassword,
   adminUpdateDiscount,
   adminUserDetail,
 } from "../services/admin.js";
@@ -39,6 +40,11 @@ const grantBody = z.object({
 });
 
 const blockBody = z.object({ blocked: z.boolean() });
+
+const setPasswordBody = z.object({
+  phone: z.string().min(1).max(32),
+  password: z.string().min(1).max(128),
+});
 
 const discountCreateBody = z.object({
   code: z
@@ -96,6 +102,15 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const body = grantBody.parse(req.body);
     const res = await adminGrant(db, id, body, now());
     req.log.info({ userId: id, months: body.months, days: body.days }, "admin grant");
+    return res;
+  });
+
+  // Set/reset a password by phone, creating the account if needed. `set-password`
+  // is a fixed path, so it never collides with the `/admin/users/:id` params.
+  app.post("/admin/users/set-password", opts, async (req) => {
+    const body = setPasswordBody.parse(req.body);
+    const res = await adminSetPassword(db, body, now());
+    req.log.info({ phone: res.phone, created: res.created }, "admin set password");
     return res;
   });
 

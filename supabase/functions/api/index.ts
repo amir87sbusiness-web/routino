@@ -24,6 +24,7 @@ import {
   type PspProvider,
 } from "./shared/providers/psp/index.ts";
 import { consoleSms, kavenegarSms, type SmsProvider } from "./shared/providers/sms/index.ts";
+import { ensureOwner } from "./shared/services/owner-bootstrap.ts";
 
 const env = loadEnv(Deno.env.toObject());
 
@@ -66,6 +67,18 @@ const pspNames = pspProviderNames(env);
 const psp = createRouter(pspNames.map(makePsp));
 
 const app = buildApp({ db, env, sms, psp, now: () => Date.now() });
+
+// Ensure the owner account (if OWNER_PHONE/OWNER_PASSWORD are set) can sign in
+// with a password from the first boot. Idempotent and never overwrites a
+// password already chosen. Failure here must not stop the function serving.
+try {
+  await ensureOwner(db, env, new Date(), {
+    info: (m) => console.log(m),
+    warn: (m) => console.warn(m),
+  });
+} catch (err) {
+  console.error("owner bootstrap failed", err);
+}
 
 console.log(`[api] edge function up (sms=${env.SMS_PROVIDER}, psp=${pspNames.join("+")})`);
 

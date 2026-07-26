@@ -29,6 +29,9 @@ const cron = `
 create extension if not exists pg_cron;
 select cron.schedule('routino-otp-purge', '0 * * * *',
   $$delete from otp_codes where created_at < now() - interval '24 hours'$$);
+-- Same story for the failed-login ledger backing the password rate limits.
+select cron.schedule('routino-login-attempts-purge', '30 * * * *',
+  $$delete from login_attempts where created_at < now() - interval '24 hours'$$);
 `;
 
 // Every table Supabase's PostgREST auto-exposes under /rest/v1/. Our backend
@@ -46,6 +49,7 @@ const RLS_TABLES = [
   "records",
   "devices",
   "otp_codes",
+  "login_attempts",
   "plans",
   "discounts",
   "redemptions",

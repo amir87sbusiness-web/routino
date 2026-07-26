@@ -20,8 +20,9 @@ import {
   users,
 } from "../db/schema.ts";
 import { badRequest, notFound } from "../lib/http-errors.ts";
-import { toAsciiDigits } from "../lib/phone.ts";
+import { normalizePhone, toAsciiDigits } from "../lib/phone.ts";
 import { grantInterval, listGrants, readEntitlement } from "./entitlement.ts";
+import { hashPassword, validatePassword } from "./password.ts";
 import { revokeAllDevices } from "./tokens.ts";
 
 const DAY_MS = 86_400_000;
@@ -159,6 +160,47 @@ export async function adminGrant(
     now,
   );
   return { ok: true as const, entitlement };
+}
+
+/**
+ * Sets (or resets) a user's password by phone number, creating the account if it
+ * doesn't exist yet. This is how the owner provisions a password-login account
+ * from the panel when SMS isn't live — the panel is deliberately usable exactly
+ * when OTP is down. A brand-new account gets a 7-day trial, same as an OTP first
+ * sign-in, so it can actually be used after logging in.
+ */
+export async function adminSetPassword(
+  db: Database,
+  body: { phone: string; password: string },
+  now: Date,
+) {
+  const phone = normalizePhone(body.phone);
+  if (!phone) throw badRequest("invalid_phone", "Enter a valid Iranian mobile number");
+  if (!validatePassword(body.password).ok) {
+    throw badRequest(
+      "weak_password",
+      "Password must be 8+ chars with at least one letter and one digit",
+    );
+  }
+
+  const passwordHash = await hashPassword(body.password);
+  let [user] = await db.select().from(users).where(eq(users.phone, phone)).limit(1);
+  let created = false;
+  if (user) {
+    await db.update(users).set({ passwordHash }).where(eq(users.id, user.id));
+  } else {
+    [user] = await db.insert(users).values({ phone, passwordHash, createdAt: now }).returning();
+    created = true;
+    if (!user) throw new Error("failed to create user");
+    await grantInterval(
+      db,
+      user.id,
+      { planId: "trial", days: 7, source: "admin", note: "created via admin set-password" },
+      now,
+    );
+  }
+
+  return { ok: true as const, created, userId: user.id, phone };
 }
 
 export async function adminListPayments(db: Database, opts: { status?: string; limit?: number }) {

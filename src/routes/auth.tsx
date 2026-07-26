@@ -2,7 +2,15 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Button, Input, Logo } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
-import { clearTokens, entitlementToSubscription, importSubscription, requestOtp, verifyOtp } from "@/lib/api/auth";
+import {
+  clearTokens,
+  entitlementToSubscription,
+  importSubscription,
+  passwordLogin,
+  requestOtp,
+  verifyOtp,
+  type ServerEntitlement,
+} from "@/lib/api/auth";
 import { faNum } from "@/lib/dates";
 import { normalizePhone, toAsciiDigits, toLocalPhone } from "@/lib/phone";
 import { loginAs } from "@/lib/wipe";
@@ -18,19 +26,20 @@ export const Route = createFileRoute("/auth")({
 // و خرید اشتراک کار نمی‌کند.
 const SKIP_SMS = false;
 
-// ═══════════════ TEST-ONLY — بعداً حذف شود ═══════════════
-// دکمه‌ی «ورود تستی بدون پیامک» زیر دکمه‌ی اصلی. فقط برای تست روی گوشی تا موقع
-// نبودنِ بک‌اند گیر نیفتی. ورود محلی است (بدون حساب سروری، بدون توکن) — پس خرید
-// اشتراک واقعی با آن کار نمی‌کند؛ برای آن از دکمه‌ی تستیِ صفحه‌ی اشتراک استفاده کن.
-// برای حذف: این ثابت را false کن یا بلاکِ نشان‌دارِ TEST-ONLY در JSX را پاک کن.
-const TEST_LOGIN_BUTTON = false;
+type Method = "password" | "otp";
 
 function AuthPage() {
   const ctx = useAppMaybe();
   const navigate = useNavigate();
+  const [method, setMethod] = useState<Method>("password");
+  // password mode
+  const [identifier, setIdentifier] = useState("");
+  const [password, setPassword] = useState("");
+  // otp mode
   const [phone, setPhone] = useState("");
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [code, setCode] = useState("");
+  // shared
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -49,12 +58,17 @@ function AuthPage() {
       );
     }
     switch (err.code) {
+      case "bad_credentials":
+        return t("شماره/نام‌کاربری یا رمز عبور اشتباهه.", "Wrong phone/username or password.");
       case "invalid_phone":
         return t("شماره موبایل معتبر وارد کن (مثل ۰۹۱۲…)", "Enter a valid mobile number (09…)");
       case "rate_limited": {
         const mins = Math.ceil((err.retryAfter ?? 60) / 60);
         return err.retryAfter && err.retryAfter > 60
-          ? t(`درخواست زیاد بود. ${faNum(mins, lang)} دقیقه دیگه تلاش کن.`, `Too many requests. Try again in ${mins} min.`)
+          ? t(
+              `تلاش زیاد بود. ${faNum(mins, lang)} دقیقه دیگه دوباره تلاش کن.`,
+              `Too many attempts. Try again in ${mins} min.`,
+            )
           : t("یه لحظه صبر کن و دوباره بزن.", "Please wait a moment and try again.");
       }
       case "sms_failed":
@@ -68,6 +82,61 @@ function AuthPage() {
     }
   };
 
+  /**
+   * The post-login tail, shared by password and OTP sign-in.
+   *
+   * `canonical` is the SERVER's phone (`res.user.phone`), so signing in by
+   * username still isolates data by the right account. Rescues a subscription
+   * that only exists in this device's storage (bounded + single-use server-side;
+   * a failure here must not block the sign-in). `loginAs` applies account
+   * isolation — a different phone wipes the previous owner's content.
+   */
+  const completeLogin = async (canonical: string, serverEntitlement: ServerEntitlement) => {
+    let entitlement = serverEntitlement;
+    const ownLocalData = db.meta.dataOwner === null || db.meta.dataOwner === canonical;
+    const local = ownLocalData ? db.subscription : null;
+    if (local && local.expiresAt > Date.now()) {
+      try {
+        const imported = await importSubscription({
+          planId: local.planId,
+          expiresAt: local.expiresAt,
+          startedAt: local.startedAt,
+          trial: local.trial,
+        });
+        entitlement = imported.entitlement;
+      } catch {
+        /* keep the sign-in; the next sync will reconcile */
+      }
+    }
+    const now = Date.now();
+    const subscription = entitlementToSubscription(entitlement, now);
+    update((d) => loginAs(d, canonical, subscription, now));
+    navigate({ to: "/" });
+  };
+
+  const doPasswordLogin = async () => {
+    if (!identifier.trim() || !password) {
+      setError(
+        t("شماره/نام‌کاربری و رمز عبور رو وارد کن.", "Enter your phone/username and password."),
+      );
+      return;
+    }
+    setError("");
+    setBusy(true);
+    try {
+      const res = await passwordLogin(
+        identifier.trim(),
+        password,
+        navigator.userAgent.slice(0, 64),
+      );
+      await completeLogin(res.user.phone, res.entitlement);
+    } catch (err) {
+      setError(explain(err));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const sendCode = async () => {
     const canonical = normalizePhone(phone);
     if (!canonical) {
@@ -76,8 +145,6 @@ function AuthPage() {
     }
     setError("");
     if (SKIP_SMS) {
-      // ورود محلی بدون کد پیامکی. loginAs جداسازی حساب‌ها را هم انجام می‌دهد:
-      // شماره‌ی متفاوت → پاک‌سازی دیتای صاحب قبلی.
       if (db.meta.dataOwner && db.meta.dataOwner !== canonical) clearTokens();
       update((d) => loginAs(d, canonical));
       navigate({ to: "/" });
@@ -94,17 +161,6 @@ function AuthPage() {
     }
   };
 
-  // TEST-ONLY: ورود محلی بدون پیامک/بک‌اند. شماره‌ی واردشده را می‌گیرد یا یک
-  // شماره‌ی پیش‌فرض. loginAs جداسازی حساب‌ها را انجام می‌دهد (شماره‌ی متفاوت →
-  // دیتا و اشتراکِ صاحب قبلی پاک می‌شود). توکن سروریِ حساب قبلی هم پاک می‌شود
-  // تا ریفرش بعدی، اشتراکِ حساب قبلی را روی حساب جدید ننشاند.
-  const testLogin = () => {
-    const canonical = normalizePhone(phone) ?? "989120000000";
-    if (db.meta.dataOwner && db.meta.dataOwner !== canonical) clearTokens();
-    update((d) => loginAs(d, canonical));
-    navigate({ to: "/" });
-  };
-
   const verify = async () => {
     const canonical = normalizePhone(phone);
     if (!canonical) {
@@ -116,37 +172,7 @@ function AuthPage() {
     setBusy(true);
     try {
       const res = await verifyOtp(canonical, code, navigator.userAgent.slice(0, 64));
-
-      // Rescue a subscription that only ever existed in this device's storage.
-      // Bounded and single-use server-side; failure here must not block sign-in,
-      // since the local copy still gates the paywall today.
-      // Owner guard: only rescue when the local subscription actually belongs to
-      // the phone signing in — importing the previous owner's plan onto a new
-      // account would move a paid entitlement across accounts.
-      let entitlement = res.entitlement;
-      const ownLocalData = db.meta.dataOwner === null || db.meta.dataOwner === canonical;
-      const local = ownLocalData ? db.subscription : null;
-      if (local && local.expiresAt > Date.now()) {
-        try {
-          const imported = await importSubscription({
-            planId: local.planId,
-            expiresAt: local.expiresAt,
-            startedAt: local.startedAt,
-            trial: local.trial,
-          });
-          entitlement = imported.entitlement;
-        } catch {
-          /* keep the sign-in; the next sync will reconcile */
-        }
-      }
-
-      const now = Date.now();
-      // Server-issued now. loginAs applies account isolation: a different phone
-      // wipes the previous owner's content and never inherits their local
-      // subscription; the same phone keeps everything.
-      const subscription = entitlementToSubscription(entitlement, now);
-      update((d) => loginAs(d, canonical, subscription, now));
-      navigate({ to: "/" });
+      await completeLogin(res.user.phone, res.entitlement);
     } catch (err) {
       setError(explain(err));
     } finally {
@@ -154,20 +180,69 @@ function AuthPage() {
     }
   };
 
+  const switchTo = (m: Method) => {
+    setMethod(m);
+    setError("");
+    setStep("phone");
+    setCode("");
+  };
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-6 py-screen-safe">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center gap-3">
           <Logo className="h-16 w-16" />
-          <h1 className="text-xl font-black text-foreground">{t("ورود به روتینو", "Sign in to Routino")}</h1>
+          <h1 className="text-xl font-black text-foreground">
+            {t("ورود به روتینو", "Sign in to Routino")}
+          </h1>
           <p className="text-center text-xs text-muted-foreground">
-            {SKIP_SMS
-              ? t("با شماره موبایلت وارد شو", "Sign in with your phone number")
-              : t("با شماره موبایل و کد پیامکی وارد شو", "Sign in with your phone number and SMS code")}
+            {method === "password"
+              ? t(
+                  "با شماره موبایل یا نام کاربری و رمز عبور وارد شو",
+                  "Sign in with your phone or username and password",
+                )
+              : t(
+                  "با شماره موبایل و کد پیامکی وارد شو",
+                  "Sign in with your phone number and SMS code",
+                )}
           </p>
         </div>
 
-        {step === "phone" ? (
+        {method === "password" ? (
+          <div className="flex flex-col gap-3">
+            <Input
+              dir="ltr"
+              placeholder={t("شماره موبایل یا نام کاربری", "Phone or username")}
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && void doPasswordLogin()}
+              className="text-center text-base"
+            />
+            <Input
+              dir="ltr"
+              type="password"
+              placeholder={t("رمز عبور", "Password")}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && void doPasswordLogin()}
+              className="text-center text-base"
+            />
+            {error && <p className="text-center text-xs text-destructive">{error}</p>}
+            <Button onClick={() => void doPasswordLogin()} disabled={busy}>
+              {busy ? t("در حال ورود…", "Signing in…") : t("ورود", "Sign in")}
+            </Button>
+            <button
+              type="button"
+              onClick={() => switchTo("otp")}
+              className="mt-1 text-center text-xs font-medium text-primary hover:underline"
+            >
+              {t(
+                "بار اولته یا رمزت رو فراموش کردی؟ ورود با کد پیامکی",
+                "First time or forgot your password? Use an SMS code",
+              )}
+            </button>
+          </div>
+        ) : step === "phone" ? (
           <div className="flex flex-col gap-3">
             <Input
               dir="ltr"
@@ -186,18 +261,13 @@ function AuthPage() {
                   ? t("ورود", "Sign in")
                   : t("ارسال کد پیامکی", "Send SMS code")}
             </Button>
-
-            {/* ═══ TEST-ONLY: ورود بدون پیامک — این بلاک را برای حذف پاک کن ═══ */}
-            {TEST_LOGIN_BUTTON && (
-              <button
-                type="button"
-                onClick={testLogin}
-                className="rounded-xl border border-dashed border-muted-foreground/40 py-2 text-xs text-muted-foreground"
-              >
-                🧪 {t("ورود تستی (بدون پیامک)", "Test sign-in (no SMS)")}
-              </button>
-            )}
-            {/* ═══ پایان TEST-ONLY ═══ */}
+            <button
+              type="button"
+              onClick={() => switchTo("password")}
+              className="mt-1 text-center text-xs font-medium text-primary hover:underline"
+            >
+              {t("ورود با رمز عبور", "Sign in with a password")}
+            </button>
           </div>
         ) : (
           <div className="flex flex-col gap-3">
@@ -224,7 +294,11 @@ function AuthPage() {
             <Button onClick={() => void verify()} disabled={busy || code.length < 4}>
               {busy ? t("در حال بررسی…", "Checking…") : t("تأیید و ورود", "Verify & sign in")}
             </Button>
-            <Button variant="ghost" onClick={() => (setStep("phone"), setError(""))} disabled={busy}>
+            <Button
+              variant="ghost"
+              onClick={() => (setStep("phone"), setError(""))}
+              disabled={busy}
+            >
               {t("تغییر شماره", "Change number")}
             </Button>
           </div>

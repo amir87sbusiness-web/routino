@@ -28,6 +28,8 @@
 | ۱ | `routes/auth.tsx` — دکمه «ارسال کد» | `auth.ts` ← `requestOtp` | `POST /v1/auth/otp/request` | `backend/src/routes/auth.ts` |
 | ۲ | `routes/auth.tsx` — دکمه «تایید و ورود» | `auth.ts` ← `verifyOtp` | `POST /v1/auth/otp/verify` | `backend/src/routes/auth.ts` |
 | ۳ | خودکار — وقتی توکن رو به انقضاست یا ۴۰۱ خورد | `auth.ts` ← `refreshTokens` | `POST /v1/auth/token/refresh` | `backend/src/routes/auth.ts` |
+| ۲ب | `routes/auth.tsx` — دکمه «ورود» (پیش‌فرض) | `auth.ts` ← `passwordLogin` | `POST /v1/auth/password/login` | `backend/src/routes/auth.ts` |
+| ۲ج | `routes/settings.tsx` — کارت «نام کاربری و رمز عبور» | `auth.ts` ← `fetchAccount`/`setUsername`/`setPassword` | `GET /v1/auth/account` · `POST /v1/auth/username` · `POST /v1/auth/password` | `backend/src/routes/auth.ts` |
 | ۴ | `routes/settings.tsx` — دکمه «خروج» | `auth.ts` ← `logout` | `POST /v1/auth/logout` | `backend/src/routes/auth.ts` |
 | ۵ | `state/app.tsx` — یک بار در هر اجرا | `auth.ts` ← `fetchEntitlement` | `GET /v1/subscriptions/me` | `backend/src/routes/subscriptions.ts` |
 | ۵ب | (فقط پنل ادمین/دیباگ) | — | `GET /v1/subscriptions/grants` | `backend/src/routes/subscriptions.ts` — دفترکل تمدیدهای یک کاربر |
@@ -39,7 +41,7 @@
 | ۱۱ | — (مرورگر، نه اپ) درگاه کاربر رو برمی‌گردونه | — | `GET /v1/payments/callback` | `backend/src/routes/payments.ts` |
 | ۱۲ | — (مرورگر ادمین) | — | `GET /admin` + `/v1/admin/*` | `backend/src/routes/admin-panel.ts` و `admin.ts` |
 
-> مسیرهای ۱، ۲، ۳، ۴، ۷، ۱۱ عمومی‌اند؛ بقیه توکن ورود می‌خوان (هدر `Authorization: Bearer ...`).
+> مسیرهای ۱، ۲، ۲ب، ۳، ۴، ۷، ۱۱ عمومی‌اند؛ بقیه (از جمله ۲ج: account/username/password) توکن ورود می‌خوان (هدر `Authorization: Bearer ...`).
 
 ---
 
@@ -71,6 +73,9 @@
 | `rate_limited` | otp/checkout (+هدر `Retry-After`) | `auth.tsx` و `subscribe.tsx` | «درخواست زیاد بود. X دقیقه دیگه…» |
 | `sms_failed` | `routes/auth.ts` | `auth.tsx` | «ارسال پیامک ناموفق بود» |
 | `bad_code` | `routes/auth.ts` | `auth.tsx` | «کد اشتباهه یا منقضی شده» |
+| `bad_credentials` | `routes/auth.ts` (ورود با رمز) | `auth.tsx` ← `explain()` | «شماره/نام‌کاربری یا رمز عبور اشتباهه» — عمداً برای هر سه حالتِ «حساب نیست/رمز ندارد/رمز غلط» یکسان (ضد شناسایی کاربر) |
+| `invalid_username` / `username_taken` | `routes/auth.ts` (تنظیم نام کاربری) | `settings.tsx` ← `explain()` | «نام کاربری نامعتبر» / «قبلاً گرفته شده» |
+| `weak_password` / `wrong_password` | `routes/auth.ts` (تنظیم/تغییر رمز) + `services/admin.ts` | `settings.tsx` ← `explain()` | «رمز ضعیف است» / «رمز عبور فعلی اشتباهه» |
 | `blocked` | `routes/auth.ts` / `plugins/auth.ts` | `auth.tsx` | «این حساب مسدود شده» |
 | `psp_failed` | `routes/payments.ts` | `subscribe.tsx` | «درگاه پرداخت در دسترس نیست» |
 | `not_signed_in` | خود فرانت (`api/auth.ts` وقتی توکن نیست) | `subscribe.tsx` | کارت «ورود با شماره موبایل» |

@@ -76,6 +76,14 @@ export const ADMIN_PAGE = `<!doctype html>
       <input id="uq" placeholder="جستجوی شماره…" dir="ltr">
       <button class="act" id="uSearch">جستجو</button>
     </div>
+    <div class="row" style="border:1px dashed var(--line);border-radius:12px;padding:12px;background:var(--card)">
+      <span style="font-weight:700">تنظیم/ریست رمز عبور:</span>
+      <input id="spPhone" placeholder="شماره (مثل 09…)" dir="ltr" style="width:150px">
+      <input id="spPass" type="text" placeholder="رمز عبور جدید" dir="ltr" style="width:170px">
+      <button class="act" id="spGo">اعمال</button>
+      <span class="muted">اگر حساب نباشد، ساخته می‌شود.</span>
+    </div>
+    <div class="err" id="spErr"></div>
     <div class="wrap"><table id="uTable"></table></div>
   </section>
 
@@ -186,6 +194,17 @@ async function loadUsers() {
 }
 $("#uSearch").onclick = loadUsers;
 $("#uq").addEventListener("keydown", (e) => e.key === "Enter" && loadUsers());
+
+$("#spGo").onclick = async () => {
+  $("#spErr").textContent = "";
+  const phone = $("#spPhone").value.trim(), password = $("#spPass").value;
+  if (!phone || !password) { $("#spErr").textContent = "شماره و رمز را وارد کن"; return; }
+  try {
+    const r = await api("/users/set-password", { method: "POST", body: { phone, password } });
+    alert(r.created ? "حساب ساخته شد و رمز تنظیم شد ✅" : "رمز عبور به‌روزرسانی شد ✅");
+    $("#spPhone").value = ""; $("#spPass").value = ""; loadUsers();
+  } catch (e) { $("#spErr").textContent = e.message; }
+};
 
 window.openUser = async (id) => {
   const d = await api("/users/" + id);

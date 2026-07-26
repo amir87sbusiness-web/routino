@@ -7,6 +7,52 @@
 
 ---
 
+## 📍 وضعیت فعلی لانچ (به‌روز: ۳ مرداد ۱۴۰۵ / 2026-07-25)
+
+> **Claude: قبل از هر کار مربوط به لانچ، این بخش کافیه — نیازی به دوباره‌کشف نیست.**
+
+**زیرساخت وب کامل دیپلوی شده و بالاست**، ولی هنوز در **حالت تست** برای پیامک و پرداخت:
+
+| تکه | آدرس / مقدار | وضعیت |
+|---|---|---|
+| بک‌اند (Supabase Edge) | `api.routino.me/health` → `{ok:true}` | ✅ بالا |
+| دیتابیس | `api.routino.me/health/ready` → `db:up` | ✅ وصل |
+| Cloudflare Worker | `api.routino.me` | ✅ کار می‌کند |
+| سایت اصلی (CF Pages) | `routino.me` → HTTP 200 | ✅ بالا |
+| پلن‌ها (از DB) | `/v1/plans` → m1=۵۹k، m3=۱۴۹k، m12=۴۴۹k تومان | ✅ seed شده |
+| `NODE_ENV` / `DB_DRIVER` | `production` / `postgres` | ✅ درست |
+| **`SMS_PROVIDER`** | **`console`** | ❌ **پیامک تستی — کاربر واقعی کد ورود نمی‌گیرد** |
+| **`ZIBAL_MERCHANT`** | **`zibal`** (سندباکس) | ❌ **پول واقعی جابه‌جا نمی‌شود** |
+
+- **پروژه‌ی Supabase:** نام `routino` · ref `axychfrteevhfdhgvfuv` · org `qgvjcextnciiezisegdt` · region eu-north-1.
+  حسابِ مالکِ روتینو **جدا** از حسابی است که پروژه‌ی «sheetra» را دارد — برای مدیریت باید با حساب درست `supabase login` کرد.
+- **چک‌کردن مقدار secretها بدون دیدن مقدار:** `supabase secrets list` فقط اثرانگشت (sha256) هر مقدار را می‌دهد؛ با محاسبه‌ی `printf "%s" "console" | sha256sum` و مقایسه می‌شود فهمید. جایگزین ساده‌تر: لاگ استارتاپ تابع `[api] edge function up (sms=… psp=…)` را در Dashboard → Edge Functions → api → Logs ببین.
+
+### دو کارِ باقی‌مانده تا لانچ واقعی
+
+هر دو: کاربر یک secret را ست می‌کند → سپس redeploy. **قالب کاوه‌نگار و مرچنت زیبال هر دو بررسی انسانیِ چندروزه دارند — زودتر شروع شوند.** (Claude نباید کلید/مرچنت را خودش وارد کند؛ کاربر `secrets set` را می‌زند، Claude فقط redeploy + تست.)
+
+**۱) پیامک واقعی (بلاکر اصلی ورود):**
+```bash
+# کاربر (بعد از گرفتن کلید + تأیید قالب verify/lookup به نام routino-otp):
+supabase secrets set SMS_PROVIDER=kavenegar KAVENEGAR_API_KEY=<key> --project-ref axychfrteevhfdhgvfuv
+# اگر نام قالب routino-otp نیست: KAVENEGAR_TEMPLATE=<name> را هم اضافه کن (پیش‌فرض env: routino-otp)
+# سپس:
+npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhgvfuv
+```
+(احتیاط env.ts: در production اگر `SMS_PROVIDER=kavenegar` باشد و `KAVENEGAR_API_KEY` نباشد، تابع اصلاً بالا نمی‌آید.)
+
+**۲) درگاه واقعی زیبال (قبل از پایان ۷ روز رایگانِ کاربرها):**
+```bash
+supabase secrets set ZIBAL_MERCHANT=<کد-پذیرنده-واقعی> --project-ref axychfrteevhfdhgvfuv
+npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhgvfuv
+```
+
+### تست محلی (تأییدشده کار می‌کند)
+`cd backend && npm run dev` (سرور :3000، sms=console → کد در ترمینال، psp=fake) + `npm run dev` (وب :5180، به :3000 پروکسی می‌شود). کل مسیر آنبوردینگ → ورود OTP → اپ اصلی محلی تست و سالم است.
+
+---
+
 ## نقشه
 
 ```
@@ -49,6 +95,15 @@ cd backend && npm test && cd .. && npm run test:edge
 npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhgvfuv
 ```
 
+> **اگر schema دیتابیس عوض شد** (مثل ستون/جدول جدید): اول `node scripts/gen-setup-sql.mjs` را بزن تا `supabase/setup.sql` تازه شود، بعد محتوایش را در Supabase → SQL Editor بچسبان (idempotent است، ضرری به دیتای موجود نمی‌زند). تابعِ Edge خودش migration اجرا نمی‌کند.
+
+### 🔐 ورود با رمز عبور (بعد از افزوده‌شدن این قابلیت — یک‌بار)
+
+۱) **migration**: `supabase/setup.sql` را دوباره در SQL Editor اجرا کن (ستون‌های `username`/`password_hash` روی `users` + جدول `login_attempts` را می‌سازد).
+۲) **ساخت حساب صاحب اپ** — یکی از دو راه:
+   - **پنل ادمین** (`api.routino.me/admin` یا مستقیم روی تابع): تب «کاربران» → «تنظیم/ریست رمز عبور» → شماره + رمز → اعمال (اگر حساب نباشد می‌سازد).
+   - **خودکار با env**: secretهای `OWNER_PHONE`، `OWNER_PASSWORD` (و اختیاری `OWNER_USERNAME`) را ست کن؛ سرور موقع بالا آمدن حساب را می‌سازد و رمز اولیه را می‌گذارد. **هیچ‌وقت رمزی را که کاربر خودش عوض کرده بازنویسی نمی‌کند.**
+
 ## راه‌اندازی (یک‌بار)
 
 1. **دیتابیس**: `supabase/setup.sql` (تولیدشده از همان DDL تست‌شده) روی پروژه
@@ -69,8 +124,11 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
    | `PUBLIC_API_URL` | `https://api.routino.me` |
    | `PUBLIC_WEB_URL` | `https://routino.me` |
    | `CORS_ORIGINS` | `https://routino.me,https://localhost,capacitor://localhost` |
-   | `SMS_PROVIDER` | فعلاً `console` (کد ورود در لاگ تابع) → بعداً `kavenegar` + `KAVENEGAR_API_KEY` |
+   | `OWNER_PHONE` / `OWNER_PASSWORD` / `OWNER_USERNAME` | اختیاری — بوت‌استرپ حساب صاحب اپ برای ورود با رمز از همان بوت اول (بخش «ورود با رمز عبور» بالا) |
+   | `SMS_PROVIDER` | فعلاً `console` (کد ورود در لاگ تابع) → بعداً `kavenegar` + `KAVENEGAR_API_KEY` (+ `KAVENEGAR_TEMPLATE` اگر نام قالب ≠ `routino-otp`) |
    | `PSP_PROVIDER` | فعلاً `zibal` با `ZIBAL_MERCHANT=zibal` (سندباکس) → بعداً مرچنت واقعی / `PSP_PROVIDERS=zarinpal,zibal` |
+
+   > وضعیت فعلیِ همین secretها و دستورهای دقیقِ «واقعی‌کردن» در بخش [«📍 وضعیت فعلی لانچ»](#-وضعیت-فعلی-لانچ-به‌روز-۳-مرداد-۱۴۰۵--2026-07-25) بالای همین فایل است.
 
 4. **دیپلوی تابع**: دستور بالا (`--no-verify-jwt` حیاتی است؛ `config.toml` هم
    `verify_jwt=false` دارد).

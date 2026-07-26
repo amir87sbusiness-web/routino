@@ -83,13 +83,59 @@ export interface VerifyResult {
   isNew: boolean;
 }
 
-export async function verifyOtp(phone: string, code: string, deviceName?: string): Promise<VerifyResult> {
+export async function verifyOtp(
+  phone: string,
+  code: string,
+  deviceName?: string,
+): Promise<VerifyResult> {
   const res = await apiRequest<VerifyResult>("/auth/otp/verify", {
     method: "POST",
     body: { phone, code, deviceName },
   });
   saveTokens(withExpiry(res));
   return res;
+}
+
+/** Password sign-in. `identifier` is a phone number OR a username; the server
+ * decides which. Returns the same shape as OTP verify, so callers reuse the
+ * same post-login flow. */
+export async function passwordLogin(
+  identifier: string,
+  password: string,
+  deviceName?: string,
+): Promise<VerifyResult> {
+  const res = await apiRequest<VerifyResult>("/auth/password/login", {
+    method: "POST",
+    body: { identifier, password, deviceName },
+  });
+  saveTokens(withExpiry(res));
+  return res;
+}
+
+export interface AccountInfo {
+  phone: string;
+  username: string | null;
+  hasPassword: boolean;
+}
+
+/** The signed-in account's credential state, for the settings screen. */
+export async function fetchAccount(): Promise<AccountInfo> {
+  return authedRequest("/auth/account");
+}
+
+export async function setUsername(username: string): Promise<{ ok: boolean; username: string }> {
+  return authedRequest("/auth/username", { method: "POST", body: { username } });
+}
+
+/** Sets the first password (no `currentPassword`) or changes an existing one. */
+export async function setPassword(
+  newPassword: string,
+  currentPassword?: string,
+): Promise<{ ok: boolean }> {
+  return authedRequest("/auth/password", {
+    method: "POST",
+    body: { newPassword, currentPassword },
+  });
 }
 
 /** Imports a legacy local subscription. Bounded and single-use server-side. */
@@ -130,10 +176,13 @@ async function refreshTokens(): Promise<Tokens | null> {
 
   refreshing ??= (async () => {
     try {
-      const res = await apiRequest<{ access: string; refresh: string; deviceId: string }>("/auth/token/refresh", {
-        method: "POST",
-        body: { refresh: current.refresh },
-      });
+      const res = await apiRequest<{ access: string; refresh: string; deviceId: string }>(
+        "/auth/token/refresh",
+        {
+          method: "POST",
+          body: { refresh: current.refresh },
+        },
+      );
       const next = withExpiry(res);
       saveTokens(next);
       return next;

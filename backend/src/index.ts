@@ -11,7 +11,13 @@ import { SCHEMA_SQL, SEED_DISCOUNTS_SQL, SEED_PLANS_SQL } from "./db/ddl.js";
 import { schema } from "./db/schema.js";
 import { loadEnv, pspProviderNames } from "./env.js";
 import { consoleSms, kavenegarSms, type SmsProvider } from "./providers/sms/index.js";
-import { createRouter, fakePsp, zarinpalPsp, zibalPsp, type PspProvider } from "./providers/psp/index.js";
+import {
+  createRouter,
+  fakePsp,
+  zarinpalPsp,
+  zibalPsp,
+  type PspProvider,
+} from "./providers/psp/index.js";
 
 const env = loadEnv();
 
@@ -46,7 +52,9 @@ if (env.DB_DRIVER === "pglite") {
 }
 
 const sms: SmsProvider =
-  env.SMS_PROVIDER === "kavenegar" ? kavenegarSms(env.KAVENEGAR_API_KEY!, env.KAVENEGAR_TEMPLATE) : consoleSms();
+  env.SMS_PROVIDER === "kavenegar"
+    ? kavenegarSms(env.KAVENEGAR_API_KEY!, env.KAVENEGAR_TEMPLATE)
+    : consoleSms();
 
 // One or more gateways, behind a router that picks the fastest healthy one per
 // checkout and fails over. A single configured gateway is a thin pass-through.
@@ -65,11 +73,23 @@ const psp = createRouter(pspNames.map(makePsp));
 
 const app = await buildApp({ db, env, sms, psp });
 
+// Ensure the owner account (if configured) can sign in with a password from the
+// first boot. Idempotent, and it never clobbers an already-set password.
+const { ensureOwner } = await import("./services/owner-bootstrap.js");
+await ensureOwner(db, env, new Date(), {
+  info: (msg) => app.log.info(msg),
+  warn: (msg) => app.log.warn(msg),
+}).catch((err) => app.log.error({ err }, "owner bootstrap failed"));
+
 // OTP rows double as the rate-limit ledger, so they must live 24h — after
-// that they are pure noise. Hourly is plenty.
+// that they are pure noise. Hourly is plenty. Failed-login rows are purged on
+// the same beat.
 const { purgeOldCodes } = await import("./services/otp.js");
+const { purgeOldLoginAttempts } = await import("./services/login-throttle.js");
 const purgeTimer = setInterval(() => {
-  purgeOldCodes(db, new Date()).catch((err) => app.log.error({ err }, "otp purge failed"));
+  const t = new Date();
+  purgeOldCodes(db, t).catch((err) => app.log.error({ err }, "otp purge failed"));
+  purgeOldLoginAttempts(db, t).catch((err) => app.log.error({ err }, "login-attempt purge failed"));
 }, 3_600_000);
 
 const close = async () => {
@@ -82,4 +102,6 @@ process.on("SIGTERM", close);
 process.on("SIGINT", close);
 
 await app.listen({ port: env.PORT, host: "0.0.0.0" });
-console.log(`  [api] listening on :${env.PORT}  (sms=${env.SMS_PROVIDER}, psp=${pspNames.join("+")})`);
+console.log(
+  `  [api] listening on :${env.PORT}  (sms=${env.SMS_PROVIDER}, psp=${pspNames.join("+")})`,
+);

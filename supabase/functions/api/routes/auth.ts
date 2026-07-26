@@ -5,12 +5,32 @@
 import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
-import { clientIp, readJson, type AppEnv, type Deps } from "../deps.ts";
+import {
+  clientIp,
+  makeAuthenticate,
+  readJson,
+  requireUser,
+  type AppEnv,
+  type Deps,
+} from "../deps.ts";
 import { users } from "../shared/db/schema.ts";
 import { badRequest, tooMany, unauthorized } from "../shared/lib/http-errors.ts";
 import { normalizePhone } from "../shared/lib/phone.ts";
 import { grantInterval, readEntitlement } from "../shared/services/entitlement.ts";
+import {
+  checkLoginRate,
+  clearLoginFailures,
+  recordLoginFailure,
+} from "../shared/services/login-throttle.ts";
 import { checkSendRate, createCode, verifyCode } from "../shared/services/otp.ts";
+import {
+  DUMMY_HASH,
+  hashPassword,
+  normalizeUsername,
+  validatePassword,
+  validateUsername,
+  verifyPassword,
+} from "../shared/services/password.ts";
 import { issueForDevice, revokeRefresh, rotateRefresh } from "../shared/services/tokens.ts";
 
 const TRIAL_DAYS = 7;
@@ -22,10 +42,21 @@ const verifyBody = z.object({
   deviceName: z.string().max(64).optional(),
 });
 const refreshBody = z.object({ refresh: z.string().min(16).max(256) });
+const passwordLoginBody = z.object({
+  identifier: z.string().min(1).max(64),
+  password: z.string().min(1).max(128),
+  deviceName: z.string().max(64).optional(),
+});
+const setUsernameBody = z.object({ username: z.string().min(1).max(64) });
+const setPasswordBody = z.object({
+  newPassword: z.string().min(1).max(128),
+  currentPassword: z.string().max(128).optional(),
+});
 
 export function authRoutes(deps: Deps) {
   const { db, env, sms } = deps;
   const now = () => new Date(deps.now());
+  const auth = makeAuthenticate(deps);
   const r = new Hono<AppEnv>();
 
   /**
@@ -100,6 +131,115 @@ export function authRoutes(deps: Deps) {
       entitlement,
       isNew,
     });
+  });
+
+  /**
+   * Sign in with a password, using a phone number OR a username. No SMS. Mirrors
+   * backend/src/routes/auth.ts: a username starts with a letter and a phone is
+   * all digits, so `normalizePhone` succeeding is an unambiguous "this is a
+   * phone"; the error is identical for missing/no-password/wrong-password and a
+   * missing account still pays a hash-verify cost, so it cannot enumerate users.
+   */
+  r.post("/auth/password/login", async (c) => {
+    const { identifier, password, deviceName } = passwordLoginBody.parse(await readJson(c));
+    const t = now();
+    const ip = clientIp(c, env);
+
+    const phone = normalizePhone(identifier);
+    const key = phone ?? normalizeUsername(identifier);
+
+    const verdict = await checkLoginRate(db, ip, key, t);
+    if (!verdict.ok) {
+      console.warn("password login rate limited", { reason: verdict.reason });
+      throw tooMany("Too many attempts. Try again later.", verdict.retryAfter);
+    }
+
+    const [user] = phone
+      ? await db.select().from(users).where(eq(users.phone, phone)).limit(1)
+      : await db.select().from(users).where(eq(users.username, key)).limit(1);
+
+    const ok = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
+    if (!user || !user.passwordHash || !ok) {
+      await recordLoginFailure(db, ip, key, t);
+      throw unauthorized("bad_credentials", "Wrong phone/username or password");
+    }
+    if (user.blocked) throw unauthorized("blocked", "Account is blocked");
+
+    await clearLoginFailures(db, key);
+    const tokens = await issueForDevice(db, env, user.id, deviceName ?? null, t);
+    const entitlement = await readEntitlement(db, user.id, t);
+
+    return c.json({
+      access: tokens.access,
+      refresh: tokens.refresh,
+      deviceId: tokens.deviceId,
+      user: { id: user.id, phone: user.phone },
+      entitlement,
+      isNew: false,
+    });
+  });
+
+  /** The current account's credential state, for the settings screen. */
+  r.get("/auth/account", auth, async (c) => {
+    const u = requireUser(c);
+    const [row] = await db.select().from(users).where(eq(users.id, u.id)).limit(1);
+    if (!row) throw unauthorized("unknown_user", "User no longer exists");
+    return c.json({
+      phone: row.phone,
+      username: row.username ?? null,
+      hasPassword: !!row.passwordHash,
+    });
+  });
+
+  /** Sets or changes the account's username (lowercased, validated, unique). */
+  r.post("/auth/username", auth, async (c) => {
+    const u = requireUser(c);
+    const { username } = setUsernameBody.parse(await readJson(c));
+    const v = validateUsername(username);
+    if (!v.ok)
+      throw badRequest(
+        "invalid_username",
+        "Username must be 3–24 chars, start with a letter (a–z, 0–9, _ .)",
+      );
+
+    const [taken] = await db.select().from(users).where(eq(users.username, v.value)).limit(1);
+    if (taken && taken.id !== u.id)
+      throw badRequest("username_taken", "That username is already taken");
+
+    try {
+      await db.update(users).set({ username: v.value }).where(eq(users.id, u.id));
+    } catch {
+      throw badRequest("username_taken", "That username is already taken");
+    }
+    return c.json({ ok: true, username: v.value });
+  });
+
+  /** Sets or changes the account's password. Changing an existing one requires
+   * the current password; setting the first one does not. */
+  r.post("/auth/password", auth, async (c) => {
+    const u = requireUser(c);
+    const { newPassword, currentPassword } = setPasswordBody.parse(await readJson(c));
+
+    const [row] = await db.select().from(users).where(eq(users.id, u.id)).limit(1);
+    if (!row) throw unauthorized("unknown_user", "User no longer exists");
+
+    if (row.passwordHash) {
+      if (!currentPassword || !(await verifyPassword(currentPassword, row.passwordHash))) {
+        throw unauthorized("wrong_password", "Current password is wrong");
+      }
+    }
+    if (!validatePassword(newPassword).ok) {
+      throw badRequest(
+        "weak_password",
+        "Password must be 8+ chars with at least one letter and one digit",
+      );
+    }
+
+    await db
+      .update(users)
+      .set({ passwordHash: await hashPassword(newPassword) })
+      .where(eq(users.id, u.id));
+    return c.json({ ok: true });
   });
 
   /** Rotates the refresh token. The old one dies immediately. */

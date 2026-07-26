@@ -90,6 +90,17 @@ const schema = z.object({
   IMPORT_MAX_DAYS: z.coerce.number().default(400),
 
   /**
+   * Optional owner bootstrap. When OWNER_PHONE and OWNER_PASSWORD are both set,
+   * the server ensures that account exists with that password on boot (see
+   * `services/owner-bootstrap.ts`). Idempotent, and it NEVER overwrites a
+   * password the user has already set — so once the owner changes it from the
+   * app, this env value stops mattering. Left empty in dev/tests.
+   */
+  OWNER_PHONE: z.string().default(""),
+  OWNER_PASSWORD: z.string().default(""),
+  OWNER_USERNAME: z.string().default(""),
+
+  /**
    * Edge deployment only. When set, every request must carry the same value in
    * `x-proxy-secret` — the Cloudflare Worker in front of api.routino.me adds it,
    * so the raw *.supabase.co URL is unreachable and the worker-set client-IP
@@ -104,14 +115,19 @@ export type Env = z.infer<typeof schema>;
 /** The active payment gateways, in tiebreak/priority order. `PSP_PROVIDERS`
  * (comma list) wins when set; otherwise the single `PSP_PROVIDER`. Unknown or
  * duplicate names are dropped. */
-export function pspProviderNames(env: Pick<Env, "PSP_PROVIDER" | "PSP_PROVIDERS">): ("fake" | "zibal" | "zarinpal")[] {
+export function pspProviderNames(
+  env: Pick<Env, "PSP_PROVIDER" | "PSP_PROVIDERS">,
+): ("fake" | "zibal" | "zarinpal")[] {
   const known = ["fake", "zibal", "zarinpal"] as const;
   const raw = env.PSP_PROVIDERS.trim()
     ? env.PSP_PROVIDERS.split(",").map((s) => s.trim())
     : [env.PSP_PROVIDER];
   const out: ("fake" | "zibal" | "zarinpal")[] = [];
   for (const name of raw) {
-    if ((known as readonly string[]).includes(name) && !out.includes(name as (typeof known)[number])) {
+    if (
+      (known as readonly string[]).includes(name) &&
+      !out.includes(name as (typeof known)[number])
+    ) {
       out.push(name as (typeof known)[number]);
     }
   }
@@ -125,17 +141,22 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     throw new Error(`Invalid environment:\n${issues}`);
   }
   if (parsed.data.NODE_ENV === "production") {
-    if (parsed.data.JWT_SECRET.startsWith("dev-only")) throw new Error("JWT_SECRET must be set in production");
-    if (parsed.data.OTP_PEPPER.startsWith("dev-only")) throw new Error("OTP_PEPPER must be set in production");
-    if (parsed.data.ADMIN_TOKEN.startsWith("dev-only")) throw new Error("ADMIN_TOKEN must be set in production");
+    if (parsed.data.JWT_SECRET.startsWith("dev-only"))
+      throw new Error("JWT_SECRET must be set in production");
+    if (parsed.data.OTP_PEPPER.startsWith("dev-only"))
+      throw new Error("OTP_PEPPER must be set in production");
+    if (parsed.data.ADMIN_TOKEN.startsWith("dev-only"))
+      throw new Error("ADMIN_TOKEN must be set in production");
     if (parsed.data.SMS_PROVIDER === "kavenegar" && !parsed.data.KAVENEGAR_API_KEY) {
       throw new Error("KAVENEGAR_API_KEY is required when SMS_PROVIDER=kavenegar");
     }
     // PGlite is single-connection; it is a development and test engine only.
-    if (parsed.data.DB_DRIVER === "pglite") throw new Error("DB_DRIVER=pglite is not supported in production");
+    if (parsed.data.DB_DRIVER === "pglite")
+      throw new Error("DB_DRIVER=pglite is not supported in production");
 
     const psps = pspProviderNames(parsed.data);
-    if (psps.length === 0) throw new Error("no payment gateway configured (set PSP_PROVIDER or PSP_PROVIDERS)");
+    if (psps.length === 0)
+      throw new Error("no payment gateway configured (set PSP_PROVIDER or PSP_PROVIDERS)");
     if (psps.includes("fake")) throw new Error("the 'fake' gateway is not allowed in production");
     if (psps.includes("zarinpal") && parsed.data.ZARINPAL_MERCHANT.startsWith("dev-only")) {
       throw new Error("ZARINPAL_MERCHANT is required when zarinpal is an active gateway");

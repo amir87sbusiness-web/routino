@@ -15,6 +15,8 @@ export const SCHEMA_SQL = `
 create table if not exists users (
   id uuid primary key default gen_random_uuid(),
   phone text not null unique,
+  username text,
+  password_hash text,
   seq bigint not null default 0,
   gc_seq bigint not null default 0,
   blocked boolean not null default false,
@@ -59,6 +61,15 @@ create table if not exists otp_codes (
 );
 create index if not exists otp_phone_recent on otp_codes (phone, created_at);
 create index if not exists otp_ip_recent on otp_codes (ip, created_at);
+
+create table if not exists login_attempts (
+  id uuid primary key default gen_random_uuid(),
+  ip text,
+  identifier text not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists login_attempts_identifier on login_attempts (identifier, created_at);
+create index if not exists login_attempts_ip on login_attempts (ip, created_at);
 
 create table if not exists plans (
   id text primary key,
@@ -159,6 +170,13 @@ alter table payments add column if not exists provider text;
 alter table payments add column if not exists authority text;
 -- authority is unique per transaction (multiple NULLs allowed for numeric gateways).
 create unique index if not exists payments_authority on payments (authority);
+
+-- Password + username sign-in (added after the users table already existed in
+-- production). Both nullable: OTP-only accounts keep working untouched.
+alter table users add column if not exists username text;
+alter table users add column if not exists password_hash text;
+-- username unique, but many NULLs allowed (unset accounts). Stored lowercased.
+create unique index if not exists users_username on users (username);
 `;
 
 /** Must match `src/lib/presets.ts` PLANS on the client, or the price shown and

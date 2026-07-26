@@ -1,13 +1,49 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { AlertTriangle, Archive, Bell, CalendarDays, ChevronDown, Download, Globe, LogOut, Moon, Palette, Plus, Sun, Tags, Trash2, Upload } from "lucide-react";
-import { useRef, useState, type ChangeEvent } from "react";
+import {
+  AlertTriangle,
+  Archive,
+  Bell,
+  CalendarDays,
+  ChevronDown,
+  Download,
+  FileText,
+  Globe,
+  KeyRound,
+  LogOut,
+  Moon,
+  Palette,
+  Plus,
+  Sun,
+  Tags,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
-import { Button, CatIcon, CATEGORY_ICONS, Card, ColorWheel, Input, Modal, TimePicker24 } from "@/components/ui";
-import { logout } from "@/lib/api/auth";
-import { backupSummary, copyBackupToClipboard, downloadBackup, parseBackup, restoreDb, type Backup } from "@/lib/backup";
+import { LegalContent } from "@/components/LegalContent";
+import {
+  Button,
+  CatIcon,
+  CATEGORY_ICONS,
+  Card,
+  ColorWheel,
+  Input,
+  Modal,
+  TimePicker24,
+} from "@/components/ui";
+import { ApiError } from "@/lib/api/client";
+import { fetchAccount, logout, setPassword, setUsername, type AccountInfo } from "@/lib/api/auth";
+import {
+  backupSummary,
+  copyBackupToClipboard,
+  downloadBackup,
+  parseBackup,
+  restoreDb,
+  type Backup,
+} from "@/lib/backup";
 import { isNative, shareBackupNative } from "@/lib/backup-native";
-import { dateKey, faNum, formatDate } from "@/lib/dates";
+import { dateKey, faNum, formatDate, type Lang } from "@/lib/dates";
 import { toLocalPhone } from "@/lib/phone";
 import { CATEGORY_COLOR_CHOICES } from "@/lib/presets";
 import { applyDemoContent } from "@/lib/seed-demo";
@@ -25,7 +61,16 @@ export const Route = createFileRoute("/settings")({
 
 // ۹ خانه در شبکهٔ ۳×۳: «پیش‌فرض» (نارنجی برند) + ۷ رنگ + چرخ رنگ دلخواه که
 // دقیقاً وسط شبکه می‌نشیند (بین ۴ رنگ اول و ۴ خانهٔ بعدی رندر می‌شود).
-const BRAND_COLORS = ["", "#EF4444", "#EAB308", "#22C55E", "#06B6D4", "#3B82F6", "#8B5CF6", "#EC4899"];
+const BRAND_COLORS = [
+  "",
+  "#EF4444",
+  "#EAB308",
+  "#22C55E",
+  "#06B6D4",
+  "#3B82F6",
+  "#8B5CF6",
+  "#EC4899",
+];
 
 // ⚠️ TEST-ONLY — دکمهٔ «ساخت یک سال دادهٔ آزمایشی». برای انتشار false بماند.
 const SHOW_DEMO_SEED = false;
@@ -37,6 +82,7 @@ function SettingsPage() {
   const [journalTimeOpen, setJournalTimeOpen] = useState(false);
   const [colorWheelOpen, setColorWheelOpen] = useState(false);
   const [catExpanded, setCatExpanded] = useState(false);
+  const [legalExpanded, setLegalExpanded] = useState(false);
   const [catName, setCatName] = useState("");
   const [catIcon, setCatIcon] = useState("star");
   const [catColor, setCatColor] = useState(CATEGORY_COLOR_CHOICES[0]);
@@ -167,10 +213,16 @@ function SettingsPage() {
               : t("بدون اشتراک", "No subscription")}
           </p>
         </div>
-        <Link to="/subscribe" className="rounded-xl bg-primary-soft px-3 py-2 text-xs font-bold text-primary">
+        <Link
+          to="/subscribe"
+          className="rounded-xl bg-primary-soft px-3 py-2 text-xs font-bold text-primary"
+        >
           {t("تمدید", "Renew")}
         </Link>
       </Card>
+
+      {/* username + password */}
+      <AccountSecurityCard t={t} lang={lang} />
 
       {/* language + calendar */}
       <div className="grid grid-cols-2 gap-3">
@@ -184,7 +236,9 @@ function SettingsPage() {
                 key={l}
                 onClick={() => update((d) => ({ ...d, settings: { ...d.settings, lang: l } }))}
                 className={`rounded-xl border px-3 py-2 text-xs font-medium ${
-                  s.lang === l ? "border-primary bg-primary-soft text-primary" : "border-border text-muted-foreground"
+                  s.lang === l
+                    ? "border-primary bg-primary-soft text-primary"
+                    : "border-border text-muted-foreground"
                 }`}
               >
                 {l === "fa" ? "فارسی" : "English"}
@@ -203,7 +257,9 @@ function SettingsPage() {
                 key={c}
                 onClick={() => update((d) => ({ ...d, settings: { ...d.settings, calendar: c } }))}
                 className={`rounded-xl border px-3 py-2 text-xs font-medium ${
-                  s.calendar === c ? "border-primary bg-primary-soft text-primary" : "border-border text-muted-foreground"
+                  s.calendar === c
+                    ? "border-primary bg-primary-soft text-primary"
+                    : "border-border text-muted-foreground"
                 }`}
               >
                 {c === "jalali" ? t("شمسی", "Jalali") : t("میلادی", "Gregorian")}
@@ -225,10 +281,16 @@ function SettingsPage() {
                 key={th}
                 onClick={() => update((d) => ({ ...d, settings: { ...d.settings, theme: th } }))}
                 className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium ${
-                  s.theme === th ? "border-primary bg-primary-soft text-primary" : "border-border text-muted-foreground"
+                  s.theme === th
+                    ? "border-primary bg-primary-soft text-primary"
+                    : "border-border text-muted-foreground"
                 }`}
               >
-                {th === "light" ? <Sun className="h-3.5 w-3.5" /> : <Moon className="h-3.5 w-3.5" />}
+                {th === "light" ? (
+                  <Sun className="h-3.5 w-3.5" />
+                ) : (
+                  <Moon className="h-3.5 w-3.5" />
+                )}
                 {th === "light" ? t("روشن", "Light") : t("تاریک", "Dark")}
               </button>
             ))}
@@ -243,9 +305,13 @@ function SettingsPage() {
             {BRAND_COLORS.map((c) => (
               <button
                 key={c || "default"}
-                onClick={() => update((d) => ({ ...d, settings: { ...d.settings, brandColor: c } }))}
+                onClick={() =>
+                  update((d) => ({ ...d, settings: { ...d.settings, brandColor: c } }))
+                }
                 className={`flex h-8 w-8 items-center justify-center rounded-full text-[7px] font-bold text-white transition-transform ${
-                  s.brandColor === c ? "scale-110 ring-2 ring-foreground ring-offset-2 ring-offset-card" : ""
+                  s.brandColor === c
+                    ? "scale-110 ring-2 ring-foreground ring-offset-2 ring-offset-card"
+                    : ""
                 }`}
                 style={{ backgroundColor: c || "#F97316" }}
               >
@@ -258,7 +324,9 @@ function SettingsPage() {
               onClick={() => setColorWheelOpen(true)}
               title={t("رنگ دلخواه", "Custom color")}
               className={`relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full transition-transform ${
-                isCustomBrand ? "scale-110 ring-2 ring-foreground ring-offset-2 ring-offset-card" : ""
+                isCustomBrand
+                  ? "scale-110 ring-2 ring-foreground ring-offset-2 ring-offset-card"
+                  : ""
               }`}
               style={{
                 background: isCustomBrand
@@ -266,7 +334,9 @@ function SettingsPage() {
                   : "conic-gradient(from 0deg, #ef4444, #f59e0b, #eab308, #22c55e, #06b6d4, #3b82f6, #8b5cf6, #ec4899, #ef4444)",
               }}
             >
-              {!isCustomBrand && <Plus className="h-4 w-4 text-white drop-shadow" strokeWidth={3} />}
+              {!isCustomBrand && (
+                <Plus className="h-4 w-4 text-white drop-shadow" strokeWidth={3} />
+              )}
             </button>
           </div>
         </Card>
@@ -284,13 +354,18 @@ function SettingsPage() {
               {faNum(db.categories.length, lang)}
             </span>
           </div>
-          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${catExpanded ? "rotate-180" : ""}`} />
+          <ChevronDown
+            className={`h-4 w-4 text-muted-foreground transition-transform ${catExpanded ? "rotate-180" : ""}`}
+          />
         </button>
         {catExpanded && (
           <div className="border-t border-border p-4 pt-3">
             <div className="mb-3 grid grid-cols-2 gap-1.5">
               {db.categories.map((c) => (
-                <div key={c.id} className="flex items-center gap-2 rounded-xl border border-border p-2">
+                <div
+                  key={c.id}
+                  className="flex items-center gap-2 rounded-xl border border-border p-2"
+                >
                   <span
                     className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-white"
                     style={{ backgroundColor: c.color }}
@@ -301,7 +376,9 @@ function SettingsPage() {
                     {lang === "fa" ? c.nameFa : c.nameEn}
                   </span>
                   <button
-                    onClick={() => setDeleteCat({ id: c.id, name: lang === "fa" ? c.nameFa : c.nameEn })}
+                    onClick={() =>
+                      setDeleteCat({ id: c.id, name: lang === "fa" ? c.nameFa : c.nameEn })
+                    }
                     className="shrink-0 rounded-full p-1 text-muted-foreground hover:bg-secondary hover:text-destructive"
                   >
                     <Trash2 className="h-3 w-3" />
@@ -355,11 +432,17 @@ function SettingsPage() {
       </Card>
 
       {/* journal reminder time modal */}
-      <Modal open={journalTimeOpen} onClose={() => setJournalTimeOpen(false)} title={t("ساعت یادآوری ژورنال", "Journal reminder time")}>
+      <Modal
+        open={journalTimeOpen}
+        onClose={() => setJournalTimeOpen(false)}
+        title={t("ساعت یادآوری ژورنال", "Journal reminder time")}
+      >
         <div className="flex flex-col gap-4">
           <TimePicker24
             value={s.journalReminder ?? "21:00"}
-            onChange={(v) => update((d) => ({ ...d, settings: { ...d.settings, journalReminder: v } }))}
+            onChange={(v) =>
+              update((d) => ({ ...d, settings: { ...d.settings, journalReminder: v } }))
+            }
             lang={lang}
             t={t}
           />
@@ -382,11 +465,17 @@ function SettingsPage() {
       </Modal>
 
       {/* custom brand colour wheel */}
-      <Modal open={colorWheelOpen} onClose={() => setColorWheelOpen(false)} title={t("رنگ دلخواه برند", "Custom brand color")}>
+      <Modal
+        open={colorWheelOpen}
+        onClose={() => setColorWheelOpen(false)}
+        title={t("رنگ دلخواه برند", "Custom brand color")}
+      >
         <div className="flex flex-col items-center gap-5">
           <ColorWheel
             value={s.brandColor || "#F97316"}
-            onChange={(hex) => update((d) => ({ ...d, settings: { ...d.settings, brandColor: hex } }))}
+            onChange={(hex) =>
+              update((d) => ({ ...d, settings: { ...d.settings, brandColor: hex } }))
+            }
           />
           <div className="flex w-full gap-2">
             <Button
@@ -406,7 +495,8 @@ function SettingsPage() {
       {/* backup & restore — the recovery net while data is device-only */}
       <Card className="flex flex-col gap-3">
         <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-          <Archive className="h-4 w-4 text-primary" /> {t("پشتیبان‌گیری و بازیابی", "Backup & restore")}
+          <Archive className="h-4 w-4 text-primary" />{" "}
+          {t("پشتیبان‌گیری و بازیابی", "Backup & restore")}
         </div>
         <p className="text-[11px] leading-5 text-muted-foreground">
           {t(
@@ -422,7 +512,13 @@ function SettingsPage() {
             <Upload className="h-4 w-4" /> {t("بازیابی", "Import")}
           </Button>
         </div>
-        <input ref={fileRef} type="file" accept="application/json,.json" hidden onChange={onFilePicked} />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json"
+          hidden
+          onChange={onFilePicked}
+        />
         {/* ═══ TEST-ONLY: دادهٔ آزمایشی یک‌ساله — با SHOW_DEMO_SEED کنترل می‌شود ═══ */}
         {SHOW_DEMO_SEED && (
           <button
@@ -430,7 +526,11 @@ function SettingsPage() {
             onClick={seedDemo}
             className="rounded-xl border border-dashed border-muted-foreground/40 py-2 text-xs text-muted-foreground"
           >
-            🧪 {t("ساخت یک سال دادهٔ آزمایشی (جایگزین دیتای فعلی)", "Seed 1 year of demo data (replaces current)")}
+            🧪{" "}
+            {t(
+              "ساخت یک سال دادهٔ آزمایشی (جایگزین دیتای فعلی)",
+              "Seed 1 year of demo data (replaces current)",
+            )}
           </button>
         )}
         {/* ═══ پایان TEST-ONLY ═══ */}
@@ -453,7 +553,11 @@ function SettingsPage() {
       </Card>
 
       {/* wipe confirm */}
-      <Modal open={wipeOpen} onClose={() => setWipeOpen(false)} title={t("پاک کردن همهٔ داده‌ها", "Erase all data")}>
+      <Modal
+        open={wipeOpen}
+        onClose={() => setWipeOpen(false)}
+        title={t("پاک کردن همهٔ داده‌ها", "Erase all data")}
+      >
         <div className="flex flex-col gap-4">
           <p className="text-sm text-muted-foreground">
             {t(
@@ -473,7 +577,11 @@ function SettingsPage() {
       </Modal>
 
       {/* restore confirm — restoring REPLACES current data, so ask first */}
-      <Modal open={!!pendingImport} onClose={() => setPendingImport(null)} title={t("بازیابی اطلاعات", "Restore data")}>
+      <Modal
+        open={!!pendingImport}
+        onClose={() => setPendingImport(null)}
+        title={t("بازیابی اطلاعات", "Restore data")}
+      >
         {pendingImport && (
           <div className="flex flex-col gap-4">
             <p className="text-sm text-muted-foreground">
@@ -485,7 +593,9 @@ function SettingsPage() {
             <div className="rounded-xl border border-border p-3 text-[11px] leading-6 text-foreground">
               <p>
                 {t("تاریخ پشتیبان", "Backup date")}:{" "}
-                <span dir="ltr">{formatDate(dateKey(new Date(pendingImport.exportedAt)), cal, lang)}</span>
+                <span dir="ltr">
+                  {formatDate(dateKey(new Date(pendingImport.exportedAt)), cal, lang)}
+                </span>
               </p>
               <p>
                 {faNum(backupSummary(pendingImport.db).habits, lang)} {t("عادت", "habits")} ·{" "}
@@ -493,14 +603,16 @@ function SettingsPage() {
                 {faNum(backupSummary(pendingImport.db).journal, lang)} {t("ژورنال", "journal")}
               </p>
             </div>
-            {pendingImport.db.auth?.phone && db.auth?.phone && pendingImport.db.auth.phone !== db.auth.phone && (
-              <p className="rounded-xl bg-destructive/10 p-3 text-[11px] leading-5 text-destructive">
-                {t(
-                  `⚠️ این پشتیبان مال شمارهٔ ${faNum(toLocalPhone(pendingImport.db.auth.phone), lang)} است، نه حساب فعلی.`,
-                  `⚠️ This backup belongs to ${toLocalPhone(pendingImport.db.auth.phone)}, not the current account.`,
-                )}
-              </p>
-            )}
+            {pendingImport.db.auth?.phone &&
+              db.auth?.phone &&
+              pendingImport.db.auth.phone !== db.auth.phone && (
+                <p className="rounded-xl bg-destructive/10 p-3 text-[11px] leading-5 text-destructive">
+                  {t(
+                    `⚠️ این پشتیبان مال شمارهٔ ${faNum(toLocalPhone(pendingImport.db.auth.phone), lang)} است، نه حساب فعلی.`,
+                    `⚠️ This backup belongs to ${toLocalPhone(pendingImport.db.auth.phone)}, not the current account.`,
+                  )}
+                </p>
+              )}
             <div className="flex gap-2">
               <Button variant="destructive" className="flex-1" onClick={confirmImport}>
                 {t("بازیابی و جایگزینی", "Restore")}
@@ -530,14 +642,46 @@ function SettingsPage() {
         </Button>
       </Card>
 
+      {/* قوانین، حریم خصوصی و تماس — یک بخش بازشو */}
+      <Card className="!p-0 overflow-hidden">
+        <button
+          onClick={() => setLegalExpanded((v) => !v)}
+          className="flex w-full items-center justify-between p-4"
+        >
+          <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+            <FileText className="h-4 w-4 text-primary" />{" "}
+            {t("قوانین، حریم خصوصی و تماس", "Terms, Privacy & Contact")}
+          </div>
+          <ChevronDown
+            className={`h-4 w-4 text-muted-foreground transition-transform ${legalExpanded ? "rotate-180" : ""}`}
+          />
+        </button>
+        {legalExpanded && (
+          <div className="border-t border-border p-4">
+            <LegalContent />
+          </div>
+        )}
+      </Card>
+
       <p className="text-center text-[10px] text-muted-foreground">
-        {t("روتینو نسخه ۱٫۰ — آفلاین‌فرست با سینک پس‌زمینه", "Routino v1.0 — offline-first with background sync")}
+        {t(
+          "روتینو نسخه ۱٫۰ — آفلاین‌فرست با سینک پس‌زمینه",
+          "Routino v1.0 — offline-first with background sync",
+        )}
       </p>
 
       {/* new category modal */}
-      <Modal open={catFormOpen} onClose={() => setCatFormOpen(false)} title={t("دسته‌بندی جدید", "New category")}>
+      <Modal
+        open={catFormOpen}
+        onClose={() => setCatFormOpen(false)}
+        title={t("دسته‌بندی جدید", "New category")}
+      >
         <div className="flex flex-col gap-4">
-          <Input value={catName} onChange={(e) => setCatName(e.target.value)} placeholder={t("نام دسته", "Category name")} />
+          <Input
+            value={catName}
+            onChange={(e) => setCatName(e.target.value)}
+            placeholder={t("نام دسته", "Category name")}
+          />
 
           <div>
             <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("آیکون", "Icon")}</p>
@@ -566,7 +710,9 @@ function SettingsPage() {
                   key={c}
                   onClick={() => setCatColor(c)}
                   className={`h-8 w-8 rounded-full transition-transform ${
-                    catColor === c ? "scale-110 ring-2 ring-foreground ring-offset-2 ring-offset-card" : ""
+                    catColor === c
+                      ? "scale-110 ring-2 ring-foreground ring-offset-2 ring-offset-card"
+                      : ""
                   }`}
                   style={{ backgroundColor: c }}
                 />
@@ -581,7 +727,11 @@ function SettingsPage() {
       </Modal>
 
       {/* delete category confirm */}
-      <Modal open={!!deleteCat} onClose={() => setDeleteCat(null)} title={t("حذف دسته‌بندی", "Delete category")}>
+      <Modal
+        open={!!deleteCat}
+        onClose={() => setDeleteCat(null)}
+        title={t("حذف دسته‌بندی", "Delete category")}
+      >
         <p className="mb-4 text-sm text-muted-foreground">
           {t(
             `«${deleteCat?.name}» حذف بشه؟ عادت‌های داخلش می‌مونن ولی بدون دسته می‌شن.`,
@@ -598,5 +748,205 @@ function SettingsPage() {
         </div>
       </Modal>
     </div>
+  );
+}
+
+/**
+ * Username + password management.
+ *
+ * Reads the account's credential state from the server on mount (offline just
+ * hides the controls). Setting the first password needs no current password —
+ * the session token is proof; changing an existing one requires it. This is what
+ * lets a user who signed in by SMS switch to password-only sign-in afterwards.
+ */
+function AccountSecurityCard({ t, lang }: { t: (fa: string, en: string) => string; lang: Lang }) {
+  const [account, setAccount] = useState<AccountInfo | null>(null);
+  const [offline, setOffline] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [uname, setUname] = useState("");
+  const [curPw, setCurPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [busyU, setBusyU] = useState(false);
+  const [busyP, setBusyP] = useState(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    fetchAccount()
+      .then((a) => {
+        if (!alive) return;
+        setAccount(a);
+        setUname(a.username ?? "");
+      })
+      .catch(() => alive && setOffline(true));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const explain = (e: unknown): string => {
+    if (!(e instanceof ApiError))
+      return t("یه مشکلی پیش اومد. دوباره تلاش کن.", "Something went wrong. Try again.");
+    if (e.offline)
+      return t("برای این کار به اینترنت نیاز داری.", "This needs an internet connection.");
+    switch (e.code) {
+      case "invalid_username":
+        return t(
+          "نام کاربری باید ۳ تا ۲۴ حرف باشه، با حرف شروع شه (a–z، ۰–۹، _ .)",
+          "Username must be 3–24 chars, start with a letter (a–z, 0–9, _ .)",
+        );
+      case "username_taken":
+        return t("این نام کاربری قبلاً گرفته شده.", "That username is already taken.");
+      case "wrong_password":
+        return t("رمز عبور فعلی اشتباهه.", "Current password is wrong.");
+      case "weak_password":
+        return t(
+          "رمز باید حداقل ۸ کاراکتر و شامل حرف و عدد باشه.",
+          "Password must be 8+ chars with a letter and a digit.",
+        );
+      case "rate_limited":
+        return t(
+          "تلاش زیاد بود. کمی بعد دوباره امتحان کن.",
+          "Too many attempts. Try again shortly.",
+        );
+      default:
+        return e.message;
+    }
+  };
+
+  const saveUsername = async () => {
+    if (!uname.trim()) return;
+    setErr("");
+    setBusyU(true);
+    try {
+      const res = await setUsername(uname.trim());
+      setAccount((a) => (a ? { ...a, username: res.username } : a));
+      setUname(res.username);
+      toast.success(t("نام کاربری ذخیره شد", "Username saved"));
+    } catch (e) {
+      setErr(explain(e));
+    } finally {
+      setBusyU(false);
+    }
+  };
+
+  const savePassword = async () => {
+    if (!newPw) return;
+    setErr("");
+    setBusyP(true);
+    try {
+      await setPassword(newPw, account?.hasPassword ? curPw : undefined);
+      setAccount((a) => (a ? { ...a, hasPassword: true } : a));
+      setCurPw("");
+      setNewPw("");
+      toast.success(t("رمز عبور ذخیره شد", "Password saved"));
+    } catch (e) {
+      setErr(explain(e));
+    } finally {
+      setBusyP(false);
+    }
+  };
+
+  return (
+    <Card className="flex flex-col gap-3">
+      <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+        <KeyRound className="h-4 w-4 text-primary" />{" "}
+        {t("نام کاربری و رمز عبور", "Username & password")}
+      </div>
+
+      {offline ? (
+        <p className="text-[11px] leading-5 text-muted-foreground">
+          {t(
+            "برای مدیریت نام کاربری و رمز عبور به اینترنت نیاز داری.",
+            "Managing your username and password needs an internet connection.",
+          )}
+        </p>
+      ) : (
+        <>
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+            <span>
+              {t("نام کاربری", "Username")}:{" "}
+              <span dir="ltr" className="font-bold text-foreground">
+                {account?.username || t("تنظیم نشده", "not set")}
+              </span>
+            </span>
+            <span className={account?.hasPassword ? "text-primary" : ""}>
+              {account?.hasPassword
+                ? t("رمز عبور فعال ✓", "Password on ✓")
+                : t("بدون رمز عبور", "no password")}
+            </span>
+          </div>
+
+          {account && !account.hasPassword && (
+            <p className="rounded-xl bg-primary-soft p-2.5 text-[11px] leading-5 text-primary">
+              {t(
+                "یک رمز عبور بذار تا دفعه‌ی بعد بدون پیامک و فقط با رمز وارد شی.",
+                "Set a password to sign in next time with just your password — no SMS needed.",
+              )}
+            </p>
+          )}
+
+          <Button
+            variant="secondary"
+            onClick={() => (setErr(""), setOpen(true))}
+            disabled={!account}
+          >
+            {t("مدیریت نام کاربری و رمز", "Manage username & password")}
+          </Button>
+        </>
+      )}
+
+      <Modal
+        open={open}
+        onClose={() => setOpen(false)}
+        title={t("نام کاربری و رمز عبور", "Username & password")}
+      >
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-bold text-foreground">{t("نام کاربری", "Username")}</p>
+            <Input
+              dir="ltr"
+              placeholder={t("مثلاً amir", "e.g. amir")}
+              value={uname}
+              onChange={(e) => setUname(e.target.value)}
+            />
+            <Button onClick={() => void saveUsername()} disabled={busyU || !uname.trim()}>
+              {busyU ? t("در حال ذخیره…", "Saving…") : t("ذخیره نام کاربری", "Save username")}
+            </Button>
+          </div>
+
+          <div className="h-px bg-border" />
+
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-bold text-foreground">
+              {account?.hasPassword
+                ? t("تغییر رمز عبور", "Change password")
+                : t("تنظیم رمز عبور", "Set a password")}
+            </p>
+            {account?.hasPassword && (
+              <Input
+                dir="ltr"
+                type="password"
+                placeholder={t("رمز عبور فعلی", "Current password")}
+                value={curPw}
+                onChange={(e) => setCurPw(e.target.value)}
+              />
+            )}
+            <Input
+              dir="ltr"
+              type="password"
+              placeholder={t("رمز عبور جدید (حداقل ۸ کاراکتر)", "New password (8+ chars)")}
+              value={newPw}
+              onChange={(e) => setNewPw(e.target.value)}
+            />
+            <Button onClick={() => void savePassword()} disabled={busyP || !newPw}>
+              {busyP ? t("در حال ذخیره…", "Saving…") : t("ذخیره رمز عبور", "Save password")}
+            </Button>
+          </div>
+
+          {err && <p className="text-center text-xs text-destructive">{err}</p>}
+        </div>
+      </Modal>
+    </Card>
   );
 }

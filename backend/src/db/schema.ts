@@ -27,7 +27,15 @@ import {
 /** Entity kinds the client may sync. `feedback` is deliberately absent: it is
  * push-only and lands in its own relational table, so letting it into `records`
  * would round-trip it back to the device and re-dirty it forever. */
-export const SYNC_KINDS = ["categories", "habits", "logs", "tasks", "timerSessions", "journal", "settings"] as const;
+export const SYNC_KINDS = [
+  "categories",
+  "habits",
+  "logs",
+  "tasks",
+  "timerSessions",
+  "journal",
+  "settings",
+] as const;
 export type SyncKind = (typeof SYNC_KINDS)[number];
 
 export const users = pgTable("users", {
@@ -35,6 +43,14 @@ export const users = pgTable("users", {
   /** Canonical `989xxxxxxxxx`. MUST be produced by the same normalizePhone as
    * the client — a divergence forks one human into two accounts. */
   phone: text("phone").notNull().unique(),
+  /** Optional login handle, stored lowercased. Lets a user sign in with a name
+   * instead of a phone number. NULL for accounts that never set one; Postgres
+   * allows many NULLs under a unique index. Always starts with a letter, so it
+   * can never be mistaken for a phone number at login. */
+  username: text("username").unique(),
+  /** scrypt hash (`scrypt$N$r$p$saltB64$hashB64`), or NULL for OTP-only accounts.
+   * The raw password is never stored, logged, or returned. */
+  passwordHash: text("password_hash"),
   /**
    * Per-user monotonic change counter. Incremented with
    * `UPDATE users SET seq = seq + $n ... RETURNING seq`, which takes a row lock
@@ -75,7 +91,10 @@ export const records = pgTable(
     primaryKey({ columns: [t.userId, t.kind, t.id] }),
     // The hot path: `WHERE user_id = $1 AND seq > $cursor ORDER BY seq`.
     index("records_pull").on(t.userId, t.seq),
-    check("records_kind_valid", sql`${t.kind} IN ('categories','habits','logs','tasks','timerSessions','journal','settings')`),
+    check(
+      "records_kind_valid",
+      sql`${t.kind} IN ('categories','habits','logs','tasks','timerSessions','journal','settings')`,
+    ),
   ],
 );
 
@@ -109,7 +128,32 @@ export const otpCodes = pgTable(
     ip: text("ip"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("otp_phone_recent").on(t.phone, t.createdAt), index("otp_ip_recent").on(t.ip, t.createdAt)],
+  (t) => [
+    index("otp_phone_recent").on(t.phone, t.createdAt),
+    index("otp_ip_recent").on(t.ip, t.createdAt),
+  ],
+);
+
+/**
+ * Failed-login ledger — the rate-limit state for password sign-in, mirroring how
+ * `otp_codes` backs the OTP limits. In Postgres, not memory: it must survive
+ * restarts and work across multiple isolates. Only failures are recorded; a
+ * correct password clears the identifier's recent rows. `identifier` is the
+ * canonical lookup key (a `989…` phone or a lowercased username), so the two
+ * ways of typing one phone throttle as one account.
+ */
+export const loginAttempts = pgTable(
+  "login_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ip: text("ip"),
+    identifier: text("identifier").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("login_attempts_identifier").on(t.identifier, t.createdAt),
+    index("login_attempts_ip").on(t.ip, t.createdAt),
+  ],
 );
 
 export const plans = pgTable("plans", {
@@ -271,6 +315,7 @@ export const schema = {
   records,
   devices,
   otpCodes,
+  loginAttempts,
   plans,
   discounts,
   redemptions,
