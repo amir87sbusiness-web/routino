@@ -55,6 +55,16 @@ describe("edge password sign-in", () => {
     const res = await login("amir", "Amir@1387");
     expect(res.status).toBe(200);
   });
+
+  it("rejects a reserved username (admin)", async () => {
+    const { access } = await signIn(h, "09123334444");
+    const res = await h.call("POST", "/v1/auth/username", {
+      headers: auth(access),
+      body: { username: "Admin" },
+    });
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toBe("username_reserved");
+  });
 });
 
 describe("edge admin set-password", () => {

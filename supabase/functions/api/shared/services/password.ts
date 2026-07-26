@@ -95,7 +95,40 @@ export function validatePassword(
   return { ok: true };
 }
 
-export type UsernameReason = "too_short" | "too_long" | "bad_chars";
+export type UsernameReason = "too_short" | "too_long" | "bad_chars" | "reserved";
+
+/**
+ * Names nobody may claim: impersonation-prone handles (admin, support, official)
+ * and app/system words. Compared against the normalized (lowercased) username, so
+ * "Admin", "ADMIN" and "admin" are all blocked. Uniqueness handles the rest — two
+ * people can never share a name — this only carves out the sensitive few.
+ */
+export const RESERVED_USERNAMES = new Set([
+  "admin",
+  "administrator",
+  "administrador",
+  "root",
+  "superuser",
+  "sysadmin",
+  "system",
+  "sys",
+  "support",
+  "help",
+  "helpdesk",
+  "moderator",
+  "mod",
+  "owner",
+  "staff",
+  "team",
+  "official",
+  "security",
+  "routino",
+  "routinoapp",
+  "api",
+  "www",
+  "null",
+  "undefined",
+]);
 
 /** Lowercased ASCII, Persian digits folded to ASCII, whitespace trimmed. */
 export function normalizeUsername(raw: string): string {
@@ -103,7 +136,7 @@ export function normalizeUsername(raw: string): string {
 }
 
 /**
- * 3–24 chars, `a-z 0-9 _ .`, MUST start with a letter.
+ * 3–24 chars, `a-z 0-9 _ .`, MUST start with a letter, and not a reserved name.
  *
  * The leading-letter rule is load-bearing: it guarantees a username can never
  * normalize to a phone number, so the login endpoint can decide "phone vs
@@ -116,5 +149,6 @@ export function validateUsername(
   if (v.length < 3) return { ok: false, reason: "too_short" };
   if (v.length > 24) return { ok: false, reason: "too_long" };
   if (!/^[a-z][a-z0-9_.]*$/.test(v)) return { ok: false, reason: "bad_chars" };
+  if (RESERVED_USERNAMES.has(v)) return { ok: false, reason: "reserved" };
   return { ok: true, value: v };
 }

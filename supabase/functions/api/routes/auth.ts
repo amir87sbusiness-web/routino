@@ -196,11 +196,14 @@ export function authRoutes(deps: Deps) {
     const u = requireUser(c);
     const { username } = setUsernameBody.parse(await readJson(c));
     const v = validateUsername(username);
-    if (!v.ok)
+    if (!v.ok) {
+      if (v.reason === "reserved")
+        throw badRequest("username_reserved", "That username is reserved");
       throw badRequest(
         "invalid_username",
         "Username must be 3–24 chars, start with a letter (a–z, 0–9, _ .)",
       );
+    }
 
     const [taken] = await db.select().from(users).where(eq(users.username, v.value)).limit(1);
     if (taken && taken.id !== u.id)

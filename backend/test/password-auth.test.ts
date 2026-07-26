@@ -150,6 +150,17 @@ describe("username", () => {
     expect((dup.json() as { error: string }).error).toBe("username_taken");
   });
 
+  it("reserves impersonation-prone names like admin (any case)", async () => {
+    const { access } = await otpSignIn("09123334444");
+    for (const name of ["admin", "Admin", "ADMIN", "support", "root", "routino"]) {
+      const res = await setName(access, name);
+      expect(res.statusCode).toBe(400);
+      expect((res.json() as { error: string }).error).toBe("username_reserved");
+    }
+    // A normal name is still fine.
+    expect((await setName(access, "amir")).statusCode).toBe(200);
+  });
+
   it("reports account credential state", async () => {
     const { access } = await otpSignIn("09123334444");
     const before = await h.app.inject({

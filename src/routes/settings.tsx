@@ -777,6 +777,8 @@ function AccountCard() {
         );
       case "username_taken":
         return t("این نام کاربری قبلاً گرفته شده.", "That username is already taken.");
+      case "username_reserved":
+        return t("این نام کاربری رزرو شده و قابل انتخاب نیست.", "That username is reserved.");
       case "wrong_password":
         return t("رمز عبور فعلی اشتباهه.", "Current password is wrong.");
       case "weak_password":
