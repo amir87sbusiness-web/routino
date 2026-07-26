@@ -5,6 +5,7 @@ import {
   Bell,
   CalendarDays,
   ChevronDown,
+  ChevronLeft,
   Download,
   FileText,
   Globe,
@@ -43,7 +44,7 @@ import {
   type Backup,
 } from "@/lib/backup";
 import { isNative, shareBackupNative } from "@/lib/backup-native";
-import { dateKey, faNum, formatDate, type Lang } from "@/lib/dates";
+import { dateKey, faNum, formatDate } from "@/lib/dates";
 import { toLocalPhone } from "@/lib/phone";
 import { CATEGORY_COLOR_CHOICES } from "@/lib/presets";
 import { applyDemoContent } from "@/lib/seed-demo";
@@ -195,34 +196,8 @@ function SettingsPage() {
 
   return (
     <div className="page-stagger flex flex-col gap-4">
-      {/* account */}
-      <Card className="flex items-center gap-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary text-lg font-black text-primary-foreground">
-          {db.auth?.phone.slice(-2)}
-        </div>
-        <div className="flex-1">
-          <p className="text-sm font-bold text-foreground" dir="ltr">
-            {faNum(db.auth?.phone ? toLocalPhone(db.auth.phone) : "", lang)}
-          </p>
-          <p className="text-[10px] text-muted-foreground">
-            {db.subscription
-              ? t(
-                  `اشتراک تا ${formatDate(dateKey(new Date(db.subscription.expiresAt)), cal, lang)}`,
-                  `Subscribed until ${formatDate(dateKey(new Date(db.subscription.expiresAt)), cal, lang)}`,
-                ) + (db.subscription.trial ? t(" (آزمایشی)", " (trial)") : "")
-              : t("بدون اشتراک", "No subscription")}
-          </p>
-        </div>
-        <Link
-          to="/subscribe"
-          className="rounded-xl bg-primary-soft px-3 py-2 text-xs font-bold text-primary"
-        >
-          {t("تمدید", "Renew")}
-        </Link>
-      </Card>
-
-      {/* username + password */}
-      <AccountSecurityCard t={t} lang={lang} />
+      {/* account: profile + username/password together, at the very top */}
+      <AccountCard />
 
       {/* language + calendar */}
       <div className="grid grid-cols-2 gap-3">
@@ -752,14 +727,16 @@ function SettingsPage() {
 }
 
 /**
- * Username + password management.
+ * Account card: the profile (phone, plan) AND username/password management,
+ * together at the very top of settings.
  *
- * Reads the account's credential state from the server on mount (offline just
- * hides the controls). Setting the first password needs no current password —
- * the session token is proof; changing an existing one requires it. This is what
+ * Credential state is read from the server on mount (offline just disables the
+ * manage button). Setting the first password needs no current password — the
+ * session token is proof; changing an existing one requires it. This is what
  * lets a user who signed in by SMS switch to password-only sign-in afterwards.
  */
-function AccountSecurityCard({ t, lang }: { t: (fa: string, en: string) => string; lang: Lang }) {
+function AccountCard() {
+  const ctx = useAppMaybe();
   const [account, setAccount] = useState<AccountInfo | null>(null);
   const [offline, setOffline] = useState(false);
   const [open, setOpen] = useState(false);
@@ -783,6 +760,9 @@ function AccountSecurityCard({ t, lang }: { t: (fa: string, en: string) => strin
       alive = false;
     };
   }, []);
+
+  if (!ctx?.db) return null;
+  const { db, t, lang, cal } = ctx;
 
   const explain = (e: unknown): string => {
     if (!(e instanceof ApiError))
@@ -849,51 +829,72 @@ function AccountSecurityCard({ t, lang }: { t: (fa: string, en: string) => strin
 
   return (
     <Card className="flex flex-col gap-3">
-      <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-        <KeyRound className="h-4 w-4 text-primary" />{" "}
-        {t("نام کاربری و رمز عبور", "Username & password")}
+      {/* profile: avatar + phone + username chip + plan */}
+      <div className="flex items-center gap-3">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-lg font-black text-primary-foreground">
+          {db.auth?.phone.slice(-2)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-bold text-foreground" dir="ltr">
+              {faNum(db.auth?.phone ? toLocalPhone(db.auth.phone) : "", lang)}
+            </p>
+            {account?.username && (
+              <span
+                dir="ltr"
+                className="max-w-[45%] truncate rounded-full bg-secondary px-2 py-0.5 text-[10px] font-bold text-muted-foreground"
+              >
+                @{account.username}
+              </span>
+            )}
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            {db.subscription
+              ? t(
+                  `اشتراک تا ${formatDate(dateKey(new Date(db.subscription.expiresAt)), cal, lang)}`,
+                  `Subscribed until ${formatDate(dateKey(new Date(db.subscription.expiresAt)), cal, lang)}`,
+                ) + (db.subscription.trial ? t(" (آزمایشی)", " (trial)") : "")
+              : t("بدون اشتراک", "No subscription")}
+          </p>
+        </div>
+        <Link
+          to="/subscribe"
+          className="shrink-0 rounded-xl bg-primary-soft px-3 py-2 text-xs font-bold text-primary"
+        >
+          {t("تمدید", "Renew")}
+        </Link>
       </div>
 
-      {offline ? (
-        <p className="text-[11px] leading-5 text-muted-foreground">
+      {/* username + password — right here in the profile card */}
+      <button
+        type="button"
+        onClick={() => (setErr(""), setOpen(true))}
+        disabled={!account}
+        className="flex items-center justify-between gap-2 rounded-xl border border-border px-3 py-2.5 text-start transition-colors hover:bg-secondary disabled:opacity-60"
+      >
+        <span className="flex items-center gap-2 text-xs font-bold text-foreground">
+          <KeyRound className="h-4 w-4 text-primary" />{" "}
+          {t("نام کاربری و رمز عبور", "Username & password")}
+        </span>
+        <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          {offline
+            ? t("آفلاین", "offline")
+            : account
+              ? account.hasPassword
+                ? t("رمز فعال ✓", "password ✓")
+                : t("رمز تنظیم نشده", "no password")
+              : "…"}
+          <ChevronLeft className="h-4 w-4" />
+        </span>
+      </button>
+
+      {account && !account.hasPassword && !offline && (
+        <p className="rounded-xl bg-primary-soft p-2.5 text-[11px] leading-5 text-primary">
           {t(
-            "برای مدیریت نام کاربری و رمز عبور به اینترنت نیاز داری.",
-            "Managing your username and password needs an internet connection.",
+            "یک رمز عبور بذار تا دفعه‌ی بعد بدون پیامک و فقط با رمز وارد شی.",
+            "Set a password to sign in next time with just your password — no SMS needed.",
           )}
         </p>
-      ) : (
-        <>
-          <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span>
-              {t("نام کاربری", "Username")}:{" "}
-              <span dir="ltr" className="font-bold text-foreground">
-                {account?.username || t("تنظیم نشده", "not set")}
-              </span>
-            </span>
-            <span className={account?.hasPassword ? "text-primary" : ""}>
-              {account?.hasPassword
-                ? t("رمز عبور فعال ✓", "Password on ✓")
-                : t("بدون رمز عبور", "no password")}
-            </span>
-          </div>
-
-          {account && !account.hasPassword && (
-            <p className="rounded-xl bg-primary-soft p-2.5 text-[11px] leading-5 text-primary">
-              {t(
-                "یک رمز عبور بذار تا دفعه‌ی بعد بدون پیامک و فقط با رمز وارد شی.",
-                "Set a password to sign in next time with just your password — no SMS needed.",
-              )}
-            </p>
-          )}
-
-          <Button
-            variant="secondary"
-            onClick={() => (setErr(""), setOpen(true))}
-            disabled={!account}
-          >
-            {t("مدیریت نام کاربری و رمز", "Manage username & password")}
-          </Button>
-        </>
       )}
 
       <Modal
