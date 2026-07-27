@@ -63,6 +63,11 @@ export async function buildApp(deps: Omit<Deps, "now"> & { now?: () => number })
   await app.register(cors, {
     origin: deps.env.CORS_ORIGINS.split(",").map((s) => s.trim()),
     credentials: true,
+    // Cache the CORS preflight so the browser stops sending an OPTIONS request
+    // before every API call. Without this, each authenticated call pays for two
+    // round-trips to the (already ~1s) backend — the preflight and the request.
+    // Browsers cap this (Chrome ~2h, Firefox 24h); the value is just the max ask.
+    maxAge: 86400,
   });
 
   // Delta sync payloads are highly repetitive jsonb — compression is most of the
