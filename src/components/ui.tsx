@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
 import {
   addMonths,
@@ -159,7 +160,11 @@ export function Modal({
   wide?: boolean;
 }) {
   if (!open) return null;
-  return (
+  // Render into <body> via a portal so the overlay never gets trapped inside a
+  // parent's stacking context. Settings cards animate in with a transform
+  // (`page-item-in`), which creates a stacking context; a modal rendered inside
+  // one of those cards would otherwise be painted *under* the later cards.
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4">
       <button aria-label="close" className="absolute inset-0" onClick={onClose} />
       <div
@@ -179,7 +184,8 @@ export function Modal({
         </div>
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
