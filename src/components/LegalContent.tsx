@@ -1,7 +1,7 @@
 /**
  * متن کامل «قوانین و مقررات» + «حریم خصوصی» + «تماس با ما» در یک قطعه.
  * داخل یک بخشِ بازشو در صفحه‌ی تنظیمات (`routes/settings.tsx`) نمایش داده می‌شود.
- * اطلاعات تماس از `lib/legal-info.ts` می‌آید (همان ۴ مقداری که کاربر پر می‌کند).
+ * اطلاعات تماس (ایمیل/تلگرام/اینستاگرام) از `lib/legal-info.ts` می‌آید.
  */
 import { LEGAL_INFO } from "@/lib/legal-info";
 import { useAppMaybe } from "@/state/app";
@@ -35,8 +35,8 @@ export function LegalContent() {
       title: t("۳. حساب کاربری", "3. Your account"),
       paras: [
         t(
-          "ورود به حساب از طریق شماره موبایل و کد یک‌بارمصرفِ پیامکی انجام می‌شود. مسئولیت حفظ دسترسی به شماره موبایل و جلوگیری از استفاده‌ی دیگران از حساب، بر عهده‌ی شماست.",
-          "Sign-in is via your mobile number and a one-time SMS code. You are responsible for keeping access to your number and preventing others from using your account.",
+          "ورود به حساب از طریق شماره موبایل یا نام کاربری و رمز عبور، یا کد یک‌بارمصرفِ پیامکی انجام می‌شود. مسئولیت حفظ رمز عبور و دسترسی به شماره موبایل و جلوگیری از استفاده‌ی دیگران از حساب، بر عهده‌ی شماست.",
+          "Sign-in is via your mobile number or username with a password, or a one-time SMS code. You are responsible for keeping your password, keeping access to your number, and preventing others from using your account.",
         ),
       ],
     },
@@ -76,7 +76,7 @@ export function LegalContent() {
       paras: [
         t(
           "سرویس «همان‌گونه که هست» ارائه می‌شود. تلاش ما بر ارائه‌ی سرویسی پایدار است، اما مسئولیتی در قبال از دست رفتن اطلاعاتی که فقط روی دستگاه شما ذخیره شده نداریم — توصیه می‌کنیم به‌صورت دوره‌ای از بخش تنظیمات «پشتیبان» بگیرید.",
-          "The service is provided \"as is.\" We aim for a reliable service but are not liable for loss of data stored only on your device — we recommend exporting a backup periodically from Settings.",
+          'The service is provided "as is." We aim for a reliable service but are not liable for loss of data stored only on your device — we recommend exporting a backup periodically from Settings.',
         ),
       ],
     },
@@ -185,27 +185,60 @@ export function LegalContent() {
   return (
     <div className="flex flex-col gap-5">
       <p className="text-[11px] text-muted-foreground">
-        {t(`آخرین به‌روزرسانی: ${LEGAL_INFO.lastUpdatedFa}`, `Last updated: ${LEGAL_INFO.lastUpdatedEn}`)}
+        {t(
+          `آخرین به‌روزرسانی: ${LEGAL_INFO.lastUpdatedFa}`,
+          `Last updated: ${LEGAL_INFO.lastUpdatedEn}`,
+        )}
       </p>
 
       <div>
-        <h3 className="mb-2 text-sm font-black text-foreground">{t("قوانین و مقررات", "Terms & Conditions")}</h3>
+        <h3 className="mb-2 text-sm font-black text-foreground">
+          {t("قوانین و مقررات", "Terms & Conditions")}
+        </h3>
         <div className="flex flex-col gap-3">{renderSections(terms)}</div>
       </div>
 
       <div>
-        <h3 className="mb-2 text-sm font-black text-foreground">{t("حریم خصوصی", "Privacy Policy")}</h3>
+        <h3 className="mb-2 text-sm font-black text-foreground">
+          {t("حریم خصوصی", "Privacy Policy")}
+        </h3>
         <div className="flex flex-col gap-3">{renderSections(privacy)}</div>
       </div>
 
       {/* اطلاعات تماس — لازمِ اینماد */}
       <div className="rounded-2xl border border-border p-3">
-        <h3 className="mb-2 text-sm font-black text-foreground">{t("تماس با ما", "Contact us")}</h3>
-        <div className="flex flex-col gap-1 text-[12px] leading-6 text-muted-foreground">
-          <p>{t(`مالک: ${LEGAL_INFO.ownerName}`, `Owner: ${LEGAL_INFO.ownerName}`)}</p>
-          <p dir="ltr" className="text-start">{t(`تلفن: ${LEGAL_INFO.phone}`, `Phone: ${LEGAL_INFO.phone}`)}</p>
-          <p dir="ltr" className="text-start">{t(`ایمیل: ${LEGAL_INFO.email}`, `Email: ${LEGAL_INFO.email}`)}</p>
-          <p>{t(`نشانی: ${LEGAL_INFO.address}`, `Address: ${LEGAL_INFO.address}`)}</p>
+        <h3 className="mb-2 text-sm font-black text-foreground">
+          {t("تماس با ما و پشتیبانی", "Contact & support")}
+        </h3>
+        <div className="flex flex-col gap-1.5 text-[12px] leading-6 text-muted-foreground">
+          <p dir="ltr" className="text-start">
+            {t("ایمیل: ", "Email: ")}
+            <a href={`mailto:${LEGAL_INFO.email}`} className="font-medium text-primary">
+              {LEGAL_INFO.email}
+            </a>
+          </p>
+          <p dir="ltr" className="text-start">
+            {t("تلگرام: ", "Telegram: ")}
+            <a
+              href={`https://t.me/${LEGAL_INFO.telegram}`}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-primary"
+            >
+              @{LEGAL_INFO.telegram}
+            </a>
+          </p>
+          <p dir="ltr" className="text-start">
+            {t("اینستاگرام: ", "Instagram: ")}
+            <a
+              href={`https://instagram.com/${LEGAL_INFO.instagram}`}
+              target="_blank"
+              rel="noreferrer"
+              className="font-medium text-primary"
+            >
+              @{LEGAL_INFO.instagram}
+            </a>
+          </p>
         </div>
       </div>
     </div>
