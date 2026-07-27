@@ -45,6 +45,10 @@ export function buildApp(deps: Deps) {
       credentials: true,
       allowHeaders: ["content-type", "authorization", "x-admin-token"],
       allowMethods: ["GET", "POST", "OPTIONS"],
+      // Cache the preflight so the browser stops sending an OPTIONS before every
+      // API call. Without it, each authenticated call pays two round-trips to the
+      // edge function (preflight + request). Browsers cap this (Chrome ~2h).
+      maxAge: 86400,
     }),
   );
 
