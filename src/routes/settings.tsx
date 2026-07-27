@@ -4,12 +4,16 @@ import {
   Archive,
   Bell,
   CalendarDays,
+  Check,
   ChevronDown,
   ChevronLeft,
   Download,
+  Eye,
+  EyeOff,
   FileText,
   Globe,
   KeyRound,
+  Lock,
   LogOut,
   Moon,
   Palette,
@@ -45,6 +49,7 @@ import {
 } from "@/lib/backup";
 import { isNative, shareBackupNative } from "@/lib/backup-native";
 import { dateKey, faNum, formatDate } from "@/lib/dates";
+import { subscriptionActive } from "@/lib/logic";
 import { toLocalPhone } from "@/lib/phone";
 import { CATEGORY_COLOR_CHOICES } from "@/lib/presets";
 import { applyDemoContent } from "@/lib/seed-demo";
@@ -146,6 +151,9 @@ function SettingsPage() {
     toast.success(t("یک سال دادهٔ آزمایشی ساخته شد", "Seeded one year of demo data"));
   };
   const s = db.settings;
+  // «اشتراک پولی» = اشتراک فعالِ غیرآزمایشی. بازیابی اطلاعات فقط برای این‌ها باز است؛
+  // در اشتراک رایگان/آزمایشی قفل می‌ماند تا کاربر ارتقا بدهد.
+  const paidActive = subscriptionActive(db) && !db.subscription?.trial;
   // رنگ دلخواه = رنگی که در لیست پیش‌فرض‌ها نیست.
   const isCustomBrand = !!s.brandColor && !BRAND_COLORS.includes(s.brandColor);
 
@@ -483,10 +491,28 @@ function SettingsPage() {
           <Button variant="secondary" onClick={exportData}>
             <Download className="h-4 w-4" /> {t("گرفتن پشتیبان", "Export")}
           </Button>
-          <Button variant="secondary" onClick={() => fileRef.current?.click()}>
-            <Upload className="h-4 w-4" /> {t("بازیابی", "Import")}
+          <Button
+            variant="secondary"
+            disabled={!paidActive}
+            onClick={() => fileRef.current?.click()}
+          >
+            {paidActive ? <Upload className="h-4 w-4" /> : <Lock className="h-4 w-4" />}{" "}
+            {t("بازیابی", "Import")}
           </Button>
         </div>
+        {/* بازیابی داده‌ها فقط برای اشتراک پولی — در اشتراک رایگان قفل است */}
+        {!paidActive && (
+          <Link
+            to="/subscribe"
+            className="flex items-center justify-center gap-1.5 rounded-xl bg-primary-soft px-3 py-2 text-[11px] font-bold text-primary"
+          >
+            <Lock className="h-3.5 w-3.5" />
+            {t(
+              "بازیابی اطلاعات فقط برای اشتراک پولی فعال است",
+              "Restoring data is available on paid plans only",
+            )}
+          </Link>
+        )}
         <input
           ref={fileRef}
           type="file"
@@ -511,11 +537,30 @@ function SettingsPage() {
         {/* ═══ پایان TEST-ONLY ═══ */}
       </Card>
 
-      {/* danger zone: erase everything on this device */}
-      <Card className="flex flex-col gap-3 border-destructive/30">
+      {/* danger zone: sign out + erase everything, together in one red box */}
+      <Card className="flex flex-col gap-3 border-destructive/40 bg-destructive/5">
         <div className="flex items-center gap-2 text-sm font-bold text-destructive">
-          <AlertTriangle className="h-4 w-4" /> {t("پاک کردن همهٔ داده‌ها", "Erase all data")}
+          <AlertTriangle className="h-4 w-4" /> {t("منطقهٔ خطر", "Danger zone")}
         </div>
+
+        {/* sign out */}
+        <Button
+          variant="secondary"
+          className="w-full justify-center text-destructive"
+          onClick={() => {
+            // Clears tokens locally first, then revokes the device server-side
+            // on a best-effort basis — signing out must work offline too.
+            void logout();
+            update((d) => ({ ...d, auth: null }));
+            navigate({ to: "/auth" });
+          }}
+        >
+          <LogOut className="h-4 w-4" /> {t("خروج از حساب", "Sign out")}
+        </Button>
+
+        <div className="h-px bg-destructive/20" />
+
+        {/* erase everything on this device */}
         <p className="text-[11px] leading-5 text-muted-foreground">
           {t(
             "همهٔ عادت‌ها، ثبت‌ها، کارها، ژورنال و تاریخچهٔ تایمر از این دستگاه پاک می‌شه. حساب و اشتراکت می‌مونه. این کار قابل بازگشت نیست — اول یه پشتیبان بگیر.",
@@ -600,23 +645,6 @@ function SettingsPage() {
         )}
       </Modal>
 
-      {/* account */}
-      <Card className="flex flex-col gap-1">
-        <Button
-          variant="ghost"
-          className="w-full justify-start text-destructive"
-          onClick={() => {
-            // Clears tokens locally first, then revokes the device server-side
-            // on a best-effort basis — signing out must work offline too.
-            void logout();
-            update((d) => ({ ...d, auth: null }));
-            navigate({ to: "/auth" });
-          }}
-        >
-          <LogOut className="h-4 w-4" /> {t("خروج از حساب", "Sign out")}
-        </Button>
-      </Card>
-
       {/* قوانین، حریم خصوصی و تماس — یک بخش بازشو */}
       <Card className="!p-0 overflow-hidden">
         <button
@@ -639,10 +667,7 @@ function SettingsPage() {
       </Card>
 
       <p className="text-center text-[10px] text-muted-foreground">
-        {t(
-          "روتینو نسخه ۱٫۰ — آفلاین‌فرست با سینک پس‌زمینه",
-          "Routino v1.0 — offline-first with background sync",
-        )}
+        {t("روتینو نسخه 1.0 - آفلاین فرست", "Routino v1.0 — offline-first")}
       </p>
 
       {/* new category modal */}
@@ -722,6 +747,45 @@ function SettingsPage() {
           </Button>
         </div>
       </Modal>
+    </div>
+  );
+}
+
+/**
+ * Password input with a show/hide eye toggle — one of the biggest usability
+ * wins for a non-technical user setting a password they can't otherwise see.
+ */
+function PwInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="relative">
+      <Input
+        dir="ltr"
+        type={show ? "text" : "password"}
+        className="pe-10"
+        autoCapitalize="none"
+        autoCorrect="off"
+        spellCheck={false}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <button
+        type="button"
+        tabIndex={-1}
+        onClick={() => setShow((v) => !v)}
+        className="absolute inset-y-0 end-2 flex items-center text-muted-foreground hover:text-foreground"
+      >
+        {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+      </button>
     </div>
   );
 }
@@ -904,50 +968,85 @@ function AccountCard() {
         onClose={() => setOpen(false)}
         title={t("نام کاربری و رمز عبور", "Username & password")}
       >
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-6">
+          {/* ── نام کاربری ── */}
           <div className="flex flex-col gap-2">
-            <p className="text-xs font-bold text-foreground">{t("نام کاربری", "Username")}</p>
+            <p className="text-sm font-bold text-foreground">{t("نام کاربری", "Username")}</p>
+            <p className="text-[11px] leading-5 text-muted-foreground">
+              {t(
+                "یک نام کاربری بذار تا بتونی به‌جای شماره موبایل با اون وارد شی.",
+                "Pick a username so you can sign in with it instead of your phone number.",
+              )}
+            </p>
             <Input
               dir="ltr"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
               placeholder={t("مثلاً amir", "e.g. amir")}
               value={uname}
               onChange={(e) => setUname(e.target.value)}
             />
-            <Button onClick={() => void saveUsername()} disabled={busyU || !uname.trim()}>
-              {busyU ? t("در حال ذخیره…", "Saving…") : t("ذخیره نام کاربری", "Save username")}
+            <Button
+              onClick={() => void saveUsername()}
+              disabled={busyU || !uname.trim() || uname.trim() === (account?.username ?? "")}
+            >
+              {busyU ? (
+                t("در حال ذخیره…", "Saving…")
+              ) : (
+                <>
+                  <Check className="h-4 w-4" /> {t("ذخیره نام کاربری", "Save username")}
+                </>
+              )}
             </Button>
           </div>
 
           <div className="h-px bg-border" />
 
+          {/* ── رمز عبور ── */}
           <div className="flex flex-col gap-2">
-            <p className="text-xs font-bold text-foreground">
+            <p className="text-sm font-bold text-foreground">
               {account?.hasPassword
                 ? t("تغییر رمز عبور", "Change password")
                 : t("تنظیم رمز عبور", "Set a password")}
             </p>
+            <p className="text-[11px] leading-5 text-muted-foreground">
+              {t(
+                "رمز باید حداقل ۸ کاراکتر و شامل حرف و عدد باشه. برای دیدن رمز روی آیکون چشم بزن.",
+                "Password must be 8+ characters with a letter and a digit. Tap the eye to reveal it.",
+              )}
+            </p>
             {account?.hasPassword && (
-              <Input
-                dir="ltr"
-                type="password"
-                placeholder={t("رمز عبور فعلی", "Current password")}
+              <PwInput
                 value={curPw}
-                onChange={(e) => setCurPw(e.target.value)}
+                onChange={setCurPw}
+                placeholder={t("رمز عبور فعلی", "Current password")}
               />
             )}
-            <Input
-              dir="ltr"
-              type="password"
-              placeholder={t("رمز عبور جدید (حداقل ۸ کاراکتر)", "New password (8+ chars)")}
+            <PwInput
               value={newPw}
-              onChange={(e) => setNewPw(e.target.value)}
+              onChange={setNewPw}
+              placeholder={t("رمز عبور جدید", "New password")}
             />
-            <Button onClick={() => void savePassword()} disabled={busyP || !newPw}>
-              {busyP ? t("در حال ذخیره…", "Saving…") : t("ذخیره رمز عبور", "Save password")}
+            <Button
+              onClick={() => void savePassword()}
+              disabled={busyP || newPw.length < 8 || (!!account?.hasPassword && !curPw)}
+            >
+              {busyP ? (
+                t("در حال ذخیره…", "Saving…")
+              ) : (
+                <>
+                  <Check className="h-4 w-4" /> {t("ذخیره رمز عبور", "Save password")}
+                </>
+              )}
             </Button>
           </div>
 
-          {err && <p className="text-center text-xs text-destructive">{err}</p>}
+          {err && (
+            <p className="rounded-xl bg-destructive/10 p-2.5 text-center text-xs leading-5 text-destructive">
+              {err}
+            </p>
+          )}
         </div>
       </Modal>
     </Card>
