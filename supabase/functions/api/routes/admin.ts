@@ -8,8 +8,9 @@ import { timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
 import type { Context, Next } from "hono";
 import { z } from "zod";
-import { readJson, type AppEnv, type Deps } from "../deps.ts";
-import { unauthorized } from "../shared/lib/http-errors.ts";
+import { clientIp, readJson, type AppEnv, type Deps } from "../deps.ts";
+import { tooMany, unauthorized } from "../shared/lib/http-errors.ts";
+import { checkAdminRate, recordAdminFailure } from "../shared/services/login-throttle.ts";
 import {
   adminCreateDiscount,
   adminGrant,
@@ -66,13 +67,33 @@ export function adminRoutes(deps: Deps) {
   const { db, env } = deps;
   const now = () => new Date(deps.now());
 
+  /**
+   * One shared secret, constant-time compared — plus a ledger-backed attempt
+   * limit. There is no HTTP rate limiter in front of this function, so without
+   * the limit a loop could try admin tokens forever at full speed, and this
+   * token gifts subscriptions and resets passwords. The counter lives in
+   * Postgres because a `Map` would reset on every isolate cold start.
+   */
   const requireAdmin = async (c: Context<AppEnv>, next: Next) => {
+    const t = now();
+    const ip = clientIp(c, env);
     const token = c.req.header("x-admin-token");
-    if (typeof token !== "string" || !tokenEquals(token, env.ADMIN_TOKEN)) {
-      console.warn("admin auth failed");
-      throw unauthorized("bad_admin_token", "Invalid admin token");
+    // The CORRECT token is always honoured, whatever the counter says. Checking
+    // the limit first would mean anyone could lock the owner out of their own
+    // panel from a shared IP. Guessing is what gets throttled.
+    if (typeof token === "string" && tokenEquals(token, env.ADMIN_TOKEN)) {
+      await next();
+      return;
     }
-    await next();
+
+    await recordAdminFailure(db, ip, t);
+    const rate = await checkAdminRate(db, ip, t);
+    if (!rate.ok) {
+      console.warn("admin auth throttled");
+      throw tooMany("Too many admin attempts. Try again later.", rate.retryAfter);
+    }
+    console.warn("admin auth failed");
+    throw unauthorized("bad_admin_token", "Invalid admin token");
   };
 
   const r = new Hono<AppEnv>();

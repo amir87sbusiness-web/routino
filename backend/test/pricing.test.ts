@@ -73,6 +73,46 @@ describe("checkDiscount", () => {
     expect((await checkDiscount(h.db, "WAT", USER, PHONE, NOW)).reason).toBe("unknown");
   });
 
+  it("counts an in-flight checkout against max_uses", async () => {
+    // Regression: max_uses was checked against `used_count`, which is only
+    // written when a payment SUCCEEDS. Every user who reached the gateway before
+    // the first one paid therefore also got the discount — a single-use code
+    // posted publicly could be redeemed by everyone in that window.
+    await h.raw(`insert into discounts (code, percent, max_uses) values ('ONCE', 50, 1)`);
+    const other = "55555555-5555-5555-5555-555555555555";
+    await h.raw(`insert into users (id, phone) values ('${other}', '989350001122')`);
+    await h.raw(
+      `insert into payments (user_id, plan_id, months, amount_toman, amount_rial, discount_code, status)
+       values ('${other}', 'm1', 1, 29500, 295000, 'ONCE', 'redirected')`,
+    );
+
+    expect((await checkDiscount(h.db, "ONCE", USER, PHONE, NOW)).reason).toBe("exhausted");
+  });
+
+  it("does not let a user's own pending checkout block their retry", async () => {
+    await h.raw(`insert into discounts (code, percent, max_uses) values ('MINE', 50, 1)`);
+    await h.raw(
+      `insert into payments (user_id, plan_id, months, amount_toman, amount_rial, discount_code, status)
+       values ('${USER}', 'm1', 1, 29500, 295000, 'MINE', 'redirected')`,
+    );
+
+    expect((await checkDiscount(h.db, "MINE", USER, PHONE, NOW)).valid).toBe(true);
+  });
+
+  it("frees a slot again once an abandoned checkout goes stale", async () => {
+    await h.raw(`insert into discounts (code, percent, max_uses) values ('STALE', 50, 1)`);
+    const other = "66666666-6666-6666-6666-666666666666";
+    await h.raw(`insert into users (id, phone) values ('${other}', '989350003344')`);
+    // created_at is two hours before the test's fixed NOW — not before the wall
+    // clock, which is what `now()` in SQL would have given.
+    await h.raw(
+      `insert into payments (user_id, plan_id, months, amount_toman, amount_rial, discount_code, status, created_at)
+       values ('${other}', 'm1', 1, 29500, 295000, 'STALE', 'redirected', '2026-07-14T22:00:00Z')`,
+    );
+
+    expect((await checkDiscount(h.db, "STALE", USER, PHONE, NOW)).valid).toBe(true);
+  });
+
   it("honours a phone-restricted code", async () => {
     await h.raw(`insert into discounts (code, percent, phone) values ('MINE', 50, '989121111111')`);
     expect((await checkDiscount(h.db, "MINE", USER, PHONE, NOW)).reason).toBe("other_user");

@@ -52,6 +52,32 @@ export function buildApp(deps: Deps) {
     }),
   );
 
+  // Security headers. The Fastify deployment gets these from @fastify/helmet;
+  // this is the production equivalent, and production is THIS app — so without
+  // it api.routino.me (including the /admin panel) shipped no headers at all.
+  app.use("*", async (c, next) => {
+    await next();
+    c.header("X-Content-Type-Options", "nosniff");
+    c.header("Referrer-Policy", "no-referrer");
+    c.header("X-Frame-Options", "DENY");
+    c.header("Strict-Transport-Security", "max-age=15552000; includeSubDomains");
+    // CSP is scoped to /admin on purpose. That page is one self-contained HTML
+    // document holding the admin token, so it is the only place where an
+    // injected <script src> or an exfiltration beacon would be worth anything —
+    // and 'unsafe-inline' is unavoidable there because the panel's own script is
+    // inline. The payment result page is deliberately left out: it navigates to
+    // the `routino://` deep link to return to the Android app, and that flow is
+    // not worth risking for a header.
+    if (c.req.path.startsWith("/api/admin")) {
+      c.header(
+        "Content-Security-Policy",
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
+          "img-src 'self' data:; connect-src 'self'; form-action 'self'; " +
+          "frame-ancestors 'none'; base-uri 'none'; object-src 'none'",
+      );
+    }
+  });
+
   // The edge analogue of TRUST_PROXY: when PROXY_SECRET is set, only requests
   // that came through our Cloudflare Worker (which adds the header) are served.
   // That blocks the raw *.supabase.co URL and makes the worker-set client-IP

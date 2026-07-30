@@ -136,6 +136,37 @@ export function normalizeUsername(raw: string): string {
 }
 
 /**
+ * Folds the digit-for-letter substitutions and separators used to slip past a
+ * reserved-name list — `adm1n`, `supp0rt`, `r00t`, `s_t_a_f_f`.
+ *
+ * Used ONLY to test against RESERVED_USERNAMES; the stored username is always
+ * the plain normalized form. This is an impersonation guard, not a security
+ * boundary: someone messaging users as apparent staff is a social-engineering
+ * risk precisely because those users are about to send money through the app.
+ */
+function foldLookalikes(v: string): string {
+  return v
+    .replace(/[._]/g, "")
+    .replace(/0/g, "o")
+    .replace(/1/g, "i")
+    .replace(/3/g, "e")
+    .replace(/4/g, "a")
+    .replace(/5/g, "s")
+    .replace(/7/g, "t")
+    .replace(/\$/g, "s");
+}
+
+/** True when a name is reserved outright or is a lookalike of one. */
+export function isReservedUsername(normalized: string): boolean {
+  if (RESERVED_USERNAMES.has(normalized)) return true;
+  const folded = foldLookalikes(normalized);
+  if (RESERVED_USERNAMES.has(folded)) return true;
+  // `routino_support`, `admin-team`, `official.routino` — a reserved word as a
+  // whole segment reads as staff regardless of what surrounds it.
+  return folded.length <= 32 && [...RESERVED_USERNAMES].some((r) => r.length >= 4 && folded.includes(r));
+}
+
+/**
  * 3–24 chars, `a-z 0-9 _ .`, MUST start with a letter, and not a reserved name.
  *
  * The leading-letter rule is load-bearing: it guarantees a username can never
@@ -149,6 +180,6 @@ export function validateUsername(
   if (v.length < 3) return { ok: false, reason: "too_short" };
   if (v.length > 24) return { ok: false, reason: "too_long" };
   if (!/^[a-z][a-z0-9_.]*$/.test(v)) return { ok: false, reason: "bad_chars" };
-  if (RESERVED_USERNAMES.has(v)) return { ok: false, reason: "reserved" };
+  if (isReservedUsername(v)) return { ok: false, reason: "reserved" };
   return { ok: true, value: v };
 }

@@ -63,31 +63,43 @@ export async function grantInterval(
 ): Promise<Entitlement> {
   const months = opts.months ?? 0;
   const days = opts.days ?? 0;
+  const t = now.toISOString();
 
-  const [current] = await db.select().from(entitlements).where(eq(entitlements.userId, userId)).limit(1);
-  const before = current?.expiresAt ?? null;
-
-  const base = before && before > now ? before : now;
-
-  // Postgres does the calendar arithmetic. `make_interval` is what makes "1
-  // Year" mean 12 real months and 31 Jan + 1 month mean 28 Feb — JS's
-  // `setMonth` would roll that over to 3 March, and the old client's flat
-  // 30-day months delivered a 360-day "year".
-  const result = await db.execute(
-    sql`select (${base.toISOString()}::timestamptz
-        + make_interval(months => ${months}, days => ${days})) as next`,
-  );
-  const next = rowsOf<{ next: Date | string }>(result)[0]?.next;
-  if (next == null) throw new Error("failed to compute expiry");
-  const expiresAt = next instanceof Date ? next : new Date(next);
-
-  await db
-    .insert(entitlements)
-    .values({ userId, planId: opts.planId, expiresAt, updatedAt: now })
-    .onConflictDoUpdate({
-      target: entitlements.userId,
-      set: { planId: opts.planId, expiresAt, updatedAt: now },
-    });
+  // ONE statement, deliberately.
+  //
+  // This used to SELECT the current expiry, add the interval in JS, then UPDATE.
+  // Two grants landing at the same moment both read the same "before" and the
+  // second write silently discarded the first — a user who paid for two months
+  // got one. The `on conflict do update` branch re-reads `entitlements.expires_at`
+  // under the row lock, so concurrent grants stack instead of overwriting.
+  //
+  // Postgres still does the calendar arithmetic: `make_interval` is what makes
+  // "1 Year" mean 12 real months and 31 Jan + 1 month mean 28 Feb, where JS's
+  // `setMonth` would roll over to 3 March.
+  const result = await db.execute(sql`
+    with prev as (
+      select expires_at from entitlements where user_id = ${userId}
+    ), upserted as (
+      insert into entitlements (user_id, plan_id, expires_at, updated_at)
+      values (
+        ${userId}, ${opts.planId},
+        ${t}::timestamptz + make_interval(months => ${months}, days => ${days}),
+        ${t}::timestamptz
+      )
+      on conflict (user_id) do update set
+        plan_id = excluded.plan_id,
+        updated_at = excluded.updated_at,
+        expires_at = greatest(entitlements.expires_at, ${t}::timestamptz)
+                     + make_interval(months => ${months}, days => ${days})
+      returning expires_at
+    )
+    select (select expires_at from prev) as before,
+           (select expires_at from upserted) as after
+  `);
+  const row = rowsOf<{ before: Date | string | null; after: Date | string }>(result)[0];
+  if (row?.after == null) throw new Error("failed to compute expiry");
+  const expiresAt = row.after instanceof Date ? row.after : new Date(row.after);
+  const before = row.before == null ? null : row.before instanceof Date ? row.before : new Date(row.before);
 
   await db.insert(grants).values({
     userId,
@@ -117,21 +129,37 @@ export async function ensureExpiresAt(
   opts: { planId: string; claimed: Date; source: GrantSource; note?: string | null },
   now: Date,
 ): Promise<Entitlement> {
-  const [current] = await db.select().from(entitlements).where(eq(entitlements.userId, userId)).limit(1);
-  const before = current?.expiresAt ?? null;
+  const t = now.toISOString();
+  const claimed = opts.claimed.toISOString();
+
+  // Same single-statement treatment as `grantInterval`: `greatest()` inside the
+  // conflict branch can only ever raise the expiry, so a concurrent grant can
+  // never be lowered by an import landing at the same moment.
+  const result = await db.execute(sql`
+    with prev as (
+      select expires_at from entitlements where user_id = ${userId}
+    ), upserted as (
+      insert into entitlements (user_id, plan_id, expires_at, updated_at)
+      values (${userId}, ${opts.planId}, ${claimed}::timestamptz, ${t}::timestamptz)
+      on conflict (user_id) do update set
+        plan_id = case
+          when entitlements.expires_at < ${claimed}::timestamptz then excluded.plan_id
+          else entitlements.plan_id
+        end,
+        updated_at = excluded.updated_at,
+        expires_at = greatest(entitlements.expires_at, ${claimed}::timestamptz)
+      returning expires_at
+    )
+    select (select expires_at from prev) as before,
+           (select expires_at from upserted) as after
+  `);
+  const row = rowsOf<{ before: Date | string | null; after: Date | string }>(result)[0];
+  const before = row?.before == null ? null : row.before instanceof Date ? row.before : new Date(row.before);
 
   if (before && before >= opts.claimed) {
-    // Already at least as good — record nothing, change nothing.
+    // Already at least as good — the upsert changed nothing, so record nothing.
     return readEntitlement(db, userId, now);
   }
-
-  await db
-    .insert(entitlements)
-    .values({ userId, planId: opts.planId, expiresAt: opts.claimed, updatedAt: now })
-    .onConflictDoUpdate({
-      target: entitlements.userId,
-      set: { planId: opts.planId, expiresAt: opts.claimed, updatedAt: now },
-    });
 
   await db.insert(grants).values({
     userId,

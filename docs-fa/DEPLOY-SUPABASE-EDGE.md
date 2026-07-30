@@ -23,6 +23,16 @@
 | `NODE_ENV` / `DB_DRIVER` | `production` / `postgres` | ✅ درست |
 | **`SMS_PROVIDER`** | **`console`** | ❌ **پیامک تستی — کاربر واقعی کد ورود نمی‌گیرد** |
 | **`ZIBAL_MERCHANT`** | **`zibal`** (سندباکس) | ❌ **پول واقعی جابه‌جا نمی‌شود** |
+| **`ALLOW_TEST_PROVIDERS`** | **باید `true` باشد** | ⚠️ **تا وقتی دو ردیف بالا تستی‌اند، بدون این تابع بالا نمی‌آید** |
+
+> 🛑 **قبل از دیپلوی بعدی حتماً بخوان.**
+> از این به بعد اگر `NODE_ENV=production` باشد، تابع با `ZIBAL_MERCHANT=zibal` (سندباکس) یا `SMS_PROVIDER=console` **بالا نمی‌آید** — مگر با اجازه‌ی صریح. چون سندباکس زیبال از بیرون هیچ تفاوتی ندارد: کاربر درگاه واقعی می‌بیند، «موفق» می‌گیرد، اشتراک واقعی هم می‌گیرد، و پول به حسابت نمی‌رسد.
+> وضعیت فعلی (سندباکس عمدی) یعنی **اول این را بزن، بعد دیپلوی کن**:
+> ```bash
+> supabase secrets set ALLOW_TEST_PROVIDERS=true --project-ref axychfrteevhfdhgvfuv
+> ```
+> و روزی که مرچنت واقعی + کاوه‌نگار وصل شد، این را **پاک کن** (`supabase secrets unset ALLOW_TEST_PROVIDERS`) تا محافظ برگردد.
+> هر بالا آمدن تابع، هرچه تستی باشد را با `[!] TEST MODE — …` در لاگ چاپ می‌کند.
 
 - **پروژه‌ی Supabase:** نام `routino` · ref `axychfrteevhfdhgvfuv` · org `qgvjcextnciiezisegdt` · region eu-north-1.
   حسابِ مالکِ روتینو **جدا** از حسابی است که پروژه‌ی «sheetra» را دارد — برای مدیریت باید با حساب درست `supabase login` کرد.
@@ -45,8 +55,11 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
 **۲) درگاه واقعی زیبال (قبل از پایان ۷ روز رایگانِ کاربرها):**
 ```bash
 supabase secrets set ZIBAL_MERCHANT=<کد-پذیرنده-واقعی> --project-ref axychfrteevhfdhgvfuv
+# و حالا که هم پیامک هم درگاه واقعی شد، محافظ را برگردان:
+supabase secrets unset ALLOW_TEST_PROVIDERS --project-ref axychfrteevhfdhgvfuv
 npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhgvfuv
 ```
+بعد از دیپلوی، لاگ تابع **نباید** هیچ خط `[!] TEST MODE` داشته باشد. اگر داشت، یعنی یکی از دو سرویس هنوز تستی است.
 
 ### تست محلی (تأییدشده کار می‌کند)
 `cd backend && npm run dev` (سرور :3000، sms=console → کد در ترمینال، psp=fake) + `npm run dev` (وب :5180، به :3000 پروکسی می‌شود). کل مسیر آنبوردینگ → ورود OTP → اپ اصلی محلی تست و سالم است.

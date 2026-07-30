@@ -24,6 +24,29 @@ async function signIn(phone = "09123334444") {
 }
 
 describe("admin auth", () => {
+  it("throttles repeated wrong tokens", async () => {
+    // Regression: nothing in the stack rate-limited anything, so a loop could
+    // guess admin tokens forever at full speed — and this token gifts
+    // subscriptions and resets passwords. The counter lives in Postgres because
+    // production runs on serverless isolates, where an in-memory Map resets on
+    // every cold start.
+    const codes: number[] = [];
+    for (let i = 0; i < 12; i++) {
+      const res = await h.app.inject({
+        method: "GET",
+        url: "/v1/admin/overview",
+        headers: { "x-admin-token": `guess-${i}` },
+      });
+      codes.push(res.statusCode);
+    }
+    expect(codes.slice(0, 9)).toEqual(Array(9).fill(401));
+    expect(codes.slice(9)).toEqual(Array(3).fill(429));
+
+    // The lockout is on guessing, not on the panel: the real token still works
+    // from the same IP, so nobody can lock the owner out of their own panel.
+    expect((await h.app.inject({ method: "GET", url: "/v1/admin/overview", headers: admin })).statusCode).toBe(200);
+  });
+
   it("rejects a missing or wrong token", async () => {
     expect((await h.app.inject({ method: "GET", url: "/v1/admin/overview" })).statusCode).toBe(401);
     expect(

@@ -68,7 +68,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const t = now();
     const verdict = await checkSendRate(db, phone, clientIp(req), t);
     if (!verdict.ok) {
-      req.log.warn({ reason: verdict.reason, phone }, "otp rate limited");
+      // Last 4 digits only. These logs land in a third-party pipeline with its
+      // own retention and access rules; a full subscriber list does not belong
+      // there just to explain a rate-limit hit.
+      req.log.warn({ reason: verdict.reason, phone: `***${phone.slice(-4)}` }, "otp rate limited");
       throw tooMany("Too many code requests. Try again later.", verdict.retryAfter);
     }
 
@@ -164,6 +167,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const ok = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
     if (!user || !user.passwordHash || !ok) {
       await recordLoginFailure(db, ip, key, t);
+      // Past the soft limit the answer becomes "too many attempts" instead of
+      // "wrong password" — but only for a wrong one. A correct password still
+      // gets through below, so an attacker cannot lock the real owner out.
+      if (verdict.verifyOnly) throw tooMany("Too many attempts. Try again later.", verdict.retryAfter);
       throw unauthorized("bad_credentials", "Wrong phone/username or password");
     }
     // Only tell a caller who PROVED they own the account that it is blocked.

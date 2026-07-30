@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { loadEnv, testProviderWarnings } from "../src/env.js";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
 
 let h: Harness;
@@ -41,6 +42,49 @@ describe("GET /v1/plans", () => {
     await h.raw(`update plans set active = false where id = 'm1'`);
     const res = await h.app.inject({ method: "GET", url: "/v1/plans" });
     expect((res.json() as { plans: unknown[] }).plans).toHaveLength(2);
+  });
+});
+
+describe("production env guards", () => {
+  const prod = {
+    NODE_ENV: "production",
+    DB_DRIVER: "postgres",
+    JWT_SECRET: "x".repeat(40),
+    OTP_PEPPER: "y".repeat(20),
+    ADMIN_TOKEN: "z".repeat(20),
+    SMS_PROVIDER: "kavenegar",
+    KAVENEGAR_API_KEY: "k",
+    PSP_PROVIDER: "zibal",
+  } as const;
+
+  it("refuses to start on Zibal's sandbox merchant", () => {
+    // The launch trap this exists for: Zibal's sandbox is not a separate host or
+    // flag — it is the merchant id left at its default. Forget one variable and
+    // the gateway looks real, verify says paid, subscriptions are granted, and
+    // nothing reaches the merchant account. ZarinPal had this guard; Zibal did not.
+    expect(() => loadEnv({ ...prod, ZIBAL_MERCHANT: "zibal" })).toThrow(/sandbox merchant/i);
+    expect(() => loadEnv({ ...prod, ZIBAL_MERCHANT: "real-merchant-id" })).not.toThrow();
+  });
+
+  it("refuses to start with console SMS", () => {
+    expect(() =>
+      loadEnv({ ...prod, ZIBAL_MERCHANT: "real-merchant-id", SMS_PROVIDER: "console" }),
+    ).toThrow(/console/i);
+  });
+
+  it("allows staying in test mode only when explicitly told to", () => {
+    const sandbox = { ...prod, ZIBAL_MERCHANT: "zibal", SMS_PROVIDER: "console" };
+    expect(() => loadEnv(sandbox)).toThrow();
+    const env = loadEnv({ ...sandbox, ALLOW_TEST_PROVIDERS: "true" });
+    // ...and then says so, loudly, on every boot.
+    expect(testProviderWarnings(env)).toHaveLength(2);
+  });
+
+  it("still rejects dev secrets and the fake gateway", () => {
+    const ok = { ...prod, ZIBAL_MERCHANT: "real-merchant-id" };
+    expect(() => loadEnv({ ...ok, JWT_SECRET: "dev-only-secret-change-me-in-production-32+" })).toThrow(/JWT_SECRET/);
+    expect(() => loadEnv({ ...ok, ADMIN_TOKEN: "dev-only-admin-token" })).toThrow(/ADMIN_TOKEN/);
+    expect(() => loadEnv({ ...ok, PSP_PROVIDER: "fake", ALLOW_TEST_PROVIDERS: "true" })).toThrow(/fake/);
   });
 });
 

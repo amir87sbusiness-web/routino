@@ -126,6 +126,23 @@ describe("POST /v1/auth/otp/verify", () => {
     expect(res.statusCode).toBe(429);
   });
 
+  it("spends attempts atomically, so a burst cannot buy extra guesses", async () => {
+    // Regression: the counter was written as `attempts = row.attempts + 1` after
+    // a separate SELECT. Requests arriving together all read the same value and
+    // all spent the same slot, turning "5 guesses" into "5 × however many you
+    // send at once" against a 6-digit code with a 120-second life.
+    await request("09123334444");
+    const code = h.sms.last()!.code;
+
+    const res = await Promise.all(Array.from({ length: 30 }, () => verify("09123334444", "000000")));
+    const evaluated = res.filter((r) => r.statusCode === 401).length;
+    expect(evaluated).toBeLessThanOrEqual(5);
+
+    const [row] = await h.query<{ attempts: number }>(`select attempts from otp_codes limit 1`);
+    expect(row!.attempts).toBe(5);
+    expect((await verify("09123334444", code)).statusCode).toBe(429);
+  });
+
   it("rejects an expired code", async () => {
     await request("09123334444");
     const code = h.sms.last()!.code;

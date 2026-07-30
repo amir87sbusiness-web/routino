@@ -14,7 +14,7 @@
 // unchanged on Deno, where the Buffer global does not exist.
 import { Buffer } from "node:buffer";
 import { createHash, randomInt, timingSafeEqual } from "node:crypto";
-import { and, count, desc, eq, gt, isNull, lt } from "drizzle-orm";
+import { and, count, desc, eq, gt, isNull, lt, sql } from "drizzle-orm";
 import type { Database } from "../db/client.ts";
 import { otpCodes } from "../db/schema.ts";
 import type { Env } from "../env.ts";
@@ -123,14 +123,21 @@ export async function verifyCode(db: Database, env: Env, phone: string, code: st
 
   if (!row) return { ok: false, reason: "no_code" };
   if (row.expiresAt <= now) return { ok: false, reason: "expired" };
-  if (row.attempts >= env.OTP_MAX_ATTEMPTS) return { ok: false, reason: "too_many" };
 
-  // Count the attempt BEFORE checking, so a crash mid-verify can't hand out a
-  // free guess.
-  await db
+  // Claim one attempt ATOMICALLY, before checking the code.
+  //
+  // Both halves matter. Counting first means a crash mid-verify cannot hand out
+  // a free guess. Doing it as a single conditional UPDATE means the cap is
+  // enforced by Postgres rather than by a read-then-write in JS: the old
+  // `attempts: row.attempts + 1` let N concurrent requests all read the same
+  // value and all spend the same slot, turning "5 guesses" into "5 × however
+  // many requests you send at once".
+  const claimed = await db
     .update(otpCodes)
-    .set({ attempts: row.attempts + 1 })
-    .where(eq(otpCodes.id, row.id));
+    .set({ attempts: sql`${otpCodes.attempts} + 1` })
+    .where(and(eq(otpCodes.id, row.id), lt(otpCodes.attempts, env.OTP_MAX_ATTEMPTS)))
+    .returning();
+  if (!claimed.length) return { ok: false, reason: "too_many" };
 
   if (!constantTimeEquals(row.codeHash, hashCode(code, env))) return { ok: false, reason: "wrong" };
 

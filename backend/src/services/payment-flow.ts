@@ -84,7 +84,21 @@ export async function applyPaid(
     if (p.discountCode) await redeemDiscount(db, p.discountCode, p.userId, p.id);
   } catch (err) {
     // Un-claim so the next callback or status poll can retry the grant.
-    await db.update(payments).set({ appliedAt: null, updatedAt: t }).where(eq(payments.id, p.id));
+    //
+    // `status` MUST be restored too. Leaving it on "paid" while `applied_at` is
+    // null used to strand the payment forever: the status poll's recovery branch
+    // only re-verified rows still marked `redirected`, so a user whose grant
+    // failed once showed "paid" and never received the subscription they had
+    // already been charged for.
+    await db
+      .update(payments)
+      .set({ status: p.status, appliedAt: null, updatedAt: t })
+      .where(eq(payments.id, p.id));
+    console.error("grant failed after payment — un-claimed for retry", {
+      paymentId: p.id,
+      userId: p.userId,
+      err,
+    });
     throw err;
   }
 }
@@ -330,9 +344,19 @@ export async function pollPayment(
     .limit(1);
   if (!payment) throw notFound("unknown_payment", "No such payment");
 
-  // Self-heal: user returned but the callback never fired (network, closed
-  // tab). One verify round-trip settles it.
-  if (payment.status === "redirected" && (payment.trackId != null || payment.authority)) {
+  // Self-heal: user returned but the callback never fired (network, closed tab),
+  // or a grant failed after the money moved and was un-claimed for retry.
+  //
+  // The condition is deliberately "not yet applied" rather than a single status:
+  // any row that reached a gateway but has no grant is money we may owe access
+  // for, whatever its local status says. Only user-cancelled and
+  // amount-mismatched rows are excluded — those must never grant, and re-asking
+  // the gateway about them on every poll is pure cost.
+  const unsettled =
+    payment.appliedAt == null &&
+    payment.status !== "canceled" &&
+    payment.status !== "verify_failed";
+  if (unsettled && (payment.trackId != null || payment.authority)) {
     try {
       const v = await psp.verify(paymentProvider(payment), paymentRef(payment)!, payment.amountRial);
       if (

@@ -11,7 +11,8 @@ import { Buffer } from "node:buffer";
 import { timingSafeEqual } from "node:crypto";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { unauthorized } from "../plugins/errors.js";
+import { tooMany, unauthorized } from "../plugins/errors.js";
+import { checkAdminRate, recordAdminFailure } from "../services/login-throttle.js";
 import {
   adminCreateDiscount,
   adminGrant,
@@ -68,12 +69,31 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   const { db, env } = app.deps;
   const now = () => new Date(app.deps.now());
 
+  /**
+   * One shared secret, constant-time compared — plus a ledger-backed attempt
+   * limit, because nothing else in the stack rate-limits anything. Without it a
+   * `for` loop could try admin tokens forever at full speed, and this token
+   * gifts subscriptions and resets passwords.
+   */
   const requireAdmin = async (req: FastifyRequest) => {
+    const t = now();
+    const ip = req.ip ?? null;
     const token = req.headers["x-admin-token"];
-    if (typeof token !== "string" || !tokenEquals(token, env.ADMIN_TOKEN)) {
-      req.log.warn({ ip: req.ip }, "admin auth failed");
-      throw unauthorized("bad_admin_token", "Invalid admin token");
+    // The CORRECT token is always honoured, whatever the counter says. Checking
+    // the limit first would mean anyone could lock the owner out of their own
+    // panel from a shared IP — the same trap the password endpoint had. Guessing
+    // is what gets throttled, and the throttle's job is to make a brute-force
+    // attempt bounded and visible in the log, not to gate the real key.
+    if (typeof token === "string" && tokenEquals(token, env.ADMIN_TOKEN)) return;
+
+    await recordAdminFailure(db, ip, t);
+    const rate = await checkAdminRate(db, ip, t);
+    if (!rate.ok) {
+      req.log.warn({ ip }, "admin auth throttled");
+      throw tooMany("Too many admin attempts. Try again later.", rate.retryAfter);
     }
+    req.log.warn({ ip }, "admin auth failed");
+    throw unauthorized("bad_admin_token", "Invalid admin token");
   };
   const opts = { preHandler: requireAdmin };
 

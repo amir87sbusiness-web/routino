@@ -15,7 +15,7 @@ import postgres from "postgres";
 import { buildApp } from "./app.ts";
 import type { Database } from "./shared/db/client.ts";
 import { schema } from "./shared/db/schema.ts";
-import { loadEnv, pspProviderNames } from "./shared/env.ts";
+import { loadEnv, pspProviderNames, testProviderWarnings } from "./shared/env.ts";
 import {
   createRouter,
   fakePsp,
@@ -81,5 +81,9 @@ try {
 }
 
 console.log(`[api] edge function up (sms=${env.SMS_PROVIDER}, psp=${pspNames.join("+")})`);
+
+// Loud, every cold start. "Nobody received the SMS" and "there is no money in
+// the merchant account" should be answered by the log, not by a support ticket.
+for (const w of testProviderWarnings(env)) console.warn(`[!] TEST MODE — ${w}`);
 
 Deno.serve(app.fetch);

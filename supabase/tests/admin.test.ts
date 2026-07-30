@@ -23,6 +23,29 @@ describe("admin auth", () => {
     ).toBe(401);
   });
 
+  it("throttles repeated wrong tokens without locking out the real one", async () => {
+    // This app IS production, and there is no HTTP rate limiter in front of it —
+    // so the guessing limit has to live here, backed by Postgres rather than an
+    // in-memory counter that a cold start would reset.
+    const codes: number[] = [];
+    for (let i = 0; i < 12; i++) {
+      codes.push((await h.call("GET", "/v1/admin/overview", { headers: { "x-admin-token": `g${i}` } })).status);
+    }
+    expect(codes.slice(0, 9)).toEqual(Array(9).fill(401));
+    expect(codes.slice(9)).toEqual(Array(3).fill(429));
+    expect((await h.call("GET", "/v1/admin/overview", { headers: admin() })).status).toBe(200);
+  });
+
+  it("sends security headers, and a CSP on the panel", async () => {
+    // helmet only ever covered the Fastify deployment; these are the headers the
+    // real api.routino.me was missing entirely.
+    const res = await h.call("GET", "/admin");
+    expect(res.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(res.headers.get("x-frame-options")).toBe("DENY");
+    expect(res.headers.get("strict-transport-security")).toContain("max-age=");
+    expect(res.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
+  });
+
   it("serves the panel shell publicly (reveals nothing without a token)", async () => {
     const res = await h.call("GET", "/admin");
     expect(res.status).toBe(200);

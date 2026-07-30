@@ -73,7 +73,9 @@ export function authRoutes(deps: Deps) {
     const ip = clientIp(c, env);
     const verdict = await checkSendRate(db, phone, ip, t);
     if (!verdict.ok) {
-      console.warn("otp rate limited", { reason: verdict.reason, phone });
+      // Last 4 digits only — these logs land in a third-party pipeline with its
+      // own retention rules, and a subscriber list does not belong there.
+      console.warn("otp rate limited", { reason: verdict.reason, phone: `***${phone.slice(-4)}` });
       throw tooMany("Too many code requests. Try again later.", verdict.retryAfter);
     }
 
@@ -161,6 +163,10 @@ export function authRoutes(deps: Deps) {
     const ok = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
     if (!user || !user.passwordHash || !ok) {
       await recordLoginFailure(db, ip, key, t);
+      // Past the soft limit a WRONG password becomes "too many attempts" — but a
+      // correct one still gets through below, so an attacker who knows someone's
+      // phone number cannot lock them out of their own account.
+      if (verdict.verifyOnly) throw tooMany("Too many attempts. Try again later.", verdict.retryAfter);
       throw unauthorized("bad_credentials", "Wrong phone/username or password");
     }
     if (user.blocked) throw unauthorized("blocked", "Account is blocked");

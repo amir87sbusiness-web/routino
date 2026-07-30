@@ -9,7 +9,7 @@ import { buildApp } from "./app.js";
 import type { Database } from "./db/client.js";
 import { SCHEMA_SQL, SEED_DISCOUNTS_SQL, SEED_PLANS_SQL } from "./db/ddl.js";
 import { schema } from "./db/schema.js";
-import { loadEnv, pspProviderNames } from "./env.js";
+import { loadEnv, pspProviderNames, testProviderWarnings } from "./env.js";
 import { consoleSms, kavenegarSms, type SmsProvider } from "./providers/sms/index.js";
 import {
   createRouter,
@@ -105,3 +105,8 @@ await app.listen({ port: env.PORT, host: "0.0.0.0" });
 console.log(
   `  [api] listening on :${env.PORT}  (sms=${env.SMS_PROVIDER}, psp=${pspNames.join("+")})`,
 );
+
+// Loud, every boot, impossible to scroll past. "Nobody received the SMS" and
+// "there is no money in the merchant account" should be answered by the top of
+// the log, not by a support ticket a week later.
+for (const w of testProviderWarnings(env)) console.warn(`  [!] TEST MODE — ${w}`);

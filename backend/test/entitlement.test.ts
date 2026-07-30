@@ -21,6 +21,35 @@ describe("grantInterval", () => {
     expect(await readEntitlement(h.db, USER, new Date())).toMatchObject({ status: "none", expiresAt: null });
   });
 
+  it("stacks concurrent grants instead of overwriting one", async () => {
+    // Regression: grantInterval used to SELECT the current expiry, add the
+    // interval in JS, then UPDATE. Two grants landing together both read the
+    // same "before" and the second write discarded the first — a user who paid
+    // for two months received one. Reproduced exactly like this.
+    const now = new Date("2026-07-15T00:00:00Z");
+    await Promise.all([
+      grantInterval(h.db, USER, { planId: "m1", months: 1, source: "payment" }, now),
+      grantInterval(h.db, USER, { planId: "m1", months: 1, source: "payment" }, now),
+    ]);
+    const e = await readEntitlement(h.db, USER, now);
+    expect(e.expiresAt).toBe("2026-09-15T00:00:00.000Z"); // both months, not one
+    expect(await listGrants(h.db, USER)).toHaveLength(2);
+  });
+
+  it("keeps the ledger and the live expiry in agreement under concurrency", async () => {
+    const now = new Date("2026-07-15T00:00:00Z");
+    await Promise.all(
+      Array.from({ length: 5 }, () =>
+        grantInterval(h.db, USER, { planId: "m1", days: 10, source: "payment" }, now),
+      ),
+    );
+    const e = await readEntitlement(h.db, USER, now);
+    const ledger = await listGrants(h.db, USER);
+    const totalDays = ledger.reduce((n, g) => n + g.days, 0);
+    expect(totalDays).toBe(50);
+    expect(days(now, e.expiresAt!)).toBe(50);
+  });
+
   it("grants days", async () => {
     const now = new Date("2026-07-15T00:00:00Z");
     const e = await grantInterval(h.db, USER, { planId: "trial", days: 7, source: "trial" }, now);

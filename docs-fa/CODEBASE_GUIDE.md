@@ -219,7 +219,7 @@ routino1.0/
 |---|---|
 | 💰 قیمت پلن‌ها رو عوض کنی | دیتابیس سرور، جدول `plans` (یا برای نصب تازه: [ddl.ts](../backend/src/db/ddl.ts) `SEED_PLANS_SQL`). نسخه نمایشی آفلاین هم در [presets.ts](../src/lib/presets.ts) ثابت `PLANS` — دوتاشون باید یکی باشن |
 | 🎁 مدت هدیه کاربر جدید (۷ روز) رو عوض کنی | [backend/src/routes/auth.ts](../backend/src/routes/auth.ts) خط ۱۱ — `TRIAL_DAYS` |
-| 🏷️ کد تخفیف بسازی | پنل ادمین (`/admin` → تب تخفیف‌ها) یا API `/v1/admin/discounts` |
+| 🏷️ کد تخفیف بسازی | پنل ادمین (`/admin` → تب تخفیف‌ها) یا API `/v1/admin/discounts` — قواعدش پایین‌تر، بخش ۶.۱ |
 | 🎨 رنگ اصلی (نارنجی) اپ رو عوض کنی | [src/styles.css](../src/styles.css) متغیر `--primary` (هر دو حالت روشن و تیره) |
 | 🎨 لیست رنگ‌های قابل انتخاب برند در تنظیمات | [settings.tsx](../src/routes/settings.tsx) ثابت `BRAND_COLORS` |
 | 📋 دسته‌بندی یا عادت آماده جدید اضافه کنی | [presets.ts](../src/lib/presets.ts) — `DEFAULT_CATEGORIES` و `PRESET_HABITS` (آیکون‌هاش باید در `CATEGORY_ICONS` فایل [ui.tsx](../src/components/ui.tsx) باشه) |
@@ -241,6 +241,33 @@ routino1.0/
 
 ---
 
+### ۶.۱ کد تخفیف — قواعد کامل 🏷️
+
+از پنل ادمین (`/admin` → تب تخفیف‌ها) می‌سازی. هر کد این تنظیمات رو داره:
+
+| تنظیم | معنی | مثال |
+|---|---|---|
+| `code` | خود کد. **بی‌توجه به بزرگی/کوچکی حرف** (کاربر `off50` بزنه با `OFF50` یکیه). فقط حرف/عدد/`-`/`_`، بین ۳ تا ۳۲ نویسه | `NOWRUZ40` |
+| `percent` | درصد تخفیف، ۱ تا ۱۰۰. **۱۰۰ = رایگان** (اصلاً به درگاه نمی‌ره، مستقیم اشتراک می‌ده) | `40` |
+| `maxUses` | **چند نفر** بتونن استفاده کنن. خالی = بی‌نهایت | `50` |
+| `expiresAt` | تا چه تاریخی معتبره. خالی = بدون انقضا | ۱۴۰۵/۰۶/۳۱ |
+| `phone` | فقط برای **یک شماره‌ی خاص**. خالی = برای همه | `09121112233` |
+| `active` | خاموش/روشن کردن فوری بدون حذف | `true` |
+
+**قواعد ثابت (تغییرشون نده):**
+- **هر کاربر فقط یک بار** از هر کد استفاده می‌کنه — این با کلید اصلی جدول `redemptions` تضمین شده، نه با یه شرط `if`.
+- **`maxUses` حالا واقعاً سقفه.** قبلاً فقط پرداخت‌های *تمام‌شده* شمرده می‌شد، پس اگه ۱۰ نفر هم‌زمان می‌رفتن درگاه، همه تخفیف می‌گرفتن. الان کسی که **همین حالا داخل درگاهه** هم یک ظرفیت اشغال می‌کنه.
+- اگه کسی وارد درگاه بشه و پرداخت رو نصفه رها کنه، ظرفیتش **بعد از ۳۰ دقیقه خودکار آزاد می‌شه** (`RESERVATION_MINUTES` در [pricing.ts](../backend/src/services/pricing.ts)).
+- تخفیف و «آفر» ضربی روی هم اعمال می‌شن، و **قیمت فقط سمت سرور** حساب می‌شه. کلاینت هیچ‌وقت مبلغ نمی‌فرسته.
+- زمان انقضا با **ساعت سرور (UTC)** مقایسه می‌شه.
+
+**مثال‌ها:**
+- کمپین نوروز برای ۱۰۰ نفر اول: `percent=40`, `maxUses=100`, `expiresAt=آخر فروردین`
+- کد اینفلوئنسر بدون سقف تا آخر ماه: `percent=25`, `maxUses=خالی`, `expiresAt=آخر ماه`
+- عذرخواهی از یک مشتری خاص: `percent=100`, `phone=شماره‌اش`, `maxUses=1`
+
+---
+
 ## ۷. ⚠️ حالت‌های تستی — قبل از انتشار واقعی حذف/خاموش کن
 
 | کجا | چی | چطور خاموش می‌شه |
@@ -248,8 +275,12 @@ routino1.0/
 | [src/routes/auth.tsx](../src/routes/auth.tsx) | `SKIP_SMS = false` → اگه `true` بشه کلاً بدون سرور وارد می‌شه (فقط دمو) | `false` بمونه |
 | [src/routes/subscribe.tsx](../src/routes/subscribe.tsx) | `TEST_GRANT_BUTTON` → دکمه «تمدید تستی بدون پرداخت» — الان از قبل `false` است | اگه برای تست خودت روشنش کردی، قبل از انتشار دوباره `false` کن |
 | env سرور | `PSP_PROVIDER=fake` → درگاه تقلبی | در پروداکشن خودش خطا می‌ده؛ `zibal` بذار |
-| env سرور | `SMS_PROVIDER=console` → کد در ترمینال | در پروداکشن `kavenegar` بذار |
+| env سرور | `SMS_PROVIDER=console` → کد در ترمینال | در پروداکشن سرور بالا نمیاد مگه `ALLOW_TEST_PROVIDERS=true`؛ برای واقعی `kavenegar` بذار |
+| env سرور | `ZIBAL_MERCHANT=zibal` → **سندباکس زیبال** | در پروداکشن سرور بالا نمیاد مگه `ALLOW_TEST_PROVIDERS=true`. ⚠️ این خطرناک‌ترین حالت تستیه: از بیرون هیچ فرقی با درگاه واقعی نداره — کاربر «موفق» می‌بینه، اشتراک واقعی می‌گیره، ولی پولی به حسابت نمی‌رسه |
+| env سرور | `ALLOW_TEST_PROVIDERS=true` → اجازه‌ی موندن روی دو مورد بالا | روز لایو **حذفش کن** |
 | env سرور | همه‌ی secretهای `dev-only...` | در پروداکشن سرور اصلاً بالا نمیاد تا عوضشون نکنی (عمداً) |
+
+**چطور بفهمم چیزی تستی مونده؟** لاگ استارتاپ سرور/تابع. هر چیزی که تستی باشه با `[!] TEST MODE — …` چاپ می‌شه. اگه هیچ خطی نبود، همه‌چی واقعیه.
 
 ---
 
@@ -297,8 +328,10 @@ npm test               # تست‌های بک‌اند
 - **Password auth:** phone-first UI defaults to password (`/auth/password/login`, identifier = canonical phone OR lowercased username — disambiguated by whether `normalizePhone` succeeds, since usernames must start with a letter). Hash = scrypt (`services/password.ts`, edge-safe, NOT the unused `argon2` dep). Brute-force limits per-identifier(8)/per-IP(50) over `login_attempts` ledger (`services/login-throttle.ts`); generic `bad_credentials` + DUMMY_HASH verify on miss = no user enumeration. Set username/password from settings when signed in (`/auth/username`, `/auth/password`). Provision without SMS: admin panel «تنظیم/ریست رمز» → `POST /admin/users/set-password` (creates + 7-day trial), OR `OWNER_PHONE`/`OWNER_PASSWORD`/`OWNER_USERNAME` env bootstrap on boot (`services/owner-bootstrap.ts`, idempotent, never overwrites an existing password).
 - **Sync:** NOT implemented yet (outbox `dirty:1` + server `records` table + per-user `seq` cursor ready; Phase 4/5 pending).
 - **Payments:** client names planId+code only. checkout → psp.request → redirect; callback verifies server-to-server, asserts `v.amount === payment.amountRial`, grants via `applied_at IS NULL` claim; `GET /payments/:id` self-heals stuck `redirected`. Free (100% off) grants directly. Toman→Rial ×10 only in `pricing.ts`.
-- **Entitlement:** `grants` append-only ledger + `entitlements` materialized; `grantInterval` stacks with `make_interval` (real calendar months); import (`/subscriptions/import`) once-only, capped IMPORT_MAX_DAYS, `ensureExpiresAt` (max, no stacking).
-- **OTP:** hashed sha256+pepper, 120s TTL, 5 attempts, newest-unconsumed-only; rate limits in `services/otp.ts` LIMITS; otp_codes rows = rate-limit ledger, purged >24h.
+- **Entitlement:** `grants` append-only ledger + `entitlements` materialized; `grantInterval` stacks with `make_interval` (real calendar months); import (`/subscriptions/import`) once-only, capped IMPORT_MAX_DAYS, `ensureExpiresAt` (max, no stacking). **Both writers are ONE statement** (`insert … on conflict do update set expires_at = greatest(entitlements.expires_at, now) + make_interval(…)`) — do NOT refactor back to SELECT-then-UPDATE: two grants landing together silently dropped one, so a user who paid for two months got one.
+- **OTP:** hashed sha256+pepper, 120s TTL, 5 attempts, newest-unconsumed-only; rate limits in `services/otp.ts` LIMITS; otp_codes rows = rate-limit ledger, purged >24h. The attempt counter is claimed with a conditional `UPDATE … SET attempts = attempts + 1 WHERE attempts < max RETURNING` — a read-then-write let a concurrent burst spend the same slot repeatedly.
+- **Discounts:** `max_uses` is enforced against `max(used_count, redemptions) + in-flight payments` (`slotsTaken` in `pricing.ts`, 30-min reservation window), because `used_count` is only written on success — checking it alone let everyone who reached the gateway before the first payment settled share a single-use code. `redeemDiscount`'s increment is capped in its WHERE clause.
+- **Throttling:** there is no HTTP rate limiter in production (the edge app has none; Fastify registers `@fastify/rate-limit` for the Node deployment only). All real limits are Postgres ledgers: `otp_codes` (SMS spend), `login_attempts` (password sign-in AND admin-token guessing, via `adminAttemptKey`). Two-tier login limits: past the soft limit a WRONG password 429s but a CORRECT one still succeeds — a flat lockout let anyone freeze a known phone number out of their own account. The admin guard checks the token FIRST for the same reason.
 - **Backend infra:** Fastify, deps-injection via `app.deps` (`buildApp`), DB = NodePg|PGlite union (`db/client.ts`, `rowsOf` for raw SQL). Tests use PGlite via `backend/test/helpers`.
 - **Charts:** `analyticsDayKeys` (rolling windows) + `buildChartBars` (`lib/chart.ts`) shared by analytics + habit detail; rendered by `MiniBars` (`components/ui.tsx`).
 - **Timer:** ref-based interval tick (not setState updaters — StrictMode safety); commits focus minutes to linked time-habit/task via `applyLog` inside updater; sessions sorted by endedAt, capped 200.

@@ -259,6 +259,41 @@ describe("GET /v1/payments/:id", () => {
     expect(grants).toHaveLength(1);
   });
 
+  it("recovers a payment whose grant failed after the money moved", async () => {
+    // Regression, and the worst outcome in the codebase: when granting threw,
+    // applyPaid un-claimed `applied_at` for a retry but left `status = 'paid'`.
+    // The recovery branch only re-verified rows still marked `redirected`, so
+    // the payment showed "paid" forever with no subscription behind it.
+    const { access, user } = await signIn();
+    const body = (await checkout(access, { planId: "m1" })).json() as { trackId: number; paymentId: string };
+    h.psp._settle(body.trackId, "paid");
+    await h.raw(
+      `update payments set status = 'paid', applied_at = null, verified_at = now(), paid_at = now()
+       where id = '${body.paymentId}'`,
+    );
+
+    const res = await h.app.inject({ method: "GET", url: `/v1/payments/${body.paymentId}`, headers: auth(access) });
+    expect(res.json().payment.status).toBe("paid");
+    expect(res.json().entitlement.status).toBe("active");
+    const grants = await h.query(`select id from grants where user_id = '${user.id}' and source = 'payment'`);
+    expect(grants).toHaveLength(1);
+  });
+
+  it("never re-verifies a cancelled or amount-mismatched payment", async () => {
+    // The flip side of widening the recovery branch: these two states must stay
+    // terminal. A mismatch is a fraud signal, and a cancel must not be revived.
+    const { access, user } = await signIn();
+    for (const status of ["canceled", "verify_failed"]) {
+      const body = (await checkout(access, { planId: "m1" })).json() as { trackId: number; paymentId: string };
+      h.psp._settle(body.trackId, "paid"); // gateway WOULD say paid if asked
+      await h.raw(`update payments set status = '${status}' where id = '${body.paymentId}'`);
+      const res = await h.app.inject({ method: "GET", url: `/v1/payments/${body.paymentId}`, headers: auth(access) });
+      expect(res.json().payment.status).toBe(status);
+    }
+    const grants = await h.query(`select id from grants where user_id = '${user.id}' and source = 'payment'`);
+    expect(grants).toHaveLength(0);
+  });
+
   it("hides other users' payments", async () => {
     const { access } = await signIn("09123334444");
     const body = (await checkout(access, { planId: "m1" })).json() as { paymentId: string };

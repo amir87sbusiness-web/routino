@@ -9,6 +9,7 @@
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import compress from "@fastify/compress";
+import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyInstance } from "fastify";
 import type { Database } from "./db/client.js";
 import type { Env } from "./env.js";
@@ -50,9 +51,28 @@ export async function buildApp(deps: Omit<Deps, "now"> & { now?: () => number })
     // Only honour x-forwarded-for behind our own proxy. Trusting it from the
     // open internet would let anyone spoof their IP past the OTP rate limits.
     trustProxy: deps.env.TRUST_PROXY,
+    // Every request body here is a short JSON object — the largest is a
+    // subscription import. 64 KB is generous for that and stops a multi-megabyte
+    // payload from being parsed before validation gets to reject it (which
+    // surfaced as a confusing 500 rather than a clean 400).
+    bodyLimit: 64 * 1024,
   });
 
   app.decorate("deps", { now: () => Date.now(), ...deps } satisfies Deps);
+
+  // A blunt per-IP ceiling. The precise limits that matter (SMS spend, login
+  // guessing, admin tokens) are enforced in Postgres by the services, because
+  // they must survive restarts and work across serverless isolates; this only
+  // stops a single host from flooding the process. Off under test so the suite's
+  // deliberate bursts stay deterministic.
+  if (deps.env.NODE_ENV !== "test") {
+    await app.register(rateLimit, {
+      max: 300,
+      timeWindow: "1 minute",
+      // /health is what the uptime monitor hits, on a schedule, forever.
+      allowList: (req) => req.url.startsWith("/health"),
+    });
+  }
 
   await app.register(helmet, {
     // The payment callback returns an HTML page that tries a custom-scheme deep

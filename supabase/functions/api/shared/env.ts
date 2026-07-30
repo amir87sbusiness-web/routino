@@ -73,6 +73,21 @@ const schema = z.object({
   PSP_PROVIDERS: z.string().default(""),
   /** Zibal's sandbox merchant is the literal string "zibal". */
   ZIBAL_MERCHANT: z.string().default("zibal"),
+
+  /**
+   * Explicit, deliberate permission to run TEST providers in production —
+   * Zibal's sandbox merchant and/or console SMS.
+   *
+   * Without it production refuses to boot on either, because both fail in the
+   * one direction nobody notices: sandbox Zibal shows the user a real gateway,
+   * returns "paid", and grants a real subscription while zero Toman reaches the
+   * merchant account. This has to be a decision somebody typed, not a default
+   * somebody forgot. Turn it off the moment the real merchant id is in place.
+   */
+  ALLOW_TEST_PROVIDERS: z
+    .string()
+    .default("false")
+    .transform((v) => v === "true" || v === "1"),
   /** ZarinPal merchant id (36-char UUID). No usable sandbox default — required
    * in production only when zarinpal is among the active gateways. */
   ZARINPAL_MERCHANT: z.string().default("dev-only-zarinpal-merchant"),
@@ -161,6 +176,36 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     if (psps.includes("zarinpal") && parsed.data.ZARINPAL_MERCHANT.startsWith("dev-only")) {
       throw new Error("ZARINPAL_MERCHANT is required when zarinpal is an active gateway");
     }
+    // Zibal's sandbox is not a distinct host or a distinct flag — it is just the
+    // merchant id left at its default. So the ONLY thing standing between "we
+    // are taking real money" and "we are giving subscriptions away" is this
+    // check. ZarinPal has had the equivalent guard since day one; Zibal did not,
+    // which made forgetting one environment variable a silent revenue hole.
+    if (psps.includes("zibal") && parsed.data.ZIBAL_MERCHANT === "zibal" && !parsed.data.ALLOW_TEST_PROVIDERS) {
+      throw new Error(
+        "ZIBAL_MERCHANT is still the sandbox merchant 'zibal' — no real money would be collected. " +
+          "Set the real merchant id, or set ALLOW_TEST_PROVIDERS=true to stay in sandbox on purpose.",
+      );
+    }
+    if (parsed.data.SMS_PROVIDER === "console" && !parsed.data.ALLOW_TEST_PROVIDERS) {
+      throw new Error(
+        "SMS_PROVIDER=console writes every login code to the server log instead of sending it. " +
+          "Set SMS_PROVIDER=kavenegar, or ALLOW_TEST_PROVIDERS=true to stay in console mode on purpose.",
+      );
+    }
   }
   return parsed.data;
+}
+
+/** Which live-money/live-delivery paths are currently faked. Printed at boot so
+ * "why did nobody get the SMS" and "why is there no money in the account" are
+ * answered by the first line of the log rather than by a support ticket. */
+export function testProviderWarnings(env: Env): string[] {
+  const out: string[] = [];
+  if (pspProviderNames(env).includes("fake")) out.push("PAYMENTS: fake gateway — no real money.");
+  if (pspProviderNames(env).includes("zibal") && env.ZIBAL_MERCHANT === "zibal")
+    out.push("PAYMENTS: Zibal SANDBOX merchant — subscriptions are granted, no real money is collected.");
+  if (env.SMS_PROVIDER === "console")
+    out.push("SMS: console mode — login codes are printed to this log, not sent to anyone.");
+  return out;
 }

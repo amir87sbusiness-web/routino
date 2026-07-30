@@ -161,6 +161,22 @@ describe("username", () => {
     expect((await setName(access, "amir")).statusCode).toBe(200);
   });
 
+  it("reserves lookalikes and staff-flavoured compounds too", async () => {
+    // Regression: `adm1n` sailed straight through the exact-match list. Somebody
+    // messaging users as apparent staff is a real risk precisely because those
+    // users are about to send money through the app.
+    const { access } = await otpSignIn("09123334444");
+    for (const name of ["adm1n", "supp0rt", "r00t", "routino_support", "official.team", "admin.routino"]) {
+      const res = await setName(access, name);
+      expect(res.statusCode, name).toBe(400);
+      expect((res.json() as { error: string }).error, name).toBe("username_reserved");
+    }
+    // Ordinary names that merely contain a digit are untouched.
+    for (const name of ["amir1387", "sara.k", "ali_92"]) {
+      expect((await setName(access, name)).statusCode, name).toBe(200);
+    }
+  });
+
   it("reports account credential state", async () => {
     const { access } = await otpSignIn("09123334444");
     const before = await h.app.inject({
@@ -219,15 +235,27 @@ describe("admin set-password", () => {
 });
 
 describe("brute-force throttling", () => {
-  it("locks an identifier after repeated wrong passwords", async () => {
+  it("throttles wrong passwords but never locks out the real owner", async () => {
     const { access } = await otpSignIn("09123334444");
     await setPw(access, "Amir@1387");
-    // 8 failures allowed in the window; the 9th attempt is throttled.
+    // 8 failures allowed in the window; the 9th wrong guess is throttled.
     for (let i = 0; i < 8; i++)
       expect((await login("09123334444", "bad-guess1")).statusCode).toBe(401);
     const limited = await login("09123334444", "bad-guess1");
     expect(limited.statusCode).toBe(429);
-    // Even the CORRECT password is refused while locked.
+
+    // ...but the CORRECT password still gets in. A flat lockout here meant
+    // anyone who knew a customer's phone number could keep them out of their own
+    // account indefinitely with eight wrong guesses every 15 minutes.
+    expect((await login("09123334444", "Amir@1387")).statusCode).toBe(200);
+  });
+
+  it("blocks even a correct password past the hard limit", async () => {
+    const { access } = await otpSignIn("09123334444");
+    await setPw(access, "Amir@1387");
+    // The soft limit protects the owner; the hard limit protects the CPU, since
+    // every attempt costs one deliberately-slow scrypt.
+    for (let i = 0; i < 50; i++) await login("09123334444", "bad-guess1");
     expect((await login("09123334444", "Amir@1387")).statusCode).toBe(429);
   });
 

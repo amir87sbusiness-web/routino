@@ -7,10 +7,60 @@
  * for a year. The client may now only name a plan and a code; every number comes
  * from here.
  */
-import { and, eq, gt, isNull, or, sql } from "drizzle-orm";
+import { and, count, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import type { Database } from "../db/client.ts";
-import { discounts, plans, redemptions } from "../db/schema.ts";
+import { discounts, payments, plans, redemptions } from "../db/schema.ts";
 import { badRequest, notFound } from "../lib/http-errors.ts";
+
+/** How long an unfinished checkout keeps holding a slot on a limited code. Long
+ * enough to cover a slow gateway round-trip, short enough that an abandoned
+ * checkout frees the slot again with nobody intervening. */
+const RESERVATION_MINUTES = 30;
+
+/**
+ * Slots consumed on a limited code: everyone who has already paid, plus everyone
+ * else currently sitting at the gateway with it.
+ *
+ * `used_count` alone is written only when a payment succeeds, which left a hole
+ * the width of the whole checkout→payment window — with `max_uses = 1`, every
+ * user who reached the gateway before the first one paid also got the discount.
+ *
+ * Settled use is `max(used_count, redemptions)`, not either one alone:
+ * `redeemDiscount` writes both, but an admin can raise `used_count` by hand to
+ * retire a code, and rows predating the redemptions ledger have a count and no
+ * rows. Taking the larger keeps both of those working while the in-flight term
+ * closes the window.
+ *
+ * The caller's own in-flight payment is excluded: they are capped to one
+ * redemption by the `redemptions` primary key anyway, and counting it would make
+ * a user's own retry report the code as exhausted.
+ */
+async function slotsTaken(
+  db: Database,
+  code: string,
+  usedCount: number,
+  userId: string,
+  now: Date,
+): Promise<number> {
+  const since = new Date(now.getTime() - RESERVATION_MINUTES * 60_000);
+  const [redeemed] = await db
+    .select({ n: count() })
+    .from(redemptions)
+    .where(eq(redemptions.code, code));
+  const [inFlight] = await db
+    .select({ n: count() })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.discountCode, code),
+        ne(payments.userId, userId),
+        isNull(payments.appliedAt),
+        inArray(payments.status, ["pending", "redirected"]),
+        gt(payments.createdAt, since),
+      ),
+    );
+  return Math.max(usedCount, redeemed?.n ?? 0) + (inFlight?.n ?? 0);
+}
 
 export interface Quote {
   planId: string;
@@ -49,7 +99,8 @@ export async function checkDiscount(
   if (!d) return { valid: false, percent: 0, code: null, reason: "unknown" };
   if (!d.active) return { valid: false, percent: 0, code: null, reason: "inactive" };
   if (d.expiresAt && d.expiresAt <= now) return { valid: false, percent: 0, code: null, reason: "expired" };
-  if (d.maxUses != null && d.usedCount >= d.maxUses) return { valid: false, percent: 0, code: null, reason: "exhausted" };
+  if (d.maxUses != null && (await slotsTaken(db, d.code, d.usedCount, userId, now)) >= d.maxUses)
+    return { valid: false, percent: 0, code: null, reason: "exhausted" };
   if (d.phone && d.phone !== userPhone) return { valid: false, percent: 0, code: null, reason: "other_user" };
 
   // One redemption per user, enforced by the redemptions PK at write time; this
@@ -113,10 +164,23 @@ export async function redeemDiscount(
   paymentId: string,
 ): Promise<void> {
   await db.insert(redemptions).values({ code, userId, paymentId }).onConflictDoNothing();
-  await db
+  // Capped, and atomic. The money has already moved, so a code that somehow
+  // slipped past its limit still grants the subscription — but `used_count` must
+  // never climb above `max_uses`, or the admin panel reports a nonsense number
+  // and nobody notices the leak. A refused bump means exactly that happened.
+  const bumped = await db
     .update(discounts)
     .set({ usedCount: sql`${discounts.usedCount} + 1` })
-    .where(eq(discounts.code, code));
+    .where(
+      and(
+        eq(discounts.code, code),
+        or(isNull(discounts.maxUses), lt(discounts.usedCount, discounts.maxUses)),
+      ),
+    )
+    .returning();
+  if (!bumped.length) {
+    console.warn("discount redeemed past its limit — investigate", { code, userId, paymentId });
+  }
 }
 
 export async function activePlans(db: Database) {
