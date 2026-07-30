@@ -14,11 +14,15 @@
  *    `x-routino-html`; here — on OUR domain — we restore `text/html` and drop
  *    the sandbox CSP.
  *
- * Deploy (Cloudflare dashboard, no CLI needed):
- *  1. Workers & Pages → Create → Worker → paste this file → Deploy.
- *  2. Worker → Settings → Variables → add secret PROXY_SECRET
- *     (same value as the Supabase function's PROXY_SECRET).
- *  3. Worker → Settings → Domains & Routes → add custom domain: api.routino.me
+ * Deploy: from git. Cloudflare Workers Builds watches `main` and redeploys this
+ * file on every push, using `cloudflare/wrangler.toml` — so DO NOT edit this
+ * Worker in the dashboard, or the next push will silently overwrite the edit.
+ *
+ * One-time dashboard setup (already done, listed for when it has to be redone):
+ *  1. Worker → Settings → Build → connect the repo, Root directory = `cloudflare`
+ *  2. Worker → Settings → Variables → Secrets → PROXY_SECRET
+ *     (identical to the Supabase function's PROXY_SECRET, or every request 403s)
+ *  3. Worker → Settings → Domains & Routes → custom domain: api.routino.me
  *
  * Path mapping: api.routino.me/<path> → <SUPABASE>/functions/v1/api/<path>.
  * The function's Hono app has basePath("/api"), so public paths (/v1/...,

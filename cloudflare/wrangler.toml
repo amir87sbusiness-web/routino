@@ -1,0 +1,32 @@
+# Cloudflare Workers Builds config — this is what lets `api.routino.me` deploy
+# from git instead of being pasted into the dashboard by hand.
+#
+# In the Cloudflare dashboard, the Worker's build settings must point at this
+# folder:  Worker → Settings → Build → Root directory = `cloudflare`
+# Then every push to `main` redeploys api-worker.js automatically.
+
+# ⚠️ MUST match the name of the EXISTING Worker that owns api.routino.me.
+# If it does not, a deploy creates a SECOND, empty Worker and the live domain
+# keeps serving the old code — the deploy "succeeds" while nothing changes.
+# Find the real name in: Workers & Pages → the Worker serving api.routino.me.
+name = "routino"
+
+main = "api-worker.js"
+compatibility_date = "2025-09-01"
+
+# Deliberately NOT configured here:
+#
+#  - PROXY_SECRET. It is a secret and belongs in
+#    Worker → Settings → Variables → Secrets, never in a committed file. The
+#    Worker reads it as `env.PROXY_SECRET`; the Supabase function must hold the
+#    identical value or every request through this Worker gets a 403.
+#
+#  - routes / custom domains. `api.routino.me` is already attached in the
+#    dashboard, and declaring it here would risk this file fighting that
+#    binding on every deploy. Leaving it out means the existing binding is
+#    simply left alone.
+
+# Worth having on before real money moves through the payment callback: without
+# it, `console.log` output from the Worker is not retained anywhere.
+[observability]
+enabled = true
