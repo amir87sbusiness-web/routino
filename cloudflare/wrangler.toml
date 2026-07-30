@@ -1,0 +1,40 @@
+# Cloudflare Workers Builds config — this is what lets `api.routino.me` deploy
+# from git instead of being pasted into the dashboard by hand.
+#
+# Kept OUT of the repo root deliberately. The root is the build directory of the
+# Cloudflare PAGES project (also called `routino`) that serves routino.me, and a
+# wrangler config there is read as a Pages config — where `main` is not a valid
+# key and `pages_build_output_dir` is required. Risking the frontend build to
+# save a header is a bad trade, so this stays in `cloudflare/` and the Worker's
+# build must set:  Worker → Settings → Build → Root directory = `cloudflare`
+#
+# ⚠️ `routino` in the dashboard is the PAGES project (the frontend). The Worker
+# that serves api.routino.me is a separate resource with its own name; find it
+# under Workers & Pages by which one owns the api.routino.me custom domain.
+
+# ⚠️ PLACEHOLDER — must be replaced with the real name of the Worker that owns
+# api.routino.me before any git deploy is wired up. `routino` is taken by the
+# Pages project, so this is NOT it. If the name is wrong, a deploy creates a
+# second, empty Worker while the live domain keeps serving the old code — and
+# the build reports success.
+name = "REPLACE-WITH-THE-REAL-WORKER-NAME"
+
+main = "api-worker.js"
+compatibility_date = "2025-09-01"
+
+# Deliberately NOT configured here:
+#
+#  - PROXY_SECRET. It is a secret and belongs in
+#    Worker → Settings → Variables → Secrets, never in a committed file. The
+#    Worker reads it as `env.PROXY_SECRET`; the Supabase function must hold the
+#    identical value or every request through this Worker gets a 403.
+#
+#  - routes / custom domains. `api.routino.me` is already attached in the
+#    dashboard, and declaring it here would risk this file fighting that
+#    binding on every deploy. Leaving it out means the existing binding is
+#    simply left alone.
+
+# Worth having on before real money moves through the payment callback: without
+# it, `console.log` output from the Worker is not retained anywhere.
+[observability]
+enabled = true
