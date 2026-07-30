@@ -147,9 +147,11 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
    `verify_jwt=false` دارد).
 5. **Worker**: **دستی paste نمی‌شود — از گیت دیپلوی می‌شود.** Worker به اسم
    `routino` به همین ریپو وصل است و با هر push روی `main` خودش دوباره دیپلوی
-   می‌کند، طبق `cloudflare/wrangler.toml`.
-   - ⚠️ در داشبورد باید **Root directory = `cloudflare`** باشد (Worker →
-     Settings → Build)، وگرنه بیلد `wrangler.toml` را پیدا نمی‌کند.
+   می‌کند، طبق `wrangler.toml` **در ریشه‌ی ریپو** (که به
+   `cloudflare/api-worker.js` اشاره می‌کند).
+   - ⚠️ فایل عمداً در ریشه است، نه داخل `cloudflare/`: بیلد دنبال کانفیگ در
+     «root directory» می‌گردد که پیش‌فرضش ریشه‌ی ریپوست. اولین تلاش برای دیپلوی
+     گیت‌محور دقیقاً به همین دلیل هیچ کاری نکرد.
    - ⚠️ `name` در `wrangler.toml` باید دقیقاً برابر اسم Worker موجود باشد.
      اگر نباشد، یک Worker **دومِ خالی** ساخته می‌شود، `api.routino.me` روی
      قدیمی می‌ماند، و بیلد «موفق» گزارش می‌دهد در حالی که هیچ‌چیز عوض نشده.

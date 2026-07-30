@@ -1,9 +1,11 @@
 # Cloudflare Workers Builds config — this is what lets `api.routino.me` deploy
 # from git instead of being pasted into the dashboard by hand.
 #
-# In the Cloudflare dashboard, the Worker's build settings must point at this
-# folder:  Worker → Settings → Build → Root directory = `cloudflare`
-# Then every push to `main` redeploys api-worker.js automatically.
+# Lives at the REPO ROOT on purpose: Workers Builds looks for a wrangler config
+# in the build's root directory, which defaults to the repo root. Putting it in
+# `cloudflare/` only works if that default has been overridden in the dashboard
+# (Worker → Settings → Build → Root directory), and it had not been — which is
+# why the first attempt at a git deploy did nothing at all.
 
 # ⚠️ MUST match the name of the EXISTING Worker that owns api.routino.me.
 # If it does not, a deploy creates a SECOND, empty Worker and the live domain
@@ -11,7 +13,7 @@
 # Find the real name in: Workers & Pages → the Worker serving api.routino.me.
 name = "routino"
 
-main = "api-worker.js"
+main = "cloudflare/api-worker.js"
 compatibility_date = "2025-09-01"
 
 # Deliberately NOT configured here:
