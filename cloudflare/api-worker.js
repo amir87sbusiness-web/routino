@@ -48,7 +48,25 @@ export default {
       const h = new Headers(resp.headers);
       h.set("content-type", "text/html; charset=utf-8");
       h.delete("content-security-policy");
-      h.delete("x-content-type-options");
+      // Only had to go because it pinned the browser to the wrong text/plain
+      // type; now that content-type is corrected above, it is safe and wanted.
+      h.set("x-content-type-options", "nosniff");
+      // The blanket delete above is what strips the gateway's sandbox CSP. For
+      // /admin we then put OUR own back: that page holds the admin token, so it
+      // is the one page here worth a CSP at all. 'unsafe-inline' is unavoidable
+      // (the panel's script is inline), but blocking every external origin
+      // still leaves an injected <script src> or an exfiltration beacon nowhere
+      // to go. Deliberately NOT applied to the payment result page: it
+      // navigates to the routino:// deep link to return to the Android app, and
+      // that flow is not worth risking for a defence-in-depth header.
+      if (new URL(request.url).pathname.startsWith("/admin")) {
+        h.set(
+          "content-security-policy",
+          "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
+            "img-src 'self' data:; connect-src 'self'; form-action 'self'; " +
+            "frame-ancestors 'none'; base-uri 'none'; object-src 'none'",
+        );
+      }
       h.delete("x-routino-html");
       return new Response(resp.body, {
         status: resp.status,
