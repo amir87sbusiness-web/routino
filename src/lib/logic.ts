@@ -1,6 +1,6 @@
 /** Pure habit/analytics computations. */
 import { addDays, dayOfMonth, keyToDate, monthDays, todayKey, type Calendar } from "./dates";
-import { logKey, type Db, type Habit, type HabitLog } from "./store";
+import { logKey, type Db, type Habit, type HabitLog, type Subscription } from "./store";
 
 export function isDueOn(habit: Habit, dk: string, cal: Calendar): boolean {
   const created = new Date(habit.createdAt);
@@ -174,4 +174,38 @@ export function weekComparison(db: Db, cal: Calendar) {
 export function subscriptionActive(db: Db, now = Date.now()): boolean {
   if (db.meta.tampered) return false;
   return !!db.subscription && db.subscription.expiresAt > now;
+}
+
+/**
+ * The next state after the SERVER tells us what this account is entitled to.
+ *
+ * Lives here rather than inline in the entitlement effect because it is an
+ * access-control decision, and it has two non-obvious halves:
+ *
+ * 1. A server answer clears `meta.tampered`. That flag is sticky and makes
+ *    `subscriptionActive` return false forever, so a paying customer whose phone
+ *    clock ran fast and then got corrected backwards used to be locked out of
+ *    the app permanently, with no route back except paying again. The flag exists
+ *    to stop someone winding their clock back to stretch an expired
+ *    subscription — an entitlement the server just vouched for settles that
+ *    question, and the server's clock is the one the device cannot touch.
+ * 2. `lastSeen` is re-baselined to the DEVICE's clock, not the server's. The
+ *    heartbeat compares `Date.now()` against `lastSeen`, so leaving a stale
+ *    future value there — or writing the server's time into it when the two
+ *    clocks disagree — would re-raise the flag on the very next tick.
+ *
+ * A null `sub` ("none" from the server) is NOT applied: a legacy local
+ * subscription that has not been imported yet must survive an empty answer.
+ */
+export function applyServerEntitlement(
+  db: Db,
+  sub: Subscription | null,
+  deviceNow = Date.now(),
+): Db {
+  if (!sub) return db;
+  return {
+    ...db,
+    subscription: sub,
+    meta: { ...db.meta, tampered: false, lastSeen: deviceNow },
+  };
 }

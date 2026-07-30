@@ -21,6 +21,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { toast } from "sonner";
 import { entitlementToSubscription, fetchEntitlement, hasSession } from "@/lib/api/auth";
 import { todayKey, type Calendar, type Lang } from "@/lib/dates";
 import { diffDb } from "@/lib/db/diff";
@@ -29,7 +30,7 @@ import { loadLocal, localChanged, mergeSettings, saveLocal, toLocalState } from 
 import { applyChanges } from "@/lib/db/persist";
 import { DEFAULT_CATEGORIES } from "@/lib/presets";
 import { defaultDb, uid, type Db } from "@/lib/store";
-import { dueHabitsOn, isCompleted, getLog } from "@/lib/logic";
+import { applyServerEntitlement, dueHabitsOn, isCompleted, getLog } from "@/lib/logic";
 import { requestNativePermission, syncRecurringReminders } from "@/lib/native-notifications";
 import { syncNativeBars } from "@/lib/native";
 
@@ -64,6 +65,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   /** The last state written to storage; the diff baseline. */
   const lastPersisted = useRef<Db | null>(null);
+  /** So a broken IndexedDB warns once, not on every keystroke. */
+  const persistFailed = useRef(false);
 
   const update: Updater = useCallback((fn) => {
     setDb((prev) => (prev ? fn(prev) : prev));
@@ -127,7 +130,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // same changes.
     lastPersisted.current = db;
     if (localChanged(prev, db)) saveLocal(toLocalState(db));
-    if (changes.length) void applyChanges(changes); // never awaited by the UI
+    // Never awaited by the UI — but never silent either. A rejected write means
+    // this change is gone (storage full, private-mode IndexedDB, a corrupted
+    // profile), and the one thing worse than losing it is the user not knowing:
+    // they would keep adding habits into a session that saves nothing. Told
+    // once, they can export a backup while the data is still in memory.
+    if (changes.length) {
+      void applyChanges(changes).catch((err) => {
+        console.error("failed to persist changes", err);
+        if (!persistFailed.current) {
+          persistFailed.current = true;
+          toast.error(
+            db.settings.lang === "fa"
+              ? "ذخیره‌سازی روی این دستگاه کار نمی‌کند. از «تنظیمات ← پشتیبان‌گیری» یک نسخه بگیر."
+              : "Saving to this device is failing. Export a backup from Settings → Backup.",
+            { duration: 15_000 },
+          );
+        }
+      });
+    }
   }, [db]);
 
   // Refresh the entitlement cache from the server once per app start.
@@ -145,7 +166,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // `none` (null) is NOT applied: a legacy local subscription that hasn't
         // been imported yet must not be wiped by an empty server answer.
         if (!sub) return;
-        setDb((prev) => (prev ? { ...prev, subscription: sub } : prev));
+        // Clears `meta.tampered` and re-baselines the clock guard — see
+        // `applyServerEntitlement` for why both halves are load-bearing.
+        setDb((prev) => (prev ? applyServerEntitlement(prev, sub) : prev));
       })
       .catch(() => {
         /* offline or expired session — the local cache stays authoritative */
