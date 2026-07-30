@@ -116,6 +116,10 @@ export async function recordLoginFailure(
         lt(loginAttempts.createdAt, new Date(now.getTime() - 86_400_000)),
       ),
     );
+  // Identifiers that failed once and never came back — including one
+  // `admin:<ip>` key per attacker IP — are swept by the hourly
+  // `routino-login-attempts-purge` pg_cron job in supabase/setup.sql, since the
+  // edge function has no resident process to run `purgeOldLoginAttempts` on.
 }
 
 /** Clears an identifier's recent failures — called on a successful sign-in so

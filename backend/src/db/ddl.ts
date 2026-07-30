@@ -48,6 +48,11 @@ create table if not exists devices (
   created_at timestamptz not null default now()
 );
 create index if not exists devices_user on devices (user_id);
+-- Every token refresh looks a device up by refresh_hash — roughly once per
+-- active user per access-token lifetime (15 min), forever. Without this it is a
+-- full scan of a table that only ever grows: one row per sign-in per device,
+-- revoked rows included. Fine at a hundred users, not at ten thousand.
+create index if not exists devices_refresh on devices (refresh_hash);
 
 create table if not exists otp_codes (
   id uuid primary key default gen_random_uuid(),
@@ -61,6 +66,10 @@ create table if not exists otp_codes (
 );
 create index if not exists otp_phone_recent on otp_codes (phone, created_at);
 create index if not exists otp_ip_recent on otp_codes (ip, created_at);
+-- The global daily circuit breaker counts the whole table by created_at with no
+-- phone or ip to narrow it, on every single code request. It is also what the
+-- 24h purge scans.
+create index if not exists otp_recent on otp_codes (created_at);
 
 create table if not exists login_attempts (
   id uuid primary key default gen_random_uuid(),
@@ -125,6 +134,10 @@ create table if not exists payments (
 );
 create index if not exists payments_user on payments (user_id);
 create index if not exists payments_status on payments (status, created_at);
+-- A limited discount code counts the checkouts currently in flight against it
+-- (slotsTaken in services/pricing.ts), on the checkout path. Partial, because
+-- most payments carry no code at all.
+create index if not exists payments_discount on payments (discount_code) where discount_code is not null;
 
 create table if not exists grants (
   id uuid primary key default gen_random_uuid(),

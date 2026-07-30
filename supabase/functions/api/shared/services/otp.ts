@@ -147,7 +147,15 @@ export async function verifyCode(db: Database, env: Env, phone: string, code: st
 }
 
 /** Housekeeping — codes are useless after a day, and they are the rate-limit
- * ledger, so they must outlive the longest window (24h) before being purged. */
+ * ledger, so they must outlive the longest window (24h) before being purged.
+ *
+ * Called on a timer by the Node server. Production is an edge function with no
+ * resident process, so there the same DELETE runs hourly as a pg_cron job
+ * (`routino-otp-purge`, installed by supabase/setup.sql). If that job is ever
+ * missing, this table grows forever and `checkSendRate` reads it five times per
+ * code request — verify with:
+ *   select jobname, schedule from cron.job;
+ */
 export async function purgeOldCodes(db: Database, now: Date): Promise<void> {
   await db.delete(otpCodes).where(lt(otpCodes.createdAt, new Date(now.getTime() - 86_400_000)));
 }
