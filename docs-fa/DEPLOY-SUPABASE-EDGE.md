@@ -145,9 +145,18 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
 
 4. **دیپلوی تابع**: دستور بالا (`--no-verify-jwt` حیاتی است؛ `config.toml` هم
    `verify_jwt=false` دارد).
-5. **Worker**: محتوای `cloudflare/api-worker.js` را در Cloudflare →
-   Workers & Pages → Create Worker بچسبان؛ متغیر secret به نام `PROXY_SECRET`
-   بده؛ و در Settings → Domains دامنه‌ی `api.routino.me` را وصل کن.
+5. **Worker**: **دستی paste نمی‌شود — از گیت دیپلوی می‌شود.** Worker به اسم
+   `routino` به همین ریپو وصل است و با هر push روی `main` خودش دوباره دیپلوی
+   می‌کند، طبق `cloudflare/wrangler.toml`.
+   - ⚠️ در داشبورد باید **Root directory = `cloudflare`** باشد (Worker →
+     Settings → Build)، وگرنه بیلد `wrangler.toml` را پیدا نمی‌کند.
+   - ⚠️ `name` در `wrangler.toml` باید دقیقاً برابر اسم Worker موجود باشد.
+     اگر نباشد، یک Worker **دومِ خالی** ساخته می‌شود، `api.routino.me` روی
+     قدیمی می‌ماند، و بیلد «موفق» گزارش می‌دهد در حالی که هیچ‌چیز عوض نشده.
+   - `PROXY_SECRET` در داشبورد می‌ماند (Settings → Variables → Secrets)، نه در
+     فایل؛ و باید با `PROXY_SECRET` تابع Supabase یکی باشد وگرنه همه‌چیز ۴۰۳.
+   - چون از گیت می‌آید، **Worker را در داشبورد ویرایش نکن** — push بعدی
+     ویرایشت را بی‌صدا پاک می‌کند.
 6. **تست دود**: `https://api.routino.me/health` و `/health/ready` باید
    `{ok:true}` بدهند؛ `https://routino.me` → ورود با شماره → کد را از
    Dashboard → Edge Functions → api → Logs بردار.
