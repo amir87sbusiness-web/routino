@@ -157,11 +157,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Offline or signed-out: silently keep whatever we have — offline must stay
   // indistinguishable from online.
   const entitlementFetched = useRef(false);
+  const entitlementRetryAfter = useRef(0);
   useEffect(() => {
     if (!db || entitlementFetched.current || !hasSession()) return;
-    entitlementFetched.current = true;
+    // Latching only on SUCCESS is load-bearing. This used to set the flag before
+    // awaiting, so a single failed request — one dropped connection at launch —
+    // burned the only attempt of the whole session. That is worst for the users
+    // who need it most: a server answer is the ONLY thing that clears
+    // `meta.tampered`, and while that flag is set `subscriptionActive` is false,
+    // so a paying customer whose phone clock drifted backwards stayed locked out
+    // of the app until they fully restarted it, even once they were back online.
+    //
+    // The cooldown is what keeps the retry from becoming a storm: this effect
+    // re-runs on every `db` change, and the 60s heartbeat guarantees one.
+    if (Date.now() < entitlementRetryAfter.current) return;
+    entitlementRetryAfter.current = Date.now() + 60_000;
     void fetchEntitlement()
       .then(({ entitlement }) => {
+        entitlementFetched.current = true;
         const sub = entitlementToSubscription(entitlement);
         // `none` (null) is NOT applied: a legacy local subscription that hasn't
         // been imported yet must not be wiped by an empty server answer.
@@ -171,7 +184,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setDb((prev) => (prev ? applyServerEntitlement(prev, sub) : prev));
       })
       .catch(() => {
-        /* offline or expired session — the local cache stays authoritative */
+        /* offline or expired session — the local cache stays authoritative,
+           and the next heartbeat retries once the cooldown lapses */
       });
   }, [db]);
 
