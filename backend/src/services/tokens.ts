@@ -10,7 +10,7 @@
  * is issued.
  */
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, ne } from "drizzle-orm";
 import { SignJWT, jwtVerify } from "jose";
 import type { Database } from "../db/client.js";
 import { devices } from "../db/schema.js";
@@ -113,4 +113,27 @@ export async function revokeRefresh(db: Database, raw: string, now: Date): Promi
 /** Revokes every device for a user. Call this when blocking an account. */
 export async function revokeAllDevices(db: Database, userId: string, now: Date): Promise<void> {
   await db.update(devices).set({ revokedAt: now }).where(and(eq(devices.userId, userId), isNull(devices.revokedAt)));
+}
+
+/**
+ * Revokes every device for a user EXCEPT the one making the request.
+ *
+ * Changing a password is how someone evicts an intruder. Refresh tokens live
+ * REFRESH_TTL_DAYS (180) and rotate silently, so without this a stolen session
+ * outlives the password that was supposed to kill it and the change is purely
+ * cosmetic. Keeping the caller's own device is what stops the fix from signing
+ * the user out of the phone they just typed the new password on.
+ */
+export async function revokeOtherDevices(
+  db: Database,
+  userId: string,
+  keepDeviceId: string,
+  now: Date,
+): Promise<void> {
+  await db
+    .update(devices)
+    .set({ revokedAt: now })
+    .where(
+      and(eq(devices.userId, userId), ne(devices.id, keepDeviceId), isNull(devices.revokedAt)),
+    );
 }

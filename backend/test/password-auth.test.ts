@@ -269,3 +269,44 @@ describe("brute-force throttling", () => {
       expect((await login("09123334444", "bad-guess1")).statusCode).toBe(401);
   });
 });
+
+describe("changing a password evicts other sessions", () => {
+  it("revokes every other device's refresh token but keeps the caller signed in", async () => {
+    // A password change is how a user throws out someone who got into their
+    // account. Refresh tokens live 180 days and rotate silently, so if they
+    // survive the change the intruder simply keeps refreshing and the new
+    // password protects nothing.
+    await h.app.inject({ method: "POST", url: "/v1/auth/otp/request", payload: { phone: "09123334444" } });
+    const victim = (
+      await h.app.inject({
+        method: "POST",
+        url: "/v1/auth/otp/verify",
+        payload: { phone: "09123334444", code: h.sms.last()!.code },
+      })
+    ).json() as { access: string; refresh: string };
+    expect((await setPw(victim.access, "Amir@1387")).statusCode).toBe(200);
+
+    // The intruder signs in with the leaked password on their own device.
+    const intruder = (await login("09123334444", "Amir@1387")).json() as { refresh: string };
+    expect(intruder.refresh).toBeTruthy();
+
+    // The victim changes the password from the device they are holding.
+    expect((await setPw(victim.access, "Naghmeh@1405", "Amir@1387")).statusCode).toBe(200);
+
+    // The intruder is out: their refresh token no longer rotates.
+    const stolen = await h.app.inject({
+      method: "POST",
+      url: "/v1/auth/token/refresh",
+      payload: { refresh: intruder.refresh },
+    });
+    expect(stolen.statusCode).toBe(401);
+
+    // ...and the victim is NOT signed out of the phone they just used.
+    const own = await h.app.inject({
+      method: "POST",
+      url: "/v1/auth/token/refresh",
+      payload: { refresh: victim.refresh },
+    });
+    expect(own.statusCode).toBe(200);
+  });
+});

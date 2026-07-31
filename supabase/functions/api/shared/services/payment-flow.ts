@@ -82,7 +82,6 @@ export async function applyPaid(
       { planId: p.planId, months: p.months, source: "payment", paymentId: p.id },
       t,
     );
-    if (p.discountCode) await redeemDiscount(db, p.discountCode, p.userId, p.id);
   } catch (err) {
     // Un-claim so the next callback or status poll can retry the grant.
     //
@@ -101,6 +100,24 @@ export async function applyPaid(
       err,
     });
     throw err;
+  }
+
+  // Deliberately OUTSIDE the un-claim above. Marking the discount used is
+  // bookkeeping; the subscription is what the user paid for and it has now
+  // landed. Letting this throw into that catch un-claimed a grant that had
+  // already succeeded, and the retry re-ran `grantInterval` — which is not
+  // idempotent (`grants.payment_id` has no unique constraint), so the user's
+  // expiry was extended a second time for a single payment.
+  if (p.discountCode) {
+    try {
+      await redeemDiscount(db, p.discountCode, p.userId, p.id);
+    } catch (err) {
+      console.error("discount redemption failed after a successful grant", {
+        paymentId: p.id,
+        code: p.discountCode,
+        err,
+      });
+    }
   }
 }
 
@@ -232,6 +249,38 @@ export async function handlePaymentCallback(
   }
 
   if (!payment) return { outcome: "failed", message: "پرداخت پیدا نشد." };
+
+  // Did this caller prove they came from the gateway, or did they merely *name* a
+  // payment? `trackId` is a short sequential integer shown to every paying user,
+  // so a stranger can guess one; our `orderId` (a UUID) and ZarinPal's `Authority`
+  // cannot be. Every genuine callback carries one of the unguessable pair — we
+  // send `orderId` on each Zibal request and it is echoed back on the redirect.
+  //
+  // Compare case-insensitively: Postgres matches `uuid` regardless of case (and
+  // UUID_RE is case-insensitive), so the row above can be found by an upper-cased
+  // orderId that would then fail a strict `===` against the canonical lower-case
+  // `payment.id` — turning a legitimate caller away.
+  const proven =
+    qs.orderId?.toLowerCase() === payment.id.toLowerCase() ||
+    (!!authorityParam && authorityParam === payment.authority);
+
+  // Everything past this line either mutates the payment or discloses its state,
+  // and this endpoint is public and unauthenticated. A caller who proved nothing
+  // gets a neutral "still checking" page and NO payment object — echoing the row
+  // back would hand them `payment.id`, which is itself the proof token they
+  // lacked, plus the bank `refNumber` the result page prints on a paid outcome.
+  //
+  // This one gate is the fix for a real bug: `canceled` is terminal (the status
+  // poll deliberately never revives it), so honouring an unproven cancel let
+  // anyone who guessed a trackId strand a stranger's payment — the victim paid,
+  // their own callback never landed (closed tab), and the poll refused to heal
+  // the canceled row. Money moved, nothing granted.
+  //
+  // Placing it above the branches rather than on each one also keeps an unproven
+  // caller from forcing an outbound `psp.verify()` round-trip per guessed
+  // trackId, which is real spend against the merchant's gateway quota — the
+  // production edge deployment has no rate limiter at all.
+  if (!proven) return { outcome: "pending" };
 
   // Already granted (double callback / refresh): render the final state.
   if (payment.appliedAt) return { outcome: "paid", payment };
