@@ -56,7 +56,21 @@ export function useAppMaybe() {
   return useContext(Ctx);
 }
 
-const TAMPER_TOLERANCE = 5 * 60 * 1000; // 5 minutes backwards is suspicious
+/**
+ * How far the clock may jump BACKWARDS before we treat it as tampering.
+ *
+ * Was 5 minutes, which punished honest devices: a phone that has been off, in
+ * airplane mode, or without signal for a while can correct by far more than
+ * that the moment it syncs, and the penalty is severe — `tampered` is sticky,
+ * `subscriptionActive()` goes false, and a paying user is thrown at the paywall
+ * until a server answer arrives to clear it.
+ *
+ * 6 hours costs an attacker essentially nothing that mattered: stretching an
+ * expired subscription needs the clock wound back by days or weeks, which is far
+ * past this bound and still caught. The server-issued entitlement is the real
+ * defence; this is only a local tripwire.
+ */
+const TAMPER_TOLERANCE = 6 * 60 * 60 * 1000;
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [db, setDb] = useState<Db | null>(null);
