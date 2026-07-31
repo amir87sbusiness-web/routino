@@ -54,6 +54,24 @@ describe("POST /v1/subscriptions/import", () => {
     expect(days).toBeLessThanOrEqual(h.env.IMPORT_MAX_DAYS + 1);
   });
 
+  it("caps a claim too large for a Date instead of returning a 500", async () => {
+    // Zod admits values past the largest instant a Date can represent; the
+    // resulting Invalid Date slips BOTH guards (every NaN comparison is false)
+    // and used to throw RangeError inside ensureExpiresAt. routes/ is
+    // hand-mirrored from Fastify, so this needs its own edge coverage.
+    const { access } = await signIn(h);
+    const res = await h.call("POST", "/v1/subscriptions/import", {
+      headers: auth(access),
+      body: { planId: "m12", expiresAt: 9e15 },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.imported).toBe(true);
+    expect(body.capped).toBe(true);
+    const days = (Date.parse(body.entitlement.expiresAt) - Date.now()) / DAY;
+    expect(days).toBeLessThanOrEqual(h.env.IMPORT_MAX_DAYS + 1);
+  });
+
   it("is once-per-account: a second import cannot extend again", async () => {
     const { access } = await signIn(h);
     await h.call("POST", "/v1/subscriptions/import", {

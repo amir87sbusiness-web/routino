@@ -223,6 +223,30 @@ describe("admin set-password", () => {
     expect((await login("09138982893", "OldPass11")).statusCode).toBe(401);
   });
 
+  it("signs every existing device out when an admin resets the password", async () => {
+    // Support presses this button precisely when a user reports someone got
+    // into their account. Refresh tokens live 180 days and rotate silently, so
+    // if they survive the reset the intruder simply keeps refreshing.
+    await h.app.inject({ method: "POST", url: "/v1/auth/otp/request", payload: { phone: "09138982893" } });
+    const intruder = (
+      await h.app.inject({
+        method: "POST",
+        url: "/v1/auth/otp/verify",
+        payload: { phone: "09138982893", code: h.sms.last()!.code },
+      })
+    ).json() as { refresh: string };
+    expect(intruder.refresh).toBeTruthy();
+
+    expect((await adminSetPw("09138982893", "Amir@1387")).statusCode).toBe(200);
+
+    const stolen = await h.app.inject({
+      method: "POST",
+      url: "/v1/auth/token/refresh",
+      payload: { refresh: intruder.refresh },
+    });
+    expect(stolen.statusCode).toBe(401);
+  });
+
   it("needs a valid admin token", async () => {
     const res = await h.app.inject({
       method: "POST",

@@ -188,6 +188,12 @@ export async function adminSetPassword(
   let created = false;
   if (user) {
     await db.update(users).set({ passwordHash }).where(eq(users.id, user.id));
+    // This button is what support uses when a user reports someone got into
+    // their account, so leaving that someone signed in defeats the whole point:
+    // refresh tokens live 180 days and rotate silently. Unlike the user-facing
+    // password change there is no caller device to preserve — the admin is
+    // acting on someone else's account — so every device goes.
+    await revokeAllDevices(db, user.id, now);
   } else {
     [user] = await db.insert(users).values({ phone, passwordHash, createdAt: now }).returning();
     created = true;

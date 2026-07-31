@@ -11,6 +11,9 @@ import {
   readEntitlement,
 } from "../shared/services/entitlement.ts";
 
+/** The largest instant a JS `Date` can represent; past this it is Invalid Date. */
+const MAX_TIMESTAMP_MS = 8_640_000_000_000_000;
+
 const importBody = z.object({
   planId: z.string().min(1).max(32),
   /** Epoch ms, as the client's local `Subscription` stores it. */
@@ -46,7 +49,17 @@ export function subscriptionRoutes(deps: Deps) {
       });
     }
 
-    const claimed = new Date(body.expiresAt);
+    // `z.number().int().positive()` still admits values past the largest instant
+    // a Date can represent, and `new Date()` then yields Invalid Date. BOTH
+    // guards below miss it, because every comparison against NaN is false — so
+    // it reached `ensureExpiresAt`, whose `.toISOString()` threw RangeError and
+    // turned a junk field into a 500 on a grant endpoint.
+    //
+    // Clamped rather than rejected: this endpoint exists to rescue legacy users
+    // whose only proof of a subscription is local, so a corrupt stored value
+    // should land on the same cap an over-large claim already gets, not lock
+    // them out with an error. The raw claim is still recorded in the note below.
+    const claimed = new Date(Math.min(body.expiresAt, MAX_TIMESTAMP_MS));
     if (claimed <= t) {
       return c.json({
         entitlement: await readEntitlement(db, user.id, t),
