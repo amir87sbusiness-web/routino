@@ -8,6 +8,20 @@ import { useAppMaybe } from "@/state/app";
 
 type Section = { title: string; paras: string[] };
 
+/**
+ * کد رسمی «نماد اعتماد الکترونیکی» (اینماد) برای دامنه‌ی routino.me.
+ *
+ * ⚠️ این رشته را دست نزن — نه آدرس‌ها، نه `id`، نه `Code`، نه تصویر. لوگوی
+ * اینماد یک علامت دولتی است و هرگونه تغییر در آن طبق قانون جرم است.
+ *
+ * چرا با `dangerouslySetInnerHTML` و نه JSX معمولی؟ چون باید دقیقاً همان HTML
+ * که اینماد صادر کرده در صفحه بنشیند. اگر به JSX ترجمه‌اش کنیم، ری‌اکت ممکن است
+ * ویژگی‌های غیراستانداردش (مثل `code`) را حذف کند. متن ثابت است و از کاربر
+ * نمی‌آید، پس اینجا خطر تزریق کد ندارد.
+ */
+const ENAMAD_SEAL =
+  "<a referrerpolicy='origin' target='_blank' href='https://trustseal.enamad.ir/?id=7120907&Code=c94FiiaLDfaEUSRS1kltZQdAz8yRaQGr'><img referrerpolicy='origin' src='https://trustseal.enamad.ir/logo.aspx?id=7120907&Code=c94FiiaLDfaEUSRS1kltZQdAz8yRaQGr' alt='' style='cursor:pointer' code='c94FiiaLDfaEUSRS1kltZQdAz8yRaQGr'></a>";
+
 export function LegalContent() {
   const ctx = useAppMaybe();
   const t = ctx?.t ?? ((fa: string) => fa);
@@ -241,6 +255,9 @@ export function LegalContent() {
           </p>
         </div>
       </div>
+
+      {/* نماد اعتماد الکترونیکی (اینماد) */}
+      <div className="flex justify-center" dangerouslySetInnerHTML={{ __html: ENAMAD_SEAL }} />
     </div>
   );
 }
