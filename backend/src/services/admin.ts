@@ -239,6 +239,21 @@ export async function adminListDiscounts(db: Database) {
   return db.select().from(discounts).orderBy(discounts.code);
 }
 
+/** The largest instant a JS `Date` can represent; past this it is Invalid Date. */
+const MAX_TIMESTAMP_MS = 8_640_000_000_000_000;
+
+/**
+ * Epoch ms -> Date, clamped.
+ *
+ * `expiresAt` is validated as `z.number().int().positive()`, which still admits
+ * values past the largest representable instant. `new Date()` would then yield
+ * Invalid Date and the insert would fail with an opaque 500 instead of setting
+ * an expiry. Clamping is lossless in meaning: an absurdly distant expiry and the
+ * maximum representable one both say "this code never expires".
+ */
+const toExpiry = (ms: number | null | undefined): Date | null =>
+  ms ? new Date(Math.min(ms, MAX_TIMESTAMP_MS)) : null;
+
 export async function adminCreateDiscount(
   db: Database,
   body: {
@@ -259,7 +274,7 @@ export async function adminCreateDiscount(
       code,
       percent: body.percent,
       maxUses: body.maxUses ?? null,
-      expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
+      expiresAt: toExpiry(body.expiresAt),
       phone: body.phone || null,
       active: true,
     })
@@ -275,8 +290,7 @@ export async function adminUpdateDiscount(
   const patch: Record<string, unknown> = {};
   if (body.active !== undefined) patch.active = body.active;
   if (body.maxUses !== undefined) patch.maxUses = body.maxUses;
-  if (body.expiresAt !== undefined)
-    patch.expiresAt = body.expiresAt ? new Date(body.expiresAt) : null;
+  if (body.expiresAt !== undefined) patch.expiresAt = toExpiry(body.expiresAt);
   if (!Object.keys(patch).length) throw badRequest("empty_patch", "Nothing to update");
 
   const [row] = await db
