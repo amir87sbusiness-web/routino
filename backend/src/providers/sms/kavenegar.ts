@@ -1,3 +1,4 @@
+import { toLocalPhone } from "../../lib/phone.js";
 import type { SmsProvider } from "./index.js";
 
 /**
@@ -15,7 +16,13 @@ export function kavenegarSms(apiKey: string, template: string): SmsProvider {
   return {
     async sendOtp(phone, code) {
       const url = new URL(`https://api.kavenegar.com/v1/${apiKey}/verify/lookup.json`);
-      url.searchParams.set("receptor", phone);
+      // `09…`, not the canonical `98…` we store. Kavenegar's `receptor` is
+      // documented in the local Iranian format, and the payment path already
+      // converts for exactly this reason (`toLocalPhone` in payment-flow before
+      // handing the number to Zibal) — the SMS path had simply been missed.
+      // Nothing catches this until the day console mode is switched off, and
+      // then it fails for every new sign-up with only a log line to show for it.
+      url.searchParams.set("receptor", toLocalPhone(phone));
       url.searchParams.set("token", code);
       url.searchParams.set("template", template);
 
