@@ -96,6 +96,7 @@ function SettingsPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const [pendingImport, setPendingImport] = useState<Backup | null>(null);
   const [wipeOpen, setWipeOpen] = useState(false);
+  const [signOutOpen, setSignOutOpen] = useState(false);
 
   if (!ctx?.db) return null;
   const { db, update, t, lang, cal } = ctx;
@@ -547,13 +548,7 @@ function SettingsPage() {
         <Button
           variant="secondary"
           className="w-full justify-center text-destructive"
-          onClick={() => {
-            // Clears tokens locally first, then revokes the device server-side
-            // on a best-effort basis — signing out must work offline too.
-            void logout();
-            update((d) => ({ ...d, auth: null }));
-            navigate({ to: "/auth" });
-          }}
+          onClick={() => setSignOutOpen(true)}
         >
           <LogOut className="h-4 w-4" /> {t("خروج از حساب", "Sign out")}
         </Button>
@@ -571,6 +566,41 @@ function SettingsPage() {
           <Trash2 className="h-4 w-4" /> {t("پاک کردن همهٔ داده‌ها", "Erase all data")}
         </Button>
       </Card>
+
+      {/* sign-out confirm — one stray tap used to sign the user straight out */}
+      <Modal
+        open={signOutOpen}
+        onClose={() => setSignOutOpen(false)}
+        title={t("خروج از حساب", "Sign out")}
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-muted-foreground">
+            {t(
+              "اطلاعاتت روی این دستگاه می‌مونه و با ورود دوباره‌ی همین شماره برمی‌گرده. ولی اگه با یک شماره‌ی دیگه وارد بشی، همه‌چیز این دستگاه پاک می‌شه.",
+              "Your data stays on this device and comes back when this same number signs in again. But signing in with a different number erases everything here.",
+            )}
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="destructive"
+              className="flex-1"
+              onClick={() => {
+                setSignOutOpen(false);
+                // Clears tokens locally first, then revokes the device server-side
+                // on a best-effort basis — signing out must work offline too.
+                void logout();
+                update((d) => ({ ...d, auth: null }));
+                navigate({ to: "/auth" });
+              }}
+            >
+              {t("آره، خارج شو", "Yes, sign out")}
+            </Button>
+            <Button variant="ghost" className="flex-1" onClick={() => setSignOutOpen(false)}>
+              {t("انصراف", "Cancel")}
+            </Button>
+          </div>
+        </div>
+      </Modal>
 
       {/* wipe confirm */}
       <Modal
