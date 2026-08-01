@@ -24,6 +24,13 @@ describe("edge shared-code parity", () => {
     } catch {
       throw new Error(`edge copy missing for ${rel} — run: node scripts/sync-edge-shared.mjs`);
     }
-    expect(copy).toBe(transform(src));
+    // Compare CODE, not bytes-on-this-OS. `core.autocrlf=true` (and no
+    // .gitattributes) rewrites line endings on checkout, but the generated
+    // header is a JS literal ending in "\n" — so after any branch switch the
+    // copy's header is "\r\n" and this compared unequal on a single byte, with
+    // the file contents completely identical. A parity test that cries wolf on
+    // every checkout is worse than none: the next real drift gets waved through.
+    const sameCode = (s: string) => s.replace(/\r\n/g, "\n");
+    expect(sameCode(copy)).toBe(sameCode(transform(src)));
   });
 });
