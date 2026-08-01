@@ -8,19 +8,19 @@
 
     <!-- Without this the manifest is dead code and the app cannot be installed
          at all, however complete the manifest itself is. -->
-    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="manifest" href="%BASE_URL%manifest.webmanifest" />
 
     <!-- Colours the Android address bar / task switcher. Two entries so the bar
          matches the app in both themes instead of flashing white. -->
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F97316" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0A0A0A" />
 
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="icon" href="/icons/favicon-32.png" sizes="32x32" type="image/png" />
-    <link rel="icon" href="/icons/favicon-16.png" sizes="16x16" type="image/png" />
+    <link rel="icon" href="%BASE_URL%favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="%BASE_URL%icons/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="icon" href="%BASE_URL%icons/favicon-16.png" sizes="16x16" type="image/png" />
 
     <!-- iOS ignores the manifest's icons entirely and uses this one. -->
-    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" href="%BASE_URL%icons/apple-touch-icon.png" />
     <!-- iOS also ignores `display: standalone`; these are how an installed app
          loses the Safari chrome there. -->
     <meta name="apple-mobile-web-app-capable" content="yes" />

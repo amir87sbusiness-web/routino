@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev",
-    "build": "vite build",
+    "build": "vite build && npm run build:landing",
     "build:mobile": "cross-env BUILD_TARGET=mobile vite build",
-    "build:landing": "tsx scripts/build-landing.mjs",
+    "build:landing": "node scripts/build-landing.mjs",
     "preview": "vite preview",
     "cap:sync": "npm run build:mobile && npx cap sync",
     "cap:ios": "npm run cap:sync && npx cap open ios",

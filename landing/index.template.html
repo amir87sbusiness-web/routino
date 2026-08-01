@@ -178,7 +178,7 @@
           عادت‌های خوب بساز، کارهات رو مدیریت کن و هر روز پیشرفتت رو ببین. با تقویم شمسی و کاملاً
           آفلاین.
         </p>
-        <a class="cta" href="https://app.routino.me">باز کردن برنامه</a>
+        <a class="cta" href="/app/">باز کردن برنامه</a>
         <p class="cta-note">
           نصب لازم نیست — از داخل مرورگر باز می‌شه. می‌تونی روی گوشیت هم نصبش کنی.
         </p>
@@ -211,5 +211,42 @@
 
       <footer>© روتینو — همه‌ی حقوق محفوظ است.</footer>
     </div>
+
+    <!--
+      تنها جاوااسکریپت این صفحه، و دلیلش:
+
+      برنامه قبلاً روی ریشه‌ی دامنه بود، پس هر کسی که قبلاً routino.me را باز
+      کرده یک سرویس‌ورکر با دامنه‌ی «/» دارد که هنوز نسخه‌ی کش‌شده‌ی قدیمیِ اپ را
+      برای همین آدرس سرو می‌کند — یعنی این صفحه‌ی معرفی را نمی‌بیند و به‌جایش اپ
+      قدیمی بالا می‌آید، تا ابد.
+
+      فقط سرویس‌ورکرِ ریشه پاک می‌شود؛ سرویس‌ورکر خود برنامه روی «/app/» دست
+      نمی‌خورد. یک‌بار هم صفحه رفرش می‌شود چون بارگذاری فعلی را همان ورکر قدیمی
+      جواب داده است. `sessionStorage` جلوی حلقه‌ی بی‌پایان رفرش را می‌گیرد.
+
+      اطلاعات کاربر (IndexedDB) اصلاً دست نمی‌خورد — چون دامنه عوض نشده، همان
+      اطلاعات روی /app/ سر جایش است.
+    -->
+    <script>
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          var root = location.origin + "/";
+          var stale = regs.filter(function (r) {
+            return r.scope === root;
+          });
+          if (!stale.length) return;
+          Promise.all(
+            stale.map(function (r) {
+              return r.unregister();
+            }),
+          ).then(function () {
+            if (!sessionStorage.getItem("routino-sw-cleaned")) {
+              sessionStorage.setItem("routino-sw-cleaned", "1");
+              location.reload();
+            }
+          });
+        });
+      }
+    </script>
   </body>
 </html>

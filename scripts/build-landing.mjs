@@ -16,7 +16,10 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const TEMPLATE = join(ROOT, "landing", "index.template.html");
-const OUT_DIR = join(ROOT, "landing", "dist");
+// ریشه‌ی همان dist که اپ داخل dist/app آن می‌نشیند: یک دامنه، صفحه‌ی معرفی روی
+// `/` و برنامه روی `/app/`. پس این باید بعد از `vite build` اجرا شود، وگرنه
+// `emptyOutDir` پاکش می‌کند.
+const OUT_DIR = join(ROOT, "dist");
 const OUT = join(OUT_DIR, "index.html");
 
 /** HTML-escape. متن حقوقی از ما می‌آید نه از کاربر، ولی یک `<` بی‌جا نباید صفحه
@@ -41,10 +44,29 @@ function renderSections(list) {
     .join("\n");
 }
 
+/** ایمیل/تلگرام/اینستاگرام از `legal-info.ts` — با regex، نه import، تا این
+ * اسکریپت با node خالی اجرا شود و بیلد Cloudflare به ابزار تایپ‌اسکریپت نیاز
+ * نداشته باشد. اگر شکل آن فایل عوض شد، اینجا با خطای صریح می‌ایستد. */
+function readLegalInfo() {
+  const src = readFileSync(join(ROOT, "src", "lib", "legal-info.ts"), "utf8");
+  const pick = (key) => {
+    const m = src.match(new RegExp(`${key}:\\s*"([^"]*)"`));
+    if (!m) throw new Error(`legal-info.ts: کلید ${key} پیدا نشد`);
+    return m[1];
+  };
+  return {
+    email: pick("email"),
+    telegram: pick("telegram"),
+    instagram: pick("instagram"),
+    lastUpdatedFa: pick("lastUpdatedFa"),
+  };
+}
+
 async function main() {
-  // `legal-text.ts` تایپ‌اسکریپت است، پس این اسکریپت با tsx اجرا می‌شود.
-  const { TERMS, PRIVACY, ENAMAD_SEAL } = await import("../src/lib/legal-text.ts");
-  const { LEGAL_INFO } = await import("../src/lib/legal-info.ts");
+  // JSON خام — نه import تایپ‌اسکریپت — تا این بیلد هیچ وابستگی‌ای نخواهد.
+  const data = JSON.parse(readFileSync(join(ROOT, "src", "lib", "legal-text.json"), "utf8"));
+  const { terms: TERMS, privacy: PRIVACY, enamadSeal: ENAMAD_SEAL } = data;
+  const LEGAL_INFO = readLegalInfo();
 
   const legal =
     `      <div class="card">\n` +
@@ -75,6 +97,56 @@ async function main() {
 
   mkdirSync(OUT_DIR, { recursive: true });
   writeFileSync(OUT, html);
+
+  // ⚠️ `_redirects` و `_headers` باید در ریشه‌ی خروجی باشند — Cloudflare Pages
+  // فقط همان‌جا را می‌خواند. قبلاً در `public/` بودند و Vite آن‌ها را کنار اپ
+  // می‌گذاشت؛ حالا که اپ در `dist/app/` است، آنجا نادیده گرفته می‌شدند. پس
+  // اینجا ساخته می‌شوند، با مسیرهای به‌روزشده برای /app/.
+  writeFileSync(
+    join(OUT_DIR, "_redirects"),
+    [
+      "# SPA fallback — فقط برای برنامه، نه صفحه‌ی معرفی.",
+      "#",
+      "# اپ روتینگ سمت کلاینت دارد: /app/habits فایل واقعی نیست و باید",
+      "# /app/index.html را بگیرد، وگرنه رفرش یا باز کردن مستقیمِ لینک ۴۰۴ می‌دهد.",
+      "# دامنه‌ی این قاعده عمداً فقط /app/* است تا ریشه (صفحه‌ی معرفی) دست نخورد —",
+      "# قاعده‌ی قبلی `/* /index.html 200` بود که حالا صفحه‌ی معرفی را می‌بلعید.",
+      "/app/* /app/index.html 200",
+      "",
+    ].join("\n"),
+  );
+
+  // کنترل کش. قانون طلایی: هر چیزی که اسمش ثابت است (index.html، sw.js،
+  // manifest) نباید کش شود، وگرنه کاربر آپدیت نمی‌گیرد و روی نسخه‌ی قدیمی یخ
+  // می‌زند. مسیرها با /app/ جلو آمده‌اند چون اپ آنجاست.
+  //
+  // ⚠️ اندازه‌گیریِ واقعی روی پروداکشن (۱۴۰۵/۰۵/۰۸): قاعده‌ی `/assets/*` عملاً
+  // اعمال نمی‌شود — Cloudflare Pages هدر خودش را می‌گذارد
+  // (`Cache-Control: max-age=14400`). چیزی که فعلاً جلوی دام «بعد از آپدیت،
+  // سایت بالا نمی‌آید» را می‌گیرد این است که index.html با no-cache سرو می‌شود و
+  // سرویس‌ورکر PWA هم assetها را جدا precache می‌کند. برای بستن کامل باید در
+  // داشبورد Cloudflare یک Transform Rule گذاشت.
+  writeFileSync(
+    join(OUT_DIR, "_headers"),
+    [
+      "# صفحه‌ی معرفی — نباید کش شود تا تغییر متن قوانین فوراً دیده شود.",
+      "/",
+      "  Cache-Control: no-cache",
+      "",
+      "/app/index.html",
+      "  Cache-Control: no-cache",
+      "",
+      "/app/sw.js",
+      "  Cache-Control: no-cache",
+      "",
+      "/app/manifest.webmanifest",
+      "  Cache-Control: no-cache",
+      "",
+      "/app/assets/*",
+      "  Cache-Control: no-cache",
+      "",
+    ].join("\n"),
+  );
   console.log(
     `[build-landing] ${OUT}  (${TERMS.length} بند قوانین، ${PRIVACY.length} بند حریم خصوصی)`,
   );

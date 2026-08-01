@@ -12,9 +12,20 @@ import { fileURLToPath, URL } from 'url';
 // BUILD_TARGET=mobile npm run build → خروجی در www/ (برای Capacitor)
 // در غیر این صورت (وب/دسکتاپ) → خروجی در dist/
 const isMobile = process.env.BUILD_TARGET === 'mobile';
-const outDir = isMobile ? 'www' : 'dist';
+
+// وب: اپ زیر مسیر /app سرو می‌شود و ریشه‌ی دامنه (routino.me) صفحه‌ی معرفی است
+// که `scripts/build-landing.mjs` می‌سازد. پس خروجی وب داخل dist/app می‌نشیند و
+// لندینگ در خودِ dist — یک دامنه، دو چیز.
+//
+// موبایل: کپسیتور فایل‌ها را از ریشه‌ی WebView سرو می‌کند، پس base باید '/'
+// بماند و خروجی در www/. هر جای دیگری که مسیر لازم دارد از
+// `import.meta.env.BASE_URL` می‌خواند، نه از یک رشته‌ی ثابت — تا هر دو حالت
+// خودبه‌خود درست باشند.
+const outDir = isMobile ? 'www' : 'dist/app';
+const base = isMobile ? '/' : '/app/';
 
 export default defineConfig({
+  base,
   plugins: [
     // autoCodeSplitting: هر صفحه یک فایل جدا می‌شود تا لود اول فقط چیزهای لازم
     // را بیاورد (سریع‌تر روی نت ضعیف). PWA همه را precache می‌کند، پس آفلاین
@@ -45,7 +56,9 @@ export default defineConfig({
       workbox: {
         // روتینگ سمت کلاینت: باز کردن مستقیم /habits در حالت آفلاین باید
         // index.html را بگیرد وگرنه ۴۰۴ می‌شود.
-        navigateFallback: '/index.html',
+        // با base=/app/ این باید /app/index.html باشد وگرنه باز کردن مستقیم
+        // /app/habits در حالت آفلاین به ریشه‌ی دامنه (صفحه‌ی معرفی) می‌افتد.
+        navigateFallback: `${base}index.html`,
 
         // ---------------------------------------------------------------
         // هرگز API را کش نکن.

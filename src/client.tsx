@@ -8,7 +8,13 @@ import './styles.css';
 import { initPwa } from './lib/pwa';
 
 // ایجاد یک نمونه از روتر
-const router = createRouter({ routeTree });
+//
+// basepath از خودِ بیلد می‌آید، نه از یک رشته‌ی ثابت: روی وب `/app/` است (چون
+// ریشه‌ی routino.me صفحه‌ی معرفی است) و روی بیلد موبایل `/`. با خواندن از
+// BASE_URL هر دو حالت بدون شرط‌گذاری درست می‌شوند. اسلشِ آخر حذف می‌شود چون
+// روتر مسیرها را با `/` شروع می‌کند و `/app//habits` تولید نشود.
+const basepath = import.meta.env.BASE_URL.replace(/\/$/, '');
+const router = createRouter({ routeTree, basepath });
 
 // ثبت تایپ‌ها برای جلوگیری از خطاهای تایپ‌اسکریپت
 declare module '@tanstack/react-router' {

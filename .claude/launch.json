@@ -18,7 +18,7 @@
     {
       "name": "routino-landing",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["vite", "landing/dist", "--port", "4180", "--strictPort"],
+      "runtimeArgs": ["vite", "dist", "--port", "4180", "--strictPort"],
       "port": 4180,
       "autoPort": false
     },
