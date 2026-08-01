@@ -1,0 +1,215 @@
+<!doctype html>
+<!--
+  صفحه‌ی اصلی routino.me — معرفی برنامه + قوانین + اینماد.
+
+  ⚠️ این فایل یک قالب است. خروجی نهایی را `node scripts/build-landing.mjs`
+  می‌سازد و متن قوانین/حریم خصوصی و کد اینماد را از `src/lib/legal-text.ts`
+  داخل جای‌گاه‌های زیر می‌ریزد. متن حقوقی را اینجا دستی ننویس — همان‌جا عوضش کن
+  تا اپ و سایت یکی بمانند.
+
+  خودِ برنامه روی app.routino.me است؛ اینجا فقط ویترین است و عمداً سبک نگه
+  داشته شده: بدون فریم‌ورک، بدون جاوااسکریپت، بدون فونت بیرونی — چون بررسی‌کننده‌ی
+  اینماد و کاربر تازه باید سریع بازش کنند.
+-->
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>روتینو — عادت‌ساز روزانه</title>
+    <meta
+      name="description"
+      content="روتینو یک برنامه‌ی عادت‌ساز و مدیریت کارهای روزانه با تقویم شمسی است. عادت بساز، کارهات رو مدیریت کن و پیشرفتت رو ببین — کاملاً آفلاین."
+    />
+    <link rel="icon" href="/favicon.svg" />
+    <meta name="theme-color" content="#F97316" />
+    <meta property="og:title" content="روتینو — عادت‌ساز روزانه" />
+    <meta
+      property="og:description"
+      content="عادت‌های خوب بساز، کارهات رو مدیریت کن و هر روز پیشرفتت رو ببین."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://routino.me" />
+    <style>
+      :root {
+        --bg: #f8f7f4;
+        --card: #ffffff;
+        --fg: #1c1917;
+        --muted: #57534e;
+        --primary: #f97316;
+        --border: #e7e5e4;
+        --radius: 20px;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #0c0a09;
+          --card: #1c1917;
+          --fg: #fafaf9;
+          --muted: #a8a29e;
+          --border: #292524;
+        }
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: Vazirmatn, Tahoma, system-ui, sans-serif;
+        line-height: 1.9;
+      }
+      .wrap {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 32px 20px 56px;
+      }
+      header {
+        text-align: center;
+        padding: 32px 0 8px;
+      }
+      .logo {
+        width: 72px;
+        height: 72px;
+        border-radius: 22px;
+        background: var(--primary);
+        color: #fff;
+        display: grid;
+        place-items: center;
+        font-size: 38px;
+        margin: 0 auto 16px;
+      }
+      h1 {
+        font-size: 28px;
+        margin: 0 0 8px;
+      }
+      .tagline {
+        color: var(--muted);
+        font-size: 15px;
+        margin: 0 auto 24px;
+        max-width: 42ch;
+      }
+      .cta {
+        display: inline-block;
+        background: var(--primary);
+        color: #fff;
+        text-decoration: none;
+        font-weight: 700;
+        font-size: 16px;
+        padding: 15px 40px;
+        border-radius: 16px;
+      }
+      .cta-note {
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 10px;
+      }
+      .features {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 12px;
+        margin: 40px 0;
+      }
+      .feature {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 18px;
+      }
+      .feature b {
+        display: block;
+        font-size: 14px;
+        margin-bottom: 4px;
+      }
+      .feature span {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        padding: 22px;
+        margin-bottom: 16px;
+      }
+      .card > h2 {
+        font-size: 17px;
+        margin: 0 0 4px;
+      }
+      .updated {
+        color: var(--muted);
+        font-size: 12px;
+        margin: 0 0 18px;
+      }
+      .card h3 {
+        font-size: 14px;
+        margin: 18px 0 6px;
+      }
+      .card p {
+        color: var(--muted);
+        font-size: 13.5px;
+        margin: 0 0 8px;
+      }
+      .contact p {
+        direction: ltr;
+        text-align: start;
+      }
+      a {
+        color: var(--primary);
+      }
+      footer {
+        text-align: center;
+        padding-top: 28px;
+        color: var(--muted);
+        font-size: 12px;
+      }
+      .seal {
+        display: flex;
+        justify-content: center;
+        margin: 24px 0 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <header>
+        <div class="logo" aria-hidden="true">✓</div>
+        <h1>روتینو</h1>
+        <p class="tagline">
+          عادت‌های خوب بساز، کارهات رو مدیریت کن و هر روز پیشرفتت رو ببین. با تقویم شمسی و کاملاً
+          آفلاین.
+        </p>
+        <a class="cta" href="https://app.routino.me">باز کردن برنامه</a>
+        <p class="cta-note">
+          نصب لازم نیست — از داخل مرورگر باز می‌شه. می‌تونی روی گوشیت هم نصبش کنی.
+        </p>
+      </header>
+
+      <div class="features">
+        <div class="feature">
+          <b>عادت‌ساز</b><span>عادت روزانه بساز، استریک بگیر و هدف ماهانه تعیین کن.</span>
+        </div>
+        <div class="feature">
+          <b>کارهای روزانه</b><span>کارهات رو با یادآور مدیریت کن.</span>
+        </div>
+        <div class="feature">
+          <b>تایمر تمرکز</b><span>پومودورو و کرونومتر، وصل به عادت‌های زمانی.</span>
+        </div>
+        <div class="feature">
+          <b>ژورنال</b><span>حال و نمره‌ی هر روزت رو ثبت کن.</span>
+        </div>
+        <div class="feature">
+          <b>آنالیز</b><span>نمودار پیشرفت و مقایسه‌ی هفته‌ها.</span>
+        </div>
+        <div class="feature">
+          <b>آفلاین</b><span>اطلاعاتت روی خود دستگاهت می‌مونه.</span>
+        </div>
+      </div>
+
+      <!--LEGAL-->
+
+      <div class="seal"><!--ENAMAD--></div>
+
+      <footer>© روتینو — همه‌ی حقوق محفوظ است.</footer>
+    </div>
+  </body>
+</html>

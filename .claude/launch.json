@@ -16,6 +16,13 @@
       "autoPort": false
     },
     {
+      "name": "routino-landing",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "landing/dist", "--port", "4180", "--strictPort"],
+      "port": 4180,
+      "autoPort": false
+    },
+    {
       "name": "routino-api",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
