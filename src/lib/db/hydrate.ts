@@ -121,6 +121,13 @@ export async function hydrate(now = Date.now()): Promise<HydrateResult> {
   const syncedSettings: Partial<Settings> = {};
   for (const r of settingRows) {
     if (r.deleted) continue;
+    // Skip undefined, do not merely copy it. `mergeSettings` spreads this over
+    // the defaults, and a spread copies a key even when its value is undefined
+    // — so one stored `{ value: undefined }` row silently replaced a real
+    // default with nothing. That is how an install upgrading from a blob that
+    // predated `journalReminder` ended up with journalReminder = undefined
+    // instead of "22:00", and its journal reminder quietly stopped firing.
+    if (r.data.value === undefined) continue;
     (syncedSettings as Record<string, unknown>)[r.key] = r.data.value;
   }
 

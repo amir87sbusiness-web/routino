@@ -153,10 +153,18 @@ export function restoreDb(current: Db, backup: Backup): Db {
     categories: Array.isArray(b.categories) ? b.categories : current.categories,
     habits: Array.isArray(b.habits) ? b.habits : current.habits,
     logs: isRecord(b.logs) ? b.logs : current.logs,
-    tasks: Array.isArray(b.tasks) ? b.tasks : [],
-    timerSessions: Array.isArray(b.timerSessions) ? b.timerSessions : [],
-    journal: isRecord(b.journal) ? b.journal : {},
-    feedback: Array.isArray(b.feedback) ? b.feedback : [],
+    // Fall back to CURRENT, not empty — same as the three above. A backup that
+    // genuinely holds no tasks carries `[]`, which is an array and passes
+    // through, clearing them correctly. This branch only runs when the key is
+    // MISSING or the wrong type, i.e. a truncated or hand-edited file — and
+    // `parseBackup` does not validate these four at all, so such a file reaches
+    // here. Blanking meant a corrupt backup silently deleted tasks, timer
+    // history, journal entries and feedback that it simply never mentioned, on
+    // the one feature whose entire purpose is getting data back.
+    tasks: Array.isArray(b.tasks) ? b.tasks : current.tasks,
+    timerSessions: Array.isArray(b.timerSessions) ? b.timerSessions : current.timerSessions,
+    journal: isRecord(b.journal) ? b.journal : current.journal,
+    feedback: Array.isArray(b.feedback) ? b.feedback : current.feedback,
     settings: {
       ...current.settings,
       lang: bs.lang ?? current.settings.lang,

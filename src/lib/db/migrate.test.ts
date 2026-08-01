@@ -209,3 +209,30 @@ describe("hydrate after migration", () => {
     expect("badges" in db).toBe(false);
   });
 });
+
+describe("a blob that predates some settings fields", () => {
+  it("keeps the defaults instead of storing undefined over them", async () => {
+    // `brandColor` and `journalReminder` were added after the first release, so
+    // an older install's blob simply has no such key. Writing a row for every
+    // SYNCED_SETTING_KEY regardless stored `{ value: undefined }`, and because
+    // mergeSettings spreads that over the defaults — and a spread copies a key
+    // even when its value is undefined — the real default was replaced with
+    // nothing. Concretely: journalReminder became undefined instead of "22:00"
+    // and the journal reminder silently stopped firing after an update.
+    const base = defaultDb(DEFAULT_CATEGORIES);
+    const old = {
+      ...base,
+      settings: { lang: "en", calendar: "gregorian", theme: "dark", onboarded: true, notificationsEnabled: false },
+    };
+    localStorage.setItem(LEGACY_KEY, JSON.stringify(old));
+    localStorage.removeItem(MIGRATED_KEY);
+
+    const { db } = await hydrate();
+
+    expect(db.settings.brandColor).toBe(base.settings.brandColor);
+    expect(db.settings.journalReminder).toBe(base.settings.journalReminder);
+    // ...and the keys the blob DID carry still win over the defaults.
+    expect(db.settings.lang).toBe("en");
+    expect(db.settings.calendar).toBe("gregorian");
+  });
+});

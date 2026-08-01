@@ -145,8 +145,16 @@ describe("restoreDb", () => {
       db: { habits: [], categories: [], logs: {}, settings: {} },
     } as unknown as ReturnType<typeof buildBackup>;
     const next = restoreDb(current, partial);
-    expect(next.tasks).toEqual([]);
-    expect(next.journal).toEqual({});
+    // Keys the file never mentions keep what the device already has. This used
+    // to assert [] / {} — the opposite of the test's own name and of restoreDb's
+    // docstring — so a truncated backup silently deleted tasks and journal
+    // entries on the one feature meant to get data back.
+    expect(next.tasks).toEqual(current.tasks);
+    expect(next.journal).toEqual(current.journal);
+    expect(next.timerSessions).toEqual(current.timerSessions);
+    // ...while a key that IS present, even empty, still replaces: that is a real
+    // statement about the backed-up state, not a gap in the file.
+    expect(next.habits).toEqual([]);
     // settings the partial omits fall back to current, not undefined
     expect(next.settings.lang).toBe(current.settings.lang);
   });

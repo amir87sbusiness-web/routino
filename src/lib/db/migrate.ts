@@ -83,8 +83,11 @@ export async function migrateLegacyBlob(now = Date.now()): Promise<boolean> {
     await idb.journal.bulkPut(rowsOfRecord(legacy.journal ?? {}, (j) => j.updatedAt));
 
     if (legacy.settings) {
+      // Only keys the blob actually carries. Writing every key unconditionally
+      // stored `{ value: undefined }` for fields the old install predated, and
+      // those rows then overrode the real defaults on hydrate.
       await idb.settings.bulkPut(
-        SYNCED_SETTING_KEYS.map((k) => ({
+        SYNCED_SETTING_KEYS.filter((k) => legacy.settings[k] !== undefined).map((k) => ({
           key: k,
           data: { value: legacy.settings[k] },
           updatedAt: now,
