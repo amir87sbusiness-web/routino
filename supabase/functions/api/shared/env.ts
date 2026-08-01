@@ -96,8 +96,13 @@ const schema = z.object({
    * be reachable from the user's device — `localhost` works for web dev but can
    * never work from a phone. Use a tunnel for device testing. */
   PUBLIC_API_URL: z.string().default("http://localhost:3000"),
-  /** Where the web app lives, for the post-payment redirect. */
-  PUBLIC_WEB_URL: z.string().default("http://localhost:5180"),
+  /** Where the web app lives, for the post-payment redirect.
+   *
+   * Must include the `/app` path. The app is served at `routino.me/app` (the
+   * bare domain is the landing page), so a value without it sends everyone who
+   * just paid to the marketing page instead of their subscription. In
+   * production this is the `PUBLIC_WEB_URL` secret — keep the `/app` there too. */
+  PUBLIC_WEB_URL: z.string().default("http://localhost:5180/app"),
   /** Deep link back into the Android app after payment. */
   APP_DEEP_LINK: z.string().default("routino://pay/result"),
 

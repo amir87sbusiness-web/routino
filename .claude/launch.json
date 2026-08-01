@@ -29,6 +29,14 @@
       "cwd": "backend",
       "port": 3000,
       "autoPort": false
+    },
+    {
+      "name": "routino-api-once",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "src/index.ts"],
+      "cwd": "backend",
+      "port": 3000,
+      "autoPort": false
     }
   ]
 }
