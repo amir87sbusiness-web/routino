@@ -131,6 +131,11 @@ export async function revokeOtherDevices(
   keepDeviceId: string,
   now: Date,
 ): Promise<void> {
+  // Refuse rather than run. Drizzle compiles `ne(col, undefined)` to `col <> NULL`,
+  // which is UNKNOWN for every row, so a falsy id would revoke NOTHING and leave
+  // the intruder signed in — silently, with no error and no log. That is the one
+  // failure mode a security control must not have, so fail loudly instead.
+  if (!keepDeviceId) throw new Error("revokeOtherDevices requires a device id");
   await db
     .update(devices)
     .set({ revokedAt: now })

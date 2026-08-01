@@ -306,3 +306,47 @@ describe("GET /v1/payments/:id", () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe("edge: the public callback only acts for a proven caller", () => {
+  // routes/payments.ts is hand-mirrored from Fastify (only shared/ is generated),
+  // and this is the branch's highest-severity fix, so it needs edge coverage of
+  // its own rather than relying on the backend suite.
+  it("ignores a cancel claim from someone who only guessed the trackId", async () => {
+    const { access, user } = await signIn(h);
+    const body = (await (await checkout(access, { planId: "m1" })).json()) as {
+      trackId: number;
+      paymentId: string;
+    };
+
+    const attack = await h.call("GET", `/v1/payments/callback?trackId=${body.trackId}`);
+    expect(attack.status).toBe(200);
+    expect(await attack.clone().text()).not.toContain(body.paymentId);
+
+    const [p] = await h.query<{ status: string }>(
+      `select status from payments where id = '${body.paymentId}'`,
+    );
+    expect(p!.status).toBe("redirected"); // untouched — nothing was proven
+
+    // The victim really paid but their browser never came back: the poll must
+    // still heal it.
+    h.psp._settle(body.trackId, "paid");
+    const poll = await h.call("GET", `/v1/payments/${body.paymentId}`, { headers: auth(access) });
+    expect((await poll.json()).payment.status).toBe("paid");
+
+    const grants = await h.query(
+      `select id from grants where user_id = '${user.id}' and source = 'payment'`,
+    );
+    expect(grants).toHaveLength(1);
+  });
+
+  it("gives a real and a nonexistent trackId the identical unproven answer", async () => {
+    const { access } = await signIn(h);
+    const body = (await (await checkout(access, { planId: "m1" })).json()) as { trackId: number };
+
+    const real = await h.call("GET", `/v1/payments/callback?trackId=${body.trackId}`);
+    const miss = await h.call("GET", `/v1/payments/callback?trackId=987654321`);
+
+    expect(real.status).toBe(miss.status);
+    expect(await real.text()).toBe(await miss.text());
+  });
+});

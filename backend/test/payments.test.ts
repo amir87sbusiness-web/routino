@@ -192,6 +192,37 @@ describe("checkout → gateway → callback", () => {
     expect(grants).toHaveLength(1);
   });
 
+  it("survives a duplicated query param and stays a neutral page", async () => {
+    // A repeated key parses to an ARRAY, not a string. `orderId.toLowerCase()`
+    // then threw a TypeError -> 500. Worse, the throw only happened once the
+    // trackId matched a real row, so the 500 was itself an existence oracle.
+    const { access } = await signIn();
+    const body = (await checkout(access, { planId: "m1" })).json() as { trackId: number; paymentId: string };
+
+    const dup = await h.app.inject({
+      method: "GET",
+      url: `/v1/payments/callback?trackId=${body.trackId}&orderId=a&orderId=b`,
+    });
+    expect(dup.statusCode).toBe(200);
+
+    const [p] = await h.query<{ status: string }>(`select status from payments where id = '${body.paymentId}'`);
+    expect(p!.status).toBe("redirected"); // proved nothing, so nothing was written
+  });
+
+  it("gives a real and a nonexistent trackId the identical unproven answer", async () => {
+    // Otherwise the callback is an existence oracle: walking sequential trackIds
+    // and diffing the page tells a stranger which ones are real payments, i.e. a
+    // live read on sales volume.
+    const { access } = await signIn();
+    const body = (await checkout(access, { planId: "m1" })).json() as { trackId: number };
+
+    const real = await h.app.inject({ method: "GET", url: `/v1/payments/callback?trackId=${body.trackId}` });
+    const miss = await h.app.inject({ method: "GET", url: `/v1/payments/callback?trackId=987654321` });
+
+    expect(real.statusCode).toBe(miss.statusCode);
+    expect(real.body).toBe(miss.body);
+  });
+
   it("does not disclose a stranger's paid payment to a guessed trackId", async () => {
     // The result page prints the bank tracking code (`refNumber`) on a paid
     // outcome, and the callback is public. Naming a trackId must not be enough
