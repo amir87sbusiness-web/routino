@@ -102,15 +102,18 @@ async function main() {
   // فقط همان‌جا را می‌خواند. قبلاً در `public/` بودند و Vite آن‌ها را کنار اپ
   // می‌گذاشت؛ حالا که اپ در `dist/app/` است، آنجا نادیده گرفته می‌شدند. پس
   // اینجا ساخته می‌شوند، با مسیرهای به‌روزشده برای /app/.
+  // ASCII only, deliberately. The first version of this file had Persian
+  // comments and Cloudflare silently ignored the whole thing: /app/ worked
+  // (a real file) but /app/habits fell through to the root index.html, i.e.
+  // every deep link — including the payment return page — served the landing
+  // page instead of the app. Keep comments ASCII so the rule always parses.
   writeFileSync(
     join(OUT_DIR, "_redirects"),
     [
-      "# SPA fallback — فقط برای برنامه، نه صفحه‌ی معرفی.",
-      "#",
-      "# اپ روتینگ سمت کلاینت دارد: /app/habits فایل واقعی نیست و باید",
-      "# /app/index.html را بگیرد، وگرنه رفرش یا باز کردن مستقیمِ لینک ۴۰۴ می‌دهد.",
-      "# دامنه‌ی این قاعده عمداً فقط /app/* است تا ریشه (صفحه‌ی معرفی) دست نخورد —",
-      "# قاعده‌ی قبلی `/* /index.html 200` بود که حالا صفحه‌ی معرفی را می‌بلعید.",
+      "# SPA fallback for the app only, never the landing page at /.",
+      "# /app/habits is not a real file and must serve /app/index.html,",
+      "# otherwise a refresh or a direct link 404s (or worse, silently",
+      "# renders the landing page).",
       "/app/* /app/index.html 200",
       "",
     ].join("\n"),
@@ -129,7 +132,9 @@ async function main() {
   writeFileSync(
     join(OUT_DIR, "_headers"),
     [
-      "# صفحه‌ی معرفی — نباید کش شود تا تغییر متن قوانین فوراً دیده شود.",
+      "# ASCII only, same reason as _redirects above.",
+      "# Anything with a stable name must not be cached, or users freeze on an",
+      "# old version and never receive an update.",
       "/",
       "  Cache-Control: no-cache",
       "",
