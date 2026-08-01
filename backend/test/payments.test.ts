@@ -162,6 +162,87 @@ describe("checkout → gateway → callback", () => {
     expect(grants).toHaveLength(0);
   });
 
+  it("ignores a cancel claim from someone who only guessed the trackId", async () => {
+    // `trackId` is a short sequential integer handed to every paying user, so a
+    // stranger can guess one. `canceled` is terminal — the status poll never
+    // revives it — so honouring an unproven cancel let an attacker strand a
+    // payment: the victim paid, their own callback never landed, and the poll
+    // refused to heal the row. Money moved, nothing granted.
+    const { access, user } = await signIn();
+    const body = (await checkout(access, { planId: "m1" })).json() as { trackId: number; paymentId: string };
+
+    // No auth, no orderId, no Authority — just the guessed trackId.
+    const attack = await h.app.inject({ method: "GET", url: `/v1/payments/callback?trackId=${body.trackId}` });
+    expect(attack.statusCode).toBe(200);
+
+    const [p] = await h.query<{ status: string }>(`select status from payments where id = '${body.paymentId}'`);
+    expect(p!.status).toBe("redirected"); // untouched — the attacker proved nothing
+
+    // And nothing about the payment leaks back: `paymentId` is the very token
+    // that would have made the next attempt "proven".
+    expect(attack.body).not.toContain(body.paymentId);
+
+    // The victim really pays, but their browser never makes it back. The poll
+    // must still be able to heal it.
+    h.psp._settle(body.trackId, "paid");
+    const poll = await h.app.inject({ method: "GET", url: `/v1/payments/${body.paymentId}`, headers: auth(access) });
+    expect(poll.json().payment.status).toBe("paid");
+
+    const grants = await h.query(`select id from grants where user_id = '${user.id}' and source = 'payment'`);
+    expect(grants).toHaveLength(1);
+  });
+
+  it("survives a duplicated query param and stays a neutral page", async () => {
+    // A repeated key parses to an ARRAY, not a string. `orderId.toLowerCase()`
+    // then threw a TypeError -> 500. Worse, the throw only happened once the
+    // trackId matched a real row, so the 500 was itself an existence oracle.
+    const { access } = await signIn();
+    const body = (await checkout(access, { planId: "m1" })).json() as { trackId: number; paymentId: string };
+
+    const dup = await h.app.inject({
+      method: "GET",
+      url: `/v1/payments/callback?trackId=${body.trackId}&orderId=a&orderId=b`,
+    });
+    expect(dup.statusCode).toBe(200);
+
+    const [p] = await h.query<{ status: string }>(`select status from payments where id = '${body.paymentId}'`);
+    expect(p!.status).toBe("redirected"); // proved nothing, so nothing was written
+  });
+
+  it("gives a real and a nonexistent trackId the identical unproven answer", async () => {
+    // Otherwise the callback is an existence oracle: walking sequential trackIds
+    // and diffing the page tells a stranger which ones are real payments, i.e. a
+    // live read on sales volume.
+    const { access } = await signIn();
+    const body = (await checkout(access, { planId: "m1" })).json() as { trackId: number };
+
+    const real = await h.app.inject({ method: "GET", url: `/v1/payments/callback?trackId=${body.trackId}` });
+    const miss = await h.app.inject({ method: "GET", url: `/v1/payments/callback?trackId=987654321` });
+
+    expect(real.statusCode).toBe(miss.statusCode);
+    expect(real.body).toBe(miss.body);
+  });
+
+  it("does not disclose a stranger's paid payment to a guessed trackId", async () => {
+    // The result page prints the bank tracking code (`refNumber`) on a paid
+    // outcome, and the callback is public. Naming a trackId must not be enough
+    // to read someone else's payment back.
+    const { access } = await signIn();
+    const body = (await checkout(access, { planId: "m1" })).json() as { trackId: number; paymentId: string };
+    await settleAndCallback(body.trackId, "paid"); // genuine callback, carries orderId
+
+    const [paid] = await h.query<{ ref_number: string }>(
+      `select ref_number from payments where id = '${body.paymentId}'`,
+    );
+
+    const snoop = await h.app.inject({
+      method: "GET",
+      url: `/v1/payments/callback?trackId=${body.trackId}&success=1&status=2`,
+    });
+    expect(snoop.body).not.toContain(paid!.ref_number);
+    expect(snoop.body).not.toContain(body.paymentId);
+  });
+
   it("refuses to grant when the verified amount differs from what we charged", async () => {
     const { access, user } = await signIn();
     const body = (await checkout(access, { planId: "m12" })).json() as { trackId: number; paymentId: string };
@@ -241,6 +322,40 @@ describe("discount redemption", () => {
     expect(p!.amount_toman).toBe(0);
     expect(p!.track_id).toBeNull(); // never went near the PSP
     expect(await h.query(`select * from redemptions where user_id = '${user.id}'`)).toHaveLength(1);
+  });
+});
+
+describe("grant durability", () => {
+  it("does not double-grant when discount bookkeeping fails after the grant landed", async () => {
+    // `redeemDiscount` used to run inside applyPaid's un-claim catch. A failure
+    // there rewound `applied_at` on a grant that had ALREADY succeeded, and the
+    // retry re-ran grantInterval — which is not idempotent (grants.payment_id has
+    // no unique constraint) — so one payment extended the user's expiry twice.
+    await h.raw(`insert into discounts (code, percent) values ('HALF', 50)`);
+    const { access, user } = await signIn();
+    const body = (await checkout(access, { planId: "m1", code: "HALF" })).json() as {
+      trackId: number;
+      paymentId: string;
+    };
+
+    // Break the redemptions FK so redeemDiscount throws, without touching the
+    // grant path at all.
+    await h.raw(`delete from discounts where code = 'HALF'`);
+
+    await settleAndCallback(body.trackId, "paid");
+
+    const [p] = await h.query<{ status: string; applied_at: string | null }>(
+      `select status, applied_at from payments where id = '${body.paymentId}'`,
+    );
+    expect(p!.status).toBe("paid");
+    expect(p!.applied_at).not.toBeNull(); // stayed claimed — no retry window
+
+    // Poll again, the way the app does on return. This is where the retry used
+    // to fire a second grantInterval.
+    await h.app.inject({ method: "GET", url: `/v1/payments/${body.paymentId}`, headers: auth(access) });
+
+    const grants = await h.query(`select id from grants where user_id = '${user.id}' and source = 'payment'`);
+    expect(grants).toHaveLength(1);
   });
 });
 

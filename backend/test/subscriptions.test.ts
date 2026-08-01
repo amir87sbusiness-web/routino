@@ -86,6 +86,22 @@ describe("POST /v1/subscriptions/import", () => {
     expect(grantedDays).toBeGreaterThan(h.env.IMPORT_MAX_DAYS - 1);
   });
 
+  it("caps a claim too large for a Date instead of returning a 500", async () => {
+    // `z.number().int().positive()` admits values past the largest instant a Date
+    // can represent. `new Date()` then yields Invalid Date, and BOTH the
+    // already-expired and the over-cap guard miss it because every comparison
+    // against NaN is false — so it reached ensureExpiresAt and threw RangeError.
+    const { access } = await signIn();
+    const res = await importSub(access, { planId: "m12", expiresAt: 9e15 });
+    expect(res.statusCode).toBe(200);
+
+    const body = res.json() as { imported: boolean; capped: boolean; entitlement: { expiresAt: string } };
+    expect(body.imported).toBe(true);
+    expect(body.capped).toBe(true);
+    const grantedDays = (Date.parse(body.entitlement.expiresAt) - Date.now()) / DAY;
+    expect(grantedDays).toBeLessThanOrEqual(h.env.IMPORT_MAX_DAYS + 1);
+  });
+
   it("cannot be replayed for more time", async () => {
     const { access } = await signIn();
     const first = (await importSub(access, { planId: "m3", expiresAt: Date.now() + 60 * DAY })).json() as {

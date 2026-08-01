@@ -51,7 +51,9 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
 
   /** The PSP redirects the user's browser here after the gateway. */
   app.get("/payments/callback", async (req, reply) => {
-    const qs = req.query as Record<string, string | undefined>;
+    // `unknown`, not `string | undefined`: a repeated key (`?a=1&a=2`) parses to
+    // an array, and this endpoint is public. `handlePaymentCallback` normalises.
+    const qs = req.query as Record<string, unknown>;
     const result = await handlePaymentCallback(db, psp, qs, now());
     return reply.type("text/html; charset=utf-8").send(renderResultPage(env, result));
   });

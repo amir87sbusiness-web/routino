@@ -72,11 +72,13 @@ describe("admin endpoints", () => {
         headers: { authorization: `Bearer ${access}` },
         payload: { planId: "m3" },
       })
-    ).json() as { trackId: number };
+    ).json() as { trackId: number; paymentId: string };
     await h.app.inject({ method: "GET", url: `/v1/dev/gateway/settle?trackId=${checkout.trackId}&outcome=paid` });
+    // `orderId` is required: every real gateway echoes it back, and the callback
+    // ignores a caller that cannot prove it knows more than the guessable trackId.
     await h.app.inject({
       method: "GET",
-      url: `/v1/payments/callback?trackId=${checkout.trackId}&success=1&status=2`,
+      url: `/v1/payments/callback?trackId=${checkout.trackId}&success=1&status=2&orderId=${checkout.paymentId}`,
     });
 
     const res = await h.app.inject({ method: "GET", url: "/v1/admin/overview", headers: admin });

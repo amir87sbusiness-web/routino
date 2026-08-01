@@ -77,9 +77,21 @@ function AuthPage() {
         return t("کد اشتباهه یا منقضی شده.", "The code is wrong or has expired.");
       case "blocked":
         return t("این حساب مسدود شده.", "This account is blocked.");
-      default:
-        return err.message;
     }
+    // A gateway failure returns no JSON body, so `err.message` falls back to the
+    // bare status line and the user was shown the literal text "HTTP 502" — in
+    // English, on a Persian sign-in screen, with no hint that waiting would fix
+    // it. Production is Cloudflare Worker -> Supabase Edge Function, where a cold
+    // start or a brief outage produces exactly that.
+    if (err.status >= 500) {
+      return t(
+        "سرور موقتاً در دسترس نیست. چند لحظه دیگه دوباره تلاش کن.",
+        "The server is temporarily unavailable. Try again in a moment.",
+      );
+    }
+    // Any other unmapped status: the server's own message is English and written
+    // for a developer, so prefer the generic line unless it is clearly absent.
+    return err.message || t("یه مشکلی پیش اومد. دوباره تلاش کن.", "Something went wrong. Try again.");
   };
 
   /**

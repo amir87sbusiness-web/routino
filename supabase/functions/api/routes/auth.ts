@@ -31,7 +31,7 @@ import {
   validateUsername,
   verifyPassword,
 } from "../shared/services/password.ts";
-import { issueForDevice, revokeRefresh, rotateRefresh } from "../shared/services/tokens.ts";
+import { issueForDevice, revokeOtherDevices, revokeRefresh, rotateRefresh } from "../shared/services/tokens.ts";
 
 const TRIAL_DAYS = 7;
 
@@ -248,6 +248,13 @@ export function authRoutes(deps: Deps) {
       .update(users)
       .set({ passwordHash: await hashPassword(newPassword) })
       .where(eq(users.id, u.id));
+
+    // Changing a password is how a user evicts someone who got in. Refresh
+    // tokens live 180 days and rotate silently, so leaving other devices signed
+    // in would make the change cosmetic — the intruder simply keeps refreshing.
+    // The caller's own device is kept so they aren't signed out of the phone
+    // they just set the password on.
+    await revokeOtherDevices(db, u.id, u.deviceId, now());
     return c.json({ ok: true });
   });
 

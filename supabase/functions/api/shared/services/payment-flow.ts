@@ -82,7 +82,6 @@ export async function applyPaid(
       { planId: p.planId, months: p.months, source: "payment", paymentId: p.id },
       t,
     );
-    if (p.discountCode) await redeemDiscount(db, p.discountCode, p.userId, p.id);
   } catch (err) {
     // Un-claim so the next callback or status poll can retry the grant.
     //
@@ -101,6 +100,24 @@ export async function applyPaid(
       err,
     });
     throw err;
+  }
+
+  // Deliberately OUTSIDE the un-claim above. Marking the discount used is
+  // bookkeeping; the subscription is what the user paid for and it has now
+  // landed. Letting this throw into that catch un-claimed a grant that had
+  // already succeeded, and the retry re-ran `grantInterval` — which is not
+  // idempotent (`grants.payment_id` has no unique constraint), so the user's
+  // expiry was extended a second time for a single payment.
+  if (p.discountCode) {
+    try {
+      await redeemDiscount(db, p.discountCode, p.userId, p.id);
+    } catch (err) {
+      console.error("discount redemption failed after a successful grant", {
+        paymentId: p.id,
+        code: p.discountCode,
+        err,
+      });
+    }
   }
 }
 
@@ -214,11 +231,25 @@ export interface CallbackOutcome {
 export async function handlePaymentCallback(
   db: Database,
   psp: PspRouter,
-  qs: Record<string, string | undefined>,
+  rawQs: Record<string, unknown>,
   t: Date,
 ): Promise<CallbackOutcome> {
-  const trackId = Number(qs.trackId);
-  const authorityParam = qs.Authority;
+  // A repeated query key (`?orderId=a&orderId=b`) arrives as an ARRAY, not the
+  // string the old signature claimed — and this endpoint is public, so anyone
+  // can send one. Collapsing to the first value is what stops `.toLowerCase()`
+  // below from throwing: that TypeError surfaced as a 500, and because it only
+  // fired once a trackId matched a real row, the 500 itself told a stranger
+  // which payments exist.
+  const q = (key: string): string | undefined => {
+    const v = rawQs[key];
+    if (typeof v === "string") return v;
+    if (Array.isArray(v) && typeof v[0] === "string") return v[0];
+    return undefined;
+  };
+
+  const trackId = Number(q("trackId"));
+  const authorityParam = q("Authority");
+  const orderIdParam = q("orderId");
 
   let payment: PaymentRow | undefined;
   if (Number.isSafeInteger(trackId) && trackId > 0) {
@@ -227,11 +258,49 @@ export async function handlePaymentCallback(
   if (!payment && authorityParam) {
     [payment] = await db.select().from(payments).where(eq(payments.authority, authorityParam)).limit(1);
   }
-  if (!payment && qs.orderId && UUID_RE.test(qs.orderId)) {
-    [payment] = await db.select().from(payments).where(eq(payments.id, qs.orderId)).limit(1);
+  if (!payment && orderIdParam && UUID_RE.test(orderIdParam)) {
+    [payment] = await db.select().from(payments).where(eq(payments.id, orderIdParam)).limit(1);
   }
 
-  if (!payment) return { outcome: "failed", message: "پرداخت پیدا نشد." };
+  // ONE neutral answer for both "no such payment" and "you proved nothing", so
+  // the page cannot be used to tell which trackIds are real. Answering the
+  // distinct «پرداخت پیدا نشد» for a miss made this an existence oracle: a
+  // stranger walking sequential trackIds could map exactly which ones had
+  // payments behind them, which is a live read on sales volume.
+  const neutral: CallbackOutcome = { outcome: "pending" };
+  if (!payment) return neutral;
+
+  // Did this caller prove they came from the gateway, or did they merely *name* a
+  // payment? `trackId` is a short sequential integer shown to every paying user,
+  // so a stranger can guess one; our `orderId` (a UUID) and ZarinPal's `Authority`
+  // cannot be. Every genuine callback carries one of the unguessable pair — we
+  // send `orderId` on each Zibal request and it is echoed back on the redirect.
+  //
+  // Compare case-insensitively: Postgres matches `uuid` regardless of case (and
+  // UUID_RE is case-insensitive), so the row above can be found by an upper-cased
+  // orderId that would then fail a strict `===` against the canonical lower-case
+  // `payment.id` — turning a legitimate caller away.
+  const proven =
+    orderIdParam?.toLowerCase() === payment.id.toLowerCase() ||
+    (!!authorityParam && authorityParam === payment.authority);
+
+  // Everything past this line either mutates the payment or discloses its state,
+  // and this endpoint is public and unauthenticated. A caller who proved nothing
+  // gets a neutral "still checking" page and NO payment object — echoing the row
+  // back would hand them `payment.id`, which is itself the proof token they
+  // lacked, plus the bank `refNumber` the result page prints on a paid outcome.
+  //
+  // This one gate is the fix for a real bug: `canceled` is terminal (the status
+  // poll deliberately never revives it), so honouring an unproven cancel let
+  // anyone who guessed a trackId strand a stranger's payment — the victim paid,
+  // their own callback never landed (closed tab), and the poll refused to heal
+  // the canceled row. Money moved, nothing granted.
+  //
+  // Placing it above the branches rather than on each one also keeps an unproven
+  // caller from forcing an outbound `psp.verify()` round-trip per guessed
+  // trackId, which is real spend against the merchant's gateway quota — the
+  // production edge deployment has no rate limiter at all.
+  if (!proven) return neutral;
 
   // Already granted (double callback / refresh): render the final state.
   if (payment.appliedAt) return { outcome: "paid", payment };
@@ -239,11 +308,11 @@ export async function handlePaymentCallback(
   // The user canceled at the gateway. Zibal signals it with `success!=1`,
   // ZarinPal with `Status!=OK`. Verify would also tell us, but skipping the
   // round-trip for the common cancel case keeps the page fast.
-  const userApproved = qs.success === "1" || qs.Status === "OK";
+  const userApproved = q("success") === "1" || q("Status") === "OK";
   if (!userApproved) {
     await db
       .update(payments)
-      .set({ status: "canceled", pspStatus: Number(qs.status) || null, updatedAt: t })
+      .set({ status: "canceled", pspStatus: Number(q("status")) || null, updatedAt: t })
       .where(and(eq(payments.id, payment.id), isNull(payments.appliedAt)));
     return { outcome: "canceled", payment };
   }
