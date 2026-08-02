@@ -1,0 +1,120 @@
+<!doctype html>
+<!--
+  routino.me/legal — قوانین، حریم خصوصی و تماس.
+
+  ⚠️ قالب است؛ خروجی را `node scripts/build-landing.mjs` می‌سازد و متن را از
+  `src/lib/legal-text.json` می‌ریزد — همان منبعی که خودِ اپ هم می‌خواند. متن را
+  اینجا دستی ننویس.
+
+  عمداً یک صفحه‌ی جداست و از فوتر صفحه‌ی اصلی با لینکِ کم‌رنگ در دسترس است:
+  باید پیدا شود (برای کاربر و برای بررسی اینماد)، ولی جلوی چشمِ کسی که تازه
+  رسیده نباشد.
+-->
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>قوانین و حریم خصوصی — روتینو</title>
+    <meta name="description" content="قوانین و مقررات، حریم خصوصی و راه‌های تماس با پشتیبانی روتینو." />
+    <link rel="icon" href="/app/favicon.svg" />
+    <meta name="theme-color" content="#f97316" />
+    <style>
+      @font-face {
+        font-family: Vazirmatn; src: url(/fonts/vazirmatn-arabic-400.woff2) format("woff2");
+        font-weight: 400; font-display: swap;
+        unicode-range: U+0600-06FF, U+200C-200E, U+FB50-FDFF, U+FE70-FEFF;
+      }
+      @font-face {
+        font-family: Vazirmatn; src: url(/fonts/vazirmatn-arabic-700.woff2) format("woff2");
+        font-weight: 700; font-display: swap;
+        unicode-range: U+0600-06FF, U+200C-200E, U+FB50-FDFF, U+FE70-FEFF;
+      }
+      @font-face {
+        font-family: Vazirmatn; src: url(/fonts/vazirmatn-latin-400.woff2) format("woff2");
+        font-weight: 400; font-display: swap; unicode-range: U+0000-00FF, U+2000-206F;
+      }
+      :root {
+        --bg: #faf9f7; --card: #fff; --fg: #1c1917; --muted: #57534e;
+        --faint: #8a827c; --primary: #f97316; --border: #e9e6e2;
+        --ring: rgba(249,115,22,.14);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#0b0a09; --card:#171513; --fg:#faf9f8; --muted:#a8a29e;
+                --faint:#7c756f; --primary:#fb8b3c; --border:#2a2724; --ring:rgba(251,139,60,.16); }
+      }
+      * { box-sizing: border-box; }
+      html { scroll-behavior: smooth; }
+      body {
+        margin: 0; background: var(--bg); color: var(--fg);
+        font-family: Vazirmatn, "Segoe UI", Tahoma, system-ui, sans-serif;
+        line-height: 2; -webkit-font-smoothing: antialiased;
+      }
+      .wrap { max-width: 760px; margin: 0 auto; padding: 0 22px; }
+      nav { border-bottom: 1px solid var(--border); background: var(--card); }
+      .nav-in { display: flex; align-items: center; justify-content: space-between; height: 66px; }
+      .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; text-decoration: none; color: inherit; }
+      .mark {
+        width: 32px; height: 32px; border-radius: 10px; color: #fff;
+        background: linear-gradient(145deg, var(--primary), #ea580c);
+        display: grid; place-items: center; font-size: 17px;
+      }
+      .back { font-size: 13px; color: var(--faint); text-decoration: none; }
+      .back:hover { color: var(--fg); }
+
+      header.pg { padding: 48px 0 10px; }
+      header.pg h1 { font-size: clamp(24px, 5vw, 34px); margin: 0 0 8px; }
+      .updated { color: var(--faint); font-size: 12.5px; margin: 0 0 6px; }
+
+      /* پیمایش داخلی — تا کسی که دنبال یک بند خاص است سریع برسد */
+      .toc { display: flex; gap: 10px; flex-wrap: wrap; margin: 22px 0 6px; }
+      .toc a {
+        font-size: 13px; text-decoration: none; color: var(--muted);
+        border: 1px solid var(--border); background: var(--card);
+        padding: 7px 15px; border-radius: 999px;
+      }
+      .toc a:hover { border-color: var(--primary); color: var(--fg); }
+
+      section { padding: 30px 0; scroll-margin-top: 20px; }
+      section > h2 {
+        font-size: 20px; margin: 0 0 4px; padding-bottom: 12px;
+        border-bottom: 1px solid var(--border);
+      }
+      h3 { font-size: 15px; margin: 26px 0 2px; }
+      p { color: var(--muted); font-size: 14.5px; margin: 0 0 10px; }
+      .contact p { direction: ltr; text-align: start; }
+      a.lnk { color: var(--primary); font-weight: 700; text-decoration: none; }
+
+      footer { border-top: 1px solid var(--border); margin-top: 30px; padding: 30px 0 46px; text-align: center; }
+      .seal { display: flex; justify-content: center; margin-bottom: 16px; }
+      .seal img { max-width: 96px; height: auto; }
+      .copy { color: var(--faint); font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <nav>
+      <div class="wrap nav-in">
+        <a class="brand" href="/"><span class="mark" aria-hidden="true">✓</span><span>روتینو</span></a>
+        <a class="back" href="/">← بازگشت به صفحه‌ی اصلی</a>
+      </div>
+    </nav>
+
+    <div class="wrap">
+      <header class="pg">
+        <h1>قوانین و حریم خصوصی</h1>
+        <p class="updated"><!--UPDATED--></p>
+        <nav class="toc" aria-label="فهرست">
+          <a href="#terms">قوانین و مقررات</a>
+          <a href="#privacy">حریم خصوصی</a>
+          <a href="#contact">تماس با ما</a>
+        </nav>
+      </header>
+
+      <!--LEGAL-->
+
+      <footer>
+        <div class="seal"><!--ENAMAD--></div>
+        <div class="copy">© روتینو — همه‌ی حقوق محفوظ است.</div>
+      </footer>
+    </div>
+  </body>
+</html>
