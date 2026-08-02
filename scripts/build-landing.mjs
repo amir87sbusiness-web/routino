@@ -14,7 +14,7 @@
  * متنِ حقوقی از `src/lib/legal-text.json` می‌آید — همان ماژولی که اپ هم از آن
  * می‌خواند. یک منبع، دو مصرف‌کننده، بدون هیچ وابستگی تایپ‌اسکریپتی در بیلد.
  */
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -100,6 +100,25 @@ function copyFonts() {
   return bytes;
 }
 
+/** عکس‌های واقعیِ اپ که `scripts/shoot-landing.mjs` گرفته. اگر پوشه نبود، بیلد
+ * می‌ایستد — صفحه‌ی معرفی بدون تصویرِ محصول یعنی یک صفحه‌ی نصفه، و بهتر است
+ * همین‌جا بفهمیم تا اینکه سایت بی‌عکس منتشر شود. */
+function copyShots() {
+  const src = join(ROOT, "landing", "shots");
+  if (!existsSync(src))
+    throw new Error("landing/shots نیست — اول `node scripts/shoot-landing.mjs` را با dev server بالا اجرا کن");
+  const dest = join(OUT_DIR, "shots");
+  mkdirSync(dest, { recursive: true });
+  let bytes = 0;
+  const names = readdirSync(src).filter((f) => f.endsWith(".webp"));
+  if (!names.length) throw new Error("landing/shots خالی است");
+  for (const f of names) {
+    copyFileSync(join(src, f), join(dest, f));
+    bytes += statSync(join(src, f)).size;
+  }
+  return { count: names.length, bytes };
+}
+
 function fill(templateName, replacements) {
   const tpl = readFileSync(join(ROOT, "landing", templateName), "utf8");
   let out = tpl;
@@ -157,6 +176,7 @@ function main() {
   );
 
   const fontBytes = copyFonts();
+  const shots = copyShots();
 
   // ── پیکربندی Cloudflare Pages ───────────────────────────
   // ASCII only, deliberately. The first version of this file had Persian
@@ -207,7 +227,8 @@ function main() {
   const kb = (n) => (n / 1024).toFixed(1) + "KB";
   console.log(
     `[build-landing] dist/index.html + dist/legal/index.html  ` +
-      `(${TERMS.length} بند قوانین، ${PRIVACY.length} بند حریم خصوصی، فونت ${kb(fontBytes)})`,
+      `(${TERMS.length} بند قوانین، ${PRIVACY.length} بند حریم خصوصی، فونت ${kb(fontBytes)}، ` +
+      `${shots.count} عکس ${kb(shots.bytes)})`,
   );
 }
 

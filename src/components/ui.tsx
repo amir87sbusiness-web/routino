@@ -78,7 +78,17 @@ export function CatIcon({ icon, className }: { icon: string; className?: string 
  * `aria-label`, or the link has no accessible name.
  */
 export function Logo({ className }: { className?: string }) {
-  return <img src="/favicon.svg" alt="" aria-hidden className={cn("shrink-0", className)} />;
+  // BASE_URL، نه یک اسلشِ ثابت. اپ روی وب زیر `/app/` سرو می‌شود و روی بیلد
+  // موبایل از ریشه‌ی WebView؛ مسیر مطلقِ `/favicon.svg` بعد از انتقال به /app
+  // در توسعه ۴۰۴ می‌شد و لوگوی هدر و سایدبار به شکل تصویرِ شکسته درمی‌آمد.
+  return (
+    <img
+      src={`${import.meta.env.BASE_URL}favicon.svg`}
+      alt=""
+      aria-hidden
+      className={cn("shrink-0", className)}
+    />
+  );
 }
 
 type BtnVariant = "primary" | "secondary" | "ghost" | "destructive" | "outline";
