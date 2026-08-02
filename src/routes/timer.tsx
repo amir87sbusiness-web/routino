@@ -390,17 +390,34 @@ function TimerPage() {
           </div>
         </div>
 
+        {/* آیکون‌های تنها: بدون aria-label اسکرین‌ریدر فقط «دکمه» می‌گوید — و
+            اینها کنترل‌های اصلی تایمرند، نه چیز فرعی. */}
         <div className="flex gap-3">
-          <Button onClick={toggleRunning} disabled={mode !== "stopwatch" && remaining === 0 && !running} className="h-14 w-14 rounded-full p-0">
-            {running ? <Pause className="h-6 w-6" /> : <Play className="h-6 w-6" />}
+          <Button
+            onClick={toggleRunning}
+            disabled={mode !== "stopwatch" && remaining === 0 && !running}
+            aria-label={running ? t("توقف موقت", "Pause") : t("شروع", "Start")}
+            className="h-14 w-14 rounded-full p-0"
+          >
+            {running ? <Pause className="h-6 w-6" aria-hidden="true" /> : <Play className="h-6 w-6" aria-hidden="true" />}
           </Button>
           {mode === "stopwatch" && running && (
-            <Button variant="secondary" onClick={stopAndSave} className="h-14 w-14 rounded-full p-0">
-              <Square className="h-5 w-5" />
+            <Button
+              variant="secondary"
+              onClick={stopAndSave}
+              aria-label={t("توقف و ذخیره", "Stop and save")}
+              className="h-14 w-14 rounded-full p-0"
+            >
+              <Square className="h-5 w-5" aria-hidden="true" />
             </Button>
           )}
-          <Button variant="secondary" onClick={reset} className="h-14 w-14 rounded-full p-0">
-            <RotateCcw className="h-5 w-5" />
+          <Button
+            variant="secondary"
+            onClick={reset}
+            aria-label={t("شروع دوباره", "Reset")}
+            className="h-14 w-14 rounded-full p-0"
+          >
+            <RotateCcw className="h-5 w-5" aria-hidden="true" />
           </Button>
         </div>
 

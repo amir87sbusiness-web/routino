@@ -1,7 +1,10 @@
 @import "tailwindcss" source(none);
 @source "../src";
 @import "tw-animate-css";
-@import "@fontsource/vazirmatn/300.css";
+/* وزن ۳۰۰ عمداً نیست: در کل اپ حتی یک بار `font-light` استفاده نشده، ولی
+   سرویس‌ورکر آن را precache می‌کرد — ۴۷ کیلوبایت (سه فایل: arabic، latin،
+   latin-ext) روی هر نصب، برای وزنی که هیچ‌جا رندر نمی‌شود. اگر روزی
+   `font-light` لازم شد، این خط را برگردان. */
 @import "@fontsource/vazirmatn/400.css";
 @import "@fontsource/vazirmatn/500.css";
 @import "@fontsource/vazirmatn/700.css";

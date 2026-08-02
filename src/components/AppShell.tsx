@@ -184,9 +184,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-1">
             <button
               onClick={() => setNotifOpen(true)}
+              // آیکون تنها = برای اسکرین‌ریدر فقط «دکمه». عدد نخوانده‌ها هم داخل
+              // نام می‌آید تا کاربر نابینا بدون باز کردن پنل بفهمد چیزی هست.
+              aria-label={
+                unread > 0
+                  ? t(`اعلان‌ها، ${faNum(unread, lang)} خوانده‌نشده`, `Notifications, ${unread} unread`)
+                  : t("اعلان‌ها", "Notifications")
+              }
               className="relative rounded-full p-2 text-muted-foreground transition-colors hover:bg-secondary"
             >
-              <Bell className="h-5 w-5" />
+              <Bell className="h-5 w-5" aria-hidden="true" />
               {unread > 0 && (
                 <span className="absolute -top-0.5 -end-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
                   {faNum(unread, lang)}
