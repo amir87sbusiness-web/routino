@@ -32,18 +32,17 @@ export interface LegalSection {
 export const ENAMAD_SEAL: string = data.enamadSeal;
 
 /**
- * JSON آرایه‌ها را `string[]` می‌بیند نه تاپلِ دوتایی، پس یک cast لازم است — و
- * cast خالی یعنی یک جفتِ ناقص در JSON بی‌صدا به `undefined` رندر می‌شود. اینجا
- * اول بررسی می‌شود تا اگر متن حقوقی خراب بود، همان لحظه با خطای صریح بایستد.
+ * JSON آرایه‌ها را `string[]` می‌بیند نه تاپلِ دوتایی، پس یک cast لازم است.
+ *
+ * اینجا عمداً هیچ throwی نیست. قبلاً بود، و نتیجه‌اش این شد: یک جفتِ ناقص در
+ * JSON — مثلاً افتادنِ نیمه‌ی انگلیسی یک عبارت — کلِ صفحه‌ی تنظیمات را با
+ * «این صفحه بارگذاری نشد» از کار می‌انداخت. یعنی یک غلطِ تایپی در متن حقوقی،
+ * دکمه‌ی «گرفتن پشتیبان» و «خروج از حساب» را از دسترس کاربر خارج می‌کرد —
+ * دقیقاً همان دو چیزی که موقع مشکل لازم می‌شوند.
+ *
+ * اعتبارسنجی به `scripts/build-landing.mjs` منتقل شد: آنجا بیلد را با خطای
+ * صریح می‌شکند، یعنی قبل از انتشار. در زمان اجرا حداکثر یک عبارت ناقص نمایش
+ * داده می‌شود، نه یک صفحه‌ی سوخته.
  */
-function asSections(raw: { title: string[]; paras: string[][] }[]): readonly LegalSection[] {
-  for (const s of raw) {
-    if (s.title.length !== 2 || s.paras.some((p) => p.length !== 2)) {
-      throw new Error(`legal-text.json: هر عبارت باید [فارسی, English] باشد — «${s.title[0]}»`);
-    }
-  }
-  return raw as unknown as readonly LegalSection[];
-}
-
-export const TERMS = asSections(data.terms);
-export const PRIVACY = asSections(data.privacy);
+export const TERMS = data.terms as unknown as readonly LegalSection[];
+export const PRIVACY = data.privacy as unknown as readonly LegalSection[];

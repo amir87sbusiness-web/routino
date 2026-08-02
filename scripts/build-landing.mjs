@@ -34,6 +34,29 @@ const esc = (s) =>
 /** فارسیِ هر جفت [fa, en]. */
 const fa = (pair) => pair[0];
 
+/**
+ * اعتبارسنجی متن حقوقی — اینجا، چون اینجا بیلد را می‌شکند.
+ *
+ * قبلاً این بررسی در `src/lib/legal-text.ts` بود و در زمان اجرا throw می‌کرد؛
+ * نتیجه این بود که یک جفتِ ناقص در JSON کلِ صفحه‌ی تنظیمات را از کار می‌انداخت
+ * و کاربر به «گرفتن پشتیبان» و «خروج از حساب» دسترسی نداشت. هیچ‌کدام از دو
+ * بیلد هم آن را نمی‌گرفتند، پس داده‌ی خراب منتشر می‌شد.
+ *
+ * حالا `npm run build` روی داده‌ی خراب با پیام صریح می‌ایستد — قبل از انتشار.
+ */
+function validate(list, which) {
+  list.forEach((sec, i) => {
+    const where = `${which}[${i}] «${sec?.title?.[0] ?? "?"}»`;
+    if (!Array.isArray(sec?.title) || sec.title.length !== 2)
+      throw new Error(`legal-text.json: ${where} — title باید [فارسی, English] باشد`);
+    if (!Array.isArray(sec?.paras)) throw new Error(`legal-text.json: ${where} — paras آرایه نیست`);
+    sec.paras.forEach((p, j) => {
+      if (!Array.isArray(p) || p.length !== 2 || p.some((x) => typeof x !== "string" || !x.trim()))
+        throw new Error(`legal-text.json: ${where} بند ${j + 1} — باید [فارسی, English] باشد`);
+    });
+  });
+}
+
 function renderSections(list) {
   return list
     .map(
@@ -66,6 +89,10 @@ async function main() {
   // JSON خام — نه import تایپ‌اسکریپت — تا این بیلد هیچ وابستگی‌ای نخواهد.
   const data = JSON.parse(readFileSync(join(ROOT, "src", "lib", "legal-text.json"), "utf8"));
   const { terms: TERMS, privacy: PRIVACY, enamadSeal: ENAMAD_SEAL } = data;
+  validate(TERMS, "terms");
+  validate(PRIVACY, "privacy");
+  if (!ENAMAD_SEAL?.includes("trustseal.enamad.ir"))
+    throw new Error("legal-text.json: مهر اینماد گم یا خراب شده");
   const LEGAL_INFO = readLegalInfo();
 
   const legal =
