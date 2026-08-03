@@ -6,6 +6,12 @@ import { routeTree } from './routeTree.gen';
 // وارد کردن استایل‌های اصلی (Tailwind)
 import './styles.css';
 import { initPwa } from './lib/pwa';
+import { captureSignupIntent } from './lib/signup-intent';
+
+// کسی که از صفحه‌ی معرفی با شماره و پلن آمده (`/app/?start=…&plan=…`).
+// قبل از ساختن روتر خوانده و از نوار آدرس پاک می‌شود — گِیتِ AppShell در هر
+// پرش پارامترها را دور می‌ریزد، و شماره‌ی موبایل هم نباید در آدرس بماند.
+captureSignupIntent();
 
 // ایجاد یک نمونه از روتر
 //

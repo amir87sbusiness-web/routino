@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button, Input, Logo } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
 import {
@@ -13,6 +13,7 @@ import {
 } from "@/lib/api/auth";
 import { faNum } from "@/lib/dates";
 import { normalizePhone, toAsciiDigits, toLocalPhone } from "@/lib/phone";
+import { readSignupIntent } from "@/lib/signup-intent";
 import { loginAs } from "@/lib/wipe";
 import { useAppMaybe } from "@/state/app";
 
@@ -31,12 +32,19 @@ type Method = "password" | "otp";
 function AuthPage() {
   const ctx = useAppMaybe();
   const navigate = useNavigate();
-  const [method, setMethod] = useState<Method>("password");
+
+  // شماره‌ای که کاربر در صفحه‌ی معرفی وارد کرده. فقط پیش‌پرکردنِ فرم است — از
+  // اینجا به بعد دقیقاً همان ورود همیشگی اجرا می‌شود، با همان اعتبارسنجی و
+  // همان محدودیت تلاش. صفحه‌ی معرفی هیچ‌وقت خودش وارد نمی‌کند.
+  const intentPhone = useMemo(() => readSignupIntent()?.phone ?? "", []);
+  // با شماره‌ی آماده، «کد پیامکی» مسیر طبیعی‌تری است: کسی که تازه از سایت آمده
+  // معمولاً هنوز رمزی ندارد.
+  const [method, setMethod] = useState<Method>(intentPhone ? "otp" : "password");
   // password mode
-  const [identifier, setIdentifier] = useState("");
+  const [identifier, setIdentifier] = useState(intentPhone);
   const [password, setPassword] = useState("");
   // otp mode
-  const [phone, setPhone] = useState("");
+  const [phone, setPhone] = useState(intentPhone);
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [code, setCode] = useState("");
   // shared
@@ -123,7 +131,13 @@ function AuthPage() {
     const now = Date.now();
     const subscription = entitlementToSubscription(entitlement, now);
     update((d) => loginAs(d, canonical, subscription, now));
-    navigate({ to: "/" });
+
+    // اگر کاربر از صفحه‌ی معرفی روی یک پلن کلیک کرده، ببرش سرِ خرید — حتی وقتی
+    // همین الان ۷ روز آزمایشی گرفته. بدون این، گِیت او را چون اشتراک فعال دارد
+    // مستقیم به اپ می‌فرستد و قصدِ خریدش بی‌صدا دور ریخته می‌شود: روی سایت
+    // «یک‌ساله» را زده و هیچ‌وقت به صفحه‌ی پرداخت نمی‌رسد.
+    const wantsPlan = !!readSignupIntent()?.plan;
+    navigate({ to: wantsPlan ? "/subscribe" : "/" });
   };
 
   const doPasswordLogin = async () => {

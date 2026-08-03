@@ -14,7 +14,7 @@
  * متنِ حقوقی از `src/lib/legal-text.json` می‌آید — همان ماژولی که اپ هم از آن
  * می‌خواند. یک منبع، دو مصرف‌کننده، بدون هیچ وابستگی تایپ‌اسکریپتی در بیلد.
  */
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -108,6 +108,9 @@ function copyShots() {
   if (!existsSync(src))
     throw new Error("landing/shots نیست — اول `node scripts/shoot-landing.mjs` را با dev server بالا اجرا کن");
   const dest = join(OUT_DIR, "shots");
+  // پاک‌سازی قبل از کپی: `vite build` فقط dist/app را خالی می‌کند، پس عکسی که
+  // اسمش عوض شده یا حذف شده تا ابد در خروجی می‌ماند و همراه سایت منتشر می‌شود.
+  rmSync(dest, { recursive: true, force: true });
   mkdirSync(dest, { recursive: true });
   let bytes = 0;
   const names = readdirSync(src).filter((f) => f.endsWith(".webp"));

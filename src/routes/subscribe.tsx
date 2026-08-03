@@ -18,6 +18,7 @@ import { checkout, fetchPlans, fetchQuote, type ServerPlan } from "@/lib/api/pay
 import { faNum, formatDate, dateKey } from "@/lib/dates";
 import { subscriptionActive } from "@/lib/logic";
 import { PLANS } from "@/lib/presets";
+import { readSignupIntent } from "@/lib/signup-intent";
 import { useAppMaybe } from "@/state/app";
 
 export const Route = createFileRoute("/subscribe")({
@@ -45,7 +46,10 @@ function SubscribePage() {
   const navigate = useNavigate();
   const [plans, setPlans] = useState<ServerPlan[]>(FALLBACK_PLANS);
   const [offline, setOffline] = useState(false);
-  const [selected, setSelected] = useState<string>("m3");
+  // پلنی که کاربر در صفحه‌ی معرفی روی آن کلیک کرده، اگر بوده. اعتبارش را
+  // `plans` تعیین می‌کند نه آدرس: اگر پلن ناشناخته‌ای در لینک باشد، به پیش‌فرض
+  // برمی‌گردیم به‌جای اینکه صفحه با انتخابِ نامعتبر بالا بیاید.
+  const [selected, setSelected] = useState<string>(() => readSignupIntent()?.plan ?? "m3");
   const [codeInput, setCodeInput] = useState("");
   const [appliedCode, setAppliedCode] = useState<{ code: string; percent: number } | null>(null);
   const [codeError, setCodeError] = useState("");
@@ -63,6 +67,10 @@ function SubscribePage() {
         if (cancelled || !res.plans.length) return;
         setPlans(res.plans);
         setOffline(false);
+        // اگر پلنِ آمده از صفحه‌ی معرفی در فهرست واقعی سرور نبود (لینک قدیمی یا
+        // دست‌کاری‌شده)، به یک پلن معتبر برگرد — وگرنه دکمه‌ی پرداخت روی چیزی
+        // می‌ماند که سرور نمی‌شناسد و خرید با خطا رد می‌شود.
+        setSelected((cur) => (res.plans.some((p) => p.id === cur) ? cur : (res.plans[1] ?? res.plans[0]).id));
       })
       .catch(() => {
         if (!cancelled) setOffline(true);

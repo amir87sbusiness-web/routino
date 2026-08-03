@@ -113,7 +113,7 @@ function demoScript() {
   })()`;
 }
 
-const signedIn = `(() => {
+const signedInFor = (theme) => `(() => {
   const now = Date.now();
   localStorage.setItem("routino:local:v1", JSON.stringify({
     auth:{phone:"989121234567",verifiedAt:now},
@@ -121,21 +121,35 @@ const signedIn = `(() => {
     notifications:[],
     meta:{sessions:12,lastFeedbackSession:12,lastSeen:now,tampered:false,
           celebrated:[],firedReminders:[],dataOwner:"989121234567"},
-    theme:"light",notificationsEnabled:true }));
+    theme:"__THEME__",notificationsEnabled:true }));
   localStorage.setItem("routino:auth:v1", JSON.stringify({
     access:"x",refresh:"y",deviceId:"d1",accessExpiresAt:now+900000 }));
   localStorage.setItem("routino:onboarded","1");
   return true;
-})()`;
+})()`.replace("__THEME__", theme);
 
-/** موبایل و لپ‌تاپ — چون کاربر باید ببیند روی هر دو کار می‌کند. */
+/**
+ * موبایل و لپ‌تاپ، و بیشترشان تم تاریک.
+ *
+ * تم از settings.theme در localStorage می‌آید (تنظیمِ مخصوصِ دستگاه)، نه از
+ * prefers-color-scheme سیستم — پس همان را موقع seed می‌نشانیم، و colorScheme
+ * مرورگر هم هماهنگ می‌شود تا اسکرول‌بار و پس‌زمینه‌ی خودِ مرورگر هم جور دربیاید.
+ */
+const PHONE = { w: 402, h: 874, kind: "phone" };
+const DESK = { w: 1440, h: 900, kind: "desktop" };
 const SHOTS = [
-  { name: "today",     path: "/app/",          w: 402, h: 874, kind: "phone" },
-  { name: "habits",    path: "/app/habits",    w: 402, h: 874, kind: "phone" },
-  { name: "analytics", path: "/app/analytics", w: 402, h: 874, kind: "phone" },
-  { name: "timer",     path: "/app/timer",     w: 402, h: 874, kind: "phone" },
-  { name: "desktop",   path: "/app/",          w: 1440, h: 900, kind: "desktop" },
-  { name: "desktop-analytics", path: "/app/analytics", w: 1440, h: 900, kind: "desktop" },
+  // تاریک — نسخه‌ی اصلی که در صفحه‌ی معرفی نشان داده می‌شود
+  { name: "today-dark",     path: "/app/",          theme: "dark",  ...PHONE },
+  { name: "habits-dark",    path: "/app/habits",    theme: "dark",  ...PHONE },
+  { name: "analytics-dark", path: "/app/analytics", theme: "dark",  ...PHONE },
+  { name: "timer-dark",     path: "/app/timer",     theme: "dark",  ...PHONE },
+  { name: "journal-dark",   path: "/app/journal",   theme: "dark",  ...PHONE },
+  { name: "desktop-dark",           path: "/app/",          theme: "dark", ...DESK },
+  { name: "desktop-analytics-dark", path: "/app/analytics", theme: "dark", ...DESK },
+  // روشن — چند تا برای اینکه معلوم باشد هر دو تم هست
+  { name: "today",     path: "/app/",          theme: "light", ...PHONE },
+  { name: "analytics", path: "/app/analytics", theme: "light", ...PHONE },
+  { name: "desktop",   path: "/app/",          theme: "light", ...DESK },
 ];
 
 async function main() {
@@ -148,12 +162,12 @@ async function main() {
       viewport: { width: s.w, height: s.h },
       deviceScaleFactor: 2, // رتینا — روی صفحه‌های امروزی تار نشود
       locale: "fa-IR",
-      colorScheme: "light",
+      colorScheme: s.theme,
     });
     const page = await ctx.newPage();
 
     await page.goto(`${BASE}/app/`, { waitUntil: "domcontentloaded" });
-    await page.evaluate(signedIn);
+    await page.evaluate(signedInFor(s.theme));
     await page.reload({ waitUntil: "networkidle" });
     await page.evaluate(demoScript());
     await page.goto(`${BASE}${s.path}`, { waitUntil: "networkidle" });

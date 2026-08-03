@@ -14,6 +14,7 @@ import { Button, Logo } from "@/components/ui";
 import { entitlementToSubscription, hasSession } from "@/lib/api/auth";
 import { fetchPayment, type PaymentStatus } from "@/lib/api/payments";
 import { faNum } from "@/lib/dates";
+import { clearSignupIntent } from "@/lib/signup-intent";
 import { useAppMaybe } from "@/state/app";
 
 interface PayResultSearch {
@@ -64,6 +65,10 @@ function PayResultPage() {
             applied.current = true;
             const sub = entitlementToSubscription(res.entitlement);
             if (sub) update((d) => ({ ...d, subscription: sub, meta: { ...d.meta, tampered: false } }));
+            // قصدِ خریدی که از صفحه‌ی معرفی آمده بود به سرانجام رسید. اگر نماند،
+            // کاربر در همین نشست هر بار به صفحه‌ی خرید با همان پلن پیش‌انتخاب‌شده
+            // برمی‌گردد — درحالی‌که دیگر اشتراک دارد.
+            clearSignupIntent();
           }
           setState("done");
           return;
