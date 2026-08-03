@@ -115,7 +115,7 @@ export function CelebrationModal({
               : t("عالیه! ۷۰٪ راه رو رفتی!", "Awesome! You're 70% there!")}
           </h3>
           <p className="text-sm text-muted-foreground">
-            {celebration.habitName} —{" "}
+            {celebration.habitName}{" · "}
             {celebration.milestone === 100
               ? t("یه نشان جدید گرفتی 🏅", "You earned a new badge 🏅")
               : t(`${faNum(70, lang)}٪ از هدف ماهانه`, `${faNum(70, lang)}% of the monthly goal`)}
@@ -322,8 +322,8 @@ export function HabitRow({
       {raw > 100 && (
         <p className="mt-1 text-[10px] font-medium text-success">
           {t(
-            `🔥 ${faNum(raw, lang)}٪ — ${faNum(raw - 100, lang)}٪ بیشتر از هدف انجام دادی!`,
-            `🔥 ${raw}% — you did ${raw - 100}% more than your goal!`,
+            `🔥 ${faNum(raw, lang)}٪، یعنی ${faNum(raw - 100, lang)}٪ بیشتر از هدف!`,
+            `🔥 ${raw}%, that is ${raw - 100}% more than your goal!`,
           )}
         </p>
       )}
@@ -335,7 +335,7 @@ export function HabitRow({
         <div className="flex flex-col gap-4">
           {isFuture && (
             <p className="rounded-xl bg-secondary px-3 py-2 text-center text-[11px] font-medium text-muted-foreground">
-              {t("این یه روز آینده‌ست — فقط می‌تونی نگاه کنی.", "This is a future day — view only.")}
+              {t("این یه روز آینده‌ست؛ فقط می‌تونی نگاه کنی.", "This is a future day, view only.")}
             </p>
           )}
           {habit.type === "quantity" && (

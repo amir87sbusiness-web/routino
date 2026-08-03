@@ -49,6 +49,10 @@ routino1.0/
 │       ├── providers/    ← اتصال به سرویس‌های بیرونی (پیامک کاوه‌نگار، درگاه زیبال)
 │       ├── db/           ← ساختار جدول‌های دیتابیس سرور
 │       └── plugins/      ← احراز هویت و مدیریت خطا
+├── landing/              ← 🌐 سایت عمومی routino.me (قالب HTML + عکس‌های محصول)
+│   ├── index.template.html   صفحه‌ی اول
+│   ├── legal.template.html   صفحه‌ی /legal/
+│   └── shots/                عکس‌های واقعی اپ (با `npm run shots`)
 ├── android/  ios/        ← پروژه‌های نیتیو موبایل (معمولاً دست نمی‌زنی)
 ├── public/               ← آیکون‌ها و مانیفست PWA
 ├── www/  dist/           ← خروجی‌های بیلد (تولید خودکار — ویرایش نکن)
@@ -238,6 +242,23 @@ routino1.0/
 | 🧭 آیتم‌های منوی پایین/کنار | [AppShell.tsx](../src/components/AppShell.tsx) — آرایه `NAV` |
 | 😀 ایموجی‌های حس‌وحال | [presets.ts](../src/lib/presets.ts) — `MOOD_EMOJIS` |
 | ⭐ فاصله پاپ‌آپ نظرسنجی (هر ۵ جلسه) | [AppShell.tsx](../src/components/AppShell.tsx) — شرط `sessions - lastFeedbackSession >= 5` |
+| 🌐 متن یا ظاهر صفحه‌ی اول سایت | [landing/index.template.html](../landing/index.template.html)، بعدش `npm run build:landing` |
+| 🖼️ عکس‌های صفحه‌ی اول (بعد از تغییر UI) | `npm run dev` روی :5180 بعد `npm run shots` — عکس‌های استفاده‌نشده خودکار منتشر نمی‌شوند |
+
+---
+
+### ۶.۲ صفحه‌ی اول عمداً حرفی از پول نمی‌زند 💡
+
+تصمیم مالک (مرداد ۱۴۰۵): در `routino.me` **هیچ اشاره‌ای به قیمت، اشتراک، خرید یا
+دوره‌ی آزمایشی نیست** و فرم ثبت‌نام هم ندارد. کارِ صفحه فقط این است که محصول را
+نشان بدهد و بازدیدکننده را با دکمه ببرد به `/app/`. حساب‌باز‌کردن و ۷ روز
+آزمایشی داخل خود اپ اتفاق می‌افتد (`TRIAL_DAYS` در
+[backend/src/routes/auth.ts](../backend/src/routes/auth.ts)) و صفحه‌ی خرید فقط
+وقتی دیده می‌شود که آن ۷ روز تمام شده باشد.
+
+پس اگر جایی در صفحه‌ی اول دنبال کارت قیمت یا فرم شماره گشتی و پیدا نکردی:
+**حذف شده، از قلم نیفتاده.** ماژول `src/lib/signup-intent.ts` هم که شماره و پلن
+را از آدرس (`/app/?start=…&plan=…`) به اپ می‌رساند با همین تغییر حذف شد.
 
 ---
 
@@ -324,7 +345,8 @@ npm test               # تست‌های بک‌اند
 > Claude: قبل از تحلیل دوباره‌ی کد، این بخش + بخش‌های بالا کافیه. فقط فایل‌هایی که واقعاً لازمه رو باز کن.
 
 - **State:** single in-memory `Db` object (`src/lib/store.ts`) in `AppProvider` (`src/state/app.tsx`). All mutations via `update(fn)`; immutable spreads preserve refs → `diffDb(prev,next)` (`lib/db/diff.ts`) reference-equality diff → `applyChanges` writes RecordRows (key,data,updatedAt,deleted,dirty,seq) to Dexie tables. Device-local slice (auth, subscription, notifications, meta, theme, notificationsEnabled) → localStorage `routino:local:v1` via `lib/db/local.ts`. Legacy blob `routino:v1` imported once by `migrate.ts` (never deleted).
-- **Gate:** `AppShell` → onboarding → auth (`db.auth`, device-local) → `subscriptionActive(db)` (local cache + `meta.tampered` check) → app. Entitlement refreshed once per boot from `GET /v1/subscriptions/me` (never applies `none`).
+- **Gate:** `AppShell` → onboarding → auth (`db.auth`, device-local) → `subscriptionActive(db)` (local cache + `meta.tampered` check) → app. Entitlement refreshed once per boot from `GET /v1/subscriptions/me` (never applies `none`). A brand-new phone gets a 7-day trial on `/auth/otp/verify`, so a first-time user goes landing → onboarding → auth → **app**, never touching `/subscribe`.
+- **Landing (`landing/index.template.html`, built by `scripts/build-landing.mjs`):** static, no framework, no signup form, and by owner decision **no mention of price, subscription or the trial**. Its only job is CTA → `/app/`. `copyShots` publishes only the screenshots the HTML actually references, so an orphaned `landing/shots/*.webp` is not shipped. On ≤760px the laptop frame is `display:none` AND its `<img>` is `loading="lazy"`, with media-scoped `<link rel=preload>` per breakpoint — that combination is what stops mobile from downloading the 63KB desktop shot; do not remove the lazy attribute "because it's above the fold", the preload already covers desktop LCP.
 - **Auth tokens:** localStorage `routino:auth:v1` (`lib/api/auth.ts`), access ~15min JWT, opaque rotating refresh; single-flight refresh; offline never signs out.
 - **Password auth:** phone-first UI defaults to password (`/auth/password/login`, identifier = canonical phone OR lowercased username — disambiguated by whether `normalizePhone` succeeds, since usernames must start with a letter). Hash = scrypt (`services/password.ts`, edge-safe, NOT the unused `argon2` dep). Brute-force limits per-identifier(8)/per-IP(50) over `login_attempts` ledger (`services/login-throttle.ts`); generic `bad_credentials` + DUMMY_HASH verify on miss = no user enumeration. Set username/password from settings when signed in (`/auth/username`, `/auth/password`). **`/auth/password` calls `revokeOtherDevices`** (`services/tokens.ts`) — a password change is how a user evicts an intruder, and refresh tokens live 180 days and rotate silently, so without it the change is cosmetic. The caller's own `deviceId` (from the access-token `did` claim) is kept so they aren't signed out of the device they just used. NOTE: `supabase/functions/api/routes/*` is hand-written, NOT generated — a route change must be mirrored there by hand; only `shared/` comes from `npm run sync:edge`. Provision without SMS: admin panel «تنظیم/ریست رمز» → `POST /admin/users/set-password` (creates + 7-day trial), OR `OWNER_PHONE`/`OWNER_PASSWORD`/`OWNER_USERNAME` env bootstrap on boot (`services/owner-bootstrap.ts`, idempotent, never overwrites an existing password).
 - **Sync:** NOT implemented yet (outbox `dirty:1` + server `records` table + per-user `seq` cursor ready; Phase 4/5 pending).
@@ -339,4 +361,4 @@ npm test               # تست‌های بک‌اند
 - **Timer:** ref-based interval tick (not setState updaters — StrictMode safety); commits focus minutes to linked time-habit/task via `applyLog` inside updater; sessions sorted by endedAt, capped 200.
 - **Native:** CapacitorHttp for API (CORS-free), LocalNotifications for OS reminders (`native-notifications.ts`), StatusBar overlay in `native.ts`, deep link `routino://pay/result` handled in `client.tsx`. PWA SW disabled on mobile builds; `virtual:pwa-register` prompt-style updates on web.
 - **i18n:** inline `t(fa, en)` everywhere; no translation files. Dates via `lib/dates.ts` (jalaali-js); week starts Sat (jalali) / Sun (gregorian); `faNum` for Persian digits.
-- **Known test-only flags:** `TEST_LOGIN_BUTTON` (auth.tsx), `TEST_GRANT_BUTTON` (subscribe.tsx), `SKIP_SMS` (auth.tsx), fake PSP + console SMS via env.
+- **Known test-only flags:** `TEST_GRANT_BUTTON` (subscribe.tsx), `SKIP_SMS` (auth.tsx), fake PSP + console SMS via env. (`TEST_LOGIN_BUTTON` no longer exists.)

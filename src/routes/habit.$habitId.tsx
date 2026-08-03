@@ -99,7 +99,7 @@ function HabitDetailPage() {
       <Card>
         <div className="mb-2 flex items-center justify-between">
           <p className="text-sm font-bold text-foreground">
-            {t("هدف ماهانه —", "Monthly goal —")} {monthTitle(todayKey(), cal, lang)}
+            {t("هدف ماهانه:", "Monthly goal:")} {monthTitle(todayKey(), cal, lang)}
           </p>
           <span className="text-xs font-black text-primary">{faNum(mp.percent, lang)}٪</span>
         </div>

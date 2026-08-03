@@ -113,7 +113,7 @@ function TodayPage() {
         </SectionTitle>
         {due.length === 0 ? (
           <div className="card-surface">
-            <EmptyState emoji="🌱" text={t("هنوز عادتی نداری — از بخش عادت‌ها اضافه کن!", "No habits yet — add one from Habits!")} />
+            <EmptyState emoji="🌱" text={t("هنوز عادتی نداری؛ از بخش عادت‌ها اضافه کن!", "No habits yet. Add one from Habits!")} />
             <div className="flex justify-center pb-4">
               <Link
                 to="/habits"

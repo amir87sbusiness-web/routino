@@ -1,4 +1,3 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   Outlet,
   Link,
@@ -9,9 +8,6 @@ import { Toaster } from "sonner";
 import { UpdateWatcher } from "../components/pwa";
 import { AppProvider } from "../state/app";
 import "../styles.css";
-
-// ایجاد QueryClient یک‌بار برای همیشه (خارج از کامپوننت)
-const queryClient = new QueryClient();
 
 function NotFoundComponent() {
   return (
@@ -78,15 +74,12 @@ export const Route = createRootRoute({
 
 function RootComponent() {
   return (
-    // QueryClientProvider در اینجا به درستی مقداردهی شده است
-    <QueryClientProvider client={queryClient}>
-      <AppProvider>
-        {/* این Outlet محل قرارگیری صفحات فرزند است */}
-        <Outlet />
-        {/* اعلان «نسخه‌ی جدید آماده‌ست» — داخل Provider تا به زبان کاربر باشد */}
-        <UpdateWatcher />
-        <Toaster position="bottom-center" dir="rtl" richColors closeButton />
-      </AppProvider>
-    </QueryClientProvider>
+    <AppProvider>
+      {/* این Outlet محل قرارگیری صفحات فرزند است */}
+      <Outlet />
+      {/* اعلان «نسخه‌ی جدید آماده‌ست» — داخل Provider تا به زبان کاربر باشد */}
+      <UpdateWatcher />
+      <Toaster position="bottom-center" dir="rtl" richColors closeButton />
+    </AppProvider>
   );
 }

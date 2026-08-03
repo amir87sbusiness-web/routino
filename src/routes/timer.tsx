@@ -435,7 +435,7 @@ function TimerPage() {
               ))}
             </div>
             <p className="text-[10px] text-muted-foreground">
-              {t("فقط زمان تمرکز حساب می‌شود، استراحت حساب نمی‌شود.", "Only focus time counts — breaks are excluded.")}
+              {t("فقط زمان تمرکز حساب می‌شود، استراحت حساب نمی‌شود.", "Only focus time counts; breaks are excluded.")}
             </p>
           </div>
         )}
@@ -473,7 +473,7 @@ function TimerPage() {
         <p className="mb-3 text-[10px] text-muted-foreground">
           {t(
             "فقط عادت‌ها و کارهای زمانی قابل اتصال‌ان. با هر حالتی (پومودورو یا آزاد) کار می‌کنه و فقط زمانِ تمرکز به هدف اضافه می‌شه.",
-            "Only time-based habits and tasks can be linked. Works in any mode (Pomodoro or Free) — only focus time counts toward the goal.",
+            "Only time-based habits and tasks can be linked. Works in any mode (Pomodoro or Free); only focus time counts toward the goal.",
           )}
         </p>
         {dueHabits.length === 0 && openTasks.length === 0 ? (

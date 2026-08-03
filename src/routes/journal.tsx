@@ -143,7 +143,7 @@ function JournalPage() {
                 <span className="text-xl">{e.mood ?? "📓"}</span>
                 <div className="min-w-0 flex-1">
                   <p className="text-[10px] text-muted-foreground">{formatDate(e.dateKey, cal, lang)}</p>
-                  <p className="truncate text-xs text-foreground">{e.text || "—"}</p>
+                  <p className="truncate text-xs text-foreground">{e.text || t("بدون یادداشت", "No note")}</p>
                 </div>
                 {e.score !== null && (
                   <span className="rounded-lg bg-primary-soft px-2 py-1 text-xs font-black text-primary">

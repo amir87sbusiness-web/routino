@@ -28,7 +28,7 @@ export async function shareBackupNative(db: Db): Promise<void> {
   });
   await Share.share({
     title: fileName,
-    text: "فایل پشتیبان روتینو — Routino backup",
+    text: "فایل پشتیبان روتینو · Routino backup",
     files: [uri],
   });
 }

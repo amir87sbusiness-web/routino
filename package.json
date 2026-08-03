@@ -34,7 +34,6 @@
     "@capacitor/status-bar": "^7.0.0",
     "@fontsource/vazirmatn": "^5.2.8",
     "@tailwindcss/vite": "^4.2.1",
-    "@tanstack/react-query": "^5.101.1",
     "@tanstack/react-router": "^1.170.16",
     "@tanstack/router-plugin": "^1.168.18",
     "clsx": "^2.1.1",
@@ -45,8 +44,7 @@
     "react-dom": "^19.2.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
-    "tailwindcss": "^4.2.1",
-    "tw-animate-css": "^1.3.4"
+    "tailwindcss": "^4.2.1"
   },
   "devDependencies": {
     "@capacitor/assets": "^3.0.5",

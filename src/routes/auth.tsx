@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Button, Input, Logo } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
 import {
@@ -13,7 +13,6 @@ import {
 } from "@/lib/api/auth";
 import { faNum } from "@/lib/dates";
 import { normalizePhone, toAsciiDigits, toLocalPhone } from "@/lib/phone";
-import { readSignupIntent } from "@/lib/signup-intent";
 import { loginAs } from "@/lib/wipe";
 import { useAppMaybe } from "@/state/app";
 
@@ -33,18 +32,12 @@ function AuthPage() {
   const ctx = useAppMaybe();
   const navigate = useNavigate();
 
-  // شماره‌ای که کاربر در صفحه‌ی معرفی وارد کرده. فقط پیش‌پرکردنِ فرم است — از
-  // اینجا به بعد دقیقاً همان ورود همیشگی اجرا می‌شود، با همان اعتبارسنجی و
-  // همان محدودیت تلاش. صفحه‌ی معرفی هیچ‌وقت خودش وارد نمی‌کند.
-  const intentPhone = useMemo(() => readSignupIntent()?.phone ?? "", []);
-  // با شماره‌ی آماده، «کد پیامکی» مسیر طبیعی‌تری است: کسی که تازه از سایت آمده
-  // معمولاً هنوز رمزی ندارد.
-  const [method, setMethod] = useState<Method>(intentPhone ? "otp" : "password");
+  const [method, setMethod] = useState<Method>("password");
   // password mode
-  const [identifier, setIdentifier] = useState(intentPhone);
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   // otp mode
-  const [phone, setPhone] = useState(intentPhone);
+  const [phone, setPhone] = useState("");
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [code, setCode] = useState("");
   // shared
@@ -131,13 +124,7 @@ function AuthPage() {
     const now = Date.now();
     const subscription = entitlementToSubscription(entitlement, now);
     update((d) => loginAs(d, canonical, subscription, now));
-
-    // اگر کاربر از صفحه‌ی معرفی روی یک پلن کلیک کرده، ببرش سرِ خرید — حتی وقتی
-    // همین الان ۷ روز آزمایشی گرفته. بدون این، گِیت او را چون اشتراک فعال دارد
-    // مستقیم به اپ می‌فرستد و قصدِ خریدش بی‌صدا دور ریخته می‌شود: روی سایت
-    // «یک‌ساله» را زده و هیچ‌وقت به صفحه‌ی پرداخت نمی‌رسد.
-    const wantsPlan = !!readSignupIntent()?.plan;
-    navigate({ to: wantsPlan ? "/subscribe" : "/" });
+    navigate({ to: "/" });
   };
 
   const doPasswordLogin = async () => {
@@ -307,7 +294,7 @@ function AuthPage() {
               dir="ltr"
               inputMode="numeric"
               maxLength={6}
-              placeholder="——————"
+              placeholder="······"
               value={code}
               // Convert Persian digits rather than stripping them: `\d` matches
               // ASCII only, so a plain strip would delete a code typed on a

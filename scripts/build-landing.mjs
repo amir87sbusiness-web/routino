@@ -102,24 +102,38 @@ function copyFonts() {
 
 /** عکس‌های واقعیِ اپ که `scripts/shoot-landing.mjs` گرفته. اگر پوشه نبود، بیلد
  * می‌ایستد — صفحه‌ی معرفی بدون تصویرِ محصول یعنی یک صفحه‌ی نصفه، و بهتر است
- * همین‌جا بفهمیم تا اینکه سایت بی‌عکس منتشر شود. */
-function copyShots() {
+ * همین‌جا بفهمیم تا اینکه سایت بی‌عکس منتشر شود.
+ *
+ * فقط عکس‌هایی کپی می‌شوند که واقعاً در HTML خروجی به آن‌ها ارجاع شده. قبلاً کلِ
+ * پوشه کپی می‌شد و هر عکسی که از صفحه حذف شده بود (یا `shoot-landing` گرفته بود
+ * ولی استفاده نمی‌شد) همچنان با سایت منتشر می‌شد. */
+function copyShots(htmlPages) {
   const src = join(ROOT, "landing", "shots");
   if (!existsSync(src))
     throw new Error("landing/shots نیست — اول `node scripts/shoot-landing.mjs` را با dev server بالا اجرا کن");
+  const available = readdirSync(src).filter((f) => f.endsWith(".webp"));
+  if (!available.length) throw new Error("landing/shots خالی است");
+
+  const used = new Set();
+  for (const html of htmlPages) {
+    for (const m of html.matchAll(/\/shots\/([A-Za-z0-9._-]+\.webp)/g)) used.add(m[1]);
+  }
+  const missing = [...used].filter((f) => !available.includes(f));
+  if (missing.length)
+    throw new Error(`عکس‌های ارجاع‌شده در صفحه پیدا نشدند: ${missing.join("، ")}`);
+  if (!used.size) throw new Error("هیچ عکسی در صفحه ارجاع نشده — قالب خراب است");
+
   const dest = join(OUT_DIR, "shots");
   // پاک‌سازی قبل از کپی: `vite build` فقط dist/app را خالی می‌کند، پس عکسی که
   // اسمش عوض شده یا حذف شده تا ابد در خروجی می‌ماند و همراه سایت منتشر می‌شود.
   rmSync(dest, { recursive: true, force: true });
   mkdirSync(dest, { recursive: true });
   let bytes = 0;
-  const names = readdirSync(src).filter((f) => f.endsWith(".webp"));
-  if (!names.length) throw new Error("landing/shots خالی است");
-  for (const f of names) {
+  for (const f of used) {
     copyFileSync(join(src, f), join(dest, f));
     bytes += statSync(join(src, f)).size;
   }
-  return { count: names.length, bytes };
+  return { count: used.size, skipped: available.length - used.size, bytes };
 }
 
 function fill(templateName, replacements) {
@@ -144,11 +158,9 @@ function main() {
   mkdirSync(OUT_DIR, { recursive: true });
 
   // ── صفحه‌ی اصلی ──────────────────────────────────────────
-  writeFileSync(
-    join(OUT_DIR, "index.html"),
-    // مهر اینماد عیناً درج می‌شود، بدون escape — باید همان HTMLی باشد که صادر شده.
-    fill("index.template.html", { "<!--ENAMAD-->": ENAMAD_SEAL }),
-  );
+  // مهر اینماد عیناً درج می‌شود، بدون escape — باید همان HTMLی باشد که صادر شده.
+  const homeHtml = fill("index.template.html", { "<!--ENAMAD-->": ENAMAD_SEAL });
+  writeFileSync(join(OUT_DIR, "index.html"), homeHtml);
 
   // ── صفحه‌ی قوانین ────────────────────────────────────────
   const legalBody =
@@ -169,17 +181,15 @@ function main() {
 
   // پوشه‌ای، نه legal.html — تا آدرس تمیزِ /legal/ کار کند.
   mkdirSync(join(OUT_DIR, "legal"), { recursive: true });
-  writeFileSync(
-    join(OUT_DIR, "legal", "index.html"),
-    fill("legal.template.html", {
-      "<!--LEGAL-->": legalBody,
-      "<!--ENAMAD-->": ENAMAD_SEAL,
-      "<!--UPDATED-->": `آخرین به‌روزرسانی: ${esc(info.lastUpdatedFa)}`,
-    }),
-  );
+  const legalHtml = fill("legal.template.html", {
+    "<!--LEGAL-->": legalBody,
+    "<!--ENAMAD-->": ENAMAD_SEAL,
+    "<!--UPDATED-->": `آخرین به‌روزرسانی: ${esc(info.lastUpdatedFa)}`,
+  });
+  writeFileSync(join(OUT_DIR, "legal", "index.html"), legalHtml);
 
   const fontBytes = copyFonts();
-  const shots = copyShots();
+  const shots = copyShots([homeHtml, legalHtml]);
 
   // ── پیکربندی Cloudflare Pages ───────────────────────────
   // ASCII only, deliberately. The first version of this file had Persian
@@ -231,7 +241,9 @@ function main() {
   console.log(
     `[build-landing] dist/index.html + dist/legal/index.html  ` +
       `(${TERMS.length} بند قوانین، ${PRIVACY.length} بند حریم خصوصی، فونت ${kb(fontBytes)}، ` +
-      `${shots.count} عکس ${kb(shots.bytes)})`,
+      `${shots.count} عکس ${kb(shots.bytes)}` +
+      (shots.skipped ? `، ${shots.skipped} عکسِ بی‌استفاده کپی نشد` : "") +
+      `)`,
   );
 }
 

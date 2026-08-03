@@ -221,7 +221,7 @@ function AnalyticsPage() {
       </section>
 
       <p className="text-center text-[10px] text-muted-foreground">
-        {t("کارها در نمودارهای بالا محاسبه نمی‌شوند؛ فقط عادت‌ها.", "Tasks aren't counted in the charts above — only habits.")}
+        {t("کارها در نمودارهای بالا محاسبه نمی‌شوند؛ فقط عادت‌ها.", "Tasks aren't counted in the charts above; only habits.")}
       </p>
     </div>
   );

@@ -28,8 +28,8 @@ function OnboardingPage() {
       emoji: "📊",
       titleFa: "آنالیز و دستاورد",
       titleEn: "Analytics & Achievements",
-      bodyFa: "نمودار پیشرفت، استریک روزهای متوالی و نشان‌های تشویقی — همه در یک‌جا.",
-      bodyEn: "Progress charts, streaks and motivational badges — all in one place.",
+      bodyFa: "نمودار پیشرفت، استریک روزهای متوالی و نشان‌های تشویقی، همه در یک‌جا.",
+      bodyEn: "Progress charts, streaks and motivational badges, all in one place.",
     },
     {
       emoji: "✍️",

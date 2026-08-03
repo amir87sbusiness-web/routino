@@ -1,6 +1,9 @@
 @import "tailwindcss" source(none);
 @source "../src";
-@import "tw-animate-css";
+/* `tw-animate-css` برداشته شد: تنها مصرف‌کننده‌اش کامپوننت‌های shadcn بودند که
+   قبلاً حذف شدند. انیمیشن‌های خودِ اپ (`animate-pop-in`، `animate-check-pop`،
+   `animate-row-flash`) پایین‌تر در همین فایل تعریف شده‌اند و به آن وابسته
+   نیستند. */
 /* وزن ۳۰۰ عمداً نیست: در کل اپ حتی یک بار `font-light` استفاده نشده، ولی
    سرویس‌ورکر آن را precache می‌کرد — ۴۷ کیلوبایت (سه فایل: arabic، latin،
    latin-ext) روی هر نصب، برای وزنی که هیچ‌جا رندر نمی‌شود. اگر روزی

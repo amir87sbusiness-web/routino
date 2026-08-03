@@ -591,7 +591,7 @@ export function MiniBars({
             type="button"
             onClick={() => setActive((a) => (a === i ? null : i))}
             className="group/bar relative flex h-full flex-1 cursor-pointer flex-col justify-end"
-            title={v === null ? "—" : `${digits(v)}%`}
+            title={v === null ? (lang === "fa" ? "بدون داده" : "No data") : `${digits(v)}%`}
           >
             {v === null ? (
               <div className="mx-auto mb-0.5 h-1 w-1 rounded-full bg-border" />

@@ -29,7 +29,6 @@ import { hydrate } from "@/lib/db/hydrate";
 import { loadLocal, localChanged, mergeSettings, saveLocal, toLocalState } from "@/lib/db/local";
 import { applyChanges } from "@/lib/db/persist";
 import { DEFAULT_CATEGORIES } from "@/lib/presets";
-import { readSignupIntent } from "@/lib/signup-intent";
 import { defaultDb, uid, type Db } from "@/lib/store";
 import { applyServerEntitlement, dueHabitsOn, isCompleted, getLog } from "@/lib/logic";
 import { requestNativePermission, syncRecurringReminders } from "@/lib/native-notifications";
@@ -97,14 +96,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // anti clock-tampering: system clock moved backwards past last-seen
       const tampered = now < loaded.meta.lastSeen - TAMPER_TOLERANCE;
       lastPersisted.current = loaded; // baseline: what's already on disk
-      // کسی که از صفحه‌ی معرفی با شماره و پلن آمده، همان‌جا دیده روتینو چیست —
-      // نشاندنش پای اسلایدهای خوش‌آمدگویی فقط دو لمس فاصله‌ی اضافه تا خرید است.
-      // تنظیمات اولیه‌ی آنبوردینگ (زبان، تقویم، تم) همگی پیش‌فرضِ درست دارند و
-      // در «تنظیمات» قابل تغییرند.
-      const fromLanding = !loaded.settings.onboarded && !!readSignupIntent();
       setDb({
         ...loaded,
-        settings: fromLanding ? { ...loaded.settings, onboarded: true } : loaded.settings,
         meta: {
           ...loaded.meta,
           sessions: loaded.meta.sessions + 1,

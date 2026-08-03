@@ -558,8 +558,8 @@ function SettingsPage() {
         {/* erase everything on this device */}
         <p className="text-[11px] leading-5 text-muted-foreground">
           {t(
-            "همهٔ عادت‌ها، ثبت‌ها، کارها، ژورنال و تاریخچهٔ تایمر از این دستگاه پاک می‌شه. حساب و اشتراکت می‌مونه. این کار قابل بازگشت نیست — اول یه پشتیبان بگیر.",
-            "Erases every habit, log, task, journal entry and timer session from this device. Your account and subscription stay. This cannot be undone — export a backup first.",
+            "همهٔ عادت‌ها، ثبت‌ها، کارها، ژورنال و تاریخچهٔ تایمر از این دستگاه پاک می‌شه. حساب و اشتراکت می‌مونه. این کار قابل بازگشت نیست؛ اول یه پشتیبان بگیر.",
+            "Erases every habit, log, task, journal entry and timer session from this device. Your account and subscription stay. This cannot be undone; export a backup first.",
           )}
         </p>
         <Button variant="destructive" onClick={() => setWipeOpen(true)}>
@@ -697,7 +697,7 @@ function SettingsPage() {
       </Card>
 
       <p className="text-center text-[10px] text-muted-foreground">
-        {t("روتینو نسخه 1.0 - آفلاین فرست", "Routino v1.0 — offline-first")}
+        {t("روتینو نسخه 1.0 - آفلاین فرست", "Routino v1.0 · offline-first")}
       </p>
 
       {/* new category modal */}
@@ -988,7 +988,7 @@ function AccountCard() {
         <p className="rounded-xl bg-primary-soft p-2.5 text-[11px] leading-5 text-primary">
           {t(
             "یک رمز عبور بذار تا دفعه‌ی بعد بدون پیامک و فقط با رمز وارد شی.",
-            "Set a password to sign in next time with just your password — no SMS needed.",
+            "Set a password to sign in next time with just your password, no SMS needed.",
           )}
         </p>
       )}

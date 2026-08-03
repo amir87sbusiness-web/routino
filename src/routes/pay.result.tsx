@@ -14,7 +14,6 @@ import { Button, Logo } from "@/components/ui";
 import { entitlementToSubscription, hasSession } from "@/lib/api/auth";
 import { fetchPayment, type PaymentStatus } from "@/lib/api/payments";
 import { faNum } from "@/lib/dates";
-import { clearSignupIntent } from "@/lib/signup-intent";
 import { useAppMaybe } from "@/state/app";
 
 interface PayResultSearch {
@@ -65,10 +64,6 @@ function PayResultPage() {
             applied.current = true;
             const sub = entitlementToSubscription(res.entitlement);
             if (sub) update((d) => ({ ...d, subscription: sub, meta: { ...d.meta, tampered: false } }));
-            // قصدِ خریدی که از صفحه‌ی معرفی آمده بود به سرانجام رسید. اگر نماند،
-            // کاربر در همین نشست هر بار به صفحه‌ی خرید با همان پلن پیش‌انتخاب‌شده
-            // برمی‌گردد — درحالی‌که دیگر اشتراک دارد.
-            clearSignupIntent();
           }
           setState("done");
           return;
@@ -123,8 +118,8 @@ function PayResultPage() {
           icon={<Hourglass className="h-10 w-10 text-primary" />}
           title={t("نتیجه هنوز نرسیده", "Result not in yet")}
           detail={t(
-            "اگر پرداخت کرده‌ای نگران نباش — به محض تأیید، اشتراکت فعال می‌شود. کمی بعد دوباره سر بزن.",
-            "If you paid, don't worry — your subscription activates once confirmed. Check back shortly.",
+            "اگر پرداخت کرده‌ای نگران نباش؛ به محض تأیید، اشتراکت فعال می‌شود. کمی بعد دوباره سر بزن.",
+            "If you paid, don't worry; your subscription activates once confirmed. Check back shortly.",
           )}
         />
       );
