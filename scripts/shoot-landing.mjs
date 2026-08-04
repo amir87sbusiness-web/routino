@@ -154,12 +154,34 @@ const SHOTS = [
   { name: "desktop",   path: "/app/",          theme: "light", ...DESK },
 ];
 
+/**
+ * فیلترِ اسم، تا بشود فقط یک عکس را دوباره گرفت:
+ *
+ *     node scripts/shoot-landing.mjs timer-dark
+ *
+ * چرا مهم است؟ داده‌ی نمایشی تصادفی ساخته می‌شود، پس گرفتنِ دوباره‌ی همه یعنی
+ * هر ۱۰ فایل عوض می‌شوند حتی اگر فقط یک صفحه تغییر کرده باشد. بدون آرگومان،
+ * مثل قبل همه گرفته می‌شوند.
+ */
+function pickShots() {
+  const wanted = process.argv.slice(2).filter((a) => !a.startsWith("-"));
+  if (!wanted.length) return SHOTS;
+  const picked = SHOTS.filter((s) => wanted.includes(s.name));
+  const unknown = wanted.filter((w) => !SHOTS.some((s) => s.name === w));
+  if (unknown.length)
+    throw new Error(
+      `عکسی به اسم ${unknown.join("، ")} نداریم. اسم‌های موجود: ${SHOTS.map((s) => s.name).join("، ")}`,
+    );
+  return picked;
+}
+
 async function main() {
   mkdirSync(OUT, { recursive: true });
+  const shots = pickShots();
   const browser = await chromium.launch({ executablePath: CHROME, headless: true });
   const written = [];
 
-  for (const s of SHOTS) {
+  for (const s of shots) {
     const ctx = await browser.newContext({
       viewport: { width: s.w, height: s.h },
       deviceScaleFactor: 2, // رتینا — روی صفحه‌های امروزی تار نشود
