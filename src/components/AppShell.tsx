@@ -14,14 +14,17 @@ import {
   Settings,
   Timer,
 } from "lucide-react";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { FeedbackModal } from "@/components/FeedbackModal";
 import { InstallBanner } from "@/components/pwa";
 import { Button, Logo, Modal } from "@/components/ui";
 import { faNum } from "@/lib/dates";
 import { subscriptionActive } from "@/lib/logic";
 import { requestPersistentStorage } from "@/lib/pwa";
-import { uid } from "@/lib/store";
 import { useAppMaybe } from "@/state/app";
+
+/** فاصله‌ی کمینه بین دو بار نشان دادن پاپ‌آپ نظرسنجی. */
+const FEEDBACK_INTERVAL = 24 * 60 * 60 * 1000;
 
 function Splash() {
   return (
@@ -53,9 +56,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [notifOpen, setNotifOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
-  const [rating, setRating] = useState(0);
-  const [fbSection, setFbSection] = useState("");
-  const [fbComment, setFbComment] = useState("");
 
   const db = ctx?.db ?? null;
   const gate = useMemo(() => {
@@ -83,45 +83,46 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (db?.settings.onboarded) void requestPersistentStorage();
   }, [db?.settings.onboarded]);
 
-  // periodic feedback popup: every 5 sessions
+  /**
+   * پاپ‌آپ نظرسنجی: حداکثر روزی یک‌بار، و حداکثر یک‌بار در هر بار باز کردن اپ.
+   *
+   * قبلاً شرط «هر ۵ تا session» بود، ولی هر بار بالا آمدنِ اپ یک session است و
+   * روی وب هر رفرش هم یک بالا آمدن — پس یک روز عادیِ کار با برنامه چند بار
+   * پاپ‌آپ می‌داد. حالا معیار زمان است.
+   *
+   * `askedThisBoot` جداگانه لازم است: `lastFeedbackAt` فقط وقتی جلو می‌رود که
+   * کاربر جواب بدهد یا «بعداً» را بزند. بدون این پرچم، اگر همان لحظه تبی عوض
+   * می‌شد یا کامپوننت دوباره mount می‌شد، تایمر ۴ ثانیه‌ای از نو راه می‌افتاد.
+   */
+  const askedThisBoot = useRef(false);
+  // شرط به شکل یک boolean حساب می‌شود و خودِ `db` در وابستگی‌های افکت نیست.
+  // این عمدی است: `db` مدام عوض می‌شود (زمان‌بندِ یادآورها، ذخیره‌سازی، تازه‌سازی
+  // اشتراک)، و اگر افکت با هر تغییرِ آن دوباره اجرا شود، cleanup همان تایمرِ ۴
+  // ثانیه‌ای را می‌کُشد و اجرای بعدی هم به‌خاطر `askedThisBoot` زود برمی‌گردد —
+  // یعنی پاپ‌آپ هیچ‌وقت باز نمی‌شود. (دقیقاً همین اتفاق افتاد و تست گرفتش.)
+  const canAsk =
+    gate === "ok" &&
+    !!db &&
+    db.meta.sessions >= 3 &&
+    Date.now() - db.meta.lastFeedbackAt >= FEEDBACK_INTERVAL;
   useEffect(() => {
-    if (!db || gate !== "ok") return;
-    const { sessions, lastFeedbackSession } = db.meta;
-    if (sessions >= 3 && sessions - lastFeedbackSession >= 5) {
-      const timer = setTimeout(() => setFeedbackOpen(true), 4000);
-      return () => clearTimeout(timer);
-    }
-  }, [db, gate]);
+    if (!canAsk || askedThisBoot.current) return;
+    askedThisBoot.current = true;
+    const timer = setTimeout(() => setFeedbackOpen(true), 4000);
+    return () => clearTimeout(timer);
+  }, [canAsk]);
+
+  /** بعد از ثبت یا رد کردن، ساعت را جلو ببر تا تا فردا دوباره پرسیده نشود. */
+  const closeFeedback = () => {
+    setFeedbackOpen(false);
+    ctx?.update((d) => ({ ...d, meta: { ...d.meta, lastFeedbackAt: Date.now() } }));
+  };
 
   if (!ctx || !db) return <Splash />;
   if (gate !== "ok") return <Splash />;
 
   const { t, lang, update } = ctx;
   const unread = db.notifications.filter((n) => !n.read).length;
-
-  const submitFeedback = (skip: boolean) => {
-    update((d) => ({
-      ...d,
-      feedback: skip
-        ? d.feedback
-        : [
-            {
-              id: uid(),
-              rating,
-              section: rating <= 3 ? fbSection : undefined,
-              comment: fbComment || undefined,
-              at: Date.now(),
-              phone: d.auth?.phone,
-            },
-            ...d.feedback,
-          ],
-      meta: { ...d.meta, lastFeedbackSession: d.meta.sessions },
-    }));
-    setFeedbackOpen(false);
-    setRating(0);
-    setFbSection("");
-    setFbComment("");
-  };
 
   return (
     <div className="min-h-screen bg-background lg:flex">
@@ -261,65 +262,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         )}
       </Modal>
 
-      {/* Feedback popup */}
-      <Modal open={feedbackOpen} onClose={() => submitFeedback(true)} title={t("نظرت درباره روتینو؟", "How is Routino?")}>
-        <div className="flex flex-col gap-4">
-          <div className="flex justify-center gap-2" dir="ltr">
-            {[1, 2, 3, 4, 5].map((s) => (
-              <button
-                key={s}
-                onClick={() => setRating(s)}
-                className={`text-3xl transition-transform hover:scale-110 ${s <= rating ? "" : "opacity-30 grayscale"}`}
-              >
-                ⭐
-              </button>
-            ))}
-          </div>
-          {rating > 0 && rating <= 3 && (
-            <div className="flex flex-col gap-2">
-              <p className="text-xs font-medium text-muted-foreground">
-                {t("کدوم بخش نیاز به بهبود داره؟", "Which part needs improvement?")}
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {[
-                  ["habits", t("عادت‌ها", "Habits")],
-                  ["tasks", t("کارها", "Tasks")],
-                  ["journal", t("ژورنال", "Journal")],
-                  ["analytics", t("آنالیز", "Analytics")],
-                  ["design", t("ظاهر برنامه", "Design")],
-                  ["other", t("سایر", "Other")],
-                ].map(([key, label]) => (
-                  <button
-                    key={key}
-                    onClick={() => setFbSection(key)}
-                    className={`rounded-full border px-3 py-1.5 text-xs transition-colors ${
-                      fbSection === key
-                        ? "border-primary bg-primary-soft text-primary"
-                        : "border-border text-muted-foreground"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <textarea
-                value={fbComment}
-                onChange={(e) => setFbComment(e.target.value)}
-                placeholder={t("توضیح بیشتر (اختیاری)", "More details (optional)")}
-                className="min-h-16 w-full rounded-xl border border-input bg-card p-3 text-sm outline-none focus:border-ring"
-              />
-            </div>
-          )}
-          <div className="flex gap-2">
-            <Button className="flex-1" disabled={rating === 0} onClick={() => submitFeedback(false)}>
-              {t("ثبت نظر", "Submit")}
-            </Button>
-            <Button variant="ghost" onClick={() => submitFeedback(true)}>
-              {t("بعداً", "Later")}
-            </Button>
-          </div>
-        </div>
-      </Modal>
+      {/* پاپ‌آپ نظرسنجی — همان فرمی که دکمه‌ی تنظیمات هم باز می‌کند. */}
+      <FeedbackModal open={feedbackOpen} onDone={closeFeedback} />
     </div>
   );
 }

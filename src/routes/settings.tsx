@@ -15,6 +15,7 @@ import {
   KeyRound,
   Lock,
   LogOut,
+  MessageSquare,
   Moon,
   Palette,
   Plus,
@@ -26,6 +27,7 @@ import {
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
+import { FeedbackModal } from "@/components/FeedbackModal";
 import { LegalContent } from "@/components/LegalContent";
 import {
   Button,
@@ -86,6 +88,7 @@ function SettingsPage() {
   const navigate = useNavigate();
   const [catFormOpen, setCatFormOpen] = useState(false);
   const [journalTimeOpen, setJournalTimeOpen] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const [colorWheelOpen, setColorWheelOpen] = useState(false);
   const [catExpanded, setCatExpanded] = useState(false);
   const [legalExpanded, setLegalExpanded] = useState(false);
@@ -413,7 +416,33 @@ function SettingsPage() {
             {s.journalReminder || t("تنظیم نشده", "Not set")}
           </button>
         </div>
+
+        {/* نظر دادن، هر وقت خودِ کاربر خواست. پاپ‌آپ خودکار حالا حداکثر روزی
+            یک‌بار می‌آید (`FEEDBACK_INTERVAL` در AppShell)، پس بدون این دکمه کسی
+            که همان لحظه حرفی دارد باید منتظر بماند تا برنامه از او بپرسد. */}
+        <div className="mt-4 border-t border-border pt-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-foreground">
+                {t("نظرت درباره روتینو", "Your feedback on Routino")}
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                {t("هر وقت حرفی داشتی، همین‌جا بگو.", "Tell us any time you have something to say.")}
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              className="shrink-0 px-3 py-2 text-xs"
+              onClick={() => setFeedbackOpen(true)}
+            >
+              <MessageSquare className="h-3.5 w-3.5" aria-hidden="true" />
+              {t("نظر بده", "Send")}
+            </Button>
+          </div>
+        </div>
       </Card>
+
+      <FeedbackModal open={feedbackOpen} onDone={() => setFeedbackOpen(false)} />
 
       {/* journal reminder time modal */}
       <Modal

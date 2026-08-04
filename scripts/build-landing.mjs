@@ -100,6 +100,20 @@ function copyFonts() {
   return bytes;
 }
 
+/**
+ * لوگو را کنار صفحه‌های عمومی می‌گذارد.
+ *
+ * همان `public/favicon.svg` خودِ برنامه است، یعنی یک منبع برای هر دو: اگر روزی
+ * لوگو عوض شد، سایت و اپ با هم عوض می‌شوند. صفحه‌ها به `/favicon.svg` اشاره
+ * می‌کنند نه `/app/favicon.svg`، تا صفحه‌ی معرفی به خروجیِ بیلدِ اپ وابسته نباشد.
+ */
+function copyLogo() {
+  const src = join(ROOT, "public", "favicon.svg");
+  if (!existsSync(src)) throw new Error("public/favicon.svg نیست — لوگوی سایت از همان می‌آید");
+  copyFileSync(src, join(OUT_DIR, "favicon.svg"));
+  return statSync(src).size;
+}
+
 /** عکس‌های واقعیِ اپ که `scripts/shoot-landing.mjs` گرفته. اگر پوشه نبود، بیلد
  * می‌ایستد — صفحه‌ی معرفی بدون تصویرِ محصول یعنی یک صفحه‌ی نصفه، و بهتر است
  * همین‌جا بفهمیم تا اینکه سایت بی‌عکس منتشر شود.
@@ -189,6 +203,7 @@ function main() {
   writeFileSync(join(OUT_DIR, "legal", "index.html"), legalHtml);
 
   const fontBytes = copyFonts();
+  const logoBytes = copyLogo();
   const shots = copyShots([homeHtml, legalHtml]);
 
   // ── پیکربندی Cloudflare Pages ───────────────────────────
@@ -240,7 +255,7 @@ function main() {
   const kb = (n) => (n / 1024).toFixed(1) + "KB";
   console.log(
     `[build-landing] dist/index.html + dist/legal/index.html  ` +
-      `(${TERMS.length} بند قوانین، ${PRIVACY.length} بند حریم خصوصی، فونت ${kb(fontBytes)}، ` +
+      `(${TERMS.length} بند قوانین، ${PRIVACY.length} بند حریم خصوصی، فونت ${kb(fontBytes)}، لوگو ${kb(logoBytes)}، ` +
       `${shots.count} عکس ${kb(shots.bytes)}` +
       (shots.skipped ? `، ${shots.skipped} عکسِ بی‌استفاده کپی نشد` : "") +
       `)`,

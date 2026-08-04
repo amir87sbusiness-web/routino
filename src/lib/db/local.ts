@@ -48,7 +48,7 @@ export function defaultLocal(): LocalState {
     notifications: [],
     meta: {
       sessions: 0,
-      lastFeedbackSession: 0,
+      lastFeedbackAt: 0,
       lastSeen: Date.now(),
       tampered: false,
       celebrated: [],

@@ -119,7 +119,9 @@ const signedInFor = (theme) => `(() => {
     auth:{phone:"989121234567",verifiedAt:now},
     subscription:{planId:"m12",startedAt:now,expiresAt:now+300*86400000,trial:false},
     notifications:[],
-    meta:{sessions:12,lastFeedbackSession:12,lastSeen:now,tampered:false,
+    // lastFeedbackAt = همین حالا، وگرنه پاپ‌آپ نظرسنجی ۴ ثانیه بعد از بالا آمدن
+    // باز می‌شود و وسطِ عکس می‌نشیند.
+    meta:{sessions:12,lastFeedbackAt:now,lastSeen:now,tampered:false,
           celebrated:[],firedReminders:[],dataOwner:"989121234567"},
     theme:"__THEME__",notificationsEnabled:true }));
   localStorage.setItem("routino:auth:v1", JSON.stringify({

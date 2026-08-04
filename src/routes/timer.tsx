@@ -23,6 +23,8 @@ const POMODORO_PRESETS = [
   { focus: 15, brk: 3 },
 ];
 const FREE_PRESETS = [5, 10, 15, 20, 25, 30, 45, 60];
+/** چند دور از همان تنظیمِ انتخاب‌شده پشت سر هم اجرا شود. */
+const CYCLE_CHOICES = [1, 2, 3, 4, 6, 8, 10];
 
 type Linked = { kind: "habit" | "task"; id: string; label: string } | null;
 
@@ -35,6 +37,15 @@ function TimerPage() {
   const [pomoFocusMin, setPomoFocusMin] = useState(25);
   const [pomoBreakMin, setPomoBreakMin] = useState(5);
   const [onBreak, setOnBreak] = useState(false);
+  /**
+   * چند دورِ «تمرکز + استراحت» پشت سر هم. مثلاً ۴ دورِ ۲۵/۵.
+   *
+   * بعد از آخرین تمرکز استراحتی نمی‌آید — استراحتِ بعد از دورِ آخر یعنی نشستن
+   * جلوی تایمری که هیچ کاری با آن نداری.
+   */
+  const [pomoCycles, setPomoCycles] = useState(4);
+  /** دورِ فعلی، از ۱ شروع می‌شود. */
+  const [pomoRound, setPomoRound] = useState(1);
 
   // Free timer state
   const [freeMinutes, setFreeMinutes] = useState(25);
@@ -63,6 +74,12 @@ function TimerPage() {
   onBreakRef.current = onBreak;
   const remainingRef = useRef(remaining);
   remainingRef.current = remaining;
+  // تیکِ تایمر داخل یک setInterval بسته‌شده اجرا می‌شود و state تازه را نمی‌بیند،
+  // پس دور و تعداد دورها هم مثل بقیه باید ref داشته باشند.
+  const pomoCyclesRef = useRef(pomoCycles);
+  pomoCyclesRef.current = pomoCycles;
+  const pomoRoundRef = useRef(pomoRound);
+  pomoRoundRef.current = pomoRound;
 
   const notify = (body: string) => {
     if (typeof Notification !== "undefined" && Notification.permission === "granted") {
@@ -186,20 +203,37 @@ function TimerPage() {
 
       if (modeRef.current === "pomodoro") {
         if (!onBreakRef.current) {
-          // focus interval just finished -> commit accumulated focus, then start break
+          // focus interval just finished -> commit accumulated focus
           focusAccumRef.current += 1;
           const focusSeconds = focusAccumRef.current;
           commitFocusToLinked(focusSeconds);
           logSession(focusSeconds, "pomodoro");
           focusAccumRef.current = 0;
           sessionStartRef.current = null;
+
+          // دورِ آخر بود؟ کلِ ست تمام است: نه استراحتی، نه دورِ بعدی.
+          if (pomoRoundRef.current >= pomoCyclesRef.current) {
+            notify("🎉 همه‌ی دورها تموم شد! آفرین.");
+            setRunning(false);
+            setFinished(true);
+            setPomoRound(1);
+            pomoRoundRef.current = 1;
+            setOnBreak(false);
+            onBreakRef.current = false;
+            setRemainingTo(pomoFocusMin * 60);
+            return;
+          }
+
           notify("⏰ زمان تمرکز تموم شد! وقت استراحته.");
           setOnBreak(true);
           onBreakRef.current = true;
           setRemainingTo(pomoBreakMin * 60);
           return;
         }
-        // break just finished -> back to focus, don't count as focus time
+        // break just finished -> next round of focus, don't count as focus time
+        const next = pomoRoundRef.current + 1;
+        setPomoRound(next);
+        pomoRoundRef.current = next;
         notify("☕️ استراحت تموم شد! برگرد سر تمرکز.");
         setOnBreak(false);
         onBreakRef.current = false;
@@ -278,6 +312,8 @@ function TimerPage() {
     setMode(m);
     setFinished(false);
     setOnBreak(false);
+    setPomoRound(1);
+    pomoRoundRef.current = 1;
     if (m !== "free" && linked) setLinked(null); // duration-sync only applies to the Free timer
     if (m === "pomodoro") setRemaining(pomoFocusMin * 60);
     else if (m === "free") setRemaining(freeMinutes * 60);
@@ -288,6 +324,8 @@ function TimerPage() {
     finalizeSession(false); // discard current progress on manual reset
     setFinished(false);
     setOnBreak(false);
+    setPomoRound(1);
+    pomoRoundRef.current = 1;
     if (mode === "pomodoro") setRemaining(pomoFocusMin * 60);
     else if (mode === "free") setRemaining(freeMinutes * 60);
     else setStopwatchElapsed(0);
@@ -296,6 +334,8 @@ function TimerPage() {
   const stopAndSave = () => {
     finalizeSession(true);
     setFinished(true);
+    setPomoRound(1);
+    pomoRoundRef.current = 1;
     if (mode === "pomodoro") setRemaining(pomoFocusMin * 60);
     else if (mode === "free") setRemaining(freeMinutes * 60);
     setOnBreak(false);
@@ -313,8 +353,25 @@ function TimerPage() {
     setFinished(false);
   };
 
+  /**
+   * تعداد دورها را عوض می‌کند بدون اینکه تایمرِ در حال اجرا را قطع کند.
+   *
+   * فقط اگر کاربر تعداد را به عددی کمتر از دورِ فعلی ببرد دور را عقب می‌کشیم،
+   * وگرنه «دور ۵ از ۳» نشان داده می‌شود و ست هیچ‌وقت تمام نمی‌شود.
+   */
+  const setCycles = (n: number) => {
+    setPomoCycles(n);
+    pomoCyclesRef.current = n;
+    if (pomoRound > n) {
+      setPomoRound(n);
+      pomoRoundRef.current = n;
+    }
+  };
+
   const applyPomoPreset = (focus: number, brk: number) => {
     finalizeSession(false);
+    setPomoRound(1);
+    pomoRoundRef.current = 1;
     setPomoFocusMin(focus);
     setPomoBreakMin(brk);
     setOnBreak(false);
@@ -356,9 +413,21 @@ function TimerPage() {
       </div>
 
       <Card className="flex flex-col items-center gap-5 py-8">
-        {mode === "pomodoro" && onBreak && (
-          <div className="flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-bold text-muted-foreground">
-            <Coffee className="h-3.5 w-3.5" /> {t("زمان استراحت", "Break time")}
+        {mode === "pomodoro" && (
+          <div className="flex flex-wrap items-center justify-center gap-1.5">
+            {onBreak && (
+              <div className="flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-bold text-muted-foreground">
+                <Coffee className="h-3.5 w-3.5" aria-hidden="true" /> {t("زمان استراحت", "Break time")}
+              </div>
+            )}
+            {pomoCycles > 1 && (
+              <div className="rounded-full bg-primary-soft px-3 py-1 text-xs font-bold text-primary">
+                {t(
+                  `دور ${faNum(pomoRound, lang)} از ${faNum(pomoCycles, lang)}`,
+                  `Round ${pomoRound} of ${pomoCycles}`,
+                )}
+              </div>
+            )}
           </div>
         )}
         <div className="relative flex h-52 w-52 items-center justify-center">
@@ -434,8 +503,29 @@ function TimerPage() {
                 </Chip>
               ))}
             </div>
-            <p className="text-[10px] text-muted-foreground">
-              {t("فقط زمان تمرکز حساب می‌شود، استراحت حساب نمی‌شود.", "Only focus time counts; breaks are excluded.")}
+
+            {/* چند دور پشت سر هم. تغییر تعداد وسطِ کار تایمر را از نو شروع
+                نمی‌کند؛ فقط می‌گوید این ست کِی تمام شود. */}
+            <div className="flex flex-col items-center gap-1.5">
+              <p className="text-[10px] font-medium text-muted-foreground">
+                {t("چند دور پشت سر هم؟", "How many rounds?")}
+              </p>
+              <div className="flex flex-wrap justify-center gap-1.5">
+                {CYCLE_CHOICES.map((c) => (
+                  <Chip key={c} active={pomoCycles === c} onClick={() => setCycles(c)}>
+                    {faNum(c, lang)}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+
+            <p className="text-center text-[10px] text-muted-foreground">
+              {pomoCycles > 1
+                ? t(
+                    `${faNum(pomoCycles, lang)} دور ${faNum(pomoFocusMin, lang)} دقیقه‌ای، جمعاً ${faNum(pomoCycles * pomoFocusMin, lang)} دقیقه تمرکز. فقط زمان تمرکز حساب می‌شود.`,
+                    `${pomoCycles} rounds of ${pomoFocusMin} min, ${pomoCycles * pomoFocusMin} min of focus in total. Only focus time counts.`,
+                  )
+                : t("فقط زمان تمرکز حساب می‌شود، استراحت حساب نمی‌شود.", "Only focus time counts; breaks are excluded.")}
             </p>
           </div>
         )}

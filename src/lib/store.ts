@@ -164,7 +164,15 @@ export interface Db {
   notifications: AppNotification[];
   meta: {
     sessions: number;
-    lastFeedbackSession: number;
+    /**
+     * When the feedback popup was last dismissed or answered (epoch ms).
+     *
+     * The popup used to fire every 5 `sessions`, but a session is one app BOOT,
+     * and on the web every reload is a boot — so a normal day of use produced it
+     * repeatedly. Time is the honest unit for "don't nag me". `0` means never
+     * asked, so an existing install sees it once and then falls into the rhythm.
+     */
+    lastFeedbackAt: number;
     lastSeen: number; // anti clock-tampering
     tampered: boolean;
     celebrated: string[]; // `${habitId}|${monthKey}|${milestone}`
@@ -206,7 +214,7 @@ export function defaultDb(categories: Category[]): Db {
     notifications: [],
     meta: {
       sessions: 0,
-      lastFeedbackSession: 0,
+      lastFeedbackAt: 0,
       lastSeen: Date.now(),
       tampered: false,
       celebrated: [],

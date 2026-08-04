@@ -144,7 +144,7 @@ routino1.0/
 | [habits.tsx](../src/routes/habits.tsx) | **عادت‌ها**: دکمه عادت آماده/دلخواه، فیلترها، کارت هر عادت (پیشرفت ماه + استریک)، نشان‌ها، ساخت دسته جدید، حذف عادت | متن‌ها، رفتار فیلترها |
 | [habit.$habitId.tsx](../src/routes/habit.$habitId.tsx) | **جزئیات یک عادت**: استریک، درصد موفقیت، هدف ماهانه، نمودار روند، یادداشت‌های اخیر | کارت‌های آمار |
 | [tasks.tsx](../src/routes/tasks.tsx) | **کارها**: انتخاب روز (امروز/فردا/دلخواه)، افزودن سریع، فرم پیشرفته (آیکون/رنگ/یادآور) | رنگ و آیکون پیش‌فرض کار جدید (`TASK_DEFAULT_COLOR`) |
-| [timer.tsx](../src/routes/timer.tsx) | **تایمر**: پومودورو (پیش‌فرض ۲۵/۵)، تایمر آزاد، کرونومتر، اتصال به عادت زمانی، تاریخچه جلسات | زمان‌های پیش‌فرض (`POMODORO_PRESETS`، `FREE_PRESETS`)، سقف تاریخچه (۲۰۰) |
+| [timer.tsx](../src/routes/timer.tsx) | **تایمر**: پومودورو (پیش‌فرض ۲۵/۵ و ۴ دور)، تایمر آزاد، کرونومتر، اتصال به عادت زمانی، تاریخچه جلسات | زمان‌های پیش‌فرض (`POMODORO_PRESETS`، `FREE_PRESETS`)، تعداد دورهای قابل انتخاب (`CYCLE_CHOICES`)، سقف تاریخچه (۲۰۰) |
 | [journal.tsx](../src/routes/journal.tsx) | **ژورنال**: ایموجی حس، نمره ۱-۱۰، متن، تاریخچه ۱۴ روز | تعداد روزهای تاریخچه، متن placeholder |
 | [analytics.tsx](../src/routes/analytics.tsx) | **آنالیز**: این‌هفته/هفته‌قبل، نمودار کلی، شبکه تقویمی هر عادت، لیست کارهای انجام‌شده/نشده | بازه‌های نمودار (`RANGES`) |
 | [settings.tsx](../src/routes/settings.tsx) | **تنظیمات**: حساب، زبان، تقویم، تم، رنگ برند (۸ رنگ + چرخ رنگ)، مدیریت دسته‌ها، نوتیف، ساعت ژورنال، خروج | لیست رنگ‌های برند (`BRAND_COLORS`)، چیدمان تنظیمات |
@@ -157,7 +157,8 @@ routino1.0/
 
 | فایل | نقش | چی رو اینجا عوض کنی |
 |---|---|---|
-| [AppShell.tsx](../src/components/AppShell.tsx) | **قاب اصلی اپ**: گِیت (بخش ۳)، منوی پایین موبایل / سایدبار دسکتاپ، زنگوله اعلان‌ها، پاپ‌آپ نظرسنجی (هر ۵ جلسه) | آیتم‌های منو (`NAV`)، فاصله نظرسنجی، اسپلش |
+| [AppShell.tsx](../src/components/AppShell.tsx) | **قاب اصلی اپ**: گِیت (بخش ۳)، منوی پایین موبایل / سایدبار دسکتاپ، زنگوله اعلان‌ها، پاپ‌آپ نظرسنجی (حداکثر روزی یک‌بار) | آیتم‌های منو (`NAV`)، فاصله نظرسنجی (`FEEDBACK_INTERVAL`)، اسپلش |
+| [FeedbackModal.tsx](../src/components/FeedbackModal.tsx) | فرم «نظرت درباره روتینو؟» — هم پاپ‌آپ خودکار، هم دکمه‌ی تنظیمات | متن‌ها و لیست بخش‌های قابل انتخاب |
 | [habits.tsx](../src/components/habits.tsx) | ردیف عادت (سوایپ برای انجام ✓)، فرم ساخت/ویرایش عادت، پاپ‌آپ جشن 🎉 (۷۰٪ و ۱۰۰٪ هدف ماهانه)، شبکه تقویمی ماه | آستانه سوایپ، درصدهای جشن (`[70, 100]`)، پیش‌فرض فرم عادت (`emptyDraft`: هدف ماهانه ۳۰ روز) |
 | [tasks.tsx](../src/components/tasks.tsx) | ردیف کار (سوایپ)، کارت «کارهای امروز»، افزودن سریع | ظاهر ردیف کار |
 | [WeekStrip.tsx](../src/components/WeekStrip.tsx) | نوار ۷ روز هفته بالای صفحه‌ها (با حلقه درصد دور هر روز) | ظاهر نوار هفته |
@@ -229,6 +230,7 @@ routino1.0/
 | 📋 دسته‌بندی یا عادت آماده جدید اضافه کنی | [presets.ts](../src/lib/presets.ts) — `DEFAULT_CATEGORIES` و `PRESET_HABITS` (آیکون‌هاش باید در `CATEGORY_ICONS` فایل [ui.tsx](../src/components/ui.tsx) باشه) |
 | ✍️ هر متن فارسی/انگلیسی اپ رو عوض کنی | متن‌ها همه‌جا به شکل `t("فارسی", "English")` نوشته شدن — همون صفحه مربوطه رو باز کن و متن رو پیدا کن |
 | ⏰ زمان‌های پیش‌فرض پومودورو | [timer.tsx](../src/routes/timer.tsx) — `POMODORO_PRESETS` و `FREE_PRESETS` |
+| 🔁 تعداد دورهای پومودورو | [timer.tsx](../src/routes/timer.tsx) — `CYCLE_CHOICES` (پیش‌فرض ۴ دور در `pomoCycles`) |
 | 🔔 متن نوتیف‌ها | داخل اپ/وب: [state/app.tsx](../src/state/app.tsx) (بخش reminder scheduler) · موبایل (اپ بسته): [native-notifications.ts](../src/lib/native-notifications.ts) |
 | 📊 درصدهای جشن (۷۰٪/۱۰۰٪) | [components/habits.tsx](../src/components/habits.tsx) تابع `applyLog` — آرایه `[70, 100]` |
 | 🗓️ هدف ماهانه پیش‌فرض عادت جدید (۳۰ روز) | [components/habits.tsx](../src/components/habits.tsx) تابع `emptyDraft` — `monthlyGoal: "30"` |
@@ -241,7 +243,7 @@ routino1.0/
 | 🚫 سقف ارسال پیامک | [backend/src/services/otp.ts](../backend/src/services/otp.ts) — ثابت `LIMITS` |
 | 🧭 آیتم‌های منوی پایین/کنار | [AppShell.tsx](../src/components/AppShell.tsx) — آرایه `NAV` |
 | 😀 ایموجی‌های حس‌وحال | [presets.ts](../src/lib/presets.ts) — `MOOD_EMOJIS` |
-| ⭐ فاصله پاپ‌آپ نظرسنجی (هر ۵ جلسه) | [AppShell.tsx](../src/components/AppShell.tsx) — شرط `sessions - lastFeedbackSession >= 5` |
+| ⭐ فاصله پاپ‌آپ نظرسنجی (روزی یک‌بار) | [AppShell.tsx](../src/components/AppShell.tsx) — ثابت `FEEDBACK_INTERVAL` |
 | 🌐 متن یا ظاهر صفحه‌ی اول سایت | [landing/index.template.html](../landing/index.template.html)، بعدش `npm run build:landing` |
 | 🖼️ عکس‌های صفحه‌ی اول (بعد از تغییر UI) | `npm run dev` روی :5180 بعد `npm run shots` — عکس‌های استفاده‌نشده خودکار منتشر نمی‌شوند |
 
