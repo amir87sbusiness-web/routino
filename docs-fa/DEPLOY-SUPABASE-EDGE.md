@@ -212,9 +212,15 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
    ```bash
    curl -s https://api.routino.me/health                      # {"ok":true}
    curl -sI https://api.routino.me/admin | grep -i content-security-policy   # باید باشد
-   for i in 1 2; do curl -sI --compressed https://api.routino.me/v1/plans | grep -i sb-request-id; done
-   # ↑ دو خط باید شناسه‌ی یکسان بدهند = کش لبه کار می‌کند
+   for i in 1 2 3; do curl -sI --compressed https://api.routino.me/v1/plans | grep -i sb-request-id; done
+   # ↑ خطِ دوم و سوم باید شناسه‌ی یکسان بدهند = کش لبه کار می‌کند
    ```
+
+   ⚠️ **خط اول را نشمار.** کش ۵ دقیقه عمر دارد و نوشتنش غیرهمزمان است
+   (`waitUntil`)، پس اولین درخواستِ بعد از انقضا همیشه MISS است و تازه دارد کش را
+   پر می‌کند. با فقط دو درخواست، تست به‌طور تصادفی «خراب» گزارش می‌دهد در حالی که
+   سالم است. ضمناً کش هر دیتاسنترِ Cloudflare جداست، پس شناسه‌ها بین شبکه‌های
+   مختلف لزوماً یکی نیستند.
 
 6. **تست دود**: `https://api.routino.me/health` و `/health/ready` باید
    `{ok:true}` بدهند؛ `https://routino.me` → ورود با شماره → کد را از
