@@ -35,6 +35,12 @@ function stubCache() {
     async put(req: Request, res: Response) {
       if (req.method !== "GET") throw new TypeError("Cannot cache non-GET");
       if (res.headers.get("vary") === "*") throw new TypeError("Cannot cache Vary: *");
+      // Cloudflare's real constraint, and the one that actually bit: a response
+      // carrying Set-Cookie is refused outright. Supabase's own edge attaches
+      // `__cf_bm` (bot management) to every answer, so WITHOUT stripping it the
+      // cache silently never populates — the deploy looked fine and /v1/plans
+      // stayed at ~1.4s.
+      if (res.headers.has("set-cookie")) throw new TypeError("Cannot cache Set-Cookie");
       store.set(req.url, res);
     },
   };
@@ -56,6 +62,9 @@ const plansResponse = (origin = "https://routino.me") =>
       "content-type": "application/json",
       "access-control-allow-origin": origin,
       vary: "Accept-Encoding, Origin",
+      // Verbatim from production: Supabase's edge sets a bot-management cookie
+      // on every response, scoped to supabase.co.
+      "set-cookie": "__cf_bm=abc123; HttpOnly; SameSite=None; Secure; Domain=supabase.co",
     },
   });
 
@@ -182,6 +191,17 @@ describe("edge cache for /v1/plans", () => {
     // A stale `content-encoding` on a body the runtime already decoded would
     // make the browser fail to parse it.
     expect(res.headers.get("content-encoding")).toBeNull();
+  });
+
+  it("strips the upstream Set-Cookie, which the cache refuses to store", async () => {
+    origin.mockResolvedValue(plansResponse());
+
+    const res = await get("/v1/plans");
+    // Scoped to supabase.co, so a browser talking to api.routino.me drops it
+    // anyway — but Cloudflare still refuses to cache a response that has it.
+    expect(res.headers.get("set-cookie")).toBeNull();
+    await settle();
+    expect(cache.store.size).toBe(1);
   });
 
   it("never caches a failure", async () => {

@@ -177,39 +177,45 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
 
 4. **دیپلوی تابع**: دستور بالا (`--no-verify-jwt` حیاتی است؛ `config.toml` هم
    `verify_jwt=false` دارد).
-5. **Worker**: 🔴 **دیپلوی گیت‌محورش هنوز وصل نیست — تأییدشده در ۱۴ مرداد ۱۴۰۵.**
-   نسخه‌ی قبلی همین بند می‌گفت «Worker به اسم `routino` از گیت دیپلوی می‌شود و
-   `wrangler.toml` در ریشه‌ی ریپوست». **هر سه جزء غلط بود:**
-   - `wrangler.toml` در `cloudflare/` است، نه ریشه (کامنت داخل خود فایل توضیح
-     می‌دهد چرا: ریشه build-root پروژه‌ی **Pages** است و کانفیگ آن‌جا به‌عنوان
-     کانفیگ Pages خوانده می‌شود و بیلد فرانت را می‌شکند).
-   - `name` در آن فایل هنوز **`REPLACE-WITH-THE-REAL-WORKER-NAME`** است — یعنی
-     یک placeholder پرنشده. تا وقتی این عوض نشود **هیچ push ای Worker را
-     به‌روز نمی‌کند.**
-   - Worker ای به اسم `routino` **وجود ندارد**؛ `routino` اسم پروژه‌ی Pages است
-     (`wrangler pages project list` نشانش می‌دهد: `routino.me`, `www.routino.me`
-     — و `api.routino.me` در آن نیست). با `wrangler deployments list --name …`
-     این نام‌ها هم امتحان و رد شدند: `routino-api`, `api-routino`, `api`,
-     `routino-worker`, `api-worker`, `routino-backend`, `routino-proxy` و چند تای
-     دیگر — همه `10007 does not exist`.
+5. **Worker**: ⚠️ **push کردن Worker را دیپلوی نمی‌کند. دستور دستی لازم است:**
 
-   **پس Worker زنده دستی در داشبورد ساخته شده و از گیت نمی‌آید.** (که کار
-   می‌کند: `curl -I https://api.routino.me/admin` جواب
-   `content-type: text/html` می‌دهد، و این تبدیل فقط کار همین Worker است.)
+   ```bash
+   npx wrangler deploy --config cloudflare/wrangler.toml
+   ```
 
-   **برای وصل‌کردنش یک‌بار (کار مالک، ۱۰ ثانیه):** داشبورد Cloudflare →
-   Workers & Pages → آن Worker ای که دامنه‌ی `api.routino.me` را دارد → اسمش را
-   بردار و در `cloudflare/wrangler.toml` جای placeholder بگذار. بعد از آن یا
-   push کافی است (اگر Workers Builds با Root directory = `cloudflare` وصل شده
-   باشد) یا مستقیم: `npx wrangler deploy --config cloudflare/wrangler.toml`.
-   - ⚠️ اگر `name` غلط باشد، یک Worker **دومِ خالی** ساخته می‌شود،
-     `api.routino.me` روی قدیمی می‌ماند، و بیلد «موفق» گزارش می‌دهد در حالی که
-     هیچ‌چیز عوض نشده. دقیقاً به همین دلیل placeholder گذاشته شد نه یک حدس.
+   **اسم Worker: `plain-field-ead8`** — اسم تصادفیِ ساختِ Cloudflare، چون Worker
+   یک بار دستی در داشبورد ساخته شده. در `cloudflare/wrangler.toml` نوشته شده و
+   **نباید به چیز خواناتری تغییرش داد**: عوض‌کردن اسم آن‌جا Worker را رنیم
+   نمی‌کند، یک Worker **دومِ خالی** می‌سازد، `api.routino.me` روی کد قدیمی
+   می‌ماند، و دیپلوی «موفق» گزارش می‌دهد.
+
+   > 🔴 **این دقیقاً همان چیزی است که ۱۶ روز اتفاق افتاد.** نسخه‌ی قبلی همین بند
+   > ادعا می‌کرد «Worker به اسم `routino` با هر push از گیت دیپلوی می‌شود» —
+   > هر سه جزئش غلط بود (`routino` اسم پروژه‌ی **Pages** است؛ `wrangler.toml`
+   > در `cloudflare/` است نه ریشه؛ و `name` داخلش یک placeholder پرنشده بود).
+   > نتیجه: آخرین دیپلوی واقعی Worker **۲۰ جولای** بود و دو کامیت
+   > (`a73e313` و `f700b02` — که CSP پنل ادمین را برمی‌گرداند) هرگز به
+   > پروداکشن نرسیدند، در حالی که همه فکر می‌کردند رسیده‌اند.
+   > **درس:** بعد از هر تغییر `cloudflare/api-worker.js`، دیپلوی را با یک
+   > چک واقعی تأیید کن، نه با «push شد پس رفت».
+
+   - **اگر می‌خواهی خودکار شود:** داشبورد → آن Worker → Settings → Build →
+     اتصال به ریپو با **Root directory = `cloudflare`**. (الان وصل نیست —
+     شمارنده‌ی «Workers build mins» صفر است.)
    - `PROXY_SECRET` در داشبورد می‌ماند (Settings → Variables → Secrets)، نه در
      فایل؛ و باید با `PROXY_SECRET` تابع Supabase یکی باشد وگرنه همه‌چیز ۴۰۳.
-   - تا وقتی دیپلوی گیت‌محور وصل نشده، **ویرایش داشبورد تنها راه به‌روزرسانی
-     Worker است** — ولی هر تغییری آن‌جا باید عیناً در `cloudflare/api-worker.js`
-     هم بیاید، وگرنه ریپو و پروداکشن از هم جدا می‌شوند.
+     `wrangler deploy` سکرت‌های موجود را پاک نمی‌کند.
+   - `cloudflare/wrangler.toml` عمداً route/custom-domain ندارد، تا دیپلوی با
+     اتصالِ موجودِ `api.routino.me` سر شاخ نشود.
+
+   **تست دودِ Worker بعد از هر دیپلوی** (هر سه باید درست باشند):
+   ```bash
+   curl -s https://api.routino.me/health                      # {"ok":true}
+   curl -sI https://api.routino.me/admin | grep -i content-security-policy   # باید باشد
+   for i in 1 2; do curl -sI --compressed https://api.routino.me/v1/plans | grep -i sb-request-id; done
+   # ↑ دو خط باید شناسه‌ی یکسان بدهند = کش لبه کار می‌کند
+   ```
+
 6. **تست دود**: `https://api.routino.me/health` و `/health/ready` باید
    `{ok:true}` بدهند؛ `https://routino.me` → ورود با شماره → کد را از
    Dashboard → Edge Functions → api → Logs بردار.

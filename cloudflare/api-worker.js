@@ -128,6 +128,13 @@ export default {
       const h = new Headers(resp.headers);
       h.delete("content-encoding");
       h.delete("content-length");
+      // Cloudflare refuses to cache a response carrying Set-Cookie, and
+      // Supabase's own edge stamps `__cf_bm` (bot management) on every answer —
+      // so without this the write is rejected and the cache silently never
+      // populates. Dropping it costs nothing: the cookie is scoped to
+      // `Domain=supabase.co`, which the browser (talking to api.routino.me)
+      // discards on arrival regardless.
+      h.delete("set-cookie");
       h.set("cache-control", `public, max-age=${CACHE_SECONDS}`);
       const cached = new Response(body, { status: 200, headers: h });
       // put() consumes the body, so the caller gets a clone. waitUntil keeps the
