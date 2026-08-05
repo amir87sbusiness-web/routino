@@ -177,20 +177,39 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
 
 4. **دیپلوی تابع**: دستور بالا (`--no-verify-jwt` حیاتی است؛ `config.toml` هم
    `verify_jwt=false` دارد).
-5. **Worker**: **دستی paste نمی‌شود — از گیت دیپلوی می‌شود.** Worker به اسم
-   `routino` به همین ریپو وصل است و با هر push روی `main` خودش دوباره دیپلوی
-   می‌کند، طبق `wrangler.toml` **در ریشه‌ی ریپو** (که به
-   `cloudflare/api-worker.js` اشاره می‌کند).
-   - ⚠️ فایل عمداً در ریشه است، نه داخل `cloudflare/`: بیلد دنبال کانفیگ در
-     «root directory» می‌گردد که پیش‌فرضش ریشه‌ی ریپوست. اولین تلاش برای دیپلوی
-     گیت‌محور دقیقاً به همین دلیل هیچ کاری نکرد.
-   - ⚠️ `name` در `wrangler.toml` باید دقیقاً برابر اسم Worker موجود باشد.
-     اگر نباشد، یک Worker **دومِ خالی** ساخته می‌شود، `api.routino.me` روی
-     قدیمی می‌ماند، و بیلد «موفق» گزارش می‌دهد در حالی که هیچ‌چیز عوض نشده.
+5. **Worker**: 🔴 **دیپلوی گیت‌محورش هنوز وصل نیست — تأییدشده در ۱۴ مرداد ۱۴۰۵.**
+   نسخه‌ی قبلی همین بند می‌گفت «Worker به اسم `routino` از گیت دیپلوی می‌شود و
+   `wrangler.toml` در ریشه‌ی ریپوست». **هر سه جزء غلط بود:**
+   - `wrangler.toml` در `cloudflare/` است، نه ریشه (کامنت داخل خود فایل توضیح
+     می‌دهد چرا: ریشه build-root پروژه‌ی **Pages** است و کانفیگ آن‌جا به‌عنوان
+     کانفیگ Pages خوانده می‌شود و بیلد فرانت را می‌شکند).
+   - `name` در آن فایل هنوز **`REPLACE-WITH-THE-REAL-WORKER-NAME`** است — یعنی
+     یک placeholder پرنشده. تا وقتی این عوض نشود **هیچ push ای Worker را
+     به‌روز نمی‌کند.**
+   - Worker ای به اسم `routino` **وجود ندارد**؛ `routino` اسم پروژه‌ی Pages است
+     (`wrangler pages project list` نشانش می‌دهد: `routino.me`, `www.routino.me`
+     — و `api.routino.me` در آن نیست). با `wrangler deployments list --name …`
+     این نام‌ها هم امتحان و رد شدند: `routino-api`, `api-routino`, `api`,
+     `routino-worker`, `api-worker`, `routino-backend`, `routino-proxy` و چند تای
+     دیگر — همه `10007 does not exist`.
+
+   **پس Worker زنده دستی در داشبورد ساخته شده و از گیت نمی‌آید.** (که کار
+   می‌کند: `curl -I https://api.routino.me/admin` جواب
+   `content-type: text/html` می‌دهد، و این تبدیل فقط کار همین Worker است.)
+
+   **برای وصل‌کردنش یک‌بار (کار مالک، ۱۰ ثانیه):** داشبورد Cloudflare →
+   Workers & Pages → آن Worker ای که دامنه‌ی `api.routino.me` را دارد → اسمش را
+   بردار و در `cloudflare/wrangler.toml` جای placeholder بگذار. بعد از آن یا
+   push کافی است (اگر Workers Builds با Root directory = `cloudflare` وصل شده
+   باشد) یا مستقیم: `npx wrangler deploy --config cloudflare/wrangler.toml`.
+   - ⚠️ اگر `name` غلط باشد، یک Worker **دومِ خالی** ساخته می‌شود،
+     `api.routino.me` روی قدیمی می‌ماند، و بیلد «موفق» گزارش می‌دهد در حالی که
+     هیچ‌چیز عوض نشده. دقیقاً به همین دلیل placeholder گذاشته شد نه یک حدس.
    - `PROXY_SECRET` در داشبورد می‌ماند (Settings → Variables → Secrets)، نه در
      فایل؛ و باید با `PROXY_SECRET` تابع Supabase یکی باشد وگرنه همه‌چیز ۴۰۳.
-   - چون از گیت می‌آید، **Worker را در داشبورد ویرایش نکن** — push بعدی
-     ویرایشت را بی‌صدا پاک می‌کند.
+   - تا وقتی دیپلوی گیت‌محور وصل نشده، **ویرایش داشبورد تنها راه به‌روزرسانی
+     Worker است** — ولی هر تغییری آن‌جا باید عیناً در `cloudflare/api-worker.js`
+     هم بیاید، وگرنه ریپو و پروداکشن از هم جدا می‌شوند.
 6. **تست دود**: `https://api.routino.me/health` و `/health/ready` باید
    `{ok:true}` بدهند؛ `https://routino.me` → ورود با شماره → کد را از
    Dashboard → Edge Functions → api → Logs بردار.
@@ -244,7 +263,9 @@ Cloudflare Pages است، پس یک بایت هم از Supabase خرج نمی‌
 - تایمر پاک‌سازی OTP دیگر در پروسه نیست؛ **pg_cron** انجامش می‌دهد
   (`select * from cron.job` برای دیدنش). سه جاب هست: پاک‌سازی ساعتیِ `otp_codes`،
   ساعتیِ `login_attempts`، و هفتگیِ سشن‌های باطل‌شده در `devices`.
-- **`/v1/plans` روی Cloudflare کش می‌شود** (۵ دقیقه، در `cloudflare/api-worker.js`).
+- **`/v1/plans` روی Cloudflare کش می‌شود** (۵ دقیقه، در `cloudflare/api-worker.js`)
+  — ⚠️ **در کد هست ولی هنوز روی پروداکشن زنده نیست**، چون دیپلوی Worker وصل
+  نیست (بند ۵ بخش «راه‌اندازی»).
   جوابش برای همه یکسان است و از ایران ~۱٫۰۵ ثانیه طول می‌کشید — حالا از لبه‌ی
   Cloudflare جواب می‌گیرد. **یعنی اگر قیمت پلنی را در پنل ادمین عوض کردی، تا
   ۵ دقیقه ممکن است قیمت قبلی را ببینی.** هیچ مسیر دیگری کش نمی‌شود.
