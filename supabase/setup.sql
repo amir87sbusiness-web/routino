@@ -199,6 +199,22 @@ select cron.schedule('routino-otp-purge', '0 * * * *',
 select cron.schedule('routino-login-attempts-purge', '30 * * * *',
   $$delete from login_attempts where created_at < now() - interval '24 hours'$$);
 
+-- Revoked sessions, weekly. `devices` is the largest per-user table on this
+-- schema (~550 bytes of the ~1.7 KB a user costs forever — see
+-- supabase/tests/quota.test.ts), and a revoked row is pure dead weight:
+-- rotateRefresh() only ever matches `revoked_at is null`, so the token behind
+-- it is already rejected and nothing can bring it back. 30 days of grace is
+-- kept purely so the row is still there to look at while investigating a
+-- "someone got into my account" report.
+--
+-- Deliberately NOT extended to old un-revoked rows. Their refresh tokens do
+-- expire (REFRESH_TTL_DAYS, measured from created_at), so they are technically
+-- just as dead — but that would tie a cron job to an env var, and raising
+-- REFRESH_TTL_DAYS later would then start signing people out early, silently.
+-- Not worth it: at ~1.7 KB/user the 500 MB free tier holds ~300k users.
+select cron.schedule('routino-devices-purge', '15 3 * * 0',
+  $$delete from devices where revoked_at is not null and revoked_at < now() - interval '30 days'$$);
+
 -- Lock every table out of Supabase's public PostgREST API (see comment in
 -- scripts/gen-setup-sql.mjs). No policies are added on purpose: nothing but
 -- the edge function's direct Postgres connection should ever touch these rows.
