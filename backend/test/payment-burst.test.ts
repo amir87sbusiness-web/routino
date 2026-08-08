@@ -134,6 +134,41 @@ describe("a burst of simultaneous sales", () => {
     expect(Number(rows[0]!.n)).toBeLessThanOrEqual(1);
   });
 
+  it("adds BOTH months when one user's two payments settle at the same instant", async () => {
+    const { access, user } = await signIn("09122100003");
+
+    // Someone double-taps, or buys on the phone and the laptop at once. Two
+    // separate payments, both genuinely paid.
+    const a = await checkout(access);
+    const b = await checkout(access);
+    h.psp._settle(a.body.trackId, "paid");
+    h.psp._settle(b.body.trackId, "paid");
+
+    const before = await h.query<{ expires_at: string }>(
+      `select expires_at::text from entitlements where user_id = '${user.id}'`,
+    );
+    const start = new Date(before[0]!.expires_at).getTime();
+
+    await Promise.all([
+      callback(a.body.paymentId, a.body.trackId),
+      callback(b.body.paymentId, b.body.trackId),
+    ]);
+
+    // Two grants, one per payment — neither swallowed the other.
+    expect(await grantCount(a.body.paymentId)).toBe(1);
+    expect(await grantCount(b.body.paymentId)).toBe(1);
+
+    // And the entitlement moved by ~two months, not one. This is the failure the
+    // single-statement `insert … on conflict … greatest(expires_at, now) +
+    // make_interval` exists to prevent: read-then-write let two grants landing
+    // together drop one, so a user who paid twice got one month.
+    const after = await h.query<{ expires_at: string }>(
+      `select expires_at::text from entitlements where user_id = '${user.id}'`,
+    );
+    const days = (new Date(after[0]!.expires_at).getTime() - start) / 86_400_000;
+    expect(days).toBeGreaterThan(55);
+  });
+
   it("keeps each buyer's sync data to themselves under load", async () => {
     const buyers = await Promise.all(
       Array.from({ length: 10 }, (_, i) => signIn(`0912230${String(i).padStart(4, "0")}`)),
