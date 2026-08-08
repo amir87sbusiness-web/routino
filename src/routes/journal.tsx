@@ -74,14 +74,19 @@ function JournalPage() {
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">{formatDate(dk, cal, lang)}</p>
         {dk !== todayKey() && (
-          <button onClick={() => setDk(todayKey())} className="text-[10px] font-medium text-primary">
+          <button
+            onClick={() => setDk(todayKey())}
+            className="text-[10px] font-medium text-primary"
+          >
             {t("برو به امروز", "Go to today")}
           </button>
         )}
       </div>
 
       <Card>
-        <p className="mb-2 text-xs font-medium text-muted-foreground">{t("حال و احساس امروز", "Today's mood")}</p>
+        <p className="mb-2 text-xs font-medium text-muted-foreground">
+          {t("حال و احساس امروز", "Today's mood")}
+        </p>
         <div className="flex flex-wrap gap-1.5">
           {MOOD_EMOJIS.map((m) => (
             <button
@@ -119,11 +124,21 @@ function JournalPage() {
       </Card>
 
       <Card>
-        <p className="mb-2 text-xs font-medium text-muted-foreground">{t("ژورنال امروز", "Today's journal")}</p>
+        <p className="mb-2 text-xs font-medium text-muted-foreground">
+          {t("ژورنال امروز", "Today's journal")}
+        </p>
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={t("امروز چطور گذشت؟ چی یاد گرفتی؟ چی حس کردی؟…", "How was your day? What did you learn or feel?…")}
+          // Sync refuses a record whose JSON exceeds 8 KB, and a rejected row is
+          // one the server never stores — so an unbounded box here is a way to
+          // write a journal entry that silently never leaves the device. 4000 is
+          // far past any real entry and leaves room for the rest of the record.
+          maxLength={4000}
+          placeholder={t(
+            "امروز چطور گذشت؟ چی یاد گرفتی؟ چی حس کردی؟…",
+            "How was your day? What did you learn or feel?…",
+          )}
           className="min-h-40 w-full resize-y rounded-xl border border-input bg-background p-3 text-sm leading-7 text-foreground outline-none placeholder:text-muted-foreground focus:border-ring"
         />
       </Card>
@@ -139,11 +154,19 @@ function JournalPage() {
             .sort((a, b) => b.dateKey.localeCompare(a.dateKey))
             .slice(0, 14)
             .map((e) => (
-              <button key={e.dateKey} onClick={() => setDk(e.dateKey)} className="card-surface flex items-center gap-3 p-3 text-start">
+              <button
+                key={e.dateKey}
+                onClick={() => setDk(e.dateKey)}
+                className="card-surface flex items-center gap-3 p-3 text-start"
+              >
                 <span className="text-xl">{e.mood ?? "📓"}</span>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[10px] text-muted-foreground">{formatDate(e.dateKey, cal, lang)}</p>
-                  <p className="truncate text-xs text-foreground">{e.text || t("بدون یادداشت", "No note")}</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {formatDate(e.dateKey, cal, lang)}
+                  </p>
+                  <p className="truncate text-xs text-foreground">
+                    {e.text || t("بدون یادداشت", "No note")}
+                  </p>
                 </div>
                 {e.score !== null && (
                   <span className="rounded-lg bg-primary-soft px-2 py-1 text-xs font-black text-primary">

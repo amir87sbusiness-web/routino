@@ -1,0 +1,17 @@
+# Deliberately narrow: only the files where a CRLF is FATAL, not a whole-repo
+# normalisation. `core.autocrlf=true` on a Windows checkout already keeps the
+# repository itself LF, so rewriting every file's endings would be a huge diff
+# that fixes nothing.
+#
+# These are different. A shell script committed with CRLF fails on Linux with
+# "bad interpreter: /bin/sh^M" — the shebang line keeps the carriage return —
+# and Docker reports it as a missing file, which sends you looking for a broken
+# COPY instead of an invisible byte. Marking them here makes the guarantee a
+# property of the repository rather than of whoever happens to clone it.
+*.sh              text eol=lf
+Dockerfile        text eol=lf
+*.Dockerfile      text eol=lf
+Caddyfile         text eol=lf
+docker-compose.yml text eol=lf
+*.yml             text eol=lf
+*.yaml            text eol=lf

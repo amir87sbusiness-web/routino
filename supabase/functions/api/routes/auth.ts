@@ -31,7 +31,13 @@ import {
   validateUsername,
   verifyPassword,
 } from "../shared/services/password.ts";
-import { issueForDevice, revokeOtherDevices, revokeRefresh, rotateRefresh } from "../shared/services/tokens.ts";
+import {
+  enforceDeviceLimit,
+  issueForDevice,
+  revokeOtherDevices,
+  revokeRefresh,
+  rotateRefresh,
+} from "../shared/services/tokens.ts";
 
 const TRIAL_DAYS = 7;
 
@@ -123,6 +129,7 @@ export function authRoutes(deps: Deps) {
     }
 
     const tokens = await issueForDevice(db, env, user.id, deviceName ?? null, t);
+    await enforceDeviceLimit(db, user.id, tokens.deviceId, t);
     const entitlement = await readEntitlement(db, user.id, t);
 
     return c.json({
@@ -173,6 +180,7 @@ export function authRoutes(deps: Deps) {
 
     await clearLoginFailures(db, key);
     const tokens = await issueForDevice(db, env, user.id, deviceName ?? null, t);
+    await enforceDeviceLimit(db, user.id, tokens.deviceId, t);
     const entitlement = await readEntitlement(db, user.id, t);
 
     return c.json({

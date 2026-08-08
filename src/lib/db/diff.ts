@@ -31,7 +31,8 @@ function diffById<T extends { id: string }>(
   if (prev === next) return; // whole collection untouched — the common case
   const prevById = new Map((prev ?? []).map((x) => [x.id, x]));
   for (const item of next) {
-    if (prevById.get(item.id) !== item) out.push({ table, key: item.id, data: item, deleted: false });
+    if (prevById.get(item.id) !== item)
+      out.push({ table, key: item.id, data: item, deleted: false });
     prevById.delete(item.id);
   }
   // Whatever is left existed before and is gone now. A forward-only scan of
@@ -67,10 +68,12 @@ function diffSettings(prev: Db | null, next: Db, out: Change[]): void {
  * Pass `prev = null` on first persist to emit everything.
  *
  * Deleting a habit emits ONE habit tombstone, not one per log: the server
- * cascades child logs by `habitId` inside the same transaction, turning a
- * 700-row push into a 1-row push. Locally the orphaned logs are invisible —
- * `getLog` is only ever called with a habit drawn from `db.habits` — so a GC
- * pass cleans them up rather than conflict machinery.
+ * cascades child logs by `habitId` in the same statement, turning a 700-row push
+ * into a 1-row push. Locally the orphaned logs are invisible — `getLog` is only
+ * ever called with a habit drawn from `db.habits` — and the cascade's tombstones
+ * come back down on the next pull, which is what actually clears them. (This
+ * used to promise a local GC pass; there wasn't one, and there does not need to
+ * be.)
  */
 export function diffDb(prev: Db | null, next: Db): Change[] {
   const out: Change[] = [];
@@ -89,10 +92,4 @@ export function diffDb(prev: Db | null, next: Db): Change[] {
   diffByKey("journal", prev?.journal, next.journal, out);
   diffSettings(prev, next, out);
   return out;
-}
-
-/** Log keys belonging to a habit — used by the local GC that drops orphans left
- * behind by a cascaded habit delete. */
-export function logKeysForHabit(db: Db, habitId: string): string[] {
-  return Object.keys(db.logs).filter((k) => k.startsWith(`${habitId}|`));
 }

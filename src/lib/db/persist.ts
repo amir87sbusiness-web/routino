@@ -5,7 +5,7 @@
  * already the source of truth for what's on screen. That is what makes "offline
  * and online are indistinguishable" a structural property rather than a promise.
  */
-import { db as idb, nextSeq, type RecordRow } from "./dexie";
+import { db as idb, nextSeq, SYNCED_TABLES, type RecordRow } from "./dexie";
 import type { Change } from "./diff";
 
 function tableOf(name: Change["table"]) {
@@ -46,10 +46,19 @@ export async function applyChanges(changes: Change[], now = Date.now()): Promise
   });
 }
 
-/** Rows awaiting push. The sync engine's outbox query (Phase 4). */
+/**
+ * Rows awaiting push, by table.
+ *
+ * Walks `SYNCED_TABLES` rather than `idb.tables`: the database also holds
+ * `syncMeta`, which is bookkeeping with no `dirty` index, and asking it for one
+ * throws `SchemaError` — so "every table" would break the outbox the moment any
+ * non-record table is added. The sync engine keeps its own flat-list version of
+ * this query in `lib/sync/engine.ts`; this one exists for the storage tests.
+ */
 export async function pendingChanges(): Promise<Record<string, RecordRow<unknown>[]>> {
   const out: Record<string, RecordRow<unknown>[]> = {};
-  for (const table of idb.tables) {
+  for (const name of SYNCED_TABLES) {
+    const table = tableOf(name);
     const rows = await table.where("dirty").equals(1).toArray();
     if (rows.length) out[table.name] = rows;
   }

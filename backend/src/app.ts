@@ -25,6 +25,7 @@ import { healthRoutes } from "./routes/health.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { planRoutes } from "./routes/plans.js";
 import { subscriptionRoutes } from "./routes/subscriptions.js";
+import { syncRoutes } from "./routes/sync.js";
 
 export interface Deps {
   db: Database;
@@ -101,6 +102,7 @@ export async function buildApp(deps: Omit<Deps, "now"> & { now?: () => number })
   await app.register(planRoutes, { prefix: "/v1" });
   await app.register(authRoutes, { prefix: "/v1" });
   await app.register(subscriptionRoutes, { prefix: "/v1" });
+  await app.register(syncRoutes, { prefix: "/v1" });
   await app.register(paymentRoutes, { prefix: "/v1" });
   await app.register(devGatewayRoutes, { prefix: "/v1" }); // no-op unless psp=fake
   await app.register(adminRoutes, { prefix: "/v1" });

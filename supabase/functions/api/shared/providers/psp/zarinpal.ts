@@ -1,6 +1,7 @@
 // AUTO-GENERATED from backend/src — do not edit. Run `node scripts/sync-edge-shared.mjs`.
 import type { PspProvider, PspRequestInput, PspRequestResult, PspVerifyResult } from "./index.ts";
 import { ZIBAL_RESULT, ZIBAL_STATUS } from "./index.ts";
+import { PSP_TIMEOUT_MS } from "./zibal.ts";
 
 const BASE = "https://payment.zarinpal.com/pg";
 
@@ -34,6 +35,9 @@ export function zarinpalPsp(merchant: string): PspProvider {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(body),
+      // See PSP_TIMEOUT_MS in zibal.ts — an untimed fetch to a gateway behind a
+      // filtered connection pins a function instance until it is killed.
+      signal: AbortSignal.timeout(PSP_TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(`zarinpal ${path} HTTP ${res.status}`);
     return (await res.json()) as T;
@@ -66,7 +70,8 @@ export function zarinpalPsp(merchant: string): PspProvider {
         // Surface ZarinPal's own numeric code for the logs; it is negative, so it
         // never collides with a canonical Zibal result.
         result: code ?? errCode ?? 0,
-        message: body.data?.message ?? (!Array.isArray(body.errors) ? body.errors?.message : undefined),
+        message:
+          body.data?.message ?? (!Array.isArray(body.errors) ? body.errors?.message : undefined),
       };
     },
 
@@ -105,7 +110,8 @@ export function zarinpalPsp(merchant: string): PspProvider {
       return {
         result: code ?? errCode ?? 0,
         status: ZIBAL_STATUS.INTERNAL_ERROR,
-        message: body.data?.message ?? (!Array.isArray(body.errors) ? body.errors?.message : undefined),
+        message:
+          body.data?.message ?? (!Array.isArray(body.errors) ? body.errors?.message : undefined),
       };
     },
 

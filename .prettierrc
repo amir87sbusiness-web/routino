@@ -2,5 +2,7 @@
   "printWidth": 100,
   "semi": true,
   "singleQuote": false,
-  "trailingComma": "all"
+  "trailingComma": "all",
+  "$comment": "endOfLine 'auto' because this repo is developed on Windows and built on Linux. Prettier defaults to 'lf', and with git's core.autocrlf the working tree is CRLF — so every line of every file failed with 'Delete CR'. That was 9292 of 10016 lint errors, which buried the 724 real ones and made `npm run lint` useless rather than merely noisy. 'auto' takes the file's first line ending as the rule, so LF in CI and CRLF here both pass.",
+  "endOfLine": "auto"
 }

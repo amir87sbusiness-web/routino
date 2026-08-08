@@ -11,7 +11,15 @@
  * avoids colliding with `JournalEntry.updatedAt`, which is domain data.
  */
 import Dexie, { type Table } from "dexie";
-import type { Category, Feedback, Habit, HabitLog, JournalEntry, Task, TimerSession } from "../store";
+import type {
+  Category,
+  Feedback,
+  Habit,
+  HabitLog,
+  JournalEntry,
+  Task,
+  TimerSession,
+} from "../store";
 
 /** One stored record. `data` is the entity exactly as the UI knows it. */
 export interface RecordRow<T> {
@@ -55,7 +63,15 @@ export type SettingRow = RecordRow<{ value: unknown }>;
 
 /** Tables that sync. `feedback` is push-only (it never comes back to a device)
  * but lives here so it survives being offline. */
-export type SyncedTable = "categories" | "habits" | "logs" | "tasks" | "timerSessions" | "journal" | "settings" | "feedback";
+export type SyncedTable =
+  | "categories"
+  | "habits"
+  | "logs"
+  | "tasks"
+  | "timerSessions"
+  | "journal"
+  | "settings"
+  | "feedback";
 
 export const SYNCED_TABLES: SyncedTable[] = [
   "categories",
@@ -68,6 +84,27 @@ export const SYNCED_TABLES: SyncedTable[] = [
   "feedback",
 ];
 
+/**
+ * Sync bookkeeping: how far this device has read the server's change log.
+ *
+ * Deliberately a table in IndexedDB rather than a localStorage key, so it shares
+ * a fate with the records it describes. Those were two different stores with two
+ * different eviction policies — Safari drops IndexedDB under storage pressure, a
+ * failed Dexie upgrade drops it, "clear site data" can take one and leave the
+ * other — and a cursor that outlives its records is worse than no cursor at all:
+ * the device asks for "everything above 5", is correctly told there is nothing
+ * new, and shows the user an empty app that their data can never come back into.
+ * Wiped together, the next sync simply pulls the account again from zero.
+ */
+export interface SyncMetaRow {
+  key: "cursor";
+  /** Phone that owns this cursor. Another account signing in starts from zero —
+   * its records are a different log entirely. */
+  owner: string | null;
+  cursor: number;
+  lastSyncedAt: number;
+}
+
 class RoutinoDexie extends Dexie {
   categories!: Table<RecordRow<Category>, string>;
   habits!: Table<RecordRow<Habit>, string>;
@@ -77,6 +114,7 @@ class RoutinoDexie extends Dexie {
   journal!: Table<RecordRow<JournalEntry>, string>;
   settings!: Table<SettingRow, string>;
   feedback!: Table<RecordRow<Feedback>, string>;
+  syncMeta!: Table<SyncMetaRow, string>;
 
   constructor(name = "routino") {
     super(name);
@@ -93,6 +131,9 @@ class RoutinoDexie extends Dexie {
       settings: "key, dirty, seq",
       feedback: "key, dirty, seq",
     });
+    // Dexie's `.stores()` is a DELTA: only the changed table is named, the eight
+    // above are inherited untouched. Adding a store needs no upgrade function.
+    this.version(2).stores({ syncMeta: "key" });
   }
 }
 
@@ -100,6 +141,11 @@ export const db = new RoutinoDexie();
 
 /** Wraps a fresh entity for storage. Callers that are applying a remote record
  * pass `dirty: 0` — only local edits go in the outbox. */
-export function row<T>(key: string, data: T, updatedAt = Date.now(), dirty: 0 | 1 = 1): RecordRow<T> {
+export function row<T>(
+  key: string,
+  data: T,
+  updatedAt = Date.now(),
+  dirty: 0 | 1 = 1,
+): RecordRow<T> {
   return { key, data, updatedAt, deleted: 0, dirty, seq: nextSeq() };
 }

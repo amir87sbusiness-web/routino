@@ -33,8 +33,8 @@ select cron.schedule('routino-otp-purge', '0 * * * *',
 select cron.schedule('routino-login-attempts-purge', '30 * * * *',
   $$delete from login_attempts where created_at < now() - interval '24 hours'$$);
 
--- Revoked sessions, weekly. \`devices\` is the largest per-user table on this
--- schema (~550 bytes of the ~1.7 KB a user costs forever — see
+-- Revoked sessions, weekly. \`devices\` is the largest of the ACCOUNT tables
+-- (~440 bytes/user; \`records\` dwarfs all of them now that sync is on — see
 -- supabase/tests/quota.test.ts), and a revoked row is pure dead weight:
 -- rotateRefresh() only ever matches \`revoked_at is null\`, so the token behind
 -- it is already rejected and nothing can bring it back. 30 days of grace is
@@ -45,9 +45,41 @@ select cron.schedule('routino-login-attempts-purge', '30 * * * *',
 -- expire (REFRESH_TTL_DAYS, measured from created_at), so they are technically
 -- just as dead — but that would tie a cron job to an env var, and raising
 -- REFRESH_TTL_DAYS later would then start signing people out early, silently.
--- Not worth it: at ~1.7 KB/user the 500 MB free tier holds ~300k users.
+-- Not worth it next to what a user's synced records cost.
 select cron.schedule('routino-devices-purge', '15 3 * * 0',
-  $$delete from devices where revoked_at is not null and revoked_at < now() - interval '30 days'$$);
+  $delete from devices where revoked_at is not null and revoked_at < now() - interval '30 days'$);
+
+-- Tombstones, weekly. A deleted habit or log leaves a row behind on purpose: a
+-- delete has to be able to TRAVEL to the user's other devices, and an absence
+-- cannot. But it only has to travel once, and \`records\` is the table that
+-- decides when the 500 MB fills up — so a user who tidies up their habits every
+-- month should not keep paying for every one of them forever.
+--
+-- The two halves must happen together, which is why this is one statement.
+-- Raising \`users.gc_seq\` to the highest seq removed is what makes deleting a
+-- tombstone safe: any device whose cursor still sits below that line is told to
+-- wipe and resync from zero (\`reset: true\` in services/sync.ts) instead of
+-- being allowed to miss the delete and silently RESURRECT the record. Delete
+-- without the bump and a phone left in a drawer for four months comes back with
+-- every habit its owner ever threw away.
+--
+-- 90 days is the promise: a device offline longer than that pays for a full
+-- resync, which is correct but not free, so do not shorten this casually.
+select cron.schedule('routino-tombstone-purge', '45 3 * * 0', $$
+  with doomed as (
+    delete from records
+     where deleted = true
+       -- 86400000::bigint, not a bare 90 * 86400000: that product is 7.7e9, which
+       -- overflows int4 and fails the whole job with "integer out of range" —
+       -- weekly, quietly, in a cron log nobody reads.
+       and updated_at < (extract(epoch from now()) * 1000)::bigint - 90 * 86400000::bigint
+    returning user_id, seq
+  ), highest as (
+    select user_id, max(seq) as top from doomed group by user_id
+  )
+  update users u set gc_seq = greatest(u.gc_seq, h.top)
+    from highest h where u.id = h.user_id
+$$);
 `;
 
 // Every table Supabase's PostgREST auto-exposes under /rest/v1/. Our backend

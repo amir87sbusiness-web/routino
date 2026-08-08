@@ -25,6 +25,7 @@ import { healthRoutes } from "./routes/health.ts";
 import { paymentRoutes } from "./routes/payments.ts";
 import { planRoutes } from "./routes/plans.ts";
 import { subscriptionRoutes } from "./routes/subscriptions.ts";
+import { syncRoutes } from "./routes/sync.ts";
 
 const secretEquals = (a: string, b: string): boolean => {
   const ab = Buffer.from(a);
@@ -124,6 +125,7 @@ export function buildApp(deps: Deps) {
   app.route("/v1", planRoutes(deps));
   app.route("/v1", authRoutes(deps));
   app.route("/v1", subscriptionRoutes(deps));
+  app.route("/v1", syncRoutes(deps));
   app.route("/v1", paymentRoutes(deps));
   app.route("/v1", devGatewayRoutes(deps)); // no-op unless psp includes fake
   app.route("/v1", adminRoutes(deps));

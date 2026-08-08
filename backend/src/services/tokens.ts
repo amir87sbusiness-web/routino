@@ -10,7 +10,7 @@
  * is issued.
  */
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, isNull, ne } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { SignJWT, jwtVerify } from "jose";
 import type { Database } from "../db/client.js";
 import { devices } from "../db/schema.js";
@@ -141,4 +141,66 @@ export async function revokeOtherDevices(
     .where(
       and(eq(devices.userId, userId), ne(devices.id, keepDeviceId), isNull(devices.revokedAt)),
     );
+}
+
+/** How many devices one account may keep signed in at once.
+ *
+ * Two, not one: the person who PAID typically has a phone and a laptop browser,
+ * and at one they would evict themselves daily. A family of five finds two just
+ * as unusable as one, so the extra slot costs nothing in sharing pressure. */
+export const MAX_ACTIVE_DEVICES = 2;
+
+/**
+ * Keeps the `max` most recently used devices signed in and revokes the rest.
+ *
+ * Runs on SIGN-IN ONLY, never in the request path — one indexed select plus at
+ * most one update, against a row that is created about once per
+ * REFRESH_TTL_DAYS. Nothing else needs a new check: `rotateRefresh` already
+ * refuses a revoked row, so an evicted device dies at its next refresh without
+ * costing every other request a lookup.
+ *
+ * Evicts by `last_seen_at`, not `created_at`. The oldest-CREATED device is
+ * routinely the owner's daily phone — evicting that instead of the tablet they
+ * last opened in March is the one outcome that would make this feel broken to
+ * the person paying for it.
+ *
+ * Returns how many devices were evicted.
+ */
+export async function enforceDeviceLimit(
+  db: Database,
+  userId: string,
+  keepDeviceId: string,
+  now: Date,
+  max: number = MAX_ACTIVE_DEVICES,
+): Promise<number> {
+  // Same reasoning as revokeOtherDevices: Drizzle compiles `ne(col, undefined)`
+  // to `col <> NULL`, which is UNKNOWN for every row — a falsy id would evict
+  // NOTHING, silently, with no error and no log. Fail loudly instead.
+  if (!keepDeviceId) throw new Error("enforceDeviceLimit requires a device id");
+
+  const others = await db
+    .select()
+    .from(devices)
+    .where(and(eq(devices.userId, userId), ne(devices.id, keepDeviceId), isNull(devices.revokedAt)))
+    // NULLS LAST is spelled out because Postgres orders nulls FIRST under DESC,
+    // which would rank a never-seen device above the one the user lives in and
+    // evict the wrong device. `issueForDevice` always stamps `lastSeenAt`, so
+    // this is belt-and-braces for rows written before it did.
+    .orderBy(sql`${devices.lastSeenAt} desc nulls last`, desc(devices.createdAt));
+
+  // The device that just signed in always survives and claims one of the slots,
+  // so only `max - 1` of the others may stay.
+  const doomed = others.slice(Math.max(max - 1, 0));
+  if (doomed.length === 0) return 0;
+
+  await db
+    .update(devices)
+    .set({ revokedAt: now })
+    .where(
+      inArray(
+        devices.id,
+        doomed.map((d) => d.id),
+      ),
+    );
+  return doomed.length;
 }

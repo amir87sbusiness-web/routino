@@ -20,7 +20,13 @@ import {
   validateUsername,
   verifyPassword,
 } from "../services/password.js";
-import { issueForDevice, revokeOtherDevices, revokeRefresh, rotateRefresh } from "../services/tokens.js";
+import {
+  enforceDeviceLimit,
+  issueForDevice,
+  revokeOtherDevices,
+  revokeRefresh,
+  rotateRefresh,
+} from "../services/tokens.js";
 
 const TRIAL_DAYS = 7;
 
@@ -123,6 +129,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     }
 
     const tokens = await issueForDevice(db, env, user.id, deviceName ?? null, t);
+    await enforceDeviceLimit(db, user.id, tokens.deviceId, t);
     const entitlement = await readEntitlement(db, user.id, t);
 
     return {
@@ -178,6 +185,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     await clearLoginFailures(db, key);
     const tokens = await issueForDevice(db, env, user.id, deviceName ?? null, t);
+    await enforceDeviceLimit(db, user.id, tokens.deviceId, t);
     const entitlement = await readEntitlement(db, user.id, t);
 
     return {

@@ -100,6 +100,119 @@ async function buyPlan(access: string, planId: string) {
   return paymentId;
 }
 
+/**
+ * What one user's synced data actually looks like after a season of real use.
+ *
+ * This is the number that matters most now and it used to be measured as ZERO:
+ * before sync shipped, `records` stayed empty and the whole budget was computed
+ * from account rows alone. Turning sync on made `records` the largest table in
+ * the product by a wide margin, so a budget that ignores it is not conservative,
+ * it is wrong.
+ *
+ * A quarter, not a year, so 300 simulated users stay a test rather than a batch
+ * job — the per-RECORD cost is reported alongside, which is what lets you scale
+ * this to however long a real user stays.
+ */
+const RECORDS_PER_USER = {
+  categories: 16, // the default seed, which every user gets on first launch
+  habits: 6,
+  logs: 90, // ~3 months of ticking a few habits
+  journal: 30,
+  tasks: 12,
+  settings: 10,
+} as const;
+
+const SYNCED_ROWS = Object.values(RECORDS_PER_USER).reduce((a, b) => a + b, 0);
+
+/** Pushes that footprint through the real sync endpoint. */
+async function seedSyncData(access: string, seed: number): Promise<void> {
+  const rows: unknown[] = [];
+  const add = (kind: string, id: string, data: unknown) =>
+    rows.push({ kind, id, data, updatedAt: 1_700_000_000_000 + seed, deleted: false });
+
+  for (let i = 0; i < RECORDS_PER_USER.categories; i++) {
+    add("categories", `cat-${i}`, {
+      id: `cat-${i}`,
+      name: "دسته‌بندی نمونه",
+      icon: "star",
+      color: "#ff8800",
+    });
+  }
+  for (let i = 0; i < RECORDS_PER_USER.habits; i++) {
+    add("habits", `hab-${i}`, {
+      id: `hab-${i}`,
+      name: "ورزش صبحگاهی روزانه",
+      categoryId: `cat-${i % 4}`,
+      type: "binary",
+      target: 1,
+      schedule: { kind: "daily" },
+      monthlyGoal: 30,
+      reminderTime: "07:30",
+      createdAt: 1_700_000_000_000,
+    });
+  }
+  for (let i = 0; i < RECORDS_PER_USER.logs; i++) {
+    add(
+      "logs",
+      `hab-${i % 6}|2026-${String((i % 12) + 1).padStart(2, "0")}-${String((i % 28) + 1).padStart(2, "0")}`,
+      {
+        habitId: `hab-${i % 6}`,
+        dateKey: "2026-05-01",
+        value: 1,
+        note: "",
+      },
+    );
+  }
+  for (let i = 0; i < RECORDS_PER_USER.journal; i++) {
+    add(
+      "journal",
+      `2026-${String((i % 12) + 1).padStart(2, "0")}-${String((i % 28) + 1).padStart(2, "0")}`,
+      {
+        dateKey: "2026-05-01",
+        // A real entry, not an empty string — journal text is the biggest single
+        // field a user writes and pretending it is short flatters the estimate.
+        text: "امروز روز خوبی بود، تمرین کردم و کتاب خوندم. فردا باید زودتر بیدار بشم.",
+        score: 8,
+        mood: "🙂",
+        updatedAt: 1_700_000_000_000,
+      },
+    );
+  }
+  for (let i = 0; i < RECORDS_PER_USER.tasks; i++) {
+    add("tasks", `task-${i}`, {
+      id: `task-${i}`,
+      title: "کار نمونه برای امروز",
+      dateKey: "2026-05-01",
+      done: i % 2 === 0,
+      color: "#ff8800",
+      icon: "check",
+    });
+  }
+  const settingKeys = [
+    "lang",
+    "cal",
+    "brand",
+    "weekStart",
+    "journalReminder",
+    "a",
+    "b",
+    "c",
+    "d",
+    "e",
+  ];
+  for (const k of settingKeys.slice(0, RECORDS_PER_USER.settings)) {
+    add("settings", k, { value: "fa" });
+  }
+
+  // The server caps a push at 200 records, same as a real client.
+  for (let i = 0; i < rows.length; i += 200) {
+    await h.call("POST", "/v1/sync/push", {
+      headers: auth(access),
+      body: { records: rows.slice(i, i + 200) },
+    });
+  }
+}
+
 /** Table sizes as Postgres itself reports them, after reclaiming dead tuples. */
 async function measure(into: Map<string, number>): Promise<void> {
   // Autovacuum does this continuously on the real database; without it the
@@ -140,6 +253,14 @@ beforeAll(async () => {
       await h.call("GET", "/v1/subscriptions/me", { headers: auth(access) }),
     );
 
+    // The app's real boot request, which now also carries the entitlement.
+    await record(
+      "GET /v1/sync/pull",
+      await h.call("GET", "/v1/sync/pull?cursor=0", { headers: auth(access) }),
+    );
+
+    await seedSyncData(access, i);
+
     if (i < PAYING) await buyPlan(access, i % 3 === 0 ? "m12" : "m1");
 
     // A fifth of users send feedback. Inserted directly on purpose: there is no
@@ -165,7 +286,11 @@ beforeAll(async () => {
   await record("GET /health", await h.call("GET", "/health"));
 
   await measure(sizes);
-});
+  // Generous, and load-bearing: vitest SKIPS a suite whose beforeAll times out,
+  // and a budget guard that silently skips under CI load is a budget guard you
+  // do not have. 300 simulated users seeding a quarter of habit data each is
+  // minutes of work on a busy machine.
+}, 600_000);
 
 afterAll(async () => {
   await h?.close();
@@ -175,6 +300,24 @@ const sum = (names: readonly string[], from = sizes) =>
   names.reduce((total, name) => total + (from.get(name) ?? 0), 0);
 
 describe("database growth", () => {
+  it("reports what a user's synced habits and journal cost", () => {
+    const recordsBytes = sum(["records"]) - sum(["records"], sizesAtHalf);
+    const perUser = recordsBytes / (USERS - HALF);
+    const perRow = perUser / SYNCED_ROWS;
+
+    console.log(
+      `[db] synced data: ${SYNCED_ROWS} rows/user (≈a quarter of use) costs ${Math.round(perUser)}B` +
+        `\n     ≈ ${Math.round(perRow)} B per record — a user who stays a YEAR (~${SYNCED_ROWS * 4} rows)` +
+        ` costs ≈ ${Math.round((perRow * SYNCED_ROWS * 4) / 1024)} KB` +
+        `\n     500 MB holds ≈ ${Math.round(FREE_DB_BYTES / (perRow * SYNCED_ROWS * 4)).toLocaleString("en-US")} users at a year each`,
+    );
+
+    // The guard that matters: sync must not make a user cost a megabyte. This is
+    // deliberately loose — it is a "something changed structurally" alarm, not a
+    // target.
+    expect(perRow).toBeLessThan(600);
+  });
+
   it("reports what one more user costs, forever", () => {
     const permanent = sum(PERMANENT);
     const marginal = (permanent - sum(PERMANENT, sizesAtHalf)) / (USERS - HALF);
@@ -192,10 +335,23 @@ describe("database growth", () => {
         `     ≈ ${marginal.toFixed(0)} bytes/user → 500 MB holds ~${capacity.toLocaleString()} users\n`,
     );
 
-    // 2 KB is already several times what these rows hold; crossing it means a
-    // new table started growing per-user, which is the change worth catching.
-    expect(marginal).toBeLessThan(2048);
-    expect(capacity).toBeGreaterThan(250_000);
+    // These two numbers moved by 30x when sync shipped, and that is the single
+    // most important fact about this project's hosting.
+    //
+    // Before sync, `records` was empty and a user cost ~1.6 KB forever, so 500 MB
+    // read as ~330,000 users and the database was effectively free. With sync on,
+    // a user's habits and journal ARE the database: a quarter of use is ~57 KB,
+    // which puts the free tier at roughly 9,000 users — and unlike the monthly
+    // invocation and egress quotas, this one does not reset. It fills up and
+    // stays full.
+    //
+    // 80 KB is the alarm line: it is a comfortable margin over the ~57 KB a
+    // three-month user costs today, and crossing it means either records grew a
+    // fatter shape or something new started accumulating per user.
+    expect(marginal).toBeLessThan(80 * 1024);
+    // Still enough to launch on and grow into. When this fails, the answer is a
+    // paid Supabase plan (8 GB for $25/mo), not a code change.
+    expect(capacity).toBeGreaterThan(6_000);
   });
 
   it("keeps the rate-limit ledgers off the permanent bill", () => {
@@ -232,12 +388,29 @@ describe("database growth", () => {
       });
   });
 
-  it("stores nothing of the user's habits, tasks or journal", () => {
-    // The app is offline-first: everything a person actually creates lives in
-    // IndexedDB on their device. `records` is the table sync WOULD use, and it
-    // is the one thing that could turn 330k users into 3k — so its emptiness is
-    // an architectural fact worth failing on if it silently changes.
-    expect(sizes.get("records") ?? 0).toBeLessThan(64 * 1024);
+  it("keeps the account tables small next to the synced data", () => {
+    // The comment this replaces called `records` "the one thing that could turn
+    // 330k users into 3k" and asserted it stayed empty. Sync shipped, so it is
+    // no longer empty and that assertion was the alarm going off exactly as
+    // designed. What is still worth guarding is the SHAPE of the bill: the
+    // user's own data should dominate it, and the account plumbing around it —
+    // devices, grants, payments, entitlements — should stay a rounding error. If
+    // that ever inverts, something is accumulating per user that has nothing to
+    // do with what they wrote.
+    const accountTables = [
+      "users",
+      "devices",
+      "entitlements",
+      "grants",
+      "payments",
+      "redemptions",
+      "feedback",
+    ];
+    const accountBytes = sum(accountTables) - sum(accountTables, sizesAtHalf);
+    const recordBytes = sum(["records"]) - sum(["records"], sizesAtHalf);
+
+    expect(recordBytes).toBeGreaterThan(0); // sync is on; it must be storing something
+    expect(accountBytes).toBeLessThan(recordBytes);
   });
 });
 

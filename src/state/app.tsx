@@ -23,6 +23,8 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { entitlementToSubscription, fetchEntitlement, hasSession } from "@/lib/api/auth";
+import { ApiError } from "@/lib/api/client";
+import { syncNow } from "@/lib/sync/engine";
 import { todayKey, type Calendar, type Lang } from "@/lib/dates";
 import { diffDb } from "@/lib/db/diff";
 import { hydrate } from "@/lib/db/hydrate";
@@ -147,8 +149,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // Never awaited by the UI — but never silent either. A rejected write means
     // this change is gone (storage full, private-mode IndexedDB, a corrupted
     // profile), and the one thing worse than losing it is the user not knowing:
-    // they would keep adding habits into a session that saves nothing. Told
-    // once, they can export a backup while the data is still in memory.
+    // they would keep adding habits into a session that saves nothing.
+    //
+    // This used to point at Settings → Backup. That card is hidden behind
+    // `BACKUP_UI` now, so the message names the causes the user can actually act
+    // on instead of a button they will not find.
     if (changes.length) {
       void applyChanges(changes).catch((err) => {
         console.error("failed to persist changes", err);
@@ -156,8 +161,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           persistFailed.current = true;
           toast.error(
             db.settings.lang === "fa"
-              ? "ذخیره‌سازی روی این دستگاه کار نمی‌کند. از «تنظیمات ← پشتیبان‌گیری» یک نسخه بگیر."
-              : "Saving to this device is failing. Export a backup from Settings → Backup.",
+              ? "ذخیره‌سازی روی این دستگاه کار نمی‌کند و تغییرهای جدید از بین می‌رود. اگر مرورگر در حالت ناشناس است از آن خارج شو، وگرنه حافظهٔ دستگاه را خالی کن."
+              : "Saving to this device is failing and new changes will be lost. Leave private/incognito mode if you are in it, otherwise free up device storage.",
             { duration: 15_000 },
           );
         }
@@ -172,8 +177,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // indistinguishable from online.
   const entitlementFetched = useRef(false);
   const entitlementRetryAfter = useRef(0);
+  /** Set once the first sync of this session has finished, successfully or not. */
+  const syncSettled = useRef(false);
   useEffect(() => {
     if (!db || entitlementFetched.current || !hasSession()) return;
+    // Wait for sync to have its turn. The pull's last page carries the same
+    // entitlement, so on the normal path this request never happens at all —
+    // that is one Supabase invocation saved on every app open, and invocations
+    // are the free tier's real ceiling (not storage, not bandwidth). This stays
+    // as the fallback for when sync could not reach the server, because a server
+    // answer is the ONLY thing that clears `meta.tampered`.
+    if (!syncSettled.current) return;
     // Latching only on SUCCESS is load-bearing. This used to set the flag before
     // awaiting, so a single failed request — one dropped connection at launch —
     // burned the only attempt of the whole session. That is worst for the users
@@ -197,11 +211,113 @@ export function AppProvider({ children }: { children: ReactNode }) {
         // `applyServerEntitlement` for why both halves are load-bearing.
         setDb((prev) => (prev ? applyServerEntitlement(prev, sub) : prev));
       })
-      .catch(() => {
-        /* offline or expired session — the local cache stays authoritative,
-           and the next heartbeat retries once the cooldown lapses */
+      .catch((err: unknown) => {
+        /* offline — the local cache stays authoritative, and the next heartbeat
+           retries once the cooldown lapses.
+
+           A DEFINITIVE 401 is different: this device's session is gone (another
+           device took its slot, or an admin blocked the account). `refreshTokens`
+           has already cleared the tokens by the time we get here, so the app is
+           signed out but the gate reads `db.auth` from a different store and
+           would keep showing a signed-in shell that can no longer talk to the
+           server. Drop `db.auth` so the sign-in screen actually appears.
+
+           The `hasSession()` test is the safety catch, not decoration: it is
+           false ONLY because `refreshTokens` decided the session was dead. When
+           the failure is a dropped connection the tokens are deliberately left
+           in place, so this cannot sign anyone out for being offline. */
+        if (err instanceof ApiError && !err.offline && err.status === 401 && !hasSession()) {
+          setDb((prev) => (prev ? { ...prev, auth: null } : prev));
+        }
       });
   }, [db]);
+
+  /**
+   * Delta sync with the server.
+   *
+   * Triggered on boot, whenever the app returns to the foreground, and on a slow
+   * timer while it stays open. Foreground is the one that makes it feel instant:
+   * you pick up the laptop, it syncs before you have finished looking at it.
+   *
+   * Keyed on the phone number alone, deliberately. Depending on `db` would
+   * re-arm the effect on every keystroke, and — because a successful sync writes
+   * to storage and therefore changes `db` — would loop forever.
+   */
+  const syncOwner = db?.auth?.phone ?? null;
+  const syncing = useRef(false);
+  useEffect(() => {
+    if (!syncOwner) return;
+
+    const runSync = async () => {
+      if (syncing.current || !hasSession()) return;
+      syncing.current = true;
+      try {
+        const outcome = await syncNow(syncOwner);
+
+        // Same answer `GET /subscriptions/me` would have given, for free.
+        // `none` (null) is deliberately not applied — see the fetch above.
+        if (outcome.entitlement) {
+          entitlementFetched.current = true;
+          const sub = entitlementToSubscription(outcome.entitlement);
+          if (sub) setDb((prev) => (prev ? applyServerEntitlement(prev, sub) : prev));
+        }
+
+        if (!outcome.changed) return;
+
+        // Sync wrote straight to IndexedDB, so the in-memory copy the UI renders
+        // is now stale and has to be rebuilt.
+        const { db: loaded } = await hydrate();
+        const base = lastPersisted.current;
+        const merged: Db = base
+          ? {
+              ...loaded,
+              // Device-local state belongs to the running app, not to what sync
+              // just fetched: re-reading it here could undo a sign-in, a fresh
+              // entitlement, or a heartbeat still in flight.
+              auth: base.auth,
+              subscription: base.subscription,
+              notifications: base.notifications,
+              meta: base.meta,
+              settings: {
+                ...loaded.settings,
+                theme: base.settings.theme,
+                notificationsEnabled: base.settings.notificationsEnabled,
+              },
+            }
+          : loaded;
+
+        // Re-baseline BEFORE the state lands. The persist effect diffs against
+        // this ref by REFERENCE, so a fresh hydrate that skipped this line would
+        // read as "every record changed", mark the whole database dirty, and
+        // push the entire account back to the server on the next sync.
+        lastPersisted.current = merged;
+        setDb(merged);
+      } catch {
+        /* offline, or the session lapsed — the outbox keeps its rows and the
+           next trigger drains it. Sync is never allowed to surface an error:
+           offline is the normal state of an offline-first app. */
+      } finally {
+        syncing.current = false;
+        // Releases the entitlement fallback above whether or not sync worked.
+        syncSettled.current = true;
+      }
+    };
+
+    void runSync();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void runSync();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    // 15 minutes, not 5. A tab left open all day was 96 pulls before this and is
+    // 32 after — and since sync also fires on every foreground, nobody who is
+    // actually LOOKING at the app waits for the timer. Purely a cost knob: on the
+    // free tier this is the difference between roughly 1k and 2k daily users.
+    const iv = setInterval(() => void runSync(), 15 * 60_000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      clearInterval(iv);
+    };
+  }, [syncOwner]);
 
   // heartbeat: keep lastSeen fresh so the clock-tampering guard stays accurate.
   // `meta` is device-local, so this touches localStorage only — it no longer
@@ -257,11 +373,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     } else {
       syncRecurringReminders(db); // will clear pending recurring notifications
     }
-  }, [
-    db?.settings.notificationsEnabled,
-    db?.settings.journalReminder,
-    db?.habits,
-  ]);
+  }, [db?.settings.notificationsEnabled, db?.settings.journalReminder, db?.habits]);
 
   // reminder scheduler (habits, tasks, journal) — checks every 30s.
   // Kept as-is: this still drives in-app/foreground browser notifications on
@@ -333,7 +445,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return {
           ...prev,
           notifications: [
-            ...newNotifs.map((n) => ({ id: uid(), title: n.title, body: n.body, at: Date.now(), read: false })),
+            ...newNotifs.map((n) => ({
+              id: uid(),
+              title: n.title,
+              body: n.body,
+              at: Date.now(),
+              read: false,
+            })),
             ...prev.notifications,
           ].slice(0, 100),
           meta: {

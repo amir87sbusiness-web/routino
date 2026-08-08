@@ -1,5 +1,11 @@
 node_modules/
 dist/
 .env
-backup/
+# NOT `backup/` — that directory holds the backup sidecar's SOURCE (Dockerfile,
+# backup.sh, restore.sh) and must be committed, or `docker compose build` on the
+# server fails on a directory that only ever existed on your laptop. It was
+# ignored wholesale back when compose bind-mounted `./backup` as the dump
+# destination; dumps now go to a named volume, so only the artefacts are ignored.
+backup/*.sql
+backup/*.sql.gz
 .pglite-data/

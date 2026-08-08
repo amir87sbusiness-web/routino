@@ -1,0 +1,32 @@
+# Keep the build context to what the Dockerfile actually copies: package
+# manifests, tsconfigs and src. Everything below is either rebuilt inside the
+# image or must never enter it.
+#
+# `.pglite-data` is the one that matters most: it is the LOCAL DEVELOPMENT
+# DATABASE — real rows, real phone numbers, real password hashes. Without this
+# file it is uploaded to the daemon on every build and baked into the layer.
+
+node_modules
+dist
+.pglite-data
+
+# Local secrets. The Dockerfile never copies these; compose injects env at run
+# time. Listing them means a stray file can't be picked up by a future COPY.
+.env
+.env.*
+
+# Test and tooling files — `tsconfig.build.json` already excludes them from the
+# compiled output, so shipping them only slows the context upload.
+test
+vitest.config.ts
+drizzle.config.ts
+
+# Deployment descriptors describe the image; they are not part of it.
+Dockerfile
+.dockerignore
+docker-compose.yml
+Caddyfile
+backup
+
+*.md
+*.log

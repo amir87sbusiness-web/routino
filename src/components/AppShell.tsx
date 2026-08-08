@@ -4,16 +4,7 @@
  * feedback popup, and celebration popups.
  */
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import {
-  BarChart3,
-  Bell,
-  BookHeart,
-  Home,
-  ListTodo,
-  Repeat,
-  Settings,
-  Timer,
-} from "lucide-react";
+import { BarChart3, Bell, BookHeart, Home, ListTodo, Repeat, Settings, Timer } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { FeedbackModal } from "@/components/FeedbackModal";
 import { InstallBanner } from "@/components/pwa";
@@ -137,7 +128,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Logo className="h-10 w-10" />
           <div>
             <p className="text-sm font-black text-foreground">{t("روتینو", "Routino")}</p>
-            <p className="text-[10px] text-muted-foreground">{t("عادت‌ساز روزانه", "Daily habit builder")}</p>
+            <p className="text-[10px] text-muted-foreground">
+              {t("عادت‌ساز روزانه", "Daily habit builder")}
+            </p>
           </div>
         </Link>
         <nav className="flex flex-col gap-1">
@@ -149,7 +142,9 @@ export function AppShell({ children }: { children: ReactNode }) {
                 key={item.to}
                 to={item.to}
                 className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
-                  active ? "bg-primary-soft text-primary" : "text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  active
+                    ? "bg-primary-soft text-primary"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                 }`}
               >
                 <Icon className="h-4.5 w-4.5" />
@@ -158,8 +153,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
+        {/* Said "saved on this device" back when that was the whole truth. Sync
+            now copies the account to the server and back down to every device
+            the user signs in on, and that is exactly the reassurance someone
+            worries about when they pick up a new phone — so say it. */}
         <div className="mt-auto px-2 text-[10px] text-muted-foreground">
-          {t("ذخیره‌شده روی این دستگاه", "Saved on this device")}
+          {t("همگام با حساب کاربری‌ات", "Synced to your account")}
         </div>
       </aside>
 
@@ -176,10 +175,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
           <span className="hidden text-sm font-bold text-foreground lg:block">
             {NAV.find((n) => n.to === pathname)
-              ? t(
-                  NAV.find((n) => n.to === pathname)!.fa,
-                  NAV.find((n) => n.to === pathname)!.en,
-                )
+              ? t(NAV.find((n) => n.to === pathname)!.fa, NAV.find((n) => n.to === pathname)!.en)
               : ""}
           </span>
           <div className="flex items-center gap-1">
@@ -189,7 +185,10 @@ export function AppShell({ children }: { children: ReactNode }) {
               // نام می‌آید تا کاربر نابینا بدون باز کردن پنل بفهمد چیزی هست.
               aria-label={
                 unread > 0
-                  ? t(`اعلان‌ها، ${faNum(unread, lang)} خوانده‌نشده`, `Notifications, ${unread} unread`)
+                  ? t(
+                      `اعلان‌ها، ${faNum(unread, lang)} خوانده‌نشده`,
+                      `Notifications, ${unread} unread`,
+                    )
                   : t("اعلان‌ها", "Notifications")
               }
               className="relative rounded-full p-2 text-muted-foreground transition-colors hover:bg-secondary"
@@ -237,7 +236,11 @@ export function AppShell({ children }: { children: ReactNode }) {
       </nav>
 
       {/* Notification center */}
-      <Modal open={notifOpen} onClose={() => setNotifOpen(false)} title={t("اعلان‌ها", "Notifications")}>
+      <Modal
+        open={notifOpen}
+        onClose={() => setNotifOpen(false)}
+        title={t("اعلان‌ها", "Notifications")}
+      >
         {db.notifications.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
             {t("اعلانی نداری 🎈", "No notifications yet 🎈")}
@@ -245,7 +248,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         ) : (
           <div className="flex max-h-96 flex-col gap-2 overflow-y-auto">
             {db.notifications.map((n) => (
-              <div key={n.id} className={`rounded-xl border border-border p-3 ${n.read ? "opacity-60" : ""}`}>
+              <div
+                key={n.id}
+                className={`rounded-xl border border-border p-3 ${n.read ? "opacity-60" : ""}`}
+              >
                 <p className="text-sm font-bold text-foreground">{n.title}</p>
                 <p className="text-xs text-muted-foreground">{n.body}</p>
               </div>
@@ -253,7 +259,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Button
               variant="secondary"
               onClick={() =>
-                update((d) => ({ ...d, notifications: d.notifications.map((n) => ({ ...n, read: true })) }))
+                update((d) => ({
+                  ...d,
+                  notifications: d.notifications.map((n) => ({ ...n, read: true })),
+                }))
               }
             >
               {t("خواندن همه", "Mark all read")}

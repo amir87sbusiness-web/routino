@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { CalendarDays, Globe, Moon, Sun } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui";
 import { useAppMaybe } from "@/state/app";
 
@@ -12,6 +12,22 @@ function OnboardingPage() {
   const ctx = useAppMaybe();
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
+
+  /**
+   * Already onboarded? Leave immediately.
+   *
+   * This is a recovery path, not a redundant guard. `onboarded` is a SYNCED
+   * setting, so it lives in IndexedDB — and when IndexedDB is evicted (iOS under
+   * storage pressure, a cleared browser store) the app boots with it false and
+   * the gate sends the user here. Sync pulls the real account back a moment
+   * later, but nothing was moving them off this screen: someone whose data had
+   * just been restored sat reading "Welcome to Routino!", which is the exact
+   * moment a person concludes they have lost everything.
+   */
+  const onboarded = ctx?.db?.settings.onboarded ?? false;
+  useEffect(() => {
+    if (onboarded) navigate({ to: "/" });
+  }, [onboarded, navigate]);
 
   if (!ctx?.db) return null;
   const { db, update, t } = ctx;
@@ -109,7 +125,9 @@ function OnboardingPage() {
                 {(["jalali", "gregorian"] as const).map((c) => (
                   <button
                     key={c}
-                    onClick={() => update((d) => ({ ...d, settings: { ...d.settings, calendar: c } }))}
+                    onClick={() =>
+                      update((d) => ({ ...d, settings: { ...d.settings, calendar: c } }))
+                    }
                     className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition-all ${
                       db.settings.calendar === c
                         ? "border-primary bg-primary-soft text-primary"
@@ -130,7 +148,9 @@ function OnboardingPage() {
                 {(["light", "dark"] as const).map((th) => (
                   <button
                     key={th}
-                    onClick={() => update((d) => ({ ...d, settings: { ...d.settings, theme: th } }))}
+                    onClick={() =>
+                      update((d) => ({ ...d, settings: { ...d.settings, theme: th } }))
+                    }
                     className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-all ${
                       db.settings.theme === th
                         ? "border-primary bg-primary-soft text-primary"

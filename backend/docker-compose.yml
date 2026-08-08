@@ -54,14 +54,42 @@ services:
       PUBLIC_API_URL: ${PUBLIC_API_URL:?set PUBLIC_API_URL}
       PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:?set PUBLIC_WEB_URL}
       APP_DEEP_LINK: ${APP_DEEP_LINK:-routino://pay/result}
+      # Optional. Passed through so a STAGING deploy is possible at all: without
+      # it, `env.ts` refuses to boot on the Zibal sandbox merchant or console
+      # SMS — which is correct for production and blocking for a dress
+      # rehearsal. Leave unset in production.
+      ALLOW_TEST_PROVIDERS: ${ALLOW_TEST_PROVIDERS:-}
+      PSP_PROVIDERS: ${PSP_PROVIDERS:-}
+      ZARINPAL_MERCHANT: ${ZARINPAL_MERCHANT:-}
+      # First-boot owner account, so you can sign in before SMS is live.
+      OWNER_PHONE: ${OWNER_PHONE:-}
+      OWNER_PASSWORD: ${OWNER_PASSWORD:-}
+      OWNER_USERNAME: ${OWNER_USERNAME:-}
     expose:
       - "3000"
+    # `node -e` rather than curl/wget: the runtime image is node:22-alpine with
+    # no HTTP client installed, and Node 22 has a global fetch. Without a
+    # healthcheck, Caddy starts proxying to a container that is running but not
+    # yet listening, and the first requests after every deploy 502.
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     ports:
       - "80:80"
       - "443:443"
@@ -70,29 +98,43 @@ services:
       - caddy_data:/data
       - caddy_config:/config
 
-  # Nightly pg_dump to a DIFFERENT bucket than the frontend's. An untested
-  # backup is decoration — run backup/restore.sh against a scratch container
-  # before you rely on this.
+  # Daily pg_dump, uploaded OFF this machine to S3-compatible object storage
+  # (ArvanCloud, Liara, Parspack — all speak S3).
+  #
+  # The upload is the entire point. This used to write only to a local volume,
+  # which is not a backup: the most likely way to lose the database is to lose
+  # the VM, and that takes a same-VM dump with it. Set S3_* below or the
+  # container will say so in its logs on every cycle.
+  #
+  # Rehearse before you rely on it:
+  #   docker compose run --rm backup restore.sh
   backup:
-    image: postgres:17-alpine
+    build: ./backup
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       PGPASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-routino}
+      POSTGRES_DB: ${POSTGRES_DB:-routino}
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-30}
+      # e.g. https://s3.ir-thr-at1.arvanstorage.ir — and use a DIFFERENT bucket
+      # than any public/frontend one, since these dumps hold every user's data.
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      S3_REGION: ${S3_REGION:-us-east-1}
     volumes:
-      - ./backup:/backup
-    entrypoint: ["/bin/sh", "-c"]
-    command: >
-      "while true; do
-         sleep 86400;
-         pg_dump -h postgres -U ${POSTGRES_USER:-routino} ${POSTGRES_DB:-routino}
-           | gzip > /backup/routino-$$(date +%F).sql.gz;
-         find /backup -name '*.sql.gz' -mtime +30 -delete;
-       done"
+      - backup_data:/backup
 
 volumes:
   pgdata:
   caddy_data:
   caddy_config:
+  # A named volume, not a bind mount: the dumps contain every user's data and
+  # have no business sitting in the source tree next to the code.
+  backup_data:

@@ -1,0 +1,86 @@
+/**
+ * Conflict resolution, as a pure function.
+ *
+ * Separated from the engine because this is the part that can silently destroy
+ * a user's data, and a pure function is the only version of it that can be
+ * exhaustively tested without a database, a server, or a clock.
+ *
+ * The rule is last-write-wins on `updatedAt`, which the server has already
+ * clamped to `min(client, serverNow + 60s)` — so a device with a broken clock
+ * cannot park a record at the top of every comparison here.
+ */
+import type { RecordRow, SyncedTable } from "../db/dexie";
+import { SYNCED_SETTING_KEYS } from "../db/local";
+import type { RemoteRecord } from "../api/sync";
+
+/** Server-side kinds, mirrored from `SYNC_KINDS` in backend/src/db/schema.ts.
+ *
+ * `feedback` is deliberately absent even though it IS a local table: it is
+ * push-only to its own endpoint and the server rejects it as an unknown kind.
+ * Including it here would make every push 400 and sync would never run at all. */
+export const SYNCABLE_TABLES = [
+  "categories",
+  "habits",
+  "logs",
+  "tasks",
+  "timerSessions",
+  "journal",
+  "settings",
+] as const satisfies readonly SyncedTable[];
+
+export type SyncableTable = (typeof SYNCABLE_TABLES)[number];
+
+const isSyncable = (t: string): t is SyncableTable =>
+  (SYNCABLE_TABLES as readonly string[]).includes(t);
+
+/**
+ * True when a remote record may be accepted at all.
+ *
+ * The settings check is the load-bearing one. `theme` and `notificationsEnabled`
+ * are device-local by design (a phone at night and a laptop in daylight are
+ * different contexts; and pulling `notificationsEnabled: true` would fire an
+ * unprompted OS permission dialog on a device the other one cannot grant for).
+ * Nothing should ever write them into the synced `settings` table — but this is
+ * the boundary where a stale or hostile row would arrive, so it is checked here
+ * rather than assumed upstream.
+ */
+export function acceptsRemote(record: RemoteRecord): boolean {
+  if (!isSyncable(record.kind)) return false;
+  if (record.kind === "settings") {
+    return (SYNCED_SETTING_KEYS as readonly string[]).includes(record.id);
+  }
+  return true;
+}
+
+/**
+ * The row to write for an incoming remote record, or `null` to keep the local one.
+ *
+ * `dirty: 0` on everything returned: an applied remote record is by definition
+ * already on the server, and marking it dirty would push it straight back and
+ * bump its `seq`, waking every other device for a change that did not happen.
+ *
+ * A surviving local row keeps its `seq`, because that is presentation order
+ * (`src/lib/db/dexie.ts`) and re-assigning it would reshuffle the user's lists
+ * every time they synced.
+ */
+export function mergeRemote(
+  local: RecordRow<unknown> | undefined,
+  remote: RemoteRecord,
+  allocSeq: () => number,
+): RecordRow<unknown> | null {
+  if (!acceptsRemote(remote)) return null;
+
+  // Ties go to the local copy. Two devices that genuinely wrote the same value
+  // in the same millisecond agree anyway, and preferring local keeps a device
+  // replaying its outbox from rewriting rows it already has.
+  if (local && local.updatedAt >= remote.updatedAt) return null;
+
+  return {
+    key: remote.id,
+    data: remote.deleted ? null : remote.data,
+    updatedAt: remote.updatedAt,
+    deleted: remote.deleted ? 1 : 0,
+    dirty: 0,
+    seq: local?.seq ?? allocSeq(),
+  };
+}

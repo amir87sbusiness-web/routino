@@ -83,6 +83,21 @@ const BRAND_COLORS = [
 // ⚠️ TEST-ONLY — دکمهٔ «ساخت یک سال دادهٔ آزمایشی». برای انتشار false بماند.
 const SHOW_DEMO_SEED = false;
 
+/**
+ * کارت «پشتیبان‌گیری و بازیابی» فعلاً پنهان است.
+ *
+ * دلیلش سوءاستفاده از دورهٔ آزمایشی است: کاربر می‌توانست پشتیبان بگیرد، با شمارهٔ
+ * تازه وارد شود (که ۷ روز آزمایشی جدید می‌دهد) و اطلاعاتش را برگرداند.
+ *
+ * ⚠️ هزینه‌اش را بدان: اطلاعات فقط روی همین دستگاه است و این کارت **تنها** راه
+ * نجات کاربر از پاک شدن داده بود. تا وقتی سینک سرور نیامده، کاربری که حافظهٔ
+ * مرورگرش پاک شود همه‌چیزش را برای همیشه از دست می‌دهد و هیچ راه بازگشتی ندارد.
+ *
+ * هیچ کدی حذف نشده — `exportData`/`onFilePicked`/`confirmImport` سر جایشان‌اند.
+ * برای برگرداندن کافی است این را `true` کنی.
+ */
+const BACKUP_UI: boolean = false;
+
 function SettingsPage() {
   const ctx = useAppMaybe();
   const navigate = useNavigate();
@@ -505,8 +520,11 @@ function SettingsPage() {
         </div>
       </Modal>
 
-      {/* backup & restore — the recovery net while data is device-only */}
+      {/* backup & restore — behind BACKUP_UI; that flag explains what hiding it costs */}
+      {(BACKUP_UI || SHOW_DEMO_SEED) && (
       <Card className="flex flex-col gap-3">
+        {BACKUP_UI && (
+          <>
         <div className="flex items-center gap-2 text-sm font-bold text-foreground">
           <Archive className="h-4 w-4 text-primary" />{" "}
           {t("پشتیبان‌گیری و بازیابی", "Backup & restore")}
@@ -550,6 +568,8 @@ function SettingsPage() {
           hidden
           onChange={onFilePicked}
         />
+          </>
+        )}
         {/* ═══ TEST-ONLY: دادهٔ آزمایشی یک‌ساله — با SHOW_DEMO_SEED کنترل می‌شود ═══ */}
         {SHOW_DEMO_SEED && (
           <button
@@ -566,6 +586,7 @@ function SettingsPage() {
         )}
         {/* ═══ پایان TEST-ONLY ═══ */}
       </Card>
+      )}
 
       {/* danger zone: sign out + erase everything, together in one red box */}
       <Card className="flex flex-col gap-3 border-destructive/40 bg-destructive/5">
@@ -587,8 +608,8 @@ function SettingsPage() {
         {/* erase everything on this device */}
         <p className="text-[11px] leading-5 text-muted-foreground">
           {t(
-            "همهٔ عادت‌ها، ثبت‌ها، کارها، ژورنال و تاریخچهٔ تایمر از این دستگاه پاک می‌شه. حساب و اشتراکت می‌مونه. این کار قابل بازگشت نیست؛ اول یه پشتیبان بگیر.",
-            "Erases every habit, log, task, journal entry and timer session from this device. Your account and subscription stay. This cannot be undone; export a backup first.",
+            "همهٔ عادت‌ها، ثبت‌ها، کارها، ژورنال و تاریخچهٔ تایمر از این دستگاه پاک می‌شه. حساب و اشتراکت می‌مونه. این کار به‌هیچ‌وجه قابل بازگشت نیست.",
+            "Erases every habit, log, task, journal entry and timer session from this device. Your account and subscription stay. This cannot be undone by anything.",
           )}
         </p>
         <Button variant="destructive" onClick={() => setWipeOpen(true)}>

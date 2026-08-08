@@ -39,6 +39,7 @@ export const SHARED_FILES = [
   "services/password.ts",
   "services/login-throttle.ts",
   "services/owner-bootstrap.ts",
+  "services/sync.ts",
   "providers/sms/index.ts",
   "providers/sms/console.ts",
   "providers/sms/kavenegar.ts",

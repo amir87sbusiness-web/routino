@@ -17,12 +17,17 @@
  *    RETURNING`, so however many times a callback fires, the grant happens
  *    exactly once.
  */
-import { and, count, eq, gt, isNull } from "drizzle-orm";
-import type { Database } from "../db/client.js";
+import { and, count, eq, gt, isNull, sql } from "drizzle-orm";
+import { rowsOf, type Database } from "../db/client.js";
 import { payments } from "../db/schema.js";
 import { badRequest, notFound, tooMany } from "../lib/http-errors.js";
 import { toLocalPhone } from "../lib/phone.js";
-import { ZIBAL_RESULT, ZIBAL_STATUS, type PspName, type PspRouter } from "../providers/psp/index.js";
+import {
+  ZIBAL_RESULT,
+  ZIBAL_STATUS,
+  type PspName,
+  type PspRouter,
+} from "../providers/psp/index.js";
 import { grantInterval, readEntitlement, type Entitlement } from "./entitlement.js";
 import { quote, redeemDiscount } from "./pricing.js";
 
@@ -190,7 +195,11 @@ export async function checkoutPayment(
       .update(payments)
       .set({ status: "failed", provider: res.provider, pspResult: res.result, updatedAt: t })
       .where(eq(payments.id, payment.id));
-    console.error("psp request failed", { paymentId: payment.id, provider: res.provider, result: res.result });
+    console.error("psp request failed", {
+      paymentId: payment.id,
+      provider: res.provider,
+      result: res.result,
+    });
     throw badRequest("psp_failed", "Payment gateway rejected the request. Try again.");
   }
 
@@ -201,7 +210,13 @@ export async function checkoutPayment(
 
   await db
     .update(payments)
-    .set({ status: "redirected", provider: res.provider, trackId: numericTrackId, authority, updatedAt: t })
+    .set({
+      status: "redirected",
+      provider: res.provider,
+      trackId: numericTrackId,
+      authority,
+      updatedAt: t,
+    })
     .where(eq(payments.id, payment.id));
 
   return {
@@ -255,7 +270,11 @@ export async function handlePaymentCallback(
     [payment] = await db.select().from(payments).where(eq(payments.trackId, trackId)).limit(1);
   }
   if (!payment && authorityParam) {
-    [payment] = await db.select().from(payments).where(eq(payments.authority, authorityParam)).limit(1);
+    [payment] = await db
+      .select()
+      .from(payments)
+      .where(eq(payments.authority, authorityParam))
+      .limit(1);
   }
   if (!payment && orderIdParam && UUID_RE.test(orderIdParam)) {
     [payment] = await db.select().from(payments).where(eq(payments.id, orderIdParam)).limit(1);
@@ -380,6 +399,168 @@ export async function handlePaymentCallback(
   return { outcome: canceled ? "canceled" : "failed", payment };
 }
 
+/**
+ * Re-asks the gateway about one unfinished payment and applies the answer.
+ *
+ * This is the ONLY place that decides "the money moved after all", and both
+ * callers — the status poll and the sign-in sweep — go through it, because two
+ * copies of this decision is exactly how a money path grows a discrepancy.
+ *
+ * Returns true when the row changed.
+ */
+export async function settleOne(
+  db: Database,
+  psp: PspRouter,
+  payment: PaymentRow,
+  t: Date,
+): Promise<boolean> {
+  // "Not yet granted" rather than one status: any row that reached a gateway but
+  // has no grant is money we may owe access for, whatever its local status says.
+  // Cancelled and amount-mismatched rows are excluded — those must never grant,
+  // and re-asking about them forever is pure spend against the merchant quota.
+  const unsettled =
+    payment.appliedAt == null &&
+    payment.status !== "canceled" &&
+    payment.status !== "verify_failed";
+  if (!unsettled) return false;
+  const ref = paymentRef(payment);
+  if (!ref) return false;
+
+  let v;
+  try {
+    v = await psp.verify(paymentProvider(payment), ref, payment.amountRial);
+  } catch {
+    // Gateway unreachable or timed out. Do NOT mark failed — the money may have
+    // moved. The next poll or the next app open asks again.
+    return false;
+  }
+
+  const paid =
+    (v.result === ZIBAL_RESULT.OK && v.status === ZIBAL_STATUS.PAID_VERIFIED) ||
+    v.result === ZIBAL_RESULT.ALREADY_VERIFIED;
+
+  if (paid) {
+    if (
+      v.result === ZIBAL_RESULT.OK &&
+      typeof v.amount === "number" &&
+      v.amount !== payment.amountRial
+    ) {
+      await db
+        .update(payments)
+        .set({
+          status: "verify_failed",
+          pspResult: v.result,
+          pspStatus: v.status ?? null,
+          updatedAt: t,
+        })
+        .where(eq(payments.id, payment.id));
+      console.error("PAYMENT AMOUNT MISMATCH — investigate immediately", {
+        paymentId: payment.id,
+        expectedRial: payment.amountRial,
+        gotRial: v.amount,
+      });
+      return true;
+    }
+    await applyPaid(db, payment, v, t);
+    return true;
+  }
+
+  if (v.status === ZIBAL_STATUS.CANCELED_BY_USER) {
+    await db
+      .update(payments)
+      .set({ status: "canceled", pspResult: v.result, pspStatus: v.status ?? null, updatedAt: t })
+      .where(and(eq(payments.id, payment.id), isNull(payments.appliedAt)));
+    return true;
+  }
+  return false;
+}
+
+/** How far back a stranded payment is still worth chasing on sign-in. */
+const SETTLE_WINDOW_MS = 72 * 3_600_000;
+/** Bounded so one pathological account can never make opening the app slow. */
+const SETTLE_MAX = 3;
+
+/**
+ * Finishes payments that the browser never finished for us.
+ *
+ * The callback is a REDIRECT of the user's browser, and in Iran that browser is
+ * often behind a VPN or a connection that drops at exactly the wrong moment. If
+ * it never lands and the user does not return to the payment screen, the row
+ * sits in `redirected` forever: money moved, nothing granted, and the only
+ * recovery is the owner noticing a support message.
+ *
+ * So the app's own boot path finishes them. This runs on the sync pull — the one
+ * request every app open already makes — and on the normal path it is a single
+ * indexed SELECT that returns nothing. Only when there IS a stranded payment
+ * does it cost a gateway round trip, and that round trip is now bounded by
+ * PSP_TIMEOUT_MS.
+ *
+ * Also repairs the one gap `applyPaid` cannot close by itself: it claims the row
+ * and THEN grants, so a process killed between the two leaves a payment marked
+ * paid with no entitlement behind it. That row is invisible to the sweep above
+ * (it is applied), so it is found by asking which paid payments have no grant.
+ *
+ * Never throws: a sweep failure must not stop someone opening their app.
+ */
+export async function settleOpenPayments(
+  db: Database,
+  psp: PspRouter,
+  userId: string,
+  t: Date,
+): Promise<number> {
+  const since = new Date(t.getTime() - SETTLE_WINDOW_MS);
+  let healed = 0;
+
+  try {
+    const open = await db
+      .select()
+      .from(payments)
+      .where(
+        and(
+          eq(payments.userId, userId),
+          isNull(payments.appliedAt),
+          eq(payments.status, "redirected"),
+          gt(payments.createdAt, since),
+        ),
+      )
+      .limit(SETTLE_MAX);
+
+    for (const row of open) {
+      if (await settleOne(db, psp, row, t)) healed += 1;
+    }
+  } catch (err) {
+    console.error("settleOpenPayments: sweep failed", { userId, err });
+  }
+
+  try {
+    const orphaned = await db.execute(sql`
+      select p.* from payments p
+       where p.user_id = ${userId}::uuid
+         and p.applied_at is not null
+         and p.status = 'paid'
+         and p.created_at > ${since}
+         and not exists (select 1 from grants g where g.payment_id = p.id)
+       limit ${SETTLE_MAX}
+    `);
+    for (const row of rowsOf<{ id: string; user_id: string; plan_id: string; months: number }>(
+      orphaned,
+    )) {
+      console.error("payment applied but never granted — repairing", { paymentId: row.id });
+      await grantInterval(
+        db,
+        row.user_id,
+        { planId: row.plan_id, months: Number(row.months), source: "payment", paymentId: row.id },
+        t,
+      );
+      healed += 1;
+    }
+  } catch (err) {
+    console.error("settleOpenPayments: grant repair failed", { userId, err });
+  }
+
+  return healed;
+}
+
 export interface PollResult {
   payment: {
     id: string;
@@ -415,46 +596,10 @@ export async function pollPayment(
 
   // Self-heal: user returned but the callback never fired (network, closed tab),
   // or a grant failed after the money moved and was un-claimed for retry.
-  //
-  // The condition is deliberately "not yet applied" rather than a single status:
-  // any row that reached a gateway but has no grant is money we may owe access
-  // for, whatever its local status says. Only user-cancelled and
-  // amount-mismatched rows are excluded — those must never grant, and re-asking
-  // the gateway about them on every poll is pure cost.
-  const unsettled =
-    payment.appliedAt == null &&
-    payment.status !== "canceled" &&
-    payment.status !== "verify_failed";
-  if (unsettled && (payment.trackId != null || payment.authority)) {
-    try {
-      const v = await psp.verify(paymentProvider(payment), paymentRef(payment)!, payment.amountRial);
-      if (
-        (v.result === ZIBAL_RESULT.OK && v.status === ZIBAL_STATUS.PAID_VERIFIED) ||
-        v.result === ZIBAL_RESULT.ALREADY_VERIFIED
-      ) {
-        if (v.result === ZIBAL_RESULT.OK && typeof v.amount === "number" && v.amount !== payment.amountRial) {
-          await db
-            .update(payments)
-            .set({ status: "verify_failed", pspResult: v.result, pspStatus: v.status ?? null, updatedAt: t })
-            .where(eq(payments.id, payment.id));
-          console.error("PAYMENT AMOUNT MISMATCH — investigate immediately", {
-            paymentId: payment.id,
-            expectedRial: payment.amountRial,
-            gotRial: v.amount,
-          });
-        } else {
-          await applyPaid(db, payment, v, t);
-        }
-      } else if (v.status === ZIBAL_STATUS.CANCELED_BY_USER) {
-        await db
-          .update(payments)
-          .set({ status: "canceled", pspResult: v.result, pspStatus: v.status ?? null, updatedAt: t })
-          .where(and(eq(payments.id, payment.id), isNull(payments.appliedAt)));
-      }
-      [payment] = await db.select().from(payments).where(eq(payments.id, id)).limit(1);
-    } catch {
-      /* verify unreachable — report current state; the client will poll again */
-    }
+  // `settleOne` owns that decision — see it for why the condition is "not yet
+  // granted" rather than a single status.
+  if (await settleOne(db, psp, payment, t)) {
+    [payment] = await db.select().from(payments).where(eq(payments.id, id)).limit(1);
   }
   if (!payment) throw notFound("unknown_payment", "No such payment");
 
