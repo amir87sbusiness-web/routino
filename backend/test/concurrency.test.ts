@@ -13,6 +13,7 @@
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
+import { claimSendSlot } from "../src/services/otp.js";
 
 let h: Harness;
 
@@ -269,5 +270,46 @@ describe("storms", () => {
       expect(owned).toHaveLength(1);
       expect(owned[0]!.id).toBe(`own-${i}`);
     });
+  });
+});
+
+describe("the SMS bill", () => {
+  it("sends ONE code when the same phone asks five times at once", async () => {
+    const phone = "09135550001";
+
+    // A retrying client, a double-tapped button, or someone deliberately
+    // hammering the endpoint. Every send is real money at Kavenegar, and the
+    // per-phone limit is one per minute — so five simultaneous requests must
+    // still cost exactly one message.
+    const results = await Promise.all(
+      Array.from({ length: 5 }, () =>
+        h.app.inject({ method: "POST", url: "/v1/auth/otp/request", payload: { phone } }),
+      ),
+    );
+
+    const sent = h.sms.sent.filter((m) => m.phone.endsWith(phone.slice(1)));
+    expect(sent).toHaveLength(1);
+
+    // And the rest were told to wait rather than failing loudly.
+    const accepted = results.filter((r) => r.statusCode === 200);
+    expect(accepted.length).toBeLessThanOrEqual(1);
+  });
+
+  it("cannot be made to send five codes by interleaving the rate check", async () => {
+    const phone = "989135550002";
+    const now = new Date();
+
+    // The same five requests, but interleaved the way real Postgres would run
+    // them across five connections: every check happens before any insert. Over
+    // HTTP against single-connection PGlite this window happens to close on its
+    // own, which is exactly why the guarantee has to be asserted at the level
+    // where the race actually lives.
+    const outcomes = await Promise.all(
+      Array.from({ length: 5 }, async () => {
+        return (await claimSendSlot(h.db, h.env, phone, null, now)) ? "sent" : "blocked";
+      }),
+    );
+
+    expect(outcomes.filter((o) => o === "sent")).toHaveLength(1);
   });
 });

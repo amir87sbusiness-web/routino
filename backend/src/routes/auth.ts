@@ -11,7 +11,7 @@ import {
   clearLoginFailures,
   recordLoginFailure,
 } from "../services/login-throttle.js";
-import { checkSendRate, createCode, verifyCode } from "../services/otp.js";
+import { checkSendRate, claimSendSlot, verifyCode } from "../services/otp.js";
 import {
   DUMMY_HASH,
   hashPassword,
@@ -72,16 +72,21 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     if (!phone) throw badRequest("invalid_phone", "Enter a valid Iranian mobile number");
 
     const t = now();
-    const verdict = await checkSendRate(db, phone, clientIp(req), t);
-    if (!verdict.ok) {
+    // The slot and the code are claimed together, in ONE statement — see
+    // `claimSendSlot`. `checkSendRate` still runs, but only to explain WHICH
+    // limit was hit; it no longer enforces them, because a check followed by a
+    // separate insert let simultaneous requests for one phone each count zero
+    // rows and each send a message. Every one of those is real money.
+    const code = await claimSendSlot(db, env, phone, clientIp(req), t);
+    if (!code) {
+      const verdict = await checkSendRate(db, phone, clientIp(req), t);
       // Last 4 digits only. These logs land in a third-party pipeline with its
       // own retention and access rules; a full subscriber list does not belong
       // there just to explain a rate-limit hit.
       req.log.warn({ reason: verdict.reason, phone: `***${phone.slice(-4)}` }, "otp rate limited");
-      throw tooMany("Too many code requests. Try again later.", verdict.retryAfter);
+      throw tooMany("Too many code requests. Try again later.", verdict.retryAfter ?? 60);
     }
 
-    const code = await createCode(db, env, phone, clientIp(req), t);
     try {
       await sms.sendOtp(phone, code);
     } catch (err) {
@@ -177,7 +182,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       // Past the soft limit the answer becomes "too many attempts" instead of
       // "wrong password" — but only for a wrong one. A correct password still
       // gets through below, so an attacker cannot lock the real owner out.
-      if (verdict.verifyOnly) throw tooMany("Too many attempts. Try again later.", verdict.retryAfter);
+      if (verdict.verifyOnly)
+        throw tooMany("Too many attempts. Try again later.", verdict.retryAfter);
       throw unauthorized("bad_credentials", "Wrong phone/username or password");
     }
     // Only tell a caller who PROVED they own the account that it is blocked.

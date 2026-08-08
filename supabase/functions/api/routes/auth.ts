@@ -22,7 +22,7 @@ import {
   clearLoginFailures,
   recordLoginFailure,
 } from "../shared/services/login-throttle.ts";
-import { checkSendRate, createCode, verifyCode } from "../shared/services/otp.ts";
+import { checkSendRate, claimSendSlot, verifyCode } from "../shared/services/otp.ts";
 import {
   DUMMY_HASH,
   hashPassword,
@@ -77,15 +77,20 @@ export function authRoutes(deps: Deps) {
 
     const t = now();
     const ip = clientIp(c, env);
-    const verdict = await checkSendRate(db, phone, ip, t);
-    if (!verdict.ok) {
+    // The slot and the code are claimed together, in ONE statement — see
+    // `claimSendSlot`. `checkSendRate` still runs, but only to explain WHICH
+    // limit was hit; it no longer enforces them, because a check followed by a
+    // separate insert let simultaneous requests for one phone each count zero
+    // rows and each send a message. Every one of those is real money.
+    const code = await claimSendSlot(db, env, phone, ip, t);
+    if (!code) {
+      const verdict = await checkSendRate(db, phone, ip, t);
       // Last 4 digits only — these logs land in a third-party pipeline with its
       // own retention rules, and a subscriber list does not belong there.
       console.warn("otp rate limited", { reason: verdict.reason, phone: `***${phone.slice(-4)}` });
-      throw tooMany("Too many code requests. Try again later.", verdict.retryAfter);
+      throw tooMany("Too many code requests. Try again later.", verdict.retryAfter ?? 60);
     }
 
-    const code = await createCode(db, env, phone, ip, t);
     try {
       await sms.sendOtp(phone, code);
     } catch (err) {
@@ -173,7 +178,8 @@ export function authRoutes(deps: Deps) {
       // Past the soft limit a WRONG password becomes "too many attempts" — but a
       // correct one still gets through below, so an attacker who knows someone's
       // phone number cannot lock them out of their own account.
-      if (verdict.verifyOnly) throw tooMany("Too many attempts. Try again later.", verdict.retryAfter);
+      if (verdict.verifyOnly)
+        throw tooMany("Too many attempts. Try again later.", verdict.retryAfter);
       throw unauthorized("bad_credentials", "Wrong phone/username or password");
     }
     if (user.blocked) throw unauthorized("blocked", "Account is blocked");

@@ -15,7 +15,7 @@
 import { Buffer } from "node:buffer";
 import { createHash, randomInt, timingSafeEqual } from "node:crypto";
 import { and, count, desc, eq, gt, isNull, lt, sql } from "drizzle-orm";
-import type { Database } from "../db/client.ts";
+import { rowsOf, type Database } from "../db/client.ts";
 import { otpCodes } from "../db/schema.ts";
 import type { Env } from "../env.ts";
 
@@ -50,7 +50,13 @@ const constantTimeEquals = (a: string, b: string): boolean => {
 /* Uses the query builder rather than raw SQL: `db.execute()` returns a bare
  * array on node-postgres but a `{ rows }` object on PGlite, whereas `select()`
  * yields a plain array on both. */
-async function countSince(db: Database, column: "phone" | "ip", value: string, seconds: number, now: Date) {
+async function countSince(
+  db: Database,
+  column: "phone" | "ip",
+  value: string,
+  seconds: number,
+  now: Date,
+) {
   const since = new Date(now.getTime() - seconds * 1000);
   const col = column === "phone" ? otpCodes.phone : otpCodes.ip;
   const [row] = await db
@@ -66,7 +72,12 @@ export interface RateVerdict {
   reason?: "phone_minute" | "phone_hour" | "phone_day" | "ip_hour" | "global_day";
 }
 
-export async function checkSendRate(db: Database, phone: string, ip: string | null, now: Date): Promise<RateVerdict> {
+export async function checkSendRate(
+  db: Database,
+  phone: string,
+  ip: string | null,
+  now: Date,
+): Promise<RateVerdict> {
   if ((await countSince(db, "phone", phone, 60, now)) >= LIMITS.phonePerMinute) {
     return { ok: false, retryAfter: 60, reason: "phone_minute" };
   }
@@ -92,8 +103,17 @@ export async function checkSendRate(db: Database, phone: string, ip: string | nu
 }
 
 /** Creates and stores a code. Returns the plaintext ONCE, for the SMS provider —
- * it is never persisted, logged, or returned to a client. */
-export async function createCode(db: Database, env: Env, phone: string, ip: string | null, now: Date): Promise<string> {
+ * it is never persisted, logged, or returned to a client.
+ *
+ * Prefer `claimSendSlot`, which does this and the rate check together. This is
+ * exported for the tests that need to write a code without spending a slot. */
+export async function createCode(
+  db: Database,
+  env: Env,
+  phone: string,
+  ip: string | null,
+  now: Date,
+): Promise<string> {
   const code = generateCode();
   await db.insert(otpCodes).values({
     phone,
@@ -105,7 +125,68 @@ export async function createCode(db: Database, env: Env, phone: string, ip: stri
   return code;
 }
 
-export type VerifyResult = { ok: true } | { ok: false; reason: "no_code" | "expired" | "too_many" | "wrong" };
+/**
+ * Claims one send slot and writes the code — in a SINGLE statement.
+ *
+ * `checkSendRate` then `createCode` is read-then-write, and every send costs
+ * real money at Kavenegar. Five requests for one phone arriving together each
+ * counted zero rows and each sent a message: the per-minute limit of one was
+ * whatever the concurrency happened to be. Sequential callers never see it, and
+ * neither does a single-connection test database, which is why this is asserted
+ * at the service level in `backend/test/concurrency.test.ts`.
+ *
+ * Two things make it safe, and both are needed:
+ *
+ *  - `pg_try_advisory_xact_lock` keyed on the phone serialises requests for the
+ *    SAME number and nothing else. A conditional INSERT alone would not be
+ *    enough: under READ COMMITTED both transactions can evaluate the counts
+ *    against their own snapshot before either commits, and both would insert.
+ *  - Losing the lock is treated as "rate limited", not as an error. A second
+ *    request for the same phone in the same instant is precisely what the limit
+ *    exists to refuse.
+ *
+ * Returns the plaintext code, or null when the caller may not send.
+ */
+export async function claimSendSlot(
+  db: Database,
+  env: Env,
+  phone: string,
+  ip: string | null,
+  now: Date,
+): Promise<string | null> {
+  const code = generateCode();
+  const at = (seconds: number) => new Date(now.getTime() - seconds * 1000);
+
+  const res = await db.execute(sql`
+    with lk as (
+      select pg_try_advisory_xact_lock(hashtext(${phone})) as got
+    ),
+    verdict as (
+      select lk.got
+        and (select count(*) from otp_codes
+              where phone = ${phone} and created_at > ${at(60)}) < ${LIMITS.phonePerMinute}
+        and (select count(*) from otp_codes
+              where phone = ${phone} and created_at > ${at(3600)}) < ${LIMITS.phonePerHour}
+        and (select count(*) from otp_codes
+              where phone = ${phone} and created_at > ${at(86400)}) < ${LIMITS.phonePerDay}
+        and (${ip}::text is null or (select count(*) from otp_codes
+              where ip = ${ip} and created_at > ${at(3600)}) < ${LIMITS.ipPerHour})
+        and (select count(*) from otp_codes
+              where created_at > ${at(86400)}) < ${LIMITS.globalPerDay}
+        as allow
+      from lk
+    )
+    insert into otp_codes (phone, code_hash, expires_at, ip, created_at)
+    select ${phone}, ${hashCode(code, env)}, ${new Date(now.getTime() + env.OTP_TTL_SECONDS * 1000)}, ${ip}, ${now}
+      from verdict where verdict.allow
+    returning id
+  `);
+
+  return rowsOf<{ id: string }>(res).length > 0 ? code : null;
+}
+
+export type VerifyResult =
+  { ok: true } | { ok: false; reason: "no_code" | "expired" | "too_many" | "wrong" };
 
 /**
  * Verifies and consumes a code.
@@ -113,7 +194,13 @@ export type VerifyResult = { ok: true } | { ok: false; reason: "no_code" | "expi
  * Only the newest unconsumed code counts: requesting a second code must
  * invalidate the first, or an attacker gains one extra guess per request.
  */
-export async function verifyCode(db: Database, env: Env, phone: string, code: string, now: Date): Promise<VerifyResult> {
+export async function verifyCode(
+  db: Database,
+  env: Env,
+  phone: string,
+  code: string,
+  now: Date,
+): Promise<VerifyResult> {
   const [row] = await db
     .select()
     .from(otpCodes)
