@@ -148,3 +148,28 @@ describe("weekly tombstone purge", () => {
     expect(bRows.records.map((r) => r.id)).toContain("b-live");
   });
 });
+
+describe("purge racing a device that is syncing", () => {
+  it("never lets a pull miss a delete the purge is removing", async () => {
+    const { access } = await signIn("09124440005");
+
+    await push(access, [
+      { kind: "habits", id: "alive", data: { id: "alive" }, updatedAt: Date.now(), deleted: false },
+      { kind: "habits", id: "old", data: null, updatedAt: Date.now() - 200 * DAY, deleted: true },
+    ]);
+
+    // A phone syncing at the exact moment the weekly job runs. Either outcome is
+    // acceptable — the pull sees the tombstone, or it is told to resync — but
+    // one is NOT: continuing from a cursor below the new watermark while the
+    // tombstone is gone, which resurrects a deleted habit.
+    const [, pulled] = await Promise.all([h.raw(purgeSql()), pull(access, 1)]);
+    const body = pulled.json() as { reset: boolean; records: { id: string }[] };
+
+    const sawTombstone = body.records.some((r) => r.id === "old");
+    expect(body.reset || sawTombstone).toBe(true);
+
+    // And afterwards a full resync shows the true state: the delete stuck.
+    const fresh = (await pull(access, 0)).json() as { records: { id: string }[] };
+    expect(fresh.records.map((r) => r.id)).toEqual(["alive"]);
+  });
+});

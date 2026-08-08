@@ -313,3 +313,81 @@ describe("the SMS bill", () => {
     expect(outcomes.filter((o) => o === "sent")).toHaveLength(1);
   });
 });
+
+describe("limits that are counted rather than locked", () => {
+  it("does not let concurrent imports extend a subscription twice", async () => {
+    const s = await signIn("09136660001");
+    const expiresAt = Date.now() + 60 * 86_400_000;
+    const body = { planId: "m3", expiresAt, startedAt: Date.now(), trial: false };
+
+    // Two tabs, or a retry, both rescuing the same legacy subscription. The
+    // once-only check is a SELECT followed by a write, so both can pass it.
+    await Promise.all([
+      h.app.inject({
+        method: "POST",
+        url: "/v1/subscriptions/import",
+        headers: auth(s.access),
+        payload: body,
+      }),
+      h.app.inject({
+        method: "POST",
+        url: "/v1/subscriptions/import",
+        headers: auth(s.access),
+        payload: body,
+      }),
+    ]);
+
+    const [row] = await h.query<{ expires_at: string }>(
+      `select expires_at::text from entitlements where user_id = '${s.user.id}'`,
+    );
+    const days = (new Date(row!.expires_at).getTime() - Date.now()) / 86_400_000;
+    // ~60 days, not ~120. `ensureExpiresAt` takes the MAX rather than stacking,
+    // which is what makes a duplicate import harmless even when both pass the
+    // once-only check.
+    expect(days).toBeLessThan(75);
+    expect(days).toBeGreaterThan(55);
+  });
+
+  it("reports how far concurrent wrong passwords can overshoot the guess limit", async () => {
+    const s = await signIn("09136660002");
+    await h.app.inject({
+      method: "POST",
+      url: "/v1/auth/password",
+      headers: auth(s.access),
+      payload: { newPassword: "Routino!2026" },
+    });
+
+    // 30 wrong guesses at once. The hard limit is 50 and the soft limit 8, and
+    // the ledger is counted-then-written, so simultaneous guesses all read the
+    // same total and all get a scrypt run. This asserts the bound rather than
+    // perfection: what must NOT happen is unbounded guessing, and what DOES
+    // happen is an overshoot of at most the attacker's concurrency — which an
+    // HTTP rate limiter in front, not this ledger, is the right answer to.
+    const attempts = await Promise.all(
+      Array.from({ length: 30 }, () =>
+        h.app.inject({
+          method: "POST",
+          url: "/v1/auth/password/login",
+          payload: { identifier: "09136660002", password: "definitely-wrong" },
+        }),
+      ),
+    );
+
+    for (const r of attempts) expect([401, 429]).toContain(r.statusCode);
+
+    const [row] = await h.query<{ n: number }>(
+      `select count(*)::int as n from login_attempts where identifier = '989136660002'`,
+    );
+    // Every failure was recorded, so the NEXT burst starts already throttled.
+    expect(Number(row!.n)).toBeGreaterThanOrEqual(25);
+
+    // And the real owner is not locked out by someone else's guessing — the
+    // whole reason the soft limit lets a CORRECT password through.
+    const good = await h.app.inject({
+      method: "POST",
+      url: "/v1/auth/password/login",
+      payload: { identifier: "09136660002", password: "Routino!2026" },
+    });
+    expect(good.statusCode).toBe(200);
+  });
+});
