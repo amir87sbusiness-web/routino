@@ -33,9 +33,22 @@ const tokenEquals = (a: string, b: string): boolean => {
   return timingSafeEqual(ab, bb);
 };
 
+// Negative values are allowed on purpose, and this is the ONLY way to take
+// access back. A refund or a chargeback happens entirely at the gateway — no
+// callback reaches this server and nothing polls for one — so a user who gets
+// their money back keeps a working subscription until somebody corrects it by
+// hand. Without a negative grant the only remedy was blocking the whole
+// account, which is far too blunt for "they refunded one month of three".
+//
+// `grantInterval` handles the arithmetic correctly either way: Postgres'
+// `make_interval` takes negative months/days, and the surrounding
+// `greatest(expires_at, now) + interval` means subtracting walks the expiry
+// backwards from wherever it actually is. Every adjustment still lands in the
+// append-only `grants` ledger with its note, so "why did this shrink" stays
+// answerable.
 const grantBody = z.object({
-  months: z.number().int().min(0).max(36).default(0),
-  days: z.number().int().min(0).max(366).default(0),
+  months: z.number().int().min(-36).max(36).default(0),
+  days: z.number().int().min(-366).max(366).default(0),
   planId: z.string().min(1).max(32).default("admin"),
   note: z.string().max(500).optional(),
 });
