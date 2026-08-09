@@ -534,12 +534,19 @@ export async function settleOpenPayments(
   }
 
   try {
+    // .toISOString() BEFORE interpolation, not just a `::timestamptz` cast in
+    // the SQL text — see the identical fix and full explanation in
+    // services/otp.ts. A raw JS Date reaching postgres.js (the edge deployment's
+    // driver on Deno) throws while encoding the parameter, before the query or
+    // its cast is even sent; node-postgres tolerates it, which is how this ran
+    // clean in every local/PGlite test while crashing on every boot in production.
+    const sinceIso = since.toISOString();
     const orphaned = await db.execute(sql`
       select p.* from payments p
        where p.user_id = ${userId}::uuid
          and p.applied_at is not null
          and p.status = 'paid'
-         and p.created_at > ${since}
+         and p.created_at > ${sinceIso}::timestamptz
          and not exists (select 1 from grants g where g.payment_id = p.id)
        limit ${SETTLE_MAX}
     `);

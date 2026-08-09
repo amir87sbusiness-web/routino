@@ -63,7 +63,7 @@ export async function grantInterval(
 ): Promise<Entitlement> {
   const months = opts.months ?? 0;
   const days = opts.days ?? 0;
-  const t = now.toISOString();
+  const tIso = now.toISOString();
 
   // ONE statement, deliberately.
   //
@@ -83,13 +83,13 @@ export async function grantInterval(
       insert into entitlements (user_id, plan_id, expires_at, updated_at)
       values (
         ${userId}, ${opts.planId},
-        ${t}::timestamptz + make_interval(months => ${months}, days => ${days}),
-        ${t}::timestamptz
+        ${tIso}::timestamptz + make_interval(months => ${months}, days => ${days}),
+        ${tIso}::timestamptz
       )
       on conflict (user_id) do update set
         plan_id = excluded.plan_id,
         updated_at = excluded.updated_at,
-        expires_at = greatest(entitlements.expires_at, ${t}::timestamptz)
+        expires_at = greatest(entitlements.expires_at, ${tIso}::timestamptz)
                      + make_interval(months => ${months}, days => ${days})
       returning expires_at
     )
@@ -129,8 +129,8 @@ export async function ensureExpiresAt(
   opts: { planId: string; claimed: Date; source: GrantSource; note?: string | null },
   now: Date,
 ): Promise<Entitlement> {
-  const t = now.toISOString();
-  const claimed = opts.claimed.toISOString();
+  const tIso = now.toISOString();
+  const claimedIso = opts.claimed.toISOString();
 
   // Same single-statement treatment as `grantInterval`: `greatest()` inside the
   // conflict branch can only ever raise the expiry, so a concurrent grant can
@@ -140,14 +140,14 @@ export async function ensureExpiresAt(
       select expires_at from entitlements where user_id = ${userId}
     ), upserted as (
       insert into entitlements (user_id, plan_id, expires_at, updated_at)
-      values (${userId}, ${opts.planId}, ${claimed}::timestamptz, ${t}::timestamptz)
+      values (${userId}, ${opts.planId}, ${claimedIso}::timestamptz, ${tIso}::timestamptz)
       on conflict (user_id) do update set
         plan_id = case
-          when entitlements.expires_at < ${claimed}::timestamptz then excluded.plan_id
+          when entitlements.expires_at < ${claimedIso}::timestamptz then excluded.plan_id
           else entitlements.plan_id
         end,
         updated_at = excluded.updated_at,
-        expires_at = greatest(entitlements.expires_at, ${claimed}::timestamptz)
+        expires_at = greatest(entitlements.expires_at, ${claimedIso}::timestamptz)
       returning expires_at
     )
     select (select expires_at from prev) as before,

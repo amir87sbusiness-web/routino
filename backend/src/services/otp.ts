@@ -154,7 +154,19 @@ export async function claimSendSlot(
   now: Date,
 ): Promise<string | null> {
   const code = generateCode();
-  const at = (seconds: number) => new Date(now.getTime() - seconds * 1000);
+  // Converted to an ISO STRING here, in JS, before it ever reaches the SQL
+  // template — a `::timestamptz` cast in the SQL text is not enough on its own.
+  // node-postgres (the Fastify backend) happily serialises a raw JS `Date`
+  // parameter itself; postgres.js — the driver the DEPLOYED edge function runs
+  // on Deno — does not, and throws `ERR_INVALID_ARG_TYPE: Received an instance
+  // of Date` while trying to encode the parameter, before the query (and its
+  // cast) is even sent. The cast only tells Postgres how to interpret a STRING
+  // that already arrived; it cannot rescue a value the client driver couldn't
+  // serialise in the first place. `grantInterval` in entitlement.ts got this
+  // right by calling \`.toISOString()\` up front — this now matches it.
+  const atIso = (seconds: number) => new Date(now.getTime() - seconds * 1000).toISOString();
+  const nowIso = now.toISOString();
+  const expiresIso = new Date(now.getTime() + env.OTP_TTL_SECONDS * 1000).toISOString();
 
   const res = await db.execute(sql`
     with lk as (
@@ -163,20 +175,22 @@ export async function claimSendSlot(
     verdict as (
       select lk.got
         and (select count(*) from otp_codes
-              where phone = ${phone} and created_at > ${at(60)}) < ${LIMITS.phonePerMinute}
+              where phone = ${phone} and created_at > ${atIso(60)}::timestamptz) < ${LIMITS.phonePerMinute}
         and (select count(*) from otp_codes
-              where phone = ${phone} and created_at > ${at(3600)}) < ${LIMITS.phonePerHour}
+              where phone = ${phone} and created_at > ${atIso(3600)}::timestamptz) < ${LIMITS.phonePerHour}
         and (select count(*) from otp_codes
-              where phone = ${phone} and created_at > ${at(86400)}) < ${LIMITS.phonePerDay}
+              where phone = ${phone} and created_at > ${atIso(86400)}::timestamptz) < ${LIMITS.phonePerDay}
         and (${ip}::text is null or (select count(*) from otp_codes
-              where ip = ${ip} and created_at > ${at(3600)}) < ${LIMITS.ipPerHour})
+              where ip = ${ip} and created_at > ${atIso(3600)}::timestamptz) < ${LIMITS.ipPerHour})
         and (select count(*) from otp_codes
-              where created_at > ${at(86400)}) < ${LIMITS.globalPerDay}
+              where created_at > ${atIso(86400)}::timestamptz) < ${LIMITS.globalPerDay}
         as allow
       from lk
     )
     insert into otp_codes (phone, code_hash, expires_at, ip, created_at)
-    select ${phone}, ${hashCode(code, env)}, ${new Date(now.getTime() + env.OTP_TTL_SECONDS * 1000)}, ${ip}, ${now}
+    select ${phone}, ${hashCode(code, env)},
+           ${expiresIso}::timestamptz,
+           ${ip}, ${nowIso}::timestamptz
       from verdict where verdict.allow
     returning id
   `);
