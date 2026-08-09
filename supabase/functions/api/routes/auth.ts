@@ -22,7 +22,13 @@ import {
   clearLoginFailures,
   recordLoginFailure,
 } from "../shared/services/login-throttle.ts";
-import { checkSendRate, claimSendSlot, verifyCode } from "../shared/services/otp.ts";
+import {
+  checkSendRate,
+  claimSendSlot,
+  releaseSendSlot,
+  verifyCode,
+} from "../shared/services/otp.ts";
+import { SmsNotSentError } from "../shared/providers/sms/index.ts";
 import {
   DUMMY_HASH,
   hashPassword,
@@ -82,8 +88,8 @@ export function authRoutes(deps: Deps) {
     // limit was hit; it no longer enforces them, because a check followed by a
     // separate insert let simultaneous requests for one phone each count zero
     // rows and each send a message. Every one of those is real money.
-    const code = await claimSendSlot(db, env, phone, ip, t);
-    if (!code) {
+    const slot = await claimSendSlot(db, env, phone, ip, t);
+    if (!slot) {
       const verdict = await checkSendRate(db, phone, ip, t);
       // Last 4 digits only — these logs land in a third-party pipeline with its
       // own retention rules, and a subscriber list does not belong there.
@@ -92,10 +98,17 @@ export function authRoutes(deps: Deps) {
     }
 
     try {
-      await sms.sendOtp(phone, code);
+      await sms.sendOtp(phone, slot.code);
     } catch (err) {
-      // The code row stays — it counts against the rate limit either way, so a
-      // provider outage can't be used to bypass throttling.
+      // Give the slot back only when the provider is CERTAIN nothing was sent
+      // (bad template, empty account, rejected receptor). That send cost
+      // nothing, so charging the user's per-hour allowance for it would lock
+      // them out for an hour over our misconfiguration — and from their side it
+      // is indistinguishable from "the SMS just doesn't arrive sometimes".
+      // A timeout or a 5xx is deliberately NOT refunded: the message may
+      // genuinely have gone out, and refunding an ambiguous failure is how the
+      // rate limit stops protecting the bill.
+      if (err instanceof SmsNotSentError) await releaseSendSlot(db, slot.slotId);
       console.error("sms send failed", { err });
       return c.json({ error: "sms_failed", message: "Could not send the code. Try again." }, 502);
     }

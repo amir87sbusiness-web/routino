@@ -66,6 +66,13 @@ async function countSince(
   return row?.n ?? 0;
 }
 
+/** What `claimSendSlot` hands back: the plaintext code for the provider, plus
+ * the row id so a provably-unsent message can give the slot back. */
+export interface SendSlot {
+  code: string;
+  slotId: string;
+}
+
 export interface RateVerdict {
   ok: boolean;
   retryAfter?: number;
@@ -153,7 +160,7 @@ export async function claimSendSlot(
   phone: string,
   ip: string | null,
   now: Date,
-): Promise<string | null> {
+): Promise<SendSlot | null> {
   const code = generateCode();
   // Converted to an ISO STRING here, in JS, before it ever reaches the SQL
   // template — a `::timestamptz` cast in the SQL text is not enough on its own.
@@ -196,7 +203,26 @@ export async function claimSendSlot(
     returning id
   `);
 
-  return rowsOf<{ id: string }>(res).length > 0 ? code : null;
+  const [row] = rowsOf<{ id: string }>(res);
+  return row ? { code, slotId: row.id } : null;
+}
+
+/**
+ * Gives back a slot claimed by `claimSendSlot` when the message provably never
+ * went out.
+ *
+ * The rate limit exists to protect the SMS bill, so a send that cost nothing
+ * should cost the user nothing either. Without this, a misconfigured template or
+ * an empty Kavenegar account burns the caller's per-hour allowance while they
+ * receive no code at all — they are locked out for an hour by OUR fault, and the
+ * failure looks to them exactly like "the SMS sometimes doesn't arrive".
+ *
+ * Only ever called for `SmsNotSentError`, never for a timeout or a 5xx: those
+ * are ambiguous, the message may really have been sent, and refunding on an
+ * ambiguous failure is how a retry loop turns into an unbounded bill.
+ */
+export async function releaseSendSlot(db: Database, slotId: string): Promise<void> {
+  await db.delete(otpCodes).where(eq(otpCodes.id, slotId));
 }
 
 export type VerifyResult =
