@@ -77,12 +77,18 @@ const renderSections = (list) =>
     )
     .join("\n");
 
-/** وزیرمتن از خود پکیج پروژه — بدون CDN، بدون فونت بیرونی. فقط دو وزنی که
- * صفحه‌های عمومی لازم دارند (۴۰۰ و ۷۰۰)، عربی برای فارسی و لاتین برای «Routino»
- * و اعداد انگلیسی. */
+/** وزیرمتن از خود پکیج پروژه — بدون CDN، بدون فونت بیرونی. عربی برای فارسی و
+ * لاتین برای «Routino» و اعداد انگلیسی.
+ *
+ * چهار وزنِ عربی، چون سلسله‌مراتبِ صفحه‌ی اصلی را وزن می‌سازد نه اندازه‌ی تنها:
+ * ۹۰۰ تیتر، ۷۰۰ برچسب و دکمه، ۵۰۰ متنِ پررنگ، ۴۰۰ بدنه. اگر وزنی اینجا نباشد
+ * مرورگر بی‌صدا وزنِ نزدیک را چاق می‌کند و تیتر مصنوعی به‌نظر می‌رسد.
+ * لاتین همان دو وزن می‌ماند؛ در این صفحه فقط برای «Routino» و اعداد است. */
 const FONTS = [
   ["vazirmatn-arabic-400-normal.woff2", "vazirmatn-arabic-400.woff2"],
+  ["vazirmatn-arabic-500-normal.woff2", "vazirmatn-arabic-500.woff2"],
   ["vazirmatn-arabic-700-normal.woff2", "vazirmatn-arabic-700.woff2"],
+  ["vazirmatn-arabic-900-normal.woff2", "vazirmatn-arabic-900.woff2"],
   ["vazirmatn-latin-400-normal.woff2", "vazirmatn-latin-400.woff2"],
   ["vazirmatn-latin-700-normal.woff2", "vazirmatn-latin-700.woff2"],
 ];

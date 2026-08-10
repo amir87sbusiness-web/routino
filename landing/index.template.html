@@ -10,6 +10,15 @@
   و اشتراک وقتی مطرح می‌شود که خودش داخل اپ رسیده باشد. اگر روزی خواستی قیمت را
   اینجا برگردانی، بدان که عمداً برداشته شده، نه از قلم افتاده.
 
+  ⚠️ صفحه فقط تاریک است و این یک انتخاب است، نه چیزی که یادمان رفته باشد. خودِ
+  برنامه تاریک‌ست و عکس‌هایش هم تاریک‌اند؛ قابِ روشن دور یک محصول تاریک، صفحه را
+  دو تکه می‌کرد. `color-scheme: dark` هم گذاشته‌ایم تا اسکرول‌بار و فرم‌های
+  پیش‌فرض مرورگر با بقیه‌ی صفحه یکی شوند.
+
+  ساختار عمدی: پنج بخشِ جدا برای پنج قابلیت نداریم. به‌جایش یک «کنسول» داریم که
+  نوار کناری خودِ برنامه است؛ روی هر تب که بزنی صفحه‌ی گوشی عوض می‌شود. هم متن
+  صفحه یک‌پنجم شد، هم بازدیدکننده واقعاً محیط برنامه را می‌بیند نه توضیحش را.
+
   تصویرها عکسِ واقعیِ خودِ برنامه‌اند و با `node scripts/shoot-landing.mjs`
   گرفته می‌شوند (Chrome + داده‌ی نمایشی + خروجی WebP). اگر UI عوض شد، همان
   اسکریپت را دوباره اجرا کن تا عکس‌ها کهنه نمانند.
@@ -18,13 +27,13 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>روتینو — عادت‌ساز روزانه با تقویم شمسی</title>
+    <title>روتینو | عادت‌ساز روزانه با تقویم شمسی</title>
     <meta
       name="description"
-      content="عادت بساز، کارهای روزت را برنامه‌ریزی کن و پیشرفتت را ببین. تقویم شمسی، بدون تبلیغ، روی گوشی و لپ‌تاپ — بدون اینترنت هم کار می‌کند."
+      content="عادت بساز، کارهای روزت را برنامه‌ریزی کن و پیشرفتت را ببین. تقویم شمسی، بدون تبلیغ، روی گوشی و لپ‌تاپ. بدون اینترنت هم کار می‌کند."
     />
     <link rel="icon" href="/favicon.svg" />
-    <meta name="theme-color" content="#f97316" />
+    <meta name="theme-color" content="#080706" />
     <meta property="og:title" content="روتینو | عادت‌ساز روزانه" />
     <meta property="og:description" content="عادت بساز، کارهایت را برنامه‌ریزی کن و پیشرفتت را ببین. روی گوشی و لپ‌تاپ، بدون تبلیغ." />
     <meta property="og:image" content="https://routino.me/shots/desktop-dark.webp" />
@@ -32,437 +41,933 @@
     <meta property="og:url" content="https://routino.me" />
     <!--
       تصویر اصلی هر دستگاه را زودتر بگیر، ولی فقط همان یکی: روی موبایل قابِ
-      لپ‌تاپ اصلاً نمایش داده نمی‌شود، پس ۶۳ کیلوبایت عکسِ ۲۸۸۰ پیکسلی روی
-      دیتای موبایل دانلود نشود. عکس لپ‌تاپ `loading=lazy` است تا در موبایل که
-      پنهان است هیچ‌وقت گرفته نشود؛ روی دسکتاپ همین preload اولویتش را بالا
-      نگه می‌دارد.
+      دسکتاپ اصلاً نمایش داده نمی‌شود، پس ۶۴ کیلوبایت عکسِ ۲۸۸۰ پیکسلی روی
+      دیتای موبایل دانلود نشود.
     -->
-    <link rel="preload" as="image" href="/shots/desktop-dark.webp" media="(min-width: 761px)" />
-    <link rel="preload" as="image" href="/shots/today-dark.webp" media="(max-width: 760px)" />
+    <link rel="preload" as="image" href="/shots/desktop-dark.webp" media="(min-width: 861px)" />
+    <link rel="preload" as="image" href="/shots/today-dark.webp" media="(max-width: 860px)" />
+
+    <!-- قبل از رسم صفحه اجرا می‌شود تا محتوا یک لحظه هم پرش نکند. اگر
+         جاوااسکریپت خاموش باشد این خط اجرا نمی‌شود و صفحه بدون انیمیشن ولی
+         کاملاً خوانا بالا می‌آید. -->
+    <script>document.documentElement.classList.add("js");</script>
 
     <style>
+      /* وزیرمتن با چهار وزن، چون سلسله‌مراتب صفحه را وزن می‌سازد نه اندازه‌ی تنها:
+         ۹۰۰ برای تیتر اصلی، ۷۰۰ برای برچسب‌ها، ۵۰۰ برای متنِ پررنگ‌تر، ۴۰۰ برای بدنه. */
       @font-face { font-family: Vazirmatn; src: url(/fonts/vazirmatn-arabic-400.woff2) format("woff2");
         font-weight: 400; font-display: swap; unicode-range: U+0600-06FF,U+200C-200E,U+FB50-FDFF,U+FE70-FEFF; }
+      @font-face { font-family: Vazirmatn; src: url(/fonts/vazirmatn-arabic-500.woff2) format("woff2");
+        font-weight: 500; font-display: swap; unicode-range: U+0600-06FF,U+200C-200E,U+FB50-FDFF,U+FE70-FEFF; }
       @font-face { font-family: Vazirmatn; src: url(/fonts/vazirmatn-arabic-700.woff2) format("woff2");
         font-weight: 700; font-display: swap; unicode-range: U+0600-06FF,U+200C-200E,U+FB50-FDFF,U+FE70-FEFF; }
+      @font-face { font-family: Vazirmatn; src: url(/fonts/vazirmatn-arabic-900.woff2) format("woff2");
+        font-weight: 900; font-display: swap; unicode-range: U+0600-06FF,U+200C-200E,U+FB50-FDFF,U+FE70-FEFF; }
       @font-face { font-family: Vazirmatn; src: url(/fonts/vazirmatn-latin-400.woff2) format("woff2");
         font-weight: 400; font-display: swap; unicode-range: U+0000-00FF,U+2000-206F; }
       @font-face { font-family: Vazirmatn; src: url(/fonts/vazirmatn-latin-700.woff2) format("woff2");
         font-weight: 700; font-display: swap; unicode-range: U+0000-00FF,U+2000-206F; }
 
       :root {
-        --bg:#faf9f7; --card:#fff; --fg:#1c1917; --muted:#57534e; --faint:#8a827c;
-        --primary:#f97316; --border:#e9e6e2; --ring:rgba(249,115,22,.14);
-        --shadow:0 2px 6px rgba(28,25,23,.05), 0 24px 60px rgba(28,25,23,.10);
-        --radius:24px;
-      }
-      @media (prefers-color-scheme: dark) {
-        :root { --bg:#0b0a09; --card:#171513; --fg:#faf9f8; --muted:#a8a29e; --faint:#7c756f;
-          --primary:#fb8b3c; --border:#2a2724; --ring:rgba(251,139,60,.16);
-          --shadow:0 2px 6px rgba(0,0,0,.5), 0 24px 60px rgba(0,0,0,.5); }
-      }
-      *{box-sizing:border-box}
-      html{scroll-behavior:smooth}
-      @media (prefers-reduced-motion:reduce){ html{scroll-behavior:auto} *{transition:none!important} }
-      body{margin:0;background:var(--bg);color:var(--fg);
-        font-family:Vazirmatn,"Segoe UI",Tahoma,system-ui,sans-serif;line-height:1.85;
-        -webkit-font-smoothing:antialiased;overflow-x:hidden}
-      .wrap{max-width:1120px;margin:0 auto;padding:0 22px}
-      a{color:inherit}
-      img{max-width:100%;height:auto;display:block}
-      h1,h2,h3{text-wrap:balance}
+        color-scheme: dark;
 
-      nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px);
-        background:color-mix(in srgb,var(--bg) 82%,transparent);border-bottom:1px solid transparent}
-      nav.scrolled{border-bottom-color:var(--border)}
-      .nav-in{display:flex;align-items:center;justify-content:space-between;height:68px}
-      .brand{display:flex;align-items:center;gap:10px;font-weight:700;text-decoration:none}
-      /* همان لوگوی خودِ برنامه (`public/favicon.svg`)، نه یک تیکِ بازسازی‌شده با
-         CSS. پس‌زمینه‌ی نارنجی و گوشه‌های گرد داخل خود SVG هستند. */
-      .mark{width:34px;height:34px;box-shadow:0 4px 14px var(--ring);border-radius:8px}
-      .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;
-        background:var(--primary);color:#fff;
-        text-decoration:none;font-weight:700;font-size:15px;padding:14px 30px;border-radius:14px;
-        box-shadow:0 6px 20px var(--ring);transition:transform .15s,box-shadow .15s}
-      .btn:hover{transform:translateY(-1px);box-shadow:0 12px 28px var(--ring)}
-      .btn.sm{padding:9px 18px;font-size:14px;border-radius:12px}
-      .btn.ghost{background:transparent;color:var(--fg);border:1px solid var(--border);box-shadow:none}
+        /* خنثی‌ها عمداً به نارنجی متمایل‌اند. خاکستریِ خالص کنار #F97316 مرده
+           به‌نظر می‌رسد؛ همین یک درجه گرمی، صفحه را به رنگِ برنامه می‌چسباند. */
+        --ink: #080706;
+        --raise: #121010;
+        --raise-2: #1a1715;
+        --edge: #241f1c;
+        --edge-strong: #352e29;
 
-      /* ── hero ── */
-      .hero{padding:clamp(38px,7vw,64px) 0 0;text-align:center;position:relative}
-      .hero::before{content:"";position:absolute;inset:-20% 15% auto;height:460px;
-        background:radial-gradient(closest-side,var(--ring),transparent 70%);pointer-events:none}
-      .pill{display:inline-block;font-size:12.5px;font-weight:700;color:var(--primary);
-        background:var(--ring);padding:6px 14px;border-radius:999px;margin-bottom:18px}
-      h1{font-size:clamp(31px,6vw,54px);line-height:1.32;margin:0 0 18px;letter-spacing:-.5px}
-      h1 .accent{background:linear-gradient(120deg,var(--primary),#e11d48);
-        -webkit-background-clip:text;background-clip:text;color:transparent}
-      .lede{font-size:clamp(15px,2.3vw,18px);color:var(--muted);max-width:48ch;margin:0 auto 30px;
-        text-wrap:pretty}
-      .cta-row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
-      .trust-line{margin-top:16px;font-size:12.5px;color:var(--faint)}
+        --fg: #f7f3ee;
+        --fg-2: #a69e96;
+        /* کم‌رنگ‌ترین لایه‌ی متن، ولی هنوز خوانا: نسبت کنتراستش روی زمینه‌ی صفحه
+           حدود ۵:۱ است. رنگِ قبلی (#6b635c) زیر ۳٫۵ بود و متنِ زیر دکمه و فوتر
+           عملاً محو می‌شد. */
+        --fg-3: #877e76;
 
-      /* ── device frames ── */
-      .laptop{position:relative;max-width:860px;margin:0 auto}
-      .laptop .lid{background:linear-gradient(160deg,#33302c,#111);border-radius:16px 16px 6px 6px;
-        padding:12px 12px 0;box-shadow:var(--shadow)}
-      .laptop .lid img{border-radius:8px 8px 0 0}
-      .laptop .base{height:16px;background:linear-gradient(180deg,#2a2724,#171514);
-        border-radius:0 0 14px 14px;
-        box-shadow:0 14px 28px rgba(0,0,0,.22)}
-      .laptop .foot{width:34%;height:7px;margin:0 auto;border-radius:0 0 9px 9px;
-        background:linear-gradient(180deg,#191715,#0d0c0b)}
+        --brand: #f97316;
+        --brand-lift: #ff8a33;
+        --brand-soft: rgba(249, 115, 22, 0.1);
+        --brand-line: rgba(249, 115, 22, 0.28);
 
-      .phone{border-radius:34px;padding:9px;background:linear-gradient(160deg,#2b2926,#111010);
-        box-shadow:var(--shadow)}
-      .phone img{border-radius:26px}
+        /* سایه‌ها آفست و بلور دارند. هاله‌ی رنگیِ بدون آفست تزئین است نه عمق. */
+        --lift-1: 0 1px 2px rgba(0, 0, 0, 0.6), 0 8px 24px rgba(0, 0, 0, 0.45);
+        --lift-2: 0 2px 4px rgba(0, 0, 0, 0.6), 0 32px 80px rgba(0, 0, 0, 0.65);
 
-      /* قابِ اصلی صفحه: روی دسکتاپ لپ‌تاپ با یک گوشی جلوی آن، روی موبایل فقط
-         گوشی. نمایشِ یک لپ‌تاپِ ۸۶۰ پیکسلی روی صفحه‌ی ۳۷۵ پیکسلی چیزی نشان
-         نمی‌دهد جز یک مستطیل تار. */
-      .combo{position:relative;padding:44px 0 0}
-      .combo .phone{position:absolute;width:196px;inset-inline-start:2%;bottom:-26px;z-index:2}
-      @media (max-width:760px){
-        .combo{padding:22px 0 0}
-        .combo .laptop{display:none}
-        .combo .phone{position:static;width:min(64vw,262px);margin:0 auto}
+        --measure: 62ch;
+        --gut: clamp(20px, 4vw, 32px);
+        --bay: clamp(72px, 11vw, 132px);
+        --curve: 20px;
+
+        --swing: cubic-bezier(0.16, 1, 0.3, 1);
       }
 
-      /* ── feature rows ── */
-      section{padding:clamp(50px,8vw,74px) 0}
-      .sec-head{text-align:center;margin-bottom:clamp(30px,6vw,44px)}
-      .sec-head h2{font-size:clamp(23px,4vw,34px);margin:0 0 10px;line-height:1.45}
-      .sec-head p{color:var(--muted);margin:0;font-size:15.5px}
+      *, *::before, *::after { box-sizing: border-box; }
 
-      .feat{display:grid;grid-template-columns:1fr 1fr;gap:52px;align-items:center;
-        margin-bottom:clamp(52px,8vw,88px)}
-      .feat:nth-child(even) .feat-shot{order:2}
-      .feat-shot .phone{max-width:288px;margin:0 auto}
-      .feat-txt .tag{display:inline-block;font-size:12px;font-weight:700;color:var(--primary);
-        background:var(--ring);padding:5px 13px;border-radius:999px;margin-bottom:14px}
-      .feat-txt h3{font-size:clamp(20px,3vw,26px);margin:0 0 12px;line-height:1.5}
-      .feat-txt p{color:var(--muted);margin:0 0 16px;font-size:15px;text-wrap:pretty}
-      .feat-txt ul{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:9px}
-      .feat-txt li{color:var(--muted);font-size:14px;display:flex;gap:9px;align-items:flex-start}
-      .feat-txt li::before{content:"✓";color:var(--primary);font-weight:700;flex:none}
-      @media (max-width:800px){
-        .feat{grid-template-columns:1fr;gap:26px;text-align:center}
-        .feat:nth-child(even) .feat-shot{order:0}
-        .feat-shot .phone{max-width:min(66vw,270px)}
-        .feat-txt ul{align-items:center}
-        .feat-txt li{text-align:start}
+      html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+      body {
+        margin: 0;
+        background: var(--ink);
+        color: var(--fg);
+        font-family: Vazirmatn, "Segoe UI", Tahoma, system-ui, sans-serif;
+        font-size: 16px;
+        line-height: 1.85;
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
       }
 
-      /* ── themes ── */
-      .themes{background:var(--card);border-block:1px solid var(--border)}
-      .pair{display:flex;gap:clamp(18px,5vw,34px);justify-content:center;flex-wrap:wrap}
-      .pair figure{margin:0;max-width:250px;flex:1 1 190px}
-      .pair figcaption{text-align:center;margin-top:14px;font-size:13.5px;
-        font-weight:700;color:var(--muted)}
+      /* سطح‌هایی که خودمان نکشیده‌ایم ولی هنوز بخشی از طراحی‌اند. */
+      ::selection { background: var(--brand); color: #1a0d02; }
+      :focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: 6px; }
+      * { scrollbar-color: var(--edge-strong) transparent; scrollbar-width: thin; }
+      ::-webkit-scrollbar { width: 10px; height: 10px; }
+      ::-webkit-scrollbar-thumb { background: var(--edge-strong); border-radius: 99px; border: 3px solid var(--ink); }
+      ::-webkit-scrollbar-track { background: transparent; }
 
-      /* ── everywhere ── */
-      .everywhere{border-block:1px solid var(--border)}
-      .plat{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:30px}
-      .plat span{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;color:var(--muted);
-        background:var(--bg);border:1px solid var(--border);padding:9px 17px;border-radius:999px}
+      a { color: inherit; text-decoration: none; }
+      img { max-width: 100%; height: auto; display: block; }
+      button { font: inherit; color: inherit; }
+      svg { display: block; }
 
-      /* ── trust ── */
-      .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px}
-      .card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
-        padding:clamp(21px,5vw,26px)}
-      .card .ico{width:42px;height:42px;border-radius:13px;background:var(--ring);
-        display:grid;place-items:center;font-size:20px;margin-bottom:14px}
-      .card h3{margin:0 0 7px;font-size:16.5px}
-      .card p{margin:0;color:var(--muted);font-size:14px;line-height:1.9;text-wrap:pretty}
+      h1, h2, h3 { text-wrap: balance; margin: 0; letter-spacing: -0.03em; line-height: 1.24; }
+      h1 { font-weight: 900; font-size: clamp(34px, 6.4vw, 68px); }
+      h2 { font-weight: 900; font-size: clamp(26px, 3.8vw, 40px); }
+      h3 { font-weight: 700; font-size: clamp(17px, 2vw, 20px); letter-spacing: -0.02em; }
+      p { margin: 0; text-wrap: pretty; }
 
-      .final{text-align:center}
-      .final .box{background:linear-gradient(145deg,var(--primary),#ea580c);border-radius:30px;
-        padding:clamp(40px,8vw,56px) clamp(20px,5vw,26px);color:#fff;box-shadow:0 20px 48px var(--ring)}
-      .final h2{margin:0 0 10px;font-size:clamp(22px,4vw,32px)}
-      .final p{margin:0 0 26px;opacity:.93;font-size:15.5px}
-      .final .btn{background:#fff;color:#9a3412;box-shadow:none}
+      .wrap { width: 100%; max-width: 1140px; margin-inline: auto; padding-inline: var(--gut); }
+      .sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+        clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
-      footer{border-top:1px solid var(--border);padding:34px 0 44px}
-      .foot{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap}
-      .foot-links{display:flex;gap:18px;flex-wrap:wrap}
-      /* عمداً کم‌رنگ و کوچک: قوانین باید در دسترس باشد، نه توی چشم. */
-      .foot-links a{color:var(--faint);text-decoration:none;font-size:12.5px}
-      .foot-links a:hover{color:var(--fg)}
-      .copy{color:var(--faint);font-size:12px}
-      .seal{margin-top:22px;display:flex;justify-content:center}
-      .seal img{max-width:96px}
-
-      /* ── نوارِ چسبانِ پایین، فقط موبایل ──
-         روی گوشی دکمه‌ی بالای صفحه بعد از دو اسکرول از دسترس خارج می‌شود و
-         کاربر تا ته صفحه راهی برای رفتن به برنامه ندارد. این نوار بعد از عبور
-         از قابِ اول ظاهر می‌شود. `pb: safe-area` برای آیفون است تا دکمه زیر
-         نوارِ خانه نیفتد. */
-      .dock{position:fixed;inset-inline:0;bottom:0;z-index:60;display:none;
-        padding:12px 16px calc(12px + env(safe-area-inset-bottom));
-        background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(14px);
-        border-top:1px solid var(--border);
-        transform:translateY(115%);transition:transform .25s ease-out}
-      .dock.show{transform:none}
-      .dock .btn{width:100%}
-      @media (max-width:760px){
-        .dock{display:block}
-        /* روی گوشی دکمه‌ی اصلی تمام‌عرض می‌شود و دکمه‌ی دوم به یک لینکِ ساده
-           تبدیل: دو دکمه‌ی هم‌اندازه یعنی هیچ‌کدام دکمه‌ی اصلی نیست. */
-        .cta-row{flex-direction:column;align-items:stretch;gap:6px}
-        .cta-row .btn{width:100%}
-        .cta-row .btn.ghost{border:0;padding:10px;font-size:14px;color:var(--muted);
-          text-decoration:underline;text-underline-offset:4px}
-        .cta-row .btn.ghost:hover{transform:none}
-        body{padding-bottom:76px}
+      /* ── دکمه‌ها ─────────────────────────────────────────────── */
+      .btn {
+        display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+        font-weight: 700; font-size: 15.5px; line-height: 1;
+        padding: 16px 30px; border-radius: 14px; border: 1px solid transparent;
+        background: var(--brand); color: #1a0d02;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 26px rgba(249, 115, 22, 0.22);
+        transition: background 0.18s var(--swing), transform 0.18s var(--swing), box-shadow 0.18s var(--swing);
       }
-      @media (max-width:420px){ .wrap{padding:0 17px} }
+      .btn:hover { background: var(--brand-lift); transform: translateY(-2px);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 16px 34px rgba(249, 115, 22, 0.3); }
+      .btn:active { transform: translateY(0); }
+      .btn .ic { width: 18px; height: 18px; }
+
+      .btn.line {
+        background: transparent; color: var(--fg); border-color: var(--edge-strong); box-shadow: none;
+      }
+      .btn.line:hover { background: var(--raise-2); border-color: var(--fg-3); transform: translateY(-2px); box-shadow: none; }
+
+      .btn.sm { padding: 11px 20px; font-size: 14px; border-radius: 11px; }
+
+      /* ── نوار بالا ───────────────────────────────────────────── */
+      .top {
+        position: sticky; top: 0; z-index: 60;
+        background: color-mix(in srgb, var(--ink) 78%, transparent);
+        backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+        border-bottom: 1px solid transparent;
+        transition: border-color 0.25s var(--swing);
+      }
+      .top.dropped { border-bottom-color: var(--edge); }
+      .top-in { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 72px; }
+      .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; }
+      .brand img { width: 32px; height: 32px; border-radius: 9px; }
+      .top-nav { display: flex; align-items: center; gap: 4px; }
+      .top-nav a {
+        font-size: 14.5px; color: var(--fg-2); padding: 9px 14px; border-radius: 10px;
+        transition: color 0.18s, background 0.18s;
+      }
+      .top-nav a:hover { color: var(--fg); background: var(--raise-2); }
+      @media (max-width: 720px) { .top-nav { display: none; } }
+
+      /* ── سرصفحه ─────────────────────────────────────────────── */
+      .hero { position: relative; padding-top: clamp(48px, 8vw, 92px); text-align: center; overflow: hidden; }
+
+      /* حلقه‌ی پیشرفتِ خودِ برنامه، یک بار و بزرگ. تنها حرکتِ نویسنده‌دارِ صفحه
+         همین است: کمان که می‌آید، صفحه شروع می‌شود. */
+      .ring { position: absolute; inset-block-start: -14%; inset-inline-start: 50%;
+        translate: 50% 0; width: min(760px, 128vw); aspect-ratio: 1; pointer-events: none;
+        opacity: 0.5; z-index: 0; }
+      .ring circle { fill: none; stroke-linecap: round; }
+      .ring .track { stroke: var(--edge); stroke-width: 1; }
+      /* ۷۵٫۵ یعنی همان ۷۵ درصدی که در خودِ برنامه روی حلقه‌ی روز نوشته شده. */
+      .ring .arc { stroke: var(--brand); stroke-width: 1.5;
+        stroke-dasharray: 302 302; stroke-dashoffset: 75.5; }
+      .js .ring .arc { stroke-dashoffset: 302; animation: sweep 1.9s var(--swing) 0.15s forwards; }
+      @keyframes sweep { to { stroke-dashoffset: 75.5; } }
+
+      .hero-in { position: relative; z-index: 1; }
+      .hero h1 { max-width: 15ch; margin-inline: auto; }
+      .lede { margin: 22px auto 0; max-width: 46ch; font-size: clamp(15.5px, 2.2vw, 18.5px); color: var(--fg-2); }
+      .acts { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 32px; }
+      .note { margin-top: 18px; font-size: 13px; color: var(--fg-3); }
+
+      /* ── قابِ دستگاه ─────────────────────────────────────────── */
+      .stage { position: relative; margin-top: clamp(44px, 7vw, 76px); }
+      .screen {
+        border: 1px solid var(--edge-strong); border-radius: var(--curve);
+        background: var(--raise); box-shadow: var(--lift-2); overflow: hidden;
+      }
+      .screen img { border-radius: calc(var(--curve) - 1px); }
+
+      .stage .tuck {
+        position: absolute; inset-block-end: -26px; inset-inline-start: -14px;
+        width: clamp(132px, 15vw, 186px); z-index: 2;
+      }
+      @media (max-width: 860px) { .stage .desk { display: none; } .stage .tuck { position: static; width: min(280px, 74vw); margin-inline: auto; } }
+
+      .phone { border-radius: 30px; padding: 7px; background: #171512;
+        border: 1px solid var(--edge-strong); box-shadow: var(--lift-2); }
+      .phone img { border-radius: 24px; }
+
+      /* ── بخش‌ها ─────────────────────────────────────────────── */
+      section { position: relative; }
+      .bay { padding-block: var(--bay); }
+      .head { max-width: var(--measure); }
+      .head p { margin-top: 14px; color: var(--fg-2); font-size: clamp(15px, 2vw, 17px); }
+      .rule { height: 1px; background: var(--edge); border: 0; margin: 0; }
+
+      /* ── کنسول: نوار کناریِ برنامه به‌عنوان ناوبریِ صفحه ──────── */
+      .console { display: grid; grid-template-columns: 1fr 300px; gap: clamp(28px, 5vw, 64px);
+        align-items: center; margin-top: clamp(34px, 5vw, 56px); }
+      @media (max-width: 900px) { .console { grid-template-columns: 1fr; gap: 32px; } }
+
+      .rail { display: flex; flex-direction: column; gap: 6px; }
+      .rail button {
+        display: flex; align-items: center; gap: 13px; width: 100%; text-align: start;
+        padding: 15px 17px; border-radius: 14px; border: 1px solid transparent;
+        background: transparent; color: var(--fg-2); cursor: pointer;
+        transition: background 0.2s var(--swing), color 0.2s var(--swing), border-color 0.2s var(--swing);
+      }
+      .rail button:hover { background: var(--raise); color: var(--fg); }
+      .rail button .ic { width: 21px; height: 21px; flex: none; }
+      .rail button b { font-weight: 700; font-size: 16px; }
+      .rail button span { display: block; font-size: 14px; line-height: 1.6; color: var(--fg-3);
+        max-height: 0; opacity: 0; overflow: hidden;
+        transition: max-height 0.34s var(--swing), opacity 0.24s ease, margin-top 0.34s var(--swing); }
+      /* رنگِ حالتِ فعال عیناً همان چیزی‌ست که خودِ برنامه در نوار کناری‌اش دارد. */
+      .rail button[aria-selected="true"] {
+        background: var(--brand-soft); border-color: var(--brand-line); color: var(--brand);
+      }
+      .rail button[aria-selected="true"] span { max-height: 90px; opacity: 1; margin-top: 4px; color: var(--fg-2); }
+
+      .deck { position: relative; }
+      .deck .phone { margin-inline: auto; max-width: 300px; }
+
+      /* ── دموی زنده‌ی داخل گوشی ────────────────────────────────
+         پالت اینجا عمداً جداست: این‌ها رنگ‌های خودِ برنامه‌اند، نه رنگ‌های صفحه.
+         اگر روزی تمِ اپ عوض شد، فقط همین چند متغیر عوض می‌شود. */
+      .sim {
+        --app-bg: #0d0c0b; --app-card: #1a1714; --app-line: #2b2622;
+        --app-fg: #f5f1ec; --app-mut: #8f867e;
+        --app-or: #f97316; --app-sky: #29b6f6; --app-rose: #f2555a; --app-mint: #34d399;
+        position: relative; border-radius: 24px; overflow: hidden;
+        background: var(--app-bg); aspect-ratio: 286 / 620;
+        display: flex; flex-direction: column;
+        font-size: 11px; line-height: 1.6; color: var(--app-fg);
+        container-type: inline-size;
+      }
+
+      .sim-bar { display: flex; align-items: center; justify-content: space-between;
+        padding: 11px 12px 8px; flex: none; }
+      .sim-brand { display: flex; align-items: center; gap: 6px; font-weight: 700; font-size: 12px; }
+      .sim-mark { width: 17px; height: 17px; border-radius: 5px; background: var(--app-or); flex: none; }
+      .sim-tools { display: flex; gap: 9px; color: var(--app-mut); }
+      .sim-tools svg { width: 14px; height: 14px; }
+
+      .sim-stage { position: relative; flex: 1; min-height: 0; }
+      .scene { position: absolute; inset: 0; padding: 0 12px; overflow: hidden; }
+      .scene[hidden] { display: none; }
+      .scene-in { display: flex; flex-direction: column; gap: 9px; height: 100%; }
+
+      .sim-nav { display: flex; justify-content: space-around; align-items: center;
+        padding: 9px 6px calc(9px + env(safe-area-inset-bottom, 0px));
+        border-top: 1px solid var(--app-line); flex: none; color: var(--app-mut); }
+      .sim-nav i { display: block; }
+      .sim-nav svg { width: 17px; height: 17px; }
+      .sim-nav i.on { color: var(--app-or); }
+
+      /* سرصفحه‌ی امروز */
+      .s-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+      .s-hi b { display: block; font-size: 15px; font-weight: 700; }
+      .s-hi span { display: block; font-size: 10px; color: var(--app-mut); }
+      .s-ring { position: relative; width: 50px; height: 50px; flex: none; }
+      .s-ring svg { width: 100%; height: 100%; }
+      .s-ring circle { fill: none; stroke-width: 4.5; }
+      .s-ring .rt { stroke: var(--app-line); }
+      .s-ring .rp { stroke: var(--app-or); stroke-linecap: round;
+        stroke-dasharray: 113 113; stroke-dashoffset: 45.2; }
+      .s-pct { position: absolute; inset: 0; display: grid; place-items: center;
+        font-size: 11px; font-weight: 700; }
+
+      /* نوار هفته */
+      .s-week { display: flex; justify-content: space-between; gap: 3px; }
+      .s-week span { display: flex; flex-direction: column; align-items: center; gap: 3px; flex: 1; }
+      .s-week i { font-size: 8px; font-style: normal; color: var(--app-mut); }
+      .s-week b { display: grid; place-items: center; width: 100%; aspect-ratio: 1; max-width: 27px;
+        border-radius: 50%; border: 1.5px solid var(--app-line); font-size: 10px; font-weight: 700; }
+      .s-week .now b { background: var(--app-or); border-color: var(--app-or); color: #1a0d02; }
+
+      /* تیترِ ردیف */
+      .s-sec { display: flex; align-items: baseline; justify-content: space-between; margin-top: 2px; }
+      .s-sec b { font-size: 11.5px; font-weight: 700; }
+      .s-sec span { font-size: 9px; color: var(--app-or); }
+      .s-title { font-size: 15px; font-weight: 700; padding-top: 2px; }
+      .s-label { font-size: 9.5px; color: var(--app-mut); margin-top: 3px; }
+
+      /* کارها */
+      .s-card { background: var(--app-card); border: 1px solid var(--app-line); border-radius: 12px;
+        padding: 7px; display: flex; flex-direction: column; gap: 5px; }
+      .s-task { display: flex; align-items: center; gap: 7px; padding: 6px 7px;
+        border: 1px solid var(--app-line); border-radius: 9px; }
+      .s-task span { font-size: 10.5px; }
+      .s-box { width: 17px; height: 17px; border-radius: 50%; border: 1.6px solid var(--app-line);
+        flex: none; position: relative; }
+      .s-box.on { background: var(--app-or); border-color: var(--app-or); }
+      .s-box::after { content: ""; position: absolute; inset: 0;
+        background: no-repeat center/9px 9px
+          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 6.2 4.6 8.8 10 3.4' fill='none' stroke='%231a0d02' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        opacity: 0; }
+      .s-box.on::after { opacity: 1; }
+
+      /* عادت‌ها */
+      .s-habit { border-radius: 12px; padding: 8px 9px; display: flex; flex-direction: column; gap: 6px;
+        border: 1px solid; }
+      .s-habit.sky { background: rgba(41, 182, 246, 0.08); border-color: rgba(41, 182, 246, 0.24); }
+      .s-habit.rose { background: rgba(242, 85, 90, 0.08); border-color: rgba(242, 85, 90, 0.24); }
+      .s-habit.mint { background: rgba(52, 211, 153, 0.08); border-color: rgba(52, 211, 153, 0.24); }
+      .s-habit.big { padding: 10px; }
+      .s-hrow { display: flex; align-items: center; gap: 7px; }
+      .s-hrow b { font-size: 11px; font-weight: 700; flex: 1; }
+      .s-hrow em { font-size: 9px; font-style: normal; color: var(--app-mut); }
+      .s-habit.sky .s-box.on { background: var(--app-sky); border-color: var(--app-sky); }
+      .s-habit.rose .s-box.on { background: var(--app-rose); border-color: var(--app-rose); }
+      .s-habit.mint .s-box.on { background: var(--app-mint); border-color: var(--app-mint); }
+
+      .s-dots { display: flex; gap: 4px; }
+      .s-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--app-line); }
+      .s-habit.sky .s-dots.lit i { background: var(--app-sky); }
+      .s-habit.rose .s-dots.lit i { background: var(--app-rose); }
+      .s-habit.mint .s-dots.lit i { background: var(--app-mint); }
+
+      .s-bar { height: 5px; border-radius: 99px; background: var(--app-line); overflow: hidden; }
+      .s-bar u { display: block; height: 100%; width: var(--to, 0%); border-radius: 99px;
+        background: var(--app-sky); }
+      .s-habit.rose .s-bar u { background: var(--app-rose); }
+      .s-habit.mint .s-bar u { background: var(--app-mint); }
+      .s-note { font-size: 9px; color: var(--app-mut); }
+
+      /* تایمر */
+      .s-clock { position: relative; width: 62%; max-width: 148px; margin: 6px auto 0; }
+      .s-clock svg { width: 100%; height: auto; }
+      .s-clock circle { fill: none; stroke-width: 6; }
+      .s-clock .ct { stroke: var(--app-line); }
+      .s-clock .cp { stroke: var(--app-or); stroke-linecap: round; stroke-dasharray: 327 327; }
+      .s-time { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+      .s-time b { font-size: 21px; font-weight: 700; font-variant-numeric: tabular-nums; }
+      .s-time span { font-size: 9px; color: var(--app-mut); }
+      .s-chiprow { display: flex; gap: 5px; justify-content: center; margin-top: 10px; }
+      .s-chiprow span { font-size: 9.5px; padding: 5px 10px; border-radius: 99px;
+        border: 1px solid var(--app-line); color: var(--app-mut); }
+      .s-chiprow .on { background: rgba(249, 115, 22, 0.14); border-color: rgba(249, 115, 22, 0.4);
+        color: var(--app-or); }
+      .s-link { display: flex; align-items: center; gap: 7px; margin-top: 10px; padding: 8px 9px;
+        border: 1px solid var(--app-line); border-radius: 10px; font-size: 10px; }
+
+      /* ژورنال */
+      .s-moods { display: flex; justify-content: space-between; gap: 6px; margin-top: 4px; }
+      .s-moods span { flex: 1; display: grid; place-items: center; aspect-ratio: 1; border-radius: 12px;
+        border: 1px solid var(--app-line); color: var(--app-mut); }
+      .s-moods svg { width: 21px; height: 21px; }
+      .s-moods .pick { border-color: var(--app-or); background: rgba(249, 115, 22, 0.12); color: var(--app-or); }
+      .s-score { display: flex; gap: 4px; }
+      .s-score i { flex: 1; height: 22px; border-radius: 6px; border: 1px solid var(--app-line); }
+      .s-lines { display: flex; flex-direction: column; gap: 6px; }
+      .s-lines u { display: block; height: 6px; border-radius: 99px; background: var(--app-line); width: 0; }
+
+      /* آنالیز */
+      .s-kpi { display: flex; align-items: baseline; gap: 6px; }
+      .s-kpi b { font-size: 19px; font-weight: 700; color: var(--app-mint); }
+      .s-kpi span { font-size: 9.5px; color: var(--app-mut); }
+      .s-bars { display: flex; align-items: flex-end; gap: 5px; height: 88px; }
+      .s-bars i { flex: 1; height: var(--h); border-radius: 4px 4px 2px 2px;
+        background: linear-gradient(180deg, var(--app-or), rgba(249, 115, 22, 0.35));
+        transform-origin: 50% 100%; }
+      .s-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+      .s-grid i { aspect-ratio: 1; border-radius: 3px; background: var(--app-line); }
+      .s-grid i.f { background: var(--app-or); }
+
+      .s-add { text-align: center; font-size: 9.5px; color: var(--app-mut);
+        border: 1px dashed var(--app-line); border-radius: 9px; padding: 6px; }
+
+      /* انگشتِ لمس
+         عمداً داخلِ همان ردیفی نشسته که قرار است تیک بخورد و با `inset` نسبت به
+         آن جا می‌گیرد، نه با یک عددِ پیکسلیِ حدسی. قبلاً ثابت بود و انگشت روی
+         ردیفِ دوم می‌افتاد در حالی که ردیفِ اول تیک می‌خورد. */
+      .s-task, .s-hrow { position: relative; }
+      .s-tap { position: absolute; inset-inline-start: 3px; top: 50%;
+        width: 25px; height: 25px; margin-top: -12.5px; border-radius: 50%;
+        border: 1.5px solid var(--app-or); background: rgba(249, 115, 22, 0.2);
+        opacity: 0; pointer-events: none; }
+      .s-tap.hit { animation: tap 0.62s var(--swing); }
+      @keyframes tap {
+        0% { opacity: 0; scale: 1.5; }
+        35% { opacity: 1; scale: 0.82; }
+        100% { opacity: 0; scale: 1.15; }
+      }
+
+      /* ── طراحیِ حرکت ───────────────────────────────────────────
+         با transition نوشته شده نه animation، تا هر بار که صحنه از اول پخش
+         می‌شود صرفاً کلاس‌ها برداشته شوند و همه‌چیز نرم برگردد سر جای اولش.
+         جاوااسکریپت فقط زمان‌بندی و عددها را می‌گذارد. */
+      .s-box, .s-bar u, .s-dots i, .s-ring .rp, .s-clock .cp,
+      .s-moods span, .s-score i, .s-lines u, .s-bars i, .s-grid i {
+        transition: 0.55s var(--swing);
+        transition-property: background-color, border-color, opacity, width, stroke-dashoffset, transform, color;
+      }
+      /* حالتِ اولِ هر صحنه: قبل از پخش، چیزی که قرار است اتفاق بیفتد خالی‌ست. */
+      .sim.armed .scene:not(.act) .s-bar u { width: 0; }
+      .sim.armed .scene:not(.act) .s-dots i { background: var(--app-line); }
+      .sim.armed .scene:not(.act) .s-bars i { transform: scaleY(0); }
+      .sim.armed .scene:not(.act) .s-grid i.f { background: var(--app-line); }
+      .sim.armed .scene:not(.act) .s-moods .pick { border-color: var(--app-line);
+        background: transparent; color: var(--app-mut); }
+      .sim.armed .scene:not(.act) .s-lines u { width: 0; }
+      .sim.armed .scene:not(.act) .s-score i { background: transparent; }
+
+      /* عادت‌ها: کارت‌ها یکی‌یکی جا می‌افتند. مخفی‌شدنِ اولیه زیرِ `armed` است،
+         وگرنه اگر پخش هیچ‌وقت شروع نشود کارت‌ها برای همیشه نامرئی می‌مانند. */
+      .s-habit.big { transition: opacity 0.5s var(--swing), translate 0.5s var(--swing); }
+      .sim.armed .s-habit.big { opacity: 0; translate: 0 10px; }
+      .scene.act .s-habit.big { opacity: 1; translate: 0 0; }
+      .scene.act .s-habit.big:nth-of-type(2) { transition-delay: 0.12s; }
+      .scene.act .s-habit.big:nth-of-type(3) { transition-delay: 0.24s; }
+      .scene.act .s-bar u { transition-delay: 0.3s; }
+
+      /* زنجیره‌ی روزها یکی‌یکی روشن می‌شود */
+      .scene.act .s-dots i:nth-child(1) { transition-delay: 0.04s; }
+      .scene.act .s-dots i:nth-child(2) { transition-delay: 0.1s; }
+      .scene.act .s-dots i:nth-child(3) { transition-delay: 0.16s; }
+      .scene.act .s-dots i:nth-child(4) { transition-delay: 0.22s; }
+      .scene.act .s-dots i:nth-child(5) { transition-delay: 0.28s; }
+      .scene.act .s-dots i:nth-child(6) { transition-delay: 0.34s; }
+      .scene.act .s-dots i:nth-child(7) { transition-delay: 0.4s; }
+
+      /* نمودار: میله‌ها از کف بالا می‌آیند */
+      .s-bars i { transform: scaleY(1); }
+      .scene.act .s-bars i:nth-child(1) { transition-delay: 0.05s; }
+      .scene.act .s-bars i:nth-child(2) { transition-delay: 0.11s; }
+      .scene.act .s-bars i:nth-child(3) { transition-delay: 0.17s; }
+      .scene.act .s-bars i:nth-child(4) { transition-delay: 0.23s; }
+      .scene.act .s-bars i:nth-child(5) { transition-delay: 0.29s; }
+      .scene.act .s-bars i:nth-child(6) { transition-delay: 0.35s; }
+      .scene.act .s-bars i:nth-child(7) { transition-delay: 0.41s; }
+
+      /* شبکه‌ی تقویمی موج‌وار پر می‌شود */
+      .scene.act .s-grid i { transition-delay: calc(var(--i, 0) * 22ms + 0.25s); }
+      /* خطوطِ یادداشت مثل تایپ‌شدن باز می‌شوند */
+      .s-lines u { width: 100%; }
+      .s-lines u:nth-child(2) { width: 82%; }
+      .s-lines u:nth-child(3) { width: 54%; }
+      .scene.act .s-lines u { transition-duration: 0.7s; }
+      .scene.act .s-lines u:nth-child(2) { transition-delay: 0.22s; }
+      .scene.act .s-lines u:nth-child(3) { transition-delay: 0.44s; }
+      /* نمره‌ی روز */
+      .s-score i { background: transparent; }
+      .scene.act .s-score i:nth-child(-n + 7) { background: rgba(249, 115, 22, 0.28); }
+      .scene.act .s-score i:nth-child(7) { background: var(--app-or); }
+      .scene.act .s-score i:nth-child(1) { transition-delay: 0.06s; }
+      .scene.act .s-score i:nth-child(2) { transition-delay: 0.1s; }
+      .scene.act .s-score i:nth-child(3) { transition-delay: 0.14s; }
+      .scene.act .s-score i:nth-child(4) { transition-delay: 0.18s; }
+      .scene.act .s-score i:nth-child(5) { transition-delay: 0.22s; }
+      .scene.act .s-score i:nth-child(6) { transition-delay: 0.26s; }
+      .scene.act .s-score i:nth-child(7) { transition-delay: 0.3s; }
+
+      /* نوارِ پیشرفتِ صحنه، روی آیتمِ فعالِ ریل */
+      .rail button::after { content: ""; position: absolute; inset-block-end: 0; inset-inline-start: 0;
+        height: 2px; width: 0; background: var(--brand); border-radius: 99px; opacity: 0; }
+      .rail button { position: relative; overflow: hidden; }
+      .rail button[aria-selected="true"]::after { opacity: 0.55; }
+      .rail button[aria-selected="true"].ticking::after { width: 100%; transition: width linear; }
+
+      /* ── نوارِ مشخصات ────────────────────────────────────────── */
+      .specs { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+        gap: 1px; background: var(--edge); border-block: 1px solid var(--edge); }
+      .specs > div { background: var(--ink); padding: clamp(26px, 3.4vw, 38px) clamp(20px, 2.6vw, 30px); }
+      .specs .ic { width: 22px; height: 22px; color: var(--brand); margin-bottom: 16px; }
+      .specs h3 { margin-bottom: 8px; }
+      .specs p { font-size: 14.5px; color: var(--fg-2); line-height: 1.75; }
+
+      /* ── همه‌جا ─────────────────────────────────────────────── */
+      .wide { margin-top: clamp(34px, 5vw, 56px); }
+
+      /* ── نصب ────────────────────────────────────────────────── */
+      .steps { counter-reset: n; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+        gap: clamp(24px, 3vw, 40px); margin-top: clamp(32px, 4vw, 48px); }
+      .steps li { counter-increment: n; list-style: none; }
+      .steps li::before {
+        content: counter(n); display: flex; align-items: center; justify-content: center;
+        width: 34px; height: 34px; margin-bottom: 15px; border-radius: 11px;
+        background: var(--brand-soft); border: 1px solid var(--brand-line);
+        color: var(--brand); font-weight: 700; font-size: 15px; font-variant-numeric: tabular-nums;
+      }
+      .steps h3 { margin-bottom: 7px; }
+      .steps p { font-size: 14.5px; color: var(--fg-2); line-height: 1.75; }
+      .steps ol { margin: 0; padding: 0; }
+
+      /* ── پایانه ─────────────────────────────────────────────── */
+      .close { text-align: center; padding-block: clamp(80px, 12vw, 148px); }
+      .close h2 { max-width: 17ch; margin-inline: auto; }
+      .close p { margin: 18px auto 0; max-width: 40ch; color: var(--fg-2); }
+
+      footer { border-top: 1px solid var(--edge); padding-block: 44px; }
+      .foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; }
+      .foot-links { display: flex; flex-wrap: wrap; gap: 22px; font-size: 14.5px; color: var(--fg-2); }
+      .foot-links a:hover { color: var(--fg); }
+      .foot .copy { font-size: 13.5px; color: var(--fg-3); }
+      .seal { margin-top: 30px; }
+      .seal img { display: inline-block; }
+
+      /* ── دکمه‌ی چسبانِ موبایل ───────────────────────────────── */
+      .dock {
+        position: fixed; inset-inline: 14px; inset-block-end: 14px; z-index: 70;
+        display: none; opacity: 0; translate: 0 14px; pointer-events: none;
+        transition: opacity 0.3s var(--swing), translate 0.3s var(--swing);
+      }
+      .dock .btn { width: 100%; }
+      .dock.up { opacity: 1; translate: 0 0; pointer-events: auto; }
+      @media (max-width: 720px) { .dock { display: block; } }
+
+      /* ── ورودِ صفحه ─────────────────────────────────────────── */
+      /* قاعده‌ی سفت‌وسخت: هیچ متنی برای دیده‌شدن به انیمیشن وابسته نیست.
+         حالتِ پیش‌فرض «دیده می‌شود» است و مخفی‌کردن فقط زیر کلاس `.js` اتفاق
+         می‌افتد؛ آن کلاس را یک اسکریپت کوچک در `head` می‌گذارد. اگر جاوااسکریپت
+         خطا بدهد یا مرورگر انیمیشن را اجرا نکند، بازدیدکننده صفحه‌ی کامل را
+         می‌بیند نه یک صفحه‌ی سفید. */
+      @keyframes rise { to { opacity: 1; translate: 0 0; } }
+
+      .js .rise { opacity: 0; translate: 0 16px; }
+      .js .rise.lit { opacity: 1; translate: 0 0;
+        transition: opacity 0.7s var(--swing), translate 0.7s var(--swing); }
+      .js .hero .rise { animation: rise 0.9s var(--swing) forwards; }
+      .js .hero .rise:nth-child(1) { animation-delay: 0.05s; }
+      .js .hero .rise:nth-child(2) { animation-delay: 0.14s; }
+      .js .hero .rise:nth-child(3) { animation-delay: 0.23s; }
+      .js .hero .rise:nth-child(4) { animation-delay: 0.32s; }
+      .js .stage { opacity: 0; animation: rise 1s var(--swing) 0.36s forwards; }
+
+      @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+        *, *::before, *::after { animation-duration: 0.01ms !important; animation-delay: 0ms !important;
+          transition-duration: 0.01ms !important; }
+        .js .rise, .js .stage { opacity: 1 !important; translate: none !important; }
+        .js .ring .arc { stroke-dashoffset: 75.5; }
+      }
     </style>
   </head>
 
   <body>
-    <nav id="nav">
-      <div class="wrap nav-in">
-        <a class="brand" href="/"><img class="mark" src="/favicon.svg" width="34" height="34" alt="" aria-hidden="true" /><span>روتینو</span></a>
+    <!-- آیکون‌ها یک‌جا، با ضخامت و گردیِ یکسان. ایموجی نداریم: ایموجی روی هر
+         سیستم‌عامل شکل و رنگ خودش را دارد و کنترلش دست ما نیست. -->
+    <svg class="sr" aria-hidden="true" focusable="false">
+      <defs>
+        <g id="i-home" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <path d="M3.6 9.7 12 3.4l8.4 6.3v9a1.6 1.6 0 0 1-1.6 1.6H5.2a1.6 1.6 0 0 1-1.6-1.6z" />
+          <path d="M9.4 20.3v-7h5.2v7" />
+        </g>
+        <g id="i-loop" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <path d="M3.5 8.4h13a3.6 3.6 0 0 1 3.6 3.6" /><path d="M6.6 5.3 3.5 8.4l3.1 3.1" />
+          <path d="M20.5 15.6h-13A3.6 3.6 0 0 1 3.9 12" /><path d="M17.4 18.7l3.1-3.1-3.1-3.1" />
+        </g>
+        <g id="i-timer" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <circle cx="12" cy="13.4" r="7.6" /><path d="M12 9.8v3.6l2.4 1.6" /><path d="M9.4 2.9h5.2" />
+        </g>
+        <g id="i-book" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <path d="M4.2 4.6a1.6 1.6 0 0 1 1.6-1.6h12.4a1.6 1.6 0 0 1 1.6 1.6v14.8a1.6 1.6 0 0 1-1.6 1.6H5.8a1.6 1.6 0 0 1-1.6-1.6z" />
+          <path d="M8.4 3v18" /><path d="M12.2 8.6h4" /><path d="M12.2 12.4h4" />
+        </g>
+        <g id="i-chart" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <path d="M4 20.4h16" /><path d="M7.3 20.4v-6.2" /><path d="M12 20.4V6.6" /><path d="M16.7 20.4v-9.4" />
+        </g>
+        <g id="i-offline" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <path d="M2.6 8.9a15.6 15.6 0 0 1 5-3" /><path d="M21.4 8.9a15.6 15.6 0 0 0-8.9-3.4" />
+          <path d="M6.2 12.6a10.4 10.4 0 0 1 3-1.8" /><path d="M17.8 12.6a10.4 10.4 0 0 0-3.3-1.9" />
+          <path d="M9.6 16.2a5.2 5.2 0 0 1 4.8 0" /><circle cx="12" cy="19.8" r="0.9" fill="currentColor" stroke="none" />
+          <path d="M3.4 3.4 20.6 20.6" />
+        </g>
+        <g id="i-devices" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <path d="M2.8 5.4a1.4 1.4 0 0 1 1.4-1.4h12a1.4 1.4 0 0 1 1.4 1.4v2.2" />
+          <path d="M6.2 16.4H2.4" /><path d="M2.8 12.6v2.4" />
+          <rect x="14.6" y="7.6" width="6.6" height="12.8" rx="1.6" /><path d="M17.2 17.9h1.4" />
+        </g>
+        <g id="i-shield" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <path d="M12 3.2 5 6.1v5.4c0 4.2 2.9 7.6 7 9.3 4.1-1.7 7-5.1 7-9.3V6.1z" />
+          <path d="M9.2 12.1l2 2 3.6-3.9" />
+        </g>
+        <g id="i-moon" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <path d="M20 14.2A8.4 8.4 0 0 1 9.8 4a8.6 8.6 0 1 0 10.2 10.2z" />
+        </g>
+        <g id="i-arrow" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <path d="M15.5 12H4.5" /><path d="M10.4 6.9 4.5 12l5.9 5.1" />
+        </g>
+        <g id="i-down" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <path d="M12 3.8v11.4" /><path d="M7.4 10.9 12 15.5l4.6-4.6" /><path d="M4.6 19.4h14.8" />
+        </g>
+        <!-- آیکون‌های داخلِ دموی گوشی -->
+        <g id="i-bell" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <path d="M12 3.4a5.6 5.6 0 0 0-5.6 5.6c0 4.4-1.6 5.8-1.6 5.8h14.4s-1.6-1.4-1.6-5.8A5.6 5.6 0 0 0 12 3.4z" />
+          <path d="M10.4 18.4a1.9 1.9 0 0 0 3.2 0" />
+        </g>
+        <g id="i-gear" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <circle cx="12" cy="12" r="2.9" />
+          <path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-1.9-3.3-2.4 1a7 7 0 0 0-2-1.2l-.3-2.5h-3.8l-.3 2.5a7 7 0 0 0-2 1.2l-2.4-1L3.1 9.3l2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 1.9 3.3 2.4-1a7 7 0 0 0 2 1.2l.3 2.5h3.8l.3-2.5a7 7 0 0 0 2-1.2l2.4 1 1.9-3.3-2-1.5c.1-.4.1-.8.1-1.2z" />
+        </g>
+        <g id="i-face-sad" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none">
+          <circle cx="12" cy="12" r="8.6" /><path d="M8.6 15.6a4.6 4.6 0 0 1 6.8 0" />
+          <path d="M9.2 9.6h.01" /><path d="M14.8 9.6h.01" />
+        </g>
+        <g id="i-face-flat" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none">
+          <circle cx="12" cy="12" r="8.6" /><path d="M8.8 15.2h6.4" />
+          <path d="M9.2 9.6h.01" /><path d="M14.8 9.6h.01" />
+        </g>
+        <g id="i-face-good" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" fill="none">
+          <circle cx="12" cy="12" r="8.6" /><path d="M8.6 14.4a4.6 4.6 0 0 0 6.8 0" />
+          <path d="M9.2 9.6h.01" /><path d="M14.8 9.6h.01" />
+        </g>
+        <g id="i-face-great" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <circle cx="12" cy="12" r="8.6" /><path d="M7.9 13.4a4.9 4.9 0 0 0 8.2 0z" />
+          <path d="M8.4 9.2l1.6 1" /><path d="M15.6 9.2l-1.6 1" />
+        </g>
+      </defs>
+    </svg>
+
+    <header class="top" id="top">
+      <div class="wrap top-in">
+        <a class="brand" href="/">
+          <img src="/favicon.svg" width="32" height="32" alt="" aria-hidden="true" />
+          <span>روتینو</span>
+        </a>
+        <nav class="top-nav" aria-label="بخش‌های صفحه">
+          <a href="#inside">داخل برنامه</a>
+          <a href="#install">نصب روی گوشی</a>
+        </nav>
         <a class="btn sm" href="/app/">ورود به برنامه</a>
-      </div>
-    </nav>
-
-    <header class="hero">
-      <div class="wrap">
-        <span class="pill">تقویم شمسی · بدون تبلیغ · روی همه‌ی دستگاه‌هایت</span>
-        <h1>عادت‌هایت را بساز<br /><span class="accent">و ول نکن</span></h1>
-        <p class="lede">
-          عادت، کار، تمرکز و ژورنال — چهارتایش در یک برنامه، با تقویم شمسی.
-          باز کن، تیک بزن، برو سراغ زندگی‌ات.
-        </p>
-        <div class="cta-row">
-          <a class="btn" href="/app/">بریم داخل برنامه</a>
-          <a class="btn ghost" href="#features">اول عکس‌هایش را ببین</a>
-        </div>
-        <p class="trust-line">بدون اینترنت هم کار می‌کند · روی گوشی و لپ‌تاپ یکسان است</p>
-
-        <div class="combo">
-          <div class="laptop">
-            <div class="lid">
-              <img src="/shots/desktop-dark.webp" width="2880" height="1800" loading="lazy"
-                   alt="روتینو روی لپ‌تاپ: صفحه‌ی امروز با نوار کناری، حلقه‌ی پیشرفت روز، کارها و عادت‌ها" />
-            </div>
-            <div class="base"></div>
-            <div class="foot"></div>
-          </div>
-          <div class="phone">
-            <img src="/shots/today-dark.webp" width="804" height="1748"
-                 alt="روتینو روی گوشی: عادت‌های امروز و درصد پیشرفت روز" />
-          </div>
-        </div>
       </div>
     </header>
 
-    <section id="features">
-      <div class="wrap">
-        <div class="sec-head">
-          <h2>ببین واقعاً چه شکلی است</h2>
-          <p>این‌ها عکسِ خودِ برنامه‌اند، نه طرحِ تبلیغاتی.</p>
-        </div>
+    <main>
+      <section class="hero">
+        <svg class="ring" viewBox="0 0 200 200" aria-hidden="true" focusable="false">
+          <circle class="track" cx="100" cy="100" r="48" />
+          <circle class="arc" cx="100" cy="100" r="48" transform="rotate(-90 100 100)" />
+        </svg>
 
-        <div class="feat">
-          <div class="feat-shot">
-            <div class="phone">
-              <img src="/shots/today-dark.webp" width="804" height="1748" loading="lazy"
-                   alt="صفحه‌ی امروز: حلقه‌ی ۷۵ درصد، نوار هفته، کارهای امروز و فهرست عادت‌ها" />
+        <div class="wrap hero-in">
+          <h1 class="rise">عادت می‌سازی، روتینو حواسش هست</h1>
+          <p class="lede rise">
+            عادت، کار، تمرکز و ژورنال در یک برنامه، با تقویم شمسی.
+            صبح بازش می‌کنی و می‌دانی امروز باید چه‌کار کنی.
+          </p>
+          <div class="acts rise">
+            <a class="btn" href="/app/">ورود به برنامه<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
+            <a class="btn line" href="#install">نصب روی گوشی<svg class="ic" aria-hidden="true"><use href="#i-down" /></svg></a>
+          </div>
+          <p class="note rise">حساب باز نکنی هم کار می‌کند. اینترنت نداشته باشی هم.</p>
+
+          <div class="stage">
+            <div class="screen desk">
+              <img src="/shots/desktop-dark.webp" width="2880" height="1800" fetchpriority="high"
+                   alt="روتینو روی لپ‌تاپ: نوار کناری، حلقه‌ی پیشرفت روز، کارها و عادت‌های امروز" />
+            </div>
+            <div class="phone tuck">
+              <img src="/shots/today-dark.webp" width="804" height="1748"
+                   alt="روتینو روی گوشی: عادت‌های امروز و درصد پیشرفت روز" />
             </div>
           </div>
-          <div class="feat-txt">
-            <span class="tag">امروز</span>
-            <h3>صبح که باز می‌کنی، همه‌چیز جلوی چشمت است</h3>
-            <p>
-              درصد پیشرفت روز، نوار هفته، کارهای امروز و عادت‌هایی که مانده — همه در
-              یک صفحه، بدون اینکه دنبالشان بگردی.
-            </p>
-            <ul>
-              <li>حلقه‌ی پیشرفت روز، همان بالا</li>
-              <li>تیک‌زدن عادت با یک لمس یا کشیدن انگشت</li>
-              <li>افزودن سریع کار، فقط با تایپ یک خط</li>
-            </ul>
-          </div>
         </div>
+      </section>
 
-        <div class="feat">
-          <div class="feat-shot">
-            <div class="phone">
-              <img src="/shots/habits-dark.webp" width="804" height="1748" loading="lazy"
-                   alt="صفحه‌ی عادت‌ها: کارت هر عادت با استریک و پیشرفت ماهانه" />
+      <!-- کنسول. یک بخش به‌جای پنج‌تا. -->
+      <section id="inside" class="bay">
+        <div class="wrap">
+          <div class="head rise">
+            <h2>داخلش این‌طوری است</h2>
+            <p>نمایشِ زنده‌ی کار با برنامه، نه یک عکس ثابت. روی هر بخش بزن تا همان‌جا برود.</p>
+          </div>
+
+          <div class="console">
+            <div class="rail" role="tablist" aria-label="بخش‌های برنامه">
+              <button role="tab" id="t-today" aria-controls="p-today" aria-selected="true" data-shot="today-dark">
+                <svg class="ic" aria-hidden="true"><use href="#i-home" /></svg>
+                <span class="sr">امروز</span>
+                <div><b aria-hidden="true">امروز</b><span>حلقه‌ی پیشرفت، نوار هفته، کارها و عادت‌های امروز، همه در یک صفحه.</span></div>
+              </button>
+              <button role="tab" id="t-habits" aria-controls="p-habits" aria-selected="false" tabindex="-1" data-shot="habits-dark">
+                <svg class="ic" aria-hidden="true"><use href="#i-loop" /></svg>
+                <span class="sr">عادت‌ها</span>
+                <div><b aria-hidden="true">عادت‌ها</b><span>هر عادت زنجیره‌ی خودش را دارد. روی کارتش می‌بینی چند روز پشت سر هم نگهش داشته‌ای.</span></div>
+              </button>
+              <button role="tab" id="t-timer" aria-controls="p-timer" aria-selected="false" tabindex="-1" data-shot="timer-dark">
+                <svg class="ic" aria-hidden="true"><use href="#i-timer" /></svg>
+                <span class="sr">تایمر</span>
+                <div><b aria-hidden="true">تایمر</b><span>پومودورو و تایمر آزاد. جلسه را به یک عادت وصل کن تا خودش ثبت شود.</span></div>
+              </button>
+              <button role="tab" id="t-journal" aria-controls="p-journal" aria-selected="false" tabindex="-1" data-shot="journal-dark">
+                <svg class="ic" aria-hidden="true"><use href="#i-book" /></svg>
+                <span class="sr">ژورنال</span>
+                <div><b aria-hidden="true">ژورنال</b><span>آخر شب چند خط برای خودت، با حال‌وهوا و نمره‌ی همان روز.</span></div>
+              </button>
+              <button role="tab" id="t-stats" aria-controls="p-stats" aria-selected="false" tabindex="-1" data-shot="analytics-dark">
+                <svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg>
+                <span class="sr">آنالیز</span>
+                <div><b aria-hidden="true">آنالیز</b><span>این هفته را با هفته‌ی قبل مقایسه می‌کند و نشان می‌دهد کجا لنگیده‌ای.</span></div>
+              </button>
+            </div>
+
+            <!--
+              این دیگر عکس نیست: خودِ صفحه‌های برنامه با HTML و CSS بازسازی
+              شده‌اند تا بازدیدکننده «استفاده» را ببیند، نه عکسِ استفاده را.
+              انگشت روی عادت می‌زند، تیک می‌خورد، حلقه‌ی روز پر می‌شود، تایمر
+              واقعاً می‌شمارد و نمودارها رشد می‌کنند.
+
+              محتوای تصویری `aria-hidden` است و هر صحنه یک توضیح متنیِ مخصوصِ
+              صفحه‌خوان دارد؛ چون یک انبوهِ `div` برای صفحه‌خوان معنایی ندارد.
+
+              ⚠️ این یک بازسازی‌ست. اگر UI خودِ برنامه عوض شد، اینجا هم باید
+              دستی به‌روز شود وگرنه سایت چیزی را نشان می‌دهد که دیگر وجود ندارد.
+            -->
+            <div class="deck" id="deck">
+              <div class="phone">
+                <div class="sim" id="sim">
+                  <div class="sim-bar" aria-hidden="true">
+                    <span class="sim-brand"><i class="sim-mark"></i>روتینو</span>
+                    <span class="sim-tools">
+                      <svg viewBox="0 0 24 24"><use href="#i-bell" /></svg>
+                      <svg viewBox="0 0 24 24"><use href="#i-gear" /></svg>
+                    </span>
+                  </div>
+
+                  <div class="sim-stage">
+                    <!-- ── امروز ── -->
+                    <div class="scene" id="p-today" role="tabpanel" aria-labelledby="t-today">
+                      <p class="sr">صفحه‌ی امروز: حلقه‌ی پیشرفت روز روی ۷۵ درصد، نوار هفته، کارهای امروز و عادت‌هایی که مانده.</p>
+                      <div class="scene-in" aria-hidden="true">
+                        <div class="s-head">
+                          <div class="s-hi"><b>ظهر بخیر</b><span>دوشنبه، ۱۲ مرداد ۱۴۰۵</span></div>
+                          <div class="s-ring">
+                            <svg viewBox="0 0 44 44">
+                              <circle class="rt" cx="22" cy="22" r="18" />
+                              <circle class="rp" cx="22" cy="22" r="18" transform="rotate(-90 22 22)" />
+                            </svg>
+                            <b class="s-pct">۶۰٪</b>
+                          </div>
+                        </div>
+
+                        <div class="s-week">
+                          <span><i>شنبه</i><b>۱۰</b></span>
+                          <span><i>یک</i><b>۱۱</b></span>
+                          <span class="now"><i>دو</i><b>۱۲</b></span>
+                          <span><i>سه</i><b>۱۳</b></span>
+                          <span><i>چهار</i><b>۱۴</b></span>
+                          <span><i>پنج</i><b>۱۵</b></span>
+                        </div>
+
+                        <div class="s-sec"><b>کارها</b><span>همه کارها</span></div>
+                        <div class="s-card">
+                          <div class="s-task t1"><i class="s-box"></i><span>تماس با دکتر</span><b class="s-tap"></b></div>
+                          <div class="s-task"><i class="s-box"></i><span>خرید هفتگی</span></div>
+                          <div class="s-add">+ افزودن کار</div>
+                        </div>
+
+                        <div class="s-sec"><b>عادت‌های امروز</b><span>مدیریت</span></div>
+                        <div class="s-habit sky h1">
+                          <div class="s-hrow"><i class="s-box"></i><b>مطالعه</b><em>۳۰د</em><b class="s-tap"></b></div>
+                          <div class="s-dots"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                          <div class="s-bar"><u style="--to: 100%"></u></div>
+                        </div>
+                        <div class="s-habit rose">
+                          <div class="s-hrow"><i class="s-box on"></i><b>ورزش صبحگاهی</b><em>۲۰د</em></div>
+                          <div class="s-dots lit"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                        </div>
+                        <div class="s-habit mint">
+                          <div class="s-hrow"><i class="s-box on"></i><b>۸ لیوان آب</b><em>۸/۸</em></div>
+                          <div class="s-dots lit"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- ── عادت‌ها ── -->
+                    <div class="scene" id="p-habits" role="tabpanel" aria-labelledby="t-habits" hidden>
+                      <p class="sr">صفحه‌ی عادت‌ها: کارت هر عادت با زنجیره‌ی روزهای پشت سر هم و پیشرفت ماهانه.</p>
+                      <div class="scene-in" aria-hidden="true">
+                        <div class="s-title">عادت‌ها</div>
+                        <div class="s-habit sky big"><div class="s-hrow"><i class="s-box on"></i><b>مطالعه</b><em>۱۲ روز</em></div>
+                          <div class="s-dots lit"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                          <div class="s-bar"><u style="--to: 82%"></u></div><span class="s-note">۸۲٪ این ماه</span></div>
+                        <div class="s-habit rose big"><div class="s-hrow"><i class="s-box on"></i><b>ورزش صبحگاهی</b><em>۵ روز</em></div>
+                          <div class="s-dots lit"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                          <div class="s-bar"><u style="--to: 64%"></u></div><span class="s-note">۶۴٪ این ماه</span></div>
+                        <div class="s-habit mint big"><div class="s-hrow"><i class="s-box"></i><b>۸ لیوان آب</b><em>۲۱ روز</em></div>
+                          <div class="s-dots lit"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                          <div class="s-bar"><u style="--to: 93%"></u></div><span class="s-note">۹۳٪ این ماه</span></div>
+                      </div>
+                    </div>
+
+                    <!-- ── تایمر ── -->
+                    <div class="scene" id="p-timer" role="tabpanel" aria-labelledby="t-timer" hidden>
+                      <p class="sr">صفحه‌ی تایمر: پومودورو با شمارش معکوس که به یک عادت وصل شده و خودش ثبت می‌شود.</p>
+                      <div class="scene-in" aria-hidden="true">
+                        <div class="s-title">تایمر تمرکز</div>
+                        <div class="s-clock">
+                          <svg viewBox="0 0 120 120">
+                            <circle class="ct" cx="60" cy="60" r="52" />
+                            <circle class="cp" cx="60" cy="60" r="52" transform="rotate(-90 60 60)" />
+                          </svg>
+                          <div class="s-time"><b id="simClock">۲۵:۰۰</b><span>پومودورو</span></div>
+                        </div>
+                        <div class="s-chiprow"><span class="on">۲۵ / ۵</span><span>۵۰ / ۱۰</span><span>آزاد</span></div>
+                        <div class="s-link"><i class="s-box on"></i><span>وصل به عادت «مطالعه»</span></div>
+                      </div>
+                    </div>
+
+                    <!-- ── ژورنال ── -->
+                    <div class="scene" id="p-journal" role="tabpanel" aria-labelledby="t-journal" hidden>
+                      <p class="sr">صفحه‌ی ژورنال: انتخاب حال‌وهوا، نمره‌ی روز و چند خط یادداشت.</p>
+                      <div class="scene-in" aria-hidden="true">
+                        <div class="s-title">امروز چطور بود؟</div>
+                        <div class="s-moods">
+                          <span><svg viewBox="0 0 24 24"><use href="#i-face-sad" /></svg></span>
+                          <span><svg viewBox="0 0 24 24"><use href="#i-face-flat" /></svg></span>
+                          <span class="pick"><svg viewBox="0 0 24 24"><use href="#i-face-good" /></svg></span>
+                          <span><svg viewBox="0 0 24 24"><use href="#i-face-great" /></svg></span>
+                        </div>
+                        <div class="s-label">نمره‌ی روز</div>
+                        <div class="s-score"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                        <div class="s-label">یادداشت</div>
+                        <div class="s-lines"><u></u><u></u><u></u></div>
+                      </div>
+                    </div>
+
+                    <!-- ── آنالیز ── -->
+                    <div class="scene" id="p-stats" role="tabpanel" aria-labelledby="t-stats" hidden>
+                      <p class="sr">صفحه‌ی آنالیز: مقایسه‌ی این هفته با هفته‌ی قبل، نمودار ماه و شبکه‌ی تقویمی هر عادت.</p>
+                      <div class="scene-in" aria-hidden="true">
+                        <div class="s-title">آنالیز</div>
+                        <div class="s-kpi"><b>+۱۸٪</b><span>نسبت به هفته‌ی قبل</span></div>
+                        <div class="s-bars">
+                          <i style="--h: 42%"></i><i style="--h: 66%"></i><i style="--h: 38%"></i>
+                          <i style="--h: 81%"></i><i style="--h: 57%"></i><i style="--h: 92%"></i><i style="--h: 74%"></i>
+                        </div>
+                        <div class="s-label">مطالعه، این ماه</div>
+                        <div class="s-grid">
+                          <i></i><i class="f"></i><i class="f"></i><i></i><i class="f"></i><i class="f"></i><i class="f"></i>
+                          <i class="f"></i><i class="f"></i><i></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i>
+                          <i class="f"></i><i class="f"></i><i class="f"></i><i class="f"></i><i></i><i class="f"></i><i class="f"></i>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="sim-nav" aria-hidden="true">
+                    <i class="on"><svg viewBox="0 0 24 24"><use href="#i-home" /></svg></i>
+                    <i><svg viewBox="0 0 24 24"><use href="#i-loop" /></svg></i>
+                    <i><svg viewBox="0 0 24 24"><use href="#i-timer" /></svg></i>
+                    <i><svg viewBox="0 0 24 24"><use href="#i-book" /></svg></i>
+                    <i><svg viewBox="0 0 24 24"><use href="#i-chart" /></svg></i>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-          <div class="feat-txt">
-            <span class="tag">عادت‌ها</span>
-            <h3>زنجیره را نشکن</h3>
-            <p>
-              عادت روزانه یا هفتگی، با هدف ماهانه. روی هر کارت می‌بینی چند روز پشت سر
-              هم انجامش داده‌ای و این ماه چقدر جلو رفته‌ای.
-            </p>
-            <ul>
-              <li>عادت‌های آماده، تا از صفر شروع نکنی</li>
-              <li>دسته‌بندی رنگی و آیکون دلخواه</li>
-              <li>مقداری (۸ لیوان آب) یا ساده (انجام شد / نشد)</li>
-            </ul>
-          </div>
         </div>
+      </section>
 
-        <div class="feat">
-          <div class="feat-shot">
-            <div class="phone">
-              <img src="/shots/analytics-dark.webp" width="804" height="1748" loading="lazy"
-                   alt="صفحه‌ی آنالیز: مقایسه‌ی این هفته با هفته‌ی قبل، نمودار ماه و شبکه‌ی تقویمی هر عادت" />
-            </div>
-          </div>
-          <div class="feat-txt">
-            <span class="tag">آنالیز</span>
-            <h3>ببین کجا خوب بودی، کجا لنگیدی</h3>
-            <p>
-              این هفته را با هفته‌ی قبل مقایسه می‌کند، نمودار ماه و سه‌ماهه را نشان
-              می‌دهد، و برای هر عادت یک شبکه‌ی تقویمی دارد که با یک نگاه دستت می‌آید.
-            </p>
-            <ul>
-              <li>مقایسه‌ی خودکار با هفته‌ی گذشته</li>
-              <li>بازه‌ی هفته، ماه، سه‌ماهه و سال</li>
-              <li>شبکه‌ی رنگی هر عادت در ماه</li>
-            </ul>
-          </div>
+      <div class="specs">
+        <div>
+          <svg class="ic" aria-hidden="true"><use href="#i-offline" /></svg>
+          <h3>بدون اینترنت</h3>
+          <p>در مترو و سفر هم کامل کار می‌کند. آنلاین که شدی، خودش همگام می‌شود.</p>
         </div>
-
-        <div class="feat">
-          <div class="feat-shot">
-            <div class="phone">
-              <img src="/shots/timer-dark.webp" width="804" height="1748" loading="lazy"
-                   alt="صفحه‌ی تایمر: پومودورو با شمارش معکوس و اتصال به عادت" />
-            </div>
-          </div>
-          <div class="feat-txt">
-            <span class="tag">تایمر تمرکز</span>
-            <h3>بنشین و فقط همان یک کار را بکن</h3>
-            <p>
-              پومودورو، تایمر آزاد و کرونومتر. هر جلسه را به یک عادتِ زمانی وصل کن تا
-              خودش ثبت شود — دیگر لازم نیست چیزی دستی وارد کنی.
-            </p>
-            <ul>
-              <li>۲۵/۵ و ۵۰/۱۰ آماده، یا زمان دلخواه</li>
-              <li>اتصال مستقیم به عادت یا کار</li>
-              <li>تاریخچه‌ی جلسه‌های تمرکز</li>
-            </ul>
-          </div>
+        <div>
+          <svg class="ic" aria-hidden="true"><use href="#i-devices" /></svg>
+          <h3>روی همه‌ی دستگاه‌ها</h3>
+          <p>گوشی را عوض کنی یا گم کنی، عادت‌ها و ژورنالت سر جایشان هستند.</p>
         </div>
-
-        <div class="feat">
-          <div class="feat-shot">
-            <div class="phone">
-              <img src="/shots/journal-dark.webp" width="804" height="1748" loading="lazy"
-                   alt="صفحه‌ی ژورنال: انتخاب حال‌وهوا با ایموجی، نمره‌ی روز و یادداشت" />
-            </div>
-          </div>
-          <div class="feat-txt">
-            <span class="tag">ژورنال</span>
-            <h3>آخر شب، چند خط برای خودت</h3>
-            <p>
-              حال‌وهوایت را با یک ایموجی بزن، به روزت نمره بده و اگر حسش بود چند خط
-              بنویس. یک ماه بعد که برمی‌گردی، خودت الگوها را می‌بینی.
-            </p>
-            <ul>
-              <li>ده حالت مختلف برای حال‌وهوا</li>
-              <li>نمره‌ی ۱ تا ۱۰ برای هر روز</li>
-              <li>تاریخچه‌ی روزهای گذشته</li>
-            </ul>
-          </div>
+        <div>
+          <svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg>
+          <h3>بدون تبلیغ</h3>
+          <p>نه تبلیغی می‌بینی، نه اطلاعاتت جای دیگری می‌رود.</p>
+        </div>
+        <div>
+          <svg class="ic" aria-hidden="true"><use href="#i-moon" /></svg>
+          <h3>تاریک و روشن</h3>
+          <p>هر دو تم را دارد و با یک کلید در تنظیمات عوض می‌شود.</p>
         </div>
       </div>
-    </section>
 
-    <!-- روشن یا تاریک، چون خیلی‌ها اول همین را می‌پرسند -->
-    <section class="themes">
-      <div class="wrap">
-        <div class="sec-head">
-          <h2>تاریک یا روشن، هرکدام را دوست داری</h2>
-          <p>با یک کلید در تنظیمات عوض می‌شود؛ روی هر دو حالت با دقت تنظیم شده.</p>
-        </div>
-        <div class="pair">
-          <figure>
-            <div class="phone">
-              <img src="/shots/today-dark.webp" width="804" height="1748" loading="lazy"
-                   alt="صفحه‌ی امروز در تم تاریک" />
-            </div>
-            <figcaption>تم تاریک</figcaption>
-          </figure>
-          <figure>
-            <div class="phone">
-              <img src="/shots/today.webp" width="804" height="1748" loading="lazy"
-                   alt="همان صفحه‌ی امروز در تم روشن" />
-            </div>
-            <figcaption>تم روشن</figcaption>
-          </figure>
-        </div>
-      </div>
-    </section>
-
-    <section class="everywhere">
-      <div class="wrap">
-        <div class="sec-head">
-          <h2>روی گوشی، روی لپ‌تاپ، همه‌جا</h2>
-          <p>یک حساب، همان اطلاعات. روی صفحه‌ی بزرگ منوی کناری می‌آید و همه‌چیز جا باز می‌کند.</p>
-        </div>
-        <div class="laptop">
-          <div class="lid">
+      <section class="bay">
+        <div class="wrap">
+          <div class="head rise">
+            <h2>روی صفحه‌ی بزرگ، بزرگ‌تر می‌شود</h2>
+            <p>روی لپ‌تاپ منوی کناری باز می‌شود و نمودارها جا پیدا می‌کنند. همان حساب، همان اطلاعات.</p>
+          </div>
+          <div class="screen wide rise">
             <img src="/shots/desktop-analytics-dark.webp" width="2880" height="1800" loading="lazy"
-                 alt="روتینو روی ویندوز و لپ‌تاپ: صفحه‌ی آنالیز با نوار کناری و نمودارها" />
+                 alt="روتینو روی لپ‌تاپ: صفحه‌ی آنالیز با نوار کناری و نمودارهای هفته و ماه" />
           </div>
-          <div class="base"></div>
-          <div class="foot"></div>
         </div>
-        <div class="plat">
-          <span>💻 ویندوز</span><span>🖥️ مک</span><span>📱 اندروید</span>
-          <span>🍎 آیفون</span><span>🌐 مرورگر</span>
-        </div>
-      </div>
-    </section>
+      </section>
 
-    <section>
-      <div class="wrap">
-        <div class="sec-head">
-          <h2>چیزهایی که برایمان مهم بود</h2>
-        </div>
-        <div class="grid">
-          <div class="card">
-            <div class="ico" aria-hidden="true">🔄</div>
-            <h3>گوشی‌ات را گم کنی، عادت‌هایت نه</h3>
-            <p>با هر دستگاهی که وارد حسابت شوی همان اطلاعات را می‌بینی. گوشی گم شد یا عوضش کردی؟ عادت‌ها و ژورنالت سر جایشان هستند.</p>
-          </div>
-          <div class="card">
-            <div class="ico" aria-hidden="true">📴</div>
-            <h3>بدون اینترنت هم کار می‌کند</h3>
-            <p>در مترو، در سفر، یا وقتی نت قطع است روتینو کامل کار می‌کند. هر تغییری بدهی، دفعه‌ی بعد که آنلاین شوی خودش همگام می‌شود.</p>
-          </div>
-          <div class="card">
-            <div class="ico" aria-hidden="true">🚫</div>
-            <h3>بدون تبلیغ، بدون فروش داده</h3>
-            <p>هیچ تبلیغی نمی‌بینی و اطلاعاتت به هیچ‌کس فروخته نمی‌شود. روتینو ساخته شده که کارت را راه بیندازد، نه که وقتت را بگیرد.</p>
-          </div>
-        </div>
-      </div>
-    </section>
+      <hr class="rule" />
 
-    <section class="final">
-      <div class="wrap">
-        <div class="box">
-          <h2>خب، از کدام عادت شروع کنیم؟</h2>
-          <p>ساختن اولین عادت کمتر از یک دقیقه طول می‌کشد.</p>
-          <a class="btn" href="/app/">بریم داخل برنامه</a>
+      <section id="install" class="bay">
+        <div class="wrap">
+          <div class="head rise">
+            <h2>روی گوشی نصبش کن</h2>
+            <p>فروشگاه لازم نیست و چیزی هم دانلود نمی‌کنی. سه قدم، کمتر از یک دقیقه.</p>
+          </div>
+          <ol class="steps rise">
+            <li>
+              <h3>برنامه را باز کن</h3>
+              <p>با همین مرورگر گوشی برو داخل روتینو.</p>
+            </li>
+            <li>
+              <h3>از منوی مرورگر</h3>
+              <p>گزینه‌ی «افزودن به صفحه‌ی اصلی» را بزن.</p>
+            </li>
+            <li>
+              <h3>تمام</h3>
+              <p>آیکونش می‌نشیند روی گوشی و مثل بقیه‌ی برنامه‌ها باز می‌شود.</p>
+            </li>
+          </ol>
+          <div class="acts" style="justify-content: flex-start; margin-top: clamp(32px, 4vw, 44px)">
+            <a class="btn" href="/app/">همین حالا بازش کن<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+
+      <hr class="rule" />
+
+      <section class="close">
+        <div class="wrap">
+          <h2 class="rise">از کدام عادت شروع می‌کنی؟</h2>
+          <p class="rise">ساختن اولین عادت کمتر از یک دقیقه طول می‌کشد.</p>
+          <div class="acts rise">
+            <a class="btn" href="/app/">ورود به برنامه<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
+          </div>
+        </div>
+      </section>
+    </main>
 
     <footer>
       <div class="wrap">
         <div class="foot">
-          <a class="brand" href="/"><img class="mark" src="/favicon.svg" width="34" height="34" alt="" aria-hidden="true" /><span>روتینو</span></a>
+          <a class="brand" href="/">
+            <img src="/favicon.svg" width="32" height="32" alt="" aria-hidden="true" />
+            <span>روتینو</span>
+          </a>
           <div class="foot-links">
             <a href="/legal/">قوانین و مقررات</a>
             <a href="/legal/#privacy">حریم خصوصی</a>
@@ -475,38 +980,203 @@
     </footer>
 
     <div class="dock" id="dock">
-      <a class="btn" href="/app/">بریم داخل برنامه</a>
+      <a class="btn" href="/app/">ورود به برنامه<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
     </div>
 
     <script>
-      var nav = document.getElementById("nav");
-      var dock = document.getElementById("dock");
-      /* یک شنونده‌ی اسکرول برای هر دو کار، چون هر دو فقط به scrollY نگاه می‌کنند. */
-      addEventListener("scroll", function () {
-        var y = scrollY;
-        nav.classList.toggle("scrolled", y > 8);
-        dock.classList.toggle("show", y > innerHeight * 0.7);
-      }, { passive: true });
+      (function () {
+        "use strict";
 
-      /* برنامه قبلاً روی ریشه‌ی دامنه بود، پس هر بازدیدکننده‌ی قدیمی یک
-         سرویس‌ورکر با دامنه‌ی «/» دارد که هنوز نسخه‌ی کش‌شده‌ی اپ را برای همین
-         آدرس سرو می‌کند و این صفحه را نمی‌گذارد دیده شود. فقط همان پاک می‌شود؛
-         سرویس‌ورکر خود برنامه روی «/app/» دست نمی‌خورد. */
-      if ("serviceWorker" in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function (regs) {
-          var root = location.origin + "/";
-          var stale = regs.filter(function (r) { return r.scope === root; });
-          if (!stale.length) return;
-          Promise.all(stale.map(function (r) { return r.unregister(); })).then(function () {
-            try {
-              if (!sessionStorage.getItem("routino-sw-cleaned")) {
-                sessionStorage.setItem("routino-sw-cleaned", "1");
-                location.reload();
-              }
-            } catch (e) { /* حالت ناشناس: sessionStorage ممکن است throw کند */ }
+        /* ── نوار بالا و دکمه‌ی چسبان ─────────────────────────── */
+        var top = document.getElementById("top");
+        var dock = document.getElementById("dock");
+        addEventListener("scroll", function () {
+          var y = scrollY;
+          top.classList.toggle("dropped", y > 8);
+          dock.classList.toggle("up", y > innerHeight * 0.8);
+        }, { passive: true });
+
+        /* ── کنسول: پخش‌کننده‌ی دموی زنده ───────────────────────
+           هر صحنه یک فیلم کوتاه است که با کلاس‌ها اجرا می‌شود. صحنه‌ها پشت هم
+           پخش می‌شوند و لوپ می‌خورند؛ کلیک روی ریل می‌پرد به همان صحنه.
+           وقتی کنسول از دید خارج شود یا تب پس‌زمینه برود، همه‌چیز می‌ایستد. */
+        var sim = document.getElementById("sim");
+        var tabs = [].slice.call(document.querySelectorAll('.rail [role="tab"]'));
+        var scenes = tabs.map(function (t) { return document.getElementById(t.getAttribute("aria-controls")); });
+        var SPAN = [5200, 3900, 4400, 3900, 4300];
+        var FA = ["۰", "۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹"];
+        var faNum = function (n) { return String(n).replace(/\d/g, function (d) { return FA[+d]; }); };
+        var pad = function (n) { return (n < 10 ? "0" : "") + n; };
+
+        var calm = matchMedia("(prefers-reduced-motion: reduce)");
+        var at = [], frame = 0, live = false, here = 0;
+
+        function stop() {
+          at.forEach(clearTimeout); at = [];
+          if (frame) cancelAnimationFrame(frame), (frame = 0);
+        }
+        function later(ms, fn) { at.push(setTimeout(fn, ms)); }
+
+        var today = scenes[0];
+        var taskBox = today.querySelector(".s-task.t1 .s-box");
+        var habBox = today.querySelector(".h1 .s-box");
+        var habDots = today.querySelector(".h1 .s-dots");
+        var arc = today.querySelector(".s-ring .rp");
+        var pct = today.querySelector(".s-pct");
+        var taps = [].slice.call(today.querySelectorAll(".s-tap"));
+        var clock = document.getElementById("simClock");
+        var clockArc = scenes[2].querySelector(".s-clock .cp");
+        /* موجِ پرشدنِ شبکه‌ی تقویمی: تأخیرِ هر خانه از خودش می‌آید. */
+        [].slice.call(scenes[4].querySelectorAll(".s-grid i")).forEach(function (c, i) {
+          c.style.setProperty("--i", i);
+        });
+
+        /* هر صحنه را به حالتِ «هنوز اتفاق نیفتاده» برمی‌گرداند. */
+        function rewind() {
+          taskBox.classList.remove("on");
+          habBox.classList.remove("on");
+          habDots.classList.remove("lit");
+          arc.style.strokeDashoffset = "45.2";
+          pct.textContent = "۶۰٪";
+          taps.forEach(function (t) { t.classList.remove("hit"); });
+          clock.textContent = "۲۵:۰۰";
+          clockArc.style.strokeDashoffset = "0";
+        }
+
+        /* «امروز» تنها صحنه‌ای‌ست که سناریو دارد: انگشت می‌زند، تیک می‌خورد،
+           حلقه‌ی روز جلو می‌رود. بقیه با CSS خودشان جا می‌افتند. */
+        function playToday() {
+          later(520, function () { taps[0].classList.add("hit"); });
+          later(880, function () { taskBox.classList.add("on"); });
+          later(1080, function () { arc.style.strokeDashoffset = "36.2"; pct.textContent = "۶۸٪"; });
+          later(2000, function () { taps[1].classList.add("hit"); });
+          later(2360, function () {
+            habBox.classList.add("on");
+            habDots.classList.add("lit");
+          });
+          later(2760, function () { arc.style.strokeDashoffset = "28.3"; pct.textContent = "۷۵٪"; });
+        }
+
+        /* تایمر: ساعت و حلقه با هم جلو می‌روند. زمان فشرده است، چون یک جلسه‌ی
+           ۲۵ دقیقه‌ای در چهار ثانیه باید خوانده شود. */
+        function playTimer(span) {
+          var t0 = performance.now();
+          var TOTAL = 1500;
+          (function tick(now) {
+            var p = Math.min((now - t0) / span, 1);
+            var left = Math.round(TOTAL * (1 - p * 0.45));
+            clock.textContent = faNum(pad(Math.floor(left / 60)) + ":" + pad(left % 60));
+            clockArc.style.strokeDashoffset = (327 * (1 - left / TOTAL)).toFixed(1);
+            if (p < 1) frame = requestAnimationFrame(tick);
+          })(t0);
+        }
+
+        function go(i, byHand) {
+          stop();
+          here = i;
+          /* `armed` صحنه را خالی می‌کند تا انیمیشن از صفر شروع شود، پس فقط
+             لحظه‌ای گذاشته می‌شود که واقعاً قرار است پخش شود. اگر این بالاتر
+             نوشته می‌شد و پخش هیچ‌وقت شروع نمی‌شد، بازدیدکننده یک صفحه‌ی خالی
+             می‌دید به‌جای صفحه‌ی پرِ برنامه. */
+          sim.classList.add("armed");
+          tabs.forEach(function (t, n) {
+            var on = n === i;
+            t.setAttribute("aria-selected", on ? "true" : "false");
+            t.tabIndex = on ? 0 : -1;
+            t.classList.remove("ticking");
+            scenes[n].hidden = !on;
+            scenes[n].classList.remove("act");
+          });
+          rewind();
+
+          /* مرورگر باید حالتِ اولیه را ببیند وگرنه transition اتفاق نمی‌افتد و
+             صحنه پرش می‌کند. این کار را با یک خواندنِ اجباریِ layout انجام
+             می‌دهیم، نه با requestAnimationFrame: اگر تب در پس‌زمینه یا حالتِ
+             کم‌مصرف باشد rAF می‌تواند اصلاً اجرا نشود، و آن‌وقت `act` هیچ‌وقت
+             گذاشته نمی‌شد و بازدیدکننده نمودارِ خالی می‌دید. */
+          void scenes[i].offsetWidth;
+
+          scenes[i].classList.add("act");
+          if (calm.matches) return;
+          if (i === 0) playToday();
+          if (i === 2) playTimer(SPAN[2]);
+          var bar = tabs[i];
+          bar.style.transitionDuration = SPAN[i] + "ms";
+          bar.classList.add("ticking");
+          later(SPAN[i], function () { if (live) go((i + 1) % scenes.length); });
+        }
+
+        tabs.forEach(function (tab, i) {
+          tab.addEventListener("click", function () { go(i, true); });
+          tab.addEventListener("keydown", function (e) {
+            /* ریل عمودی‌ست و در RTL جهت فلش‌های افقی برعکس می‌شود، پس هر چهار
+               کلید را می‌پذیریم و کاربر لازم نیست حدس بزند. */
+            var step = 0;
+            if (e.key === "ArrowDown" || e.key === "ArrowLeft") step = 1;
+            else if (e.key === "ArrowUp" || e.key === "ArrowRight") step = -1;
+            else if (e.key === "Home") { e.preventDefault(); go(0, true); tabs[0].focus(); return; }
+            else if (e.key === "End") { e.preventDefault(); go(tabs.length - 1, true); tabs[tabs.length - 1].focus(); return; }
+            if (!step) return;
+            e.preventDefault();
+            var n = (i + step + tabs.length) % tabs.length;
+            go(n, true); tabs[n].focus();
           });
         });
-      }
+
+        /* فقط وقتی واقعاً دیده می‌شود کار می‌کند. باتریِ کسی را روی صحنه‌ای که
+           پایین صفحه است نمی‌سوزانیم. */
+        function wake(on) {
+          if (on === live) return;
+          live = on;
+          if (on) go(here); else stop();
+        }
+        if ("IntersectionObserver" in window) {
+          new IntersectionObserver(function (en) {
+            wake(en[0].isIntersecting && !document.hidden);
+          }, { threshold: 0.25 }).observe(sim);
+        } else {
+          wake(true);
+        }
+        document.addEventListener("visibilitychange", function () {
+          if (document.hidden) wake(false);
+        });
+
+        /* ── ورودِ بخش‌ها ─────────────────────────────────────── */
+        var risers = [].slice.call(document.querySelectorAll("main > section:not(.hero) .rise, .close .rise"));
+        if (!("IntersectionObserver" in window)) {
+          risers.forEach(function (el) { el.classList.add("lit"); });
+        } else {
+          var eye = new IntersectionObserver(function (entries) {
+            entries.forEach(function (en) {
+              if (!en.isIntersecting) return;
+              en.target.classList.add("lit");
+              eye.unobserve(en.target);
+            });
+          }, { rootMargin: "0px 0px -12% 0px" });
+          risers.forEach(function (el) { eye.observe(el); });
+        }
+
+        /* ── سرویس‌ورکرِ کهنه ─────────────────────────────────── */
+        /* برنامه قبلاً روی ریشه‌ی دامنه بود، پس هر بازدیدکننده‌ی قدیمی یک
+           سرویس‌ورکر با دامنه‌ی «/» دارد که هنوز نسخه‌ی کش‌شده‌ی اپ را برای همین
+           آدرس سرو می‌کند و این صفحه را نمی‌گذارد دیده شود. فقط همان پاک می‌شود؛
+           سرویس‌ورکر خود برنامه روی «/app/» دست نمی‌خورد. */
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function (regs) {
+            var root = location.origin + "/";
+            var stale = regs.filter(function (r) { return r.scope === root; });
+            if (!stale.length) return;
+            Promise.all(stale.map(function (r) { return r.unregister(); })).then(function () {
+              try {
+                if (!sessionStorage.getItem("routino-sw-cleaned")) {
+                  sessionStorage.setItem("routino-sw-cleaned", "1");
+                  location.reload();
+                }
+              } catch (e) { /* حالت ناشناس: sessionStorage ممکن است throw کند */ }
+            });
+          });
+        }
+      })();
     </script>
   </body>
 </html>
