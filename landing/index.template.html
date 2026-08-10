@@ -6,7 +6,7 @@
   اینجا نیست: رفته به `/legal/` و فقط یک لینک کم‌رنگ در فوتر دارد.
 
   ⚠️ اینجا حرفی از قیمت، اشتراک و دوره‌ی آزمایشی زده نمی‌شود. تصمیم مالک: صفحه‌ی
-  اول فقط باید بازدیدکننده را ببرد داخل برنامه تا کار کردن با آن را ببیند؛ حساب
+  اول فقط باید بازدیدکننده را ببرد داخلش تا کار کردن با آن را ببیند؛ حساب
   و اشتراک وقتی مطرح می‌شود که خودش داخل اپ رسیده باشد. اگر روزی خواستی قیمت را
   اینجا برگردانی، بدان که عمداً برداشته شده، نه از قلم افتاده.
 
@@ -71,25 +71,29 @@
       :root {
         color-scheme: dark;
 
-        /* خنثی‌ها عمداً به نارنجی متمایل‌اند. خاکستریِ خالص کنار #F97316 مرده
-           به‌نظر می‌رسد؛ همین یک درجه گرمی، صفحه را به رنگِ برنامه می‌چسباند. */
-        --ink: #080706;
-        --raise: #121010;
-        --raise-2: #1a1715;
-        --edge: #241f1c;
-        --edge-strong: #352e29;
+        /* این‌ها حدس نیستند: عیناً همان توکن‌های تمِ تاریکِ خودِ برنامه‌اند
+           (`src/styles.css`، بلوکِ `.dark`)، فقط از oklch به hex درآمده‌اند تا
+           اینجا وابستگی نداشته باشیم. اگر تمِ اپ عوض شد، از همان‌جا بردار.
+           نارنجیِ واقعیِ برنامه #fe7825 است نه #f97316؛ قبلاً سایت و اپ دو
+           نارنجیِ کمی متفاوت داشتند. */
+        --ink: #0e0a08;        /* background */
+        --raise: #1a1512;      /* card */
+        --raise-2: #28231f;    /* secondary */
+        --edge: #322d29;       /* border */
+        --edge-strong: #443d37;
 
-        --fg: #f7f3ee;
-        --fg-2: #a69e96;
-        /* کم‌رنگ‌ترین لایه‌ی متن، ولی هنوز خوانا: نسبت کنتراستش روی زمینه‌ی صفحه
-           حدود ۵:۱ است. رنگِ قبلی (#6b635c) زیر ۳٫۵ بود و متنِ زیر دکمه و فوتر
-           عملاً محو می‌شد. */
-        --fg-3: #877e76;
+        --fg: #f3f1ee;         /* foreground */
+        --fg-2: #938e89;       /* muted-foreground */
+        /* کم‌رنگ‌ترین لایه‌ی متن، ولی هنوز خوانا. رنگِ اولیه (#6b635c) زیر ۳٫۵
+           بود و متنِ زیر دکمه و فوتر عملاً محو می‌شد. */
+        --fg-3: #8a8179;
 
-        --brand: #f97316;
-        --brand-lift: #ff8a33;
-        --brand-soft: rgba(249, 115, 22, 0.1);
-        --brand-line: rgba(249, 115, 22, 0.28);
+        --brand: #fe7825;      /* primary */
+        --brand-ink: #0a0704;  /* primary-foreground */
+        --brand-lift: #ff9147;
+        --brand-soft: rgba(254, 120, 37, 0.1);
+        --brand-line: rgba(254, 120, 37, 0.28);
+        --good: #42b966;       /* success */
 
         /* سایه‌ها آفست و بلور دارند. هاله‌ی رنگیِ بدون آفست تزئین است نه عمق. */
         --lift-1: 0 1px 2px rgba(0, 0, 0, 0.6), 0 8px 24px rgba(0, 0, 0, 0.45);
@@ -101,6 +105,10 @@
         --curve: 20px;
 
         --swing: cubic-bezier(0.16, 1, 0.3, 1);
+        /* منحنی‌های خودِ برنامه، عیناً از `src/styles.css`. */
+        --ease-page: cubic-bezier(0.22, 1, 0.36, 1);
+        --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+        --ease-pop: cubic-bezier(0.2, 0.9, 0.3, 1.2);
       }
 
       *, *::before, *::after { box-sizing: border-box; }
@@ -118,7 +126,7 @@
       }
 
       /* سطح‌هایی که خودمان نکشیده‌ایم ولی هنوز بخشی از طراحی‌اند. */
-      ::selection { background: var(--brand); color: #1a0d02; }
+      ::selection { background: var(--brand); color: var(--brand-ink); }
       :focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: 6px; }
       * { scrollbar-color: var(--edge-strong) transparent; scrollbar-width: thin; }
       ::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -145,12 +153,12 @@
         display: inline-flex; align-items: center; justify-content: center; gap: 9px;
         font-weight: 700; font-size: 15.5px; line-height: 1;
         padding: 16px 30px; border-radius: 14px; border: 1px solid transparent;
-        background: var(--brand); color: #1a0d02;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 26px rgba(249, 115, 22, 0.22);
+        background: var(--brand); color: var(--brand-ink);
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 26px rgba(254, 120, 37, 0.22);
         transition: background 0.18s var(--swing), transform 0.18s var(--swing), box-shadow 0.18s var(--swing);
       }
       .btn:hover { background: var(--brand-lift); transform: translateY(-2px);
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 16px 34px rgba(249, 115, 22, 0.3); }
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 16px 34px rgba(254, 120, 37, 0.3); }
       .btn:active { transform: translateY(0); }
       .btn .ic { width: 18px; height: 18px; }
 
@@ -160,6 +168,14 @@
       .btn.line:hover { background: var(--raise-2); border-color: var(--fg-3); transform: translateY(-2px); box-shadow: none; }
 
       .btn.sm { padding: 11px 20px; font-size: 14px; border-radius: 11px; }
+
+      /* دکمه‌ای که هنوز مقصد ندارد. کم‌رنگ‌تر است ولی متنش هنوز خواناست، و
+         نشانه‌ی «به‌زودی» را کنار خودش دارد تا کسی بی‌خود رویش کلیک نکند. */
+      .btn.soon { color: var(--fg-2); border-color: var(--edge); cursor: default; }
+      .btn.soon:hover { background: transparent; border-color: var(--edge); transform: none; }
+      .btn.soon .ic { opacity: 0.75; }
+      .btn .tag { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 99px;
+        background: var(--brand-soft); color: var(--brand); }
 
       /* ── نوار بالا ───────────────────────────────────────────── */
       .top {
@@ -259,9 +275,11 @@
          پالت اینجا عمداً جداست: این‌ها رنگ‌های خودِ برنامه‌اند، نه رنگ‌های صفحه.
          اگر روزی تمِ اپ عوض شد، فقط همین چند متغیر عوض می‌شود. */
       .sim {
-        --app-bg: #0d0c0b; --app-card: #1a1714; --app-line: #2b2622;
-        --app-fg: #f5f1ec; --app-mut: #8f867e;
-        --app-or: #f97316; --app-sky: #29b6f6; --app-rose: #f2555a; --app-mint: #34d399;
+        /* همان توکن‌های `.dark` خودِ برنامه. رنگِ دسته‌ها (آبی/قرمز/سبز) هم
+           همان `tint`ی‌ست که کارتِ عادت در `components/habits.tsx` می‌گیرد. */
+        --app-bg: #0e0a08; --app-card: #1a1512; --app-line: #322d29;
+        --app-fg: #f3f1ee; --app-mut: #938e89; --app-ink: #0a0704;
+        --app-or: #fe7825; --app-sky: #29b6f6; --app-rose: #f4514f; --app-mint: #42b966;
         position: relative; border-radius: 24px; overflow: hidden;
         background: var(--app-bg); aspect-ratio: 286 / 620;
         display: flex; flex-direction: column;
@@ -307,7 +325,7 @@
       .s-week i { font-size: 8px; font-style: normal; color: var(--app-mut); }
       .s-week b { display: grid; place-items: center; width: 100%; aspect-ratio: 1; max-width: 27px;
         border-radius: 50%; border: 1.5px solid var(--app-line); font-size: 10px; font-weight: 700; }
-      .s-week .now b { background: var(--app-or); border-color: var(--app-or); color: #1a0d02; }
+      .s-week .now b { background: var(--app-or); border-color: var(--app-or); color: var(--brand-ink); }
 
       /* تیترِ ردیف */
       .s-sec { display: flex; align-items: baseline; justify-content: space-between; margin-top: 2px; }
@@ -325,11 +343,15 @@
       .s-box { width: 17px; height: 17px; border-radius: 50%; border: 1.6px solid var(--app-line);
         flex: none; position: relative; }
       .s-box.on { background: var(--app-or); border-color: var(--app-or); }
+      /* تیک با ضخامتِ ۳ کشیده شده، همان `strokeWidth={3}`ی که
+         `components/tasks.tsx` به آیکون می‌دهد. */
       .s-box::after { content: ""; position: absolute; inset: 0;
-        background: no-repeat center/9px 9px
-          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 6.2 4.6 8.8 10 3.4' fill='none' stroke='%231a0d02' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        background: no-repeat center/10px 10px
+          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 6.2 4.6 8.8 10 3.4' fill='none' stroke='%23ffffff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
         opacity: 0; }
-      .s-box.on::after { opacity: 1; }
+      .s-box.on::after { opacity: 1; animation: check-pop 0.32s var(--ease-spring) both; }
+      /* ردیف موقع کامل‌شدن یک تکان کوچک می‌خورد، دقیقاً مثل خودِ اپ. */
+      .s-task.done, .s-hrow.done { animation: row-complete-flash 0.28s ease-out both; }
 
       /* عادت‌ها */
       .s-habit { border-radius: 12px; padding: 8px 9px; display: flex; flex-direction: column; gap: 6px;
@@ -370,7 +392,7 @@
       .s-chiprow { display: flex; gap: 5px; justify-content: center; margin-top: 10px; }
       .s-chiprow span { font-size: 9.5px; padding: 5px 10px; border-radius: 99px;
         border: 1px solid var(--app-line); color: var(--app-mut); }
-      .s-chiprow .on { background: rgba(249, 115, 22, 0.14); border-color: rgba(249, 115, 22, 0.4);
+      .s-chiprow .on { background: rgba(254, 120, 37, 0.14); border-color: rgba(254, 120, 37, 0.4);
         color: var(--app-or); }
       .s-link { display: flex; align-items: center; gap: 7px; margin-top: 10px; padding: 8px 9px;
         border: 1px solid var(--app-line); border-radius: 10px; font-size: 10px; }
@@ -380,7 +402,7 @@
       .s-moods span { flex: 1; display: grid; place-items: center; aspect-ratio: 1; border-radius: 12px;
         border: 1px solid var(--app-line); color: var(--app-mut); }
       .s-moods svg { width: 21px; height: 21px; }
-      .s-moods .pick { border-color: var(--app-or); background: rgba(249, 115, 22, 0.12); color: var(--app-or); }
+      .s-moods .pick { border-color: var(--app-or); background: rgba(254, 120, 37, 0.12); color: var(--app-or); }
       .s-score { display: flex; gap: 4px; }
       .s-score i { flex: 1; height: 22px; border-radius: 6px; border: 1px solid var(--app-line); }
       .s-lines { display: flex; flex-direction: column; gap: 6px; }
@@ -392,7 +414,7 @@
       .s-kpi span { font-size: 9.5px; color: var(--app-mut); }
       .s-bars { display: flex; align-items: flex-end; gap: 5px; height: 88px; }
       .s-bars i { flex: 1; height: var(--h); border-radius: 4px 4px 2px 2px;
-        background: linear-gradient(180deg, var(--app-or), rgba(249, 115, 22, 0.35));
+        background: linear-gradient(180deg, var(--app-or), rgba(254, 120, 37, 0.35));
         transform-origin: 50% 100%; }
       .s-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
       .s-grid i { aspect-ratio: 1; border-radius: 3px; background: var(--app-line); }
@@ -408,7 +430,7 @@
       .s-task, .s-hrow { position: relative; }
       .s-tap { position: absolute; inset-inline-start: 3px; top: 50%;
         width: 25px; height: 25px; margin-top: -12.5px; border-radius: 50%;
-        border: 1.5px solid var(--app-or); background: rgba(249, 115, 22, 0.2);
+        border: 1.5px solid var(--app-or); background: rgba(254, 120, 37, 0.2);
         opacity: 0; pointer-events: none; }
       .s-tap.hit { animation: tap 0.62s var(--swing); }
       @keyframes tap {
@@ -475,7 +497,7 @@
       .scene.act .s-lines u:nth-child(3) { transition-delay: 0.44s; }
       /* نمره‌ی روز */
       .s-score i { background: transparent; }
-      .scene.act .s-score i:nth-child(-n + 7) { background: rgba(249, 115, 22, 0.28); }
+      .scene.act .s-score i:nth-child(-n + 7) { background: rgba(254, 120, 37, 0.28); }
       .scene.act .s-score i:nth-child(7) { background: var(--app-or); }
       .scene.act .s-score i:nth-child(1) { transition-delay: 0.06s; }
       .scene.act .s-score i:nth-child(2) { transition-delay: 0.1s; }
@@ -546,17 +568,46 @@
          می‌افتد؛ آن کلاس را یک اسکریپت کوچک در `head` می‌گذارد. اگر جاوااسکریپت
          خطا بدهد یا مرورگر انیمیشن را اجرا نکند، بازدیدکننده صفحه‌ی کامل را
          می‌بیند نه یک صفحه‌ی سفید. */
-      @keyframes rise { to { opacity: 1; translate: 0 0; } }
+      /* این چهار کیفریم کپیِ عینِ خودِ برنامه‌اند (`src/styles.css`). یعنی
+         سایت با همان زبانِ حرکتی تکان می‌خورد که کاربر بعداً داخل اپ می‌بیند:
+         همان پرشِ تیک، همان جاافتادنِ ردیف‌ها. */
+      @keyframes page-item-in {
+        from { opacity: 0; transform: translateY(14px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      @keyframes check-pop {
+        0% { transform: scale(0.6); opacity: 0; }
+        60% { transform: scale(1.25); opacity: 1; }
+        100% { transform: scale(1); opacity: 1; }
+      }
+      @keyframes row-complete-flash {
+        0% { transform: scale(1); }
+        35% { transform: scale(1.015); }
+        100% { transform: scale(1); }
+      }
+      @keyframes pop-in {
+        0% { opacity: 0; transform: scale(0.85) translateY(12px); }
+        100% { opacity: 1; transform: scale(1) translateY(0); }
+      }
 
-      .js .rise { opacity: 0; translate: 0 16px; }
-      .js .rise.lit { opacity: 1; translate: 0 0;
-        transition: opacity 0.7s var(--swing), translate 0.7s var(--swing); }
-      .js .hero .rise { animation: rise 0.9s var(--swing) forwards; }
-      .js .hero .rise:nth-child(1) { animation-delay: 0.05s; }
-      .js .hero .rise:nth-child(2) { animation-delay: 0.14s; }
-      .js .hero .rise:nth-child(3) { animation-delay: 0.23s; }
-      .js .hero .rise:nth-child(4) { animation-delay: 0.32s; }
-      .js .stage { opacity: 0; animation: rise 1s var(--swing) 0.36s forwards; }
+      .js .rise { opacity: 0; }
+      .js .rise.lit { animation: page-item-in 0.4s var(--ease-page) both; }
+      .js .hero .rise { animation: page-item-in 0.4s var(--ease-page) both; }
+      .js .hero .rise:nth-child(2) { animation-delay: 60ms; }
+      .js .hero .rise:nth-child(3) { animation-delay: 120ms; }
+      .js .hero .rise:nth-child(4) { animation-delay: 180ms; }
+      .js .stage { animation: page-item-in 0.5s var(--ease-page) 240ms both; }
+
+      /* همان پلکانِ ۶۰ میلی‌ثانیه‌ایِ `page-stagger` اپ، روی ردیف‌های صفحه. */
+      .js .specs > div, .js .steps li, .js .rail button { opacity: 0; }
+      .js .specs.lit > div, .js .steps.lit li, .js .console.lit .rail button {
+        animation: page-item-in 0.4s var(--ease-page) both; }
+      .js .specs.lit > div:nth-child(2), .js .steps.lit li:nth-child(2),
+      .js .console.lit .rail button:nth-child(2) { animation-delay: 60ms; }
+      .js .specs.lit > div:nth-child(3), .js .steps.lit li:nth-child(3),
+      .js .console.lit .rail button:nth-child(3) { animation-delay: 120ms; }
+      .js .specs.lit > div:nth-child(4), .js .console.lit .rail button:nth-child(4) { animation-delay: 180ms; }
+      .js .console.lit .rail button:nth-child(5) { animation-delay: 240ms; }
 
       @media (prefers-reduced-motion: reduce) {
         html { scroll-behavior: auto; }
@@ -650,10 +701,10 @@
           <span>روتینو</span>
         </a>
         <nav class="top-nav" aria-label="بخش‌های صفحه">
-          <a href="#inside">داخل برنامه</a>
-          <a href="#install">نصب روی گوشی</a>
+          <a href="#inside">داخلش</a>
+          <a href="#install">نصب</a>
         </nav>
-        <a class="btn sm" href="/app/">ورود به برنامه</a>
+        <a class="btn sm" href="/app/">وب‌اپ</a>
       </div>
     </header>
 
@@ -665,16 +716,25 @@
         </svg>
 
         <div class="wrap hero-in">
-          <h1 class="rise">عادت می‌سازی، روتینو حواسش هست</h1>
+          <h1 class="rise">عادت‌هات رو بساز، بقیه‌ش با روتینو</h1>
           <p class="lede rise">
-            عادت، کار، تمرکز و ژورنال در یک برنامه، با تقویم شمسی.
-            صبح بازش می‌کنی و می‌دانی امروز باید چه‌کار کنی.
+            عادت، کار، تایمر تمرکز و ژورنال، همه توی یه برنامه با تقویم شمسی.
+            صبح بازش می‌کنی و می‌بینی امروز چی داری.
           </p>
+          <!--
+            ⚠️ دکمه‌ی اندروید عمداً لینک ندارد: فایل APK هنوز آماده نیست و مالک
+            بعداً لینکش را می‌دهد. برای فعال‌کردنش، این `span` را به یک `<a>` با
+            `href` و `download` تبدیل کن و کلاس `soon` و تگِ «به‌زودی» را بردار.
+            تا آن روز هیچ لینکِ الکی اینجا نمی‌گذاریم.
+          -->
           <div class="acts rise">
-            <a class="btn" href="/app/">ورود به برنامه<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
-            <a class="btn line" href="#install">نصب روی گوشی<svg class="ic" aria-hidden="true"><use href="#i-down" /></svg></a>
+            <a class="btn" href="/app/">باز کردن وب‌اپ<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
+            <span class="btn line soon" role="link" aria-disabled="true">
+              <svg class="ic" aria-hidden="true"><use href="#i-down" /></svg>دانلود اندروید
+              <b class="tag">به‌زودی</b>
+            </span>
           </div>
-          <p class="note rise">حساب باز نکنی هم کار می‌کند. اینترنت نداشته باشی هم.</p>
+          <p class="note rise">وب‌اپ روی آیفون و هر مرورگری کار می‌کنه. نسخه‌ی اندروید داره آماده می‌شه.</p>
 
           <div class="stage">
             <div class="screen desk">
@@ -693,8 +753,8 @@
       <section id="inside" class="bay">
         <div class="wrap">
           <div class="head rise">
-            <h2>داخلش این‌طوری است</h2>
-            <p>نمایشِ زنده‌ی کار با برنامه، نه یک عکس ثابت. روی هر بخش بزن تا همان‌جا برود.</p>
+            <h2>داخلش این شکلیه</h2>
+            <p>این خودِ برنامه‌ست که داره کار می‌کنه، نه عکس. روی هر بخش بزنی می‌ره همون‌جا.</p>
           </div>
 
           <div class="console">
@@ -702,27 +762,27 @@
               <button role="tab" id="t-today" aria-controls="p-today" aria-selected="true" data-shot="today-dark">
                 <svg class="ic" aria-hidden="true"><use href="#i-home" /></svg>
                 <span class="sr">امروز</span>
-                <div><b aria-hidden="true">امروز</b><span>حلقه‌ی پیشرفت، نوار هفته، کارها و عادت‌های امروز، همه در یک صفحه.</span></div>
+                <div><b aria-hidden="true">امروز</b><span>حلقه‌ی پیشرفت، نوار هفته، کارها و عادت‌های امروز؛ همه توی یه صفحه.</span></div>
               </button>
               <button role="tab" id="t-habits" aria-controls="p-habits" aria-selected="false" tabindex="-1" data-shot="habits-dark">
                 <svg class="ic" aria-hidden="true"><use href="#i-loop" /></svg>
                 <span class="sr">عادت‌ها</span>
-                <div><b aria-hidden="true">عادت‌ها</b><span>هر عادت زنجیره‌ی خودش را دارد. روی کارتش می‌بینی چند روز پشت سر هم نگهش داشته‌ای.</span></div>
+                <div><b aria-hidden="true">عادت‌ها</b><span>هر عادت زنجیره‌ی خودشو داره. روی کارتش می‌بینی چند روزه پشت سر هم نگهش داشتی.</span></div>
               </button>
               <button role="tab" id="t-timer" aria-controls="p-timer" aria-selected="false" tabindex="-1" data-shot="timer-dark">
                 <svg class="ic" aria-hidden="true"><use href="#i-timer" /></svg>
                 <span class="sr">تایمر</span>
-                <div><b aria-hidden="true">تایمر</b><span>پومودورو و تایمر آزاد. جلسه را به یک عادت وصل کن تا خودش ثبت شود.</span></div>
+                <div><b aria-hidden="true">تایمر</b><span>پومودورو و تایمر آزاد. جلسه رو به یه عادت وصل کن تا خودش ثبت بشه.</span></div>
               </button>
               <button role="tab" id="t-journal" aria-controls="p-journal" aria-selected="false" tabindex="-1" data-shot="journal-dark">
                 <svg class="ic" aria-hidden="true"><use href="#i-book" /></svg>
                 <span class="sr">ژورنال</span>
-                <div><b aria-hidden="true">ژورنال</b><span>آخر شب چند خط برای خودت، با حال‌وهوا و نمره‌ی همان روز.</span></div>
+                <div><b aria-hidden="true">ژورنال</b><span>آخر شب چند خط برای خودت، با حال‌وهوا و نمره‌ی همون روز.</span></div>
               </button>
               <button role="tab" id="t-stats" aria-controls="p-stats" aria-selected="false" tabindex="-1" data-shot="analytics-dark">
                 <svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg>
                 <span class="sr">آنالیز</span>
-                <div><b aria-hidden="true">آنالیز</b><span>این هفته را با هفته‌ی قبل مقایسه می‌کند و نشان می‌دهد کجا لنگیده‌ای.</span></div>
+                <div><b aria-hidden="true">آنالیز</b><span>این هفته رو با هفته‌ی قبل مقایسه می‌کنه و نشون می‌ده کجا لنگیدی.</span></div>
               </button>
             </div>
 
@@ -888,30 +948,30 @@
         <div>
           <svg class="ic" aria-hidden="true"><use href="#i-offline" /></svg>
           <h3>بدون اینترنت</h3>
-          <p>در مترو و سفر هم کامل کار می‌کند. آنلاین که شدی، خودش همگام می‌شود.</p>
+          <p>توی مترو و سفر هم کامل کار می‌کنه. آنلاین که شدی، خودش همگام می‌شه.</p>
         </div>
         <div>
           <svg class="ic" aria-hidden="true"><use href="#i-devices" /></svg>
           <h3>روی همه‌ی دستگاه‌ها</h3>
-          <p>گوشی را عوض کنی یا گم کنی، عادت‌ها و ژورنالت سر جایشان هستند.</p>
+          <p>گوشیتو عوض کنی یا گم کنی، عادت‌ها و ژورنالت سر جاشونن.</p>
         </div>
         <div>
           <svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg>
           <h3>بدون تبلیغ</h3>
-          <p>نه تبلیغی می‌بینی، نه اطلاعاتت جای دیگری می‌رود.</p>
+          <p>نه تبلیغی می‌بینی، نه اطلاعاتت جایی می‌ره.</p>
         </div>
         <div>
           <svg class="ic" aria-hidden="true"><use href="#i-moon" /></svg>
           <h3>تاریک و روشن</h3>
-          <p>هر دو تم را دارد و با یک کلید در تنظیمات عوض می‌شود.</p>
+          <p>هر دو تم رو داره، با یه کلید توی تنظیمات عوض می‌شه.</p>
         </div>
       </div>
 
       <section class="bay">
         <div class="wrap">
           <div class="head rise">
-            <h2>روی صفحه‌ی بزرگ، بزرگ‌تر می‌شود</h2>
-            <p>روی لپ‌تاپ منوی کناری باز می‌شود و نمودارها جا پیدا می‌کنند. همان حساب، همان اطلاعات.</p>
+            <h2>روی لپ‌تاپ هم همینه</h2>
+            <p>منوی کناری باز می‌شه و نمودارها جا باز می‌کنن. همون حساب، همون اطلاعات.</p>
           </div>
           <div class="screen wide rise">
             <img src="/shots/desktop-analytics-dark.webp" width="2880" height="1800" loading="lazy"
@@ -925,25 +985,25 @@
       <section id="install" class="bay">
         <div class="wrap">
           <div class="head rise">
-            <h2>روی گوشی نصبش کن</h2>
-            <p>فروشگاه لازم نیست و چیزی هم دانلود نمی‌کنی. سه قدم، کمتر از یک دقیقه.</p>
+            <h2>بذارش روی گوشیت</h2>
+            <p>روی آیفون و هر مرورگری با سه تا زدن. روی اندروید هم به‌زودی فایل مستقیم می‌ذاریم.</p>
           </div>
-          <ol class="steps rise">
+          <ol class="steps">
             <li>
-              <h3>برنامه را باز کن</h3>
-              <p>با همین مرورگر گوشی برو داخل روتینو.</p>
+              <h3>وب‌اپ رو باز کن</h3>
+              <p>با مرورگر گوشیت برو توی روتینو.</p>
             </li>
             <li>
-              <h3>از منوی مرورگر</h3>
-              <p>گزینه‌ی «افزودن به صفحه‌ی اصلی» را بزن.</p>
+              <h3>برو سراغ منوی مرورگر</h3>
+              <p>بزن روی «افزودن به صفحه‌ی اصلی».</p>
             </li>
             <li>
-              <h3>تمام</h3>
-              <p>آیکونش می‌نشیند روی گوشی و مثل بقیه‌ی برنامه‌ها باز می‌شود.</p>
+              <h3>تموم</h3>
+              <p>آیکونش میاد روی گوشیت و مثل بقیه‌ی برنامه‌ها باز می‌شه.</p>
             </li>
           </ol>
           <div class="acts" style="justify-content: flex-start; margin-top: clamp(32px, 4vw, 44px)">
-            <a class="btn" href="/app/">همین حالا بازش کن<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
+            <a class="btn" href="/app/">همین الان بازش کن<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
           </div>
         </div>
       </section>
@@ -952,10 +1012,10 @@
 
       <section class="close">
         <div class="wrap">
-          <h2 class="rise">از کدام عادت شروع می‌کنی؟</h2>
-          <p class="rise">ساختن اولین عادت کمتر از یک دقیقه طول می‌کشد.</p>
+          <h2 class="rise">از کدوم عادت شروع می‌کنی؟</h2>
+          <p class="rise">ساختن اولین عادت یه دقیقه هم طول نمی‌کشه.</p>
           <div class="acts rise">
-            <a class="btn" href="/app/">ورود به برنامه<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
+            <a class="btn" href="/app/">بزن بریم<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
           </div>
         </div>
       </section>
@@ -980,7 +1040,7 @@
     </footer>
 
     <div class="dock" id="dock">
-      <a class="btn" href="/app/">ورود به برنامه<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
+      <a class="btn" href="/app/">باز کردن وب‌اپ<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
     </div>
 
     <script>
@@ -1034,7 +1094,9 @@
         /* هر صحنه را به حالتِ «هنوز اتفاق نیفتاده» برمی‌گرداند. */
         function rewind() {
           taskBox.classList.remove("on");
+          taskBox.closest(".s-task").classList.remove("done");
           habBox.classList.remove("on");
+          habBox.closest(".s-hrow").classList.remove("done");
           habDots.classList.remove("lit");
           arc.style.strokeDashoffset = "45.2";
           pct.textContent = "۶۰٪";
@@ -1047,11 +1109,15 @@
            حلقه‌ی روز جلو می‌رود. بقیه با CSS خودشان جا می‌افتند. */
         function playToday() {
           later(520, function () { taps[0].classList.add("hit"); });
-          later(880, function () { taskBox.classList.add("on"); });
+          later(880, function () {
+            taskBox.classList.add("on");
+            taskBox.closest(".s-task").classList.add("done");
+          });
           later(1080, function () { arc.style.strokeDashoffset = "36.2"; pct.textContent = "۶۸٪"; });
           later(2000, function () { taps[1].classList.add("hit"); });
           later(2360, function () {
             habBox.classList.add("on");
+            habBox.closest(".s-hrow").classList.add("done");
             habDots.classList.add("lit");
           });
           later(2760, function () { arc.style.strokeDashoffset = "28.3"; pct.textContent = "۷۵٪"; });
@@ -1142,7 +1208,11 @@
         });
 
         /* ── ورودِ بخش‌ها ─────────────────────────────────────── */
-        var risers = [].slice.call(document.querySelectorAll("main > section:not(.hero) .rise, .close .rise"));
+        /* `.specs`/`.console`/`.steps` خودشان محو نمی‌شوند؛ فقط `lit` می‌گیرند تا
+           بچه‌هایشان با همان پلکانِ ۶۰ میلی‌ثانیه‌ایِ اپ یکی‌یکی بیایند. */
+        var risers = [].slice.call(
+          document.querySelectorAll("main > section:not(.hero) .rise, .close .rise, .specs, .console, .steps"),
+        );
         if (!("IntersectionObserver" in window)) {
           risers.forEach(function (el) { el.classList.add("lit"); });
         } else {
