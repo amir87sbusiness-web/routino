@@ -6,20 +6,20 @@
   اینجا نیست: رفته به `/legal/` و فقط یک لینک کم‌رنگ در فوتر دارد.
 
   ⚠️ اینجا حرفی از قیمت، اشتراک و دوره‌ی آزمایشی زده نمی‌شود. تصمیم مالک: صفحه‌ی
-  اول فقط باید بازدیدکننده را ببرد داخل برنامه تا کار کردن با آن را ببیند؛ حساب
-  و اشتراک وقتی مطرح می‌شود که خودش داخل اپ رسیده باشد. اگر روزی خواستی قیمت را
-  اینجا برگردانی، بدان که عمداً برداشته شده، نه از قلم افتاده.
+  اول فقط باید بازدیدکننده را ببرد داخل برنامه. اگر روزی خواستی قیمت را برگردانی،
+  بدان که عمداً برداشته شده، نه از قلم افتاده.
 
-  ⚠️ صفحه فقط تاریک است و این یک انتخاب است. خودِ برنامه تاریک‌ست و همه‌ی
-  فیلم‌ها تاریک‌اند؛ قابِ روشن دور یک محصول تاریک، صفحه را دو تکه می‌کرد.
+  ⚠️ چیدمانِ صفحه از قراردادهای رایجِ سایت‌های محصول گرفته شده (سرصفحه، ردیف‌های
+  یک‌درمیانِ قابلیت، بنرِ پایانی). چیزی از متن، لوگو، رنگ یا آمارِ هیچ محصول
+  دیگری برداشته نشده. **آمار و نظر کاربر جعل نمی‌کنیم**: تا وقتی عدد واقعی
+  نداریم، جای «۵ میلیون دانلود» و «نظر کاربران» را حرف‌های راستِ محصول گرفته.
 
-  ⚠️ لینکِ فایل اندروید هنوز نداریم. دکمه‌اش هست ولی غیرفعال است و متنش
-  «به‌زودی» می‌گوید. وقتی APK آماده شد، تنها جایی که باید عوض شود همان دکمه‌ی
-  `#android-btn` است: `href` بگذار و `aria-disabled` و کلاس `soon` را بردار.
+  ⚠️ لینکِ فایل اندروید هنوز نداریم. دکمه‌اش هست ولی غیرفعال است. وقتی APK آماده
+  شد، تنها جایی که عوض می‌شود `#android-btn` است: `href` بگذار و `soon` و
+  `aria-disabled` را بردار.
 
-  فیلم‌ها: `node scripts/film-landing.mjs` با dev server بالا. اینها ضبطِ واقعیِ
-  کار کردن با برنامه‌اند (تیک‌زدن، تایمر، اسکرول)، نه انیمیشنِ بازسازی‌شده. اگر
-  UI عوض شد، همان اسکریپت را دوباره بزن.
+  فیلم‌ها: `npm run film` با dev server بالا. ضبطِ واقعیِ کار کردن با برنامه‌اند،
+  نه انیمیشنِ بازسازی‌شده.
 -->
 <html lang="fa" dir="rtl">
   <head>
@@ -31,14 +31,13 @@
       content="عادت بساز، کارهای روزت رو بچین و پیشرفتت رو ببین. تقویم شمسی، بدون تبلیغ، روی گوشی و لپ‌تاپ. بدون اینترنت هم کار می‌کنه."
     />
     <link rel="icon" href="/favicon.svg" />
-    <meta name="theme-color" content="#080706" />
+    <meta name="theme-color" content="#131211" />
     <meta property="og:title" content="روتینو | عادت‌ساز روزانه" />
     <meta property="og:description" content="عادت بساز، کارهات رو بچین و پیشرفتت رو ببین. روی گوشی و لپ‌تاپ، بدون تبلیغ." />
     <meta property="og:image" content="https://routino.me/shots/desktop-dark.webp" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://routino.me" />
-    <link rel="preload" as="image" href="/shots/desktop-dark.webp" media="(min-width: 861px)" />
-    <link rel="preload" as="image" href="/shots/clip-today-still.webp" media="(max-width: 860px)" />
+    <link rel="preload" as="image" href="/shots/clip-today-still.webp" />
 
     <!-- قبل از رسم صفحه اجرا می‌شود تا محتوا یک لحظه هم پرش نکند. اگر
          جاوااسکریپت خاموش باشد این خط اجرا نمی‌شود و صفحه بدون انیمیشن ولی
@@ -46,8 +45,6 @@
     <script>document.documentElement.classList.add("js");</script>
 
     <style>
-      /* وزیرمتن با چهار وزن، چون سلسله‌مراتب صفحه را وزن می‌سازد نه اندازه‌ی تنها:
-         ۹۰۰ برای تیتر اصلی، ۷۰۰ برای برچسب‌ها، ۵۰۰ برای متنِ پررنگ‌تر، ۴۰۰ بدنه. */
       @font-face { font-family: Vazirmatn; src: url(/fonts/vazirmatn-arabic-400.woff2) format("woff2");
         font-weight: 400; font-display: swap; unicode-range: U+0600-06FF,U+200C-200E,U+FB50-FDFF,U+FE70-FEFF; }
       @font-face { font-family: Vazirmatn; src: url(/fonts/vazirmatn-arabic-500.woff2) format("woff2");
@@ -64,32 +61,25 @@
       :root {
         color-scheme: dark;
 
-        /* خنثی‌ها عمداً به نارنجی متمایل‌اند. خاکستریِ خالص کنار #F97316 مرده
-           به‌نظر می‌رسد؛ همین یک درجه گرمی، صفحه را به رنگِ برنامه می‌چسباند. */
-        --ink: #080706;
-        --raise: #121010;
-        --raise-2: #1a1715;
-        --edge: #241f1c;
-        --edge-strong: #352e29;
+        --ink: #131211;
+        --ink-2: #1b1917;
+        --card: #1e1b19;
+        --edge: #2b2724;
+        --edge-2: #3a3430;
 
-        --fg: #f7f3ee;
-        --fg-2: #a69e96;
-        /* کم‌رنگ‌ترین لایه‌ی متن، ولی هنوز خوانا: نسبت کنتراستش حدود ۵:۱ است. */
-        --fg-3: #877e76;
+        --fg: #ffffff;
+        --fg-2: #b3aca6;
+        --fg-3: #8a827b;
 
         --brand: #f97316;
-        --brand-lift: #ff8a33;
-        --brand-soft: rgba(249, 115, 22, 0.1);
-        --brand-line: rgba(249, 115, 22, 0.28);
+        --brand-soft: rgba(249, 115, 22, 0.12);
+        --brand-line: rgba(249, 115, 22, 0.3);
 
-        --lift-1: 0 1px 2px rgba(0, 0, 0, 0.6), 0 8px 24px rgba(0, 0, 0, 0.45);
-        --lift-2: 0 2px 4px rgba(0, 0, 0, 0.6), 0 32px 80px rgba(0, 0, 0, 0.65);
+        --lift: 0 2px 4px rgba(0, 0, 0, 0.5), 0 30px 70px rgba(0, 0, 0, 0.6);
 
-        --measure: 62ch;
-        --gut: clamp(20px, 4vw, 32px);
-        --bay: clamp(72px, 11vw, 132px);
+        --gut: clamp(20px, 4vw, 30px);
+        --bay: clamp(64px, 9vw, 104px);
         --curve: 20px;
-
         --swing: cubic-bezier(0.16, 1, 0.3, 1);
       }
 
@@ -97,246 +87,168 @@
 
       html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
       body {
-        margin: 0;
-        background: var(--ink);
-        color: var(--fg);
+        margin: 0; background: var(--ink); color: var(--fg);
         font-family: Vazirmatn, "Segoe UI", Tahoma, system-ui, sans-serif;
-        font-size: 16px;
-        line-height: 1.85;
-        -webkit-font-smoothing: antialiased;
-        overflow-x: hidden;
+        font-size: 16px; line-height: 1.85;
+        -webkit-font-smoothing: antialiased; overflow-x: hidden;
       }
 
-      /* سطح‌هایی که خودمان نکشیده‌ایم ولی هنوز بخشی از طراحی‌اند. */
-      ::selection { background: var(--brand); color: #1a0d02; }
+      ::selection { background: var(--brand); color: #180c02; }
       :focus-visible { outline: 2px solid var(--brand); outline-offset: 3px; border-radius: 6px; }
-      * { scrollbar-color: var(--edge-strong) transparent; scrollbar-width: thin; }
+      * { scrollbar-color: var(--edge-2) transparent; scrollbar-width: thin; }
       ::-webkit-scrollbar { width: 10px; height: 10px; }
-      ::-webkit-scrollbar-thumb { background: var(--edge-strong); border-radius: 99px; border: 3px solid var(--ink); }
+      ::-webkit-scrollbar-thumb { background: var(--edge-2); border-radius: 99px; border: 3px solid var(--ink); }
       ::-webkit-scrollbar-track { background: transparent; }
 
       a { color: inherit; text-decoration: none; }
       img { max-width: 100%; height: auto; display: block; }
       button { font: inherit; color: inherit; }
       svg { display: block; }
-
-      h1, h2, h3 { text-wrap: balance; margin: 0; letter-spacing: -0.03em; line-height: 1.24; }
-      h1 { font-weight: 900; font-size: clamp(34px, 6.4vw, 68px); }
-      h2 { font-weight: 900; font-size: clamp(26px, 3.8vw, 40px); }
-      h3 { font-weight: 700; font-size: clamp(17px, 2vw, 20px); letter-spacing: -0.02em; }
       p { margin: 0; text-wrap: pretty; }
 
-      .wrap { width: 100%; max-width: 1140px; margin-inline: auto; padding-inline: var(--gut); }
+      /* مقیاسِ تایپ عمداً جمع‌وجور است، مثل سایت‌های محصول: تیتر بزرگ ولی نه
+         غول‌آسا، و همه‌چیز وزنِ ۷۰۰ به بالا. کلمه‌ی رنگیِ داخلِ تیتر تنها جایی‌ست
+         که نارنجی در متن ظاهر می‌شود. */
+      h1, h2, h3 { margin: 0; font-weight: 900; letter-spacing: -0.03em; line-height: 1.28; text-wrap: balance; }
+      h1 { font-size: clamp(31px, 5vw, 52px); line-height: 1.22; }
+      h2 { font-size: clamp(25px, 3.2vw, 34px); }
+      h3 { font-size: clamp(16px, 1.9vw, 18px); font-weight: 700; letter-spacing: -0.02em; }
+      .hl { color: var(--brand); }
+
+      .wrap { width: 100%; max-width: 1160px; margin-inline: auto; padding-inline: var(--gut); }
       .sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
         clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
       /* ── دکمه‌ها ─────────────────────────────────────────────── */
+      /* دکمه‌ی اصلی روشن است روی زمینه‌ی تیره. نارنجی برای تأکیدِ متن و آیکون
+         می‌ماند، نه برای پرکردنِ دکمه؛ این‌طور هر دو بیشتر دیده می‌شوند. */
       .btn {
         display: inline-flex; align-items: center; justify-content: center; gap: 9px;
         font-weight: 700; font-size: 15.5px; line-height: 1;
-        padding: 16px 30px; border-radius: 14px; border: 1px solid transparent;
-        background: var(--brand); color: #1a0d02;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 26px rgba(249, 115, 22, 0.22);
-        transition: background 0.18s var(--swing), transform 0.18s var(--swing), box-shadow 0.18s var(--swing);
+        padding: 15px 28px; border-radius: 999px; border: 1px solid transparent;
+        background: var(--fg); color: #16130f;
+        transition: transform 0.18s var(--swing), background 0.18s, opacity 0.18s;
       }
-      .btn:hover { background: var(--brand-lift); transform: translateY(-2px);
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 16px 34px rgba(249, 115, 22, 0.3); }
+      .btn:hover { transform: translateY(-2px); background: #ece7e1; }
       .btn:active { transform: translateY(0); }
-      .btn .ic { width: 18px; height: 18px; }
-
-      .btn.line { background: transparent; color: var(--fg); border-color: var(--edge-strong); box-shadow: none; }
-      .btn.line:hover { background: var(--raise-2); border-color: var(--fg-3); transform: translateY(-2px); box-shadow: none; }
-      .btn.sm { padding: 11px 20px; font-size: 14px; border-radius: 11px; }
-
-      /* دکمه‌ی اندروید تا وقتی فایلش نیامده: دیده می‌شود، ولی وانمود نمی‌کند
-         که کار می‌کند. کلیک هم نمی‌گیرد. */
-      .btn.soon { opacity: 0.55; cursor: not-allowed; }
-      .btn.soon:hover { transform: none; background: transparent; border-color: var(--edge-strong); }
-      .btn .tag { font-size: 11.5px; font-weight: 700; color: var(--fg-3);
-        border: 1px solid var(--edge-strong); border-radius: 999px; padding: 2px 8px; }
+      .btn .ic { width: 17px; height: 17px; }
+      .btn.line { background: transparent; color: var(--fg); border-color: var(--edge-2); }
+      .btn.line:hover { background: var(--ink-2); border-color: var(--fg-3); }
+      .btn.sm { padding: 11px 20px; font-size: 14px; }
+      .btn.soon { opacity: 0.5; cursor: not-allowed; }
+      .btn.soon:hover { transform: none; background: transparent; }
+      .btn .tag { font-size: 11px; font-weight: 700; color: var(--fg-3);
+        border: 1px solid var(--edge-2); border-radius: 999px; padding: 2px 8px; }
 
       /* ── نوار بالا ───────────────────────────────────────────── */
-      .top {
-        position: sticky; top: 0; z-index: 60;
-        background: color-mix(in srgb, var(--ink) 78%, transparent);
+      .top { position: sticky; top: 0; z-index: 60;
+        background: color-mix(in srgb, var(--ink) 82%, transparent);
         backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-        border-bottom: 1px solid transparent;
-        transition: border-color 0.25s var(--swing);
-      }
+        border-bottom: 1px solid transparent; transition: border-color 0.25s var(--swing); }
       .top.dropped { border-bottom-color: var(--edge); }
-      .top-in { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 72px; }
+      .top-in { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 74px; }
       .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; }
-      .brand img { width: 32px; height: 32px; border-radius: 9px; }
-      .top-nav { display: flex; align-items: center; gap: 4px; }
-      .top-nav a { font-size: 14.5px; color: var(--fg-2); padding: 9px 14px; border-radius: 10px;
+      .brand img { width: 31px; height: 31px; border-radius: 9px; }
+      .top-nav { display: flex; align-items: center; gap: 2px; }
+      .top-nav a { font-size: 14px; font-weight: 700; color: var(--fg-2); padding: 9px 14px; border-radius: 999px;
         transition: color 0.18s, background 0.18s; }
-      .top-nav a:hover { color: var(--fg); background: var(--raise-2); }
-      @media (max-width: 760px) { .top-nav { display: none; } }
+      .top-nav a:hover { color: var(--fg); background: var(--ink-2); }
+      @media (max-width: 800px) { .top-nav { display: none; } }
 
       /* ── سرصفحه ─────────────────────────────────────────────── */
-      .hero { position: relative; padding-top: clamp(48px, 8vw, 92px); text-align: center; overflow: hidden; }
+      .hero { text-align: center; padding-top: clamp(44px, 7vw, 82px); position: relative; overflow: hidden; }
+      .hero::before { content: ""; position: absolute; inset-block-start: -30%; inset-inline-start: 50%;
+        translate: -50% 0; width: min(900px, 150vw); aspect-ratio: 1; pointer-events: none;
+        background: radial-gradient(closest-side, rgba(249, 115, 22, 0.13), transparent 70%); }
+      .hero > * { position: relative; }
+      .hero h1 { max-width: 16ch; margin-inline: auto; }
+      .lede { margin: 20px auto 0; max-width: 45ch; font-size: clamp(15px, 2vw, 17.5px); color: var(--fg-2); }
+      .acts { display: flex; flex-wrap: wrap; gap: 11px; justify-content: center; margin-top: 30px; }
 
-      /* حلقه‌ی پیشرفتِ خودِ برنامه، یک بار و بزرگ. ۷۵٫۵ همان ۷۵ درصدی‌ست که
-         در فیلمِ صفحه‌ی امروز هم می‌بینی. */
-      .ring { position: absolute; inset-block-start: -14%; inset-inline-start: 50%;
-        translate: 50% 0; width: min(760px, 128vw); aspect-ratio: 1; pointer-events: none;
-        opacity: 0.5; z-index: 0; }
-      .ring circle { fill: none; stroke-linecap: round; }
-      .ring .track { stroke: var(--edge); stroke-width: 1; }
-      .ring .arc { stroke: var(--brand); stroke-width: 1.5; stroke-dasharray: 302 302; stroke-dashoffset: 75.5; }
-      .js .ring .arc { stroke-dashoffset: 302; animation: sweep 1.9s var(--swing) 0.15s forwards; }
-      @keyframes sweep { to { stroke-dashoffset: 75.5; } }
+      /* نوارِ حرف‌های راست، جای آمارِ جعلی. */
+      .facts { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 26px;
+        margin-top: 30px; font-size: 13.5px; font-weight: 700; color: var(--fg-2); }
+      .facts span { display: inline-flex; align-items: center; gap: 7px; }
+      .facts .ic { width: 15px; height: 15px; color: var(--brand); }
 
-      .hero-in { position: relative; z-index: 1; }
-      .hero h1 { max-width: 15ch; margin-inline: auto; }
-      .lede { margin: 22px auto 0; max-width: 44ch; font-size: clamp(15.5px, 2.2vw, 18.5px); color: var(--fg-2); }
-      .acts { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; margin-top: 32px; }
-      .note { margin-top: 18px; font-size: 13px; color: var(--fg-3); }
+      /* ── قاب‌ها ─────────────────────────────────────────────── */
+      .phone { border-radius: 30px; padding: 7px; background: #201d1a;
+        border: 1px solid var(--edge-2); box-shadow: var(--lift); }
+      .phone img { border-radius: 24px; width: 100%; }
+      .glass { border: 1px solid var(--edge); border-radius: var(--curve);
+        background: var(--card); box-shadow: var(--lift); overflow: hidden; }
 
-      /* ── قابِ دستگاه ─────────────────────────────────────────── */
-      .stage { position: relative; margin-top: clamp(44px, 7vw, 76px); }
-      .screen { border: 1px solid var(--edge-strong); border-radius: var(--curve);
-        background: var(--raise); box-shadow: var(--lift-2); overflow: hidden; }
-      .screen img { border-radius: calc(var(--curve) - 1px); }
+      .hero-stage { margin-top: clamp(38px, 6vw, 62px); display: flex; justify-content: center; }
+      .hero-stage .phone { width: min(300px, 74vw); }
 
-      .stage .tuck { position: absolute; inset-block-end: -26px; inset-inline-start: -14px;
-        width: clamp(132px, 15vw, 186px); z-index: 2; }
+      /* ── ردیف‌های قابلیت ─────────────────────────────────────── */
+      /* ستونِ متن عرضِ ثابت دارد و تصویر بقیه را می‌گیرد؛ ردیف‌ها یک‌درمیان
+         جا عوض می‌کنند. روی موبایل هر دو زیر هم می‌روند و تصویر اول می‌آید. */
+      .rows { padding-block: var(--bay); }
+      .row { display: flex; align-items: center; gap: clamp(34px, 6vw, 90px);
+        padding-bottom: clamp(56px, 8vw, 96px); }
+      .row:last-child { padding-bottom: 0; }
+      .row:nth-child(even) { flex-direction: row-reverse; }
+      .row .txt { flex: 0 0 380px; max-width: 380px; }
+      .row .txt p { margin-top: 14px; color: var(--fg-2); font-size: clamp(14.5px, 1.8vw, 16px); }
+      .row .pic { flex: 1; display: flex; justify-content: center; }
+      .row .pic .phone { width: min(292px, 70vw); }
+      .kicker { display: inline-flex; align-items: center; gap: 7px; margin-bottom: 14px;
+        font-size: 12.5px; font-weight: 700; color: var(--brand); }
+      .kicker .ic { width: 15px; height: 15px; }
       @media (max-width: 860px) {
-        .stage .desk { display: none; }
-        .stage .tuck { position: static; width: min(280px, 74vw); margin-inline: auto; }
+        .row, .row:nth-child(even) { flex-direction: column; text-align: center; gap: 30px; }
+        .row .txt { flex: none; max-width: 46ch; margin-inline: auto; }
+        .kicker { justify-content: center; }
       }
 
-      .phone { border-radius: 30px; padding: 7px; background: #171512;
-        border: 1px solid var(--edge-strong); box-shadow: var(--lift-2); }
-      .phone img { border-radius: 24px; }
-
-      /* ── بخش‌ها ─────────────────────────────────────────────── */
-      section { position: relative; }
-      .bay { padding-block: var(--bay); }
-      .head { max-width: var(--measure); }
-      .head p { margin-top: 14px; color: var(--fg-2); font-size: clamp(15px, 2vw, 17px); }
-      .rule { height: 1px; background: var(--edge); border: 0; margin: 0; }
-
-      /* ── کنسول: نوار کناریِ برنامه به‌عنوان ناوبریِ صفحه ──────── */
-      .console { display: grid; grid-template-columns: 1fr 320px; gap: clamp(28px, 5vw, 64px);
-        align-items: center; margin-top: clamp(34px, 5vw, 56px); }
-      @media (max-width: 900px) { .console { grid-template-columns: 1fr; gap: 32px; } }
-
-      .rail { display: flex; flex-direction: column; gap: 6px; }
-      .rail button {
-        display: flex; align-items: center; gap: 13px; width: 100%; text-align: start;
-        padding: 15px 17px; border-radius: 14px; border: 1px solid transparent;
-        background: transparent; color: var(--fg-2); cursor: pointer;
-        transition: background 0.2s var(--swing), color 0.2s var(--swing), border-color 0.2s var(--swing);
-      }
-      .rail button:hover { background: var(--raise); color: var(--fg); }
-      .rail button .ic { width: 21px; height: 21px; flex: none; }
-      .rail button b { font-weight: 700; font-size: 16px; }
-      .rail button span { display: block; font-size: 14px; line-height: 1.6; color: var(--fg-3);
-        max-height: 0; opacity: 0; overflow: hidden;
-        transition: max-height 0.34s var(--swing), opacity 0.24s ease, margin-top 0.34s var(--swing); }
-      /* رنگِ حالتِ فعال عیناً همان چیزی‌ست که خودِ برنامه در نوار کناری‌اش دارد. */
-      .rail button[aria-selected="true"] {
-        background: var(--brand-soft); border-color: var(--brand-line); color: var(--brand);
-      }
-      .rail button[aria-selected="true"] span { max-height: 110px; opacity: 1; margin-top: 4px; color: var(--fg-2); }
-
-      /* نوارِ باریکی که نشان می‌دهد کلیپِ فعال کجای مسیرش است. صرفاً تزئین
-         نیست: تنها سرنخِ اینکه این تصویر «دارد پخش می‌شود» همین است. */
-      .rail button i { display: block; height: 2px; margin-top: 10px; border-radius: 2px;
-        background: var(--brand-line); transform-origin: right; scale: 0 1; }
-      .rail button[aria-selected="true"] i { background: var(--brand); animation: run 6s linear infinite; }
-      @keyframes run { from { scale: 0 1; } to { scale: 1 1; } }
-      .rail button[aria-selected="false"] i { display: none; }
-
-      .deck { position: relative; }
-      .reel { position: relative; }
-      .reel .frame { display: none; width: 100%; border-radius: 24px; }
-      .reel .frame.on { display: block; }
-      .deck .phone { margin-inline: auto; max-width: 320px; }
-
-      /* دکمه‌ی نگه‌داشتن. WebP متحرک را نمی‌شود با JS نگه داشت، پس به‌جایش
-         تصویرِ ثابت را می‌گذاریم — از بیرون همان «مکث» است. */
-      .hold {
-        position: absolute; inset-block-end: 12px; inset-inline-end: 12px; z-index: 3;
-        display: flex; align-items: center; gap: 7px;
-        padding: 8px 13px; border-radius: 999px; cursor: pointer;
-        font-size: 12.5px; font-weight: 700;
-        background: color-mix(in srgb, #0b0a09 72%, transparent); color: var(--fg);
-        border: 1px solid var(--edge-strong);
-        backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-        transition: background 0.18s, border-color 0.18s, opacity 0.25s;
-      }
-      .hold:hover { background: #0b0a09; border-color: var(--fg-3); }
-      .hold .ic { width: 13px; height: 13px; }
-      .hold .go { display: none; }
-      .hold[aria-pressed="true"] .go { display: block; }
-      .hold[aria-pressed="true"] .stop { display: none; }
-
-      /* ── بخشِ سرهم‌شدن ───────────────────────────────────────── */
-      /* گوشی وسط قفل می‌شود و کارت‌های شناور، همان‌طور که اسکرول می‌کنی، می‌آیند
-         و روی صفحه‌اش می‌نشینند.
-         `.runway` فقط ارتفاع می‌دهد تا اسکرول جا داشته باشد؛ چیزی داخلش نیست.
-         `.stage2` با `sticky` سرِ جایش می‌ماند — بدون جاوااسکریپت، بدون jank. */
+      /* ── صحنه‌ی سرهم‌شدن ─────────────────────────────────────── */
       .assembly { position: relative; }
       .runway { height: 340vh; }
-      .stage2 {
-        position: sticky; inset-block-start: 0; height: 100svh;
-        display: grid; place-items: center; overflow: hidden;
-      }
-      .stage2 .cap { position: absolute; inset-block-start: clamp(58px, 11vh, 104px); inset-inline: 0;
+      .stage2 { position: sticky; inset-block-start: 0; height: 100svh;
+        display: grid; place-items: center; overflow: hidden; }
+      .stage2 .cap { position: absolute; inset-block-start: clamp(54px, 10vh, 96px); inset-inline: 0;
         text-align: center; padding-inline: var(--gut); z-index: 1; }
       .stage2 .cap h2 { max-width: 16ch; margin-inline: auto; }
-      .stage2 .cap p { margin: 12px auto 0; max-width: 40ch; color: var(--fg-2);
-        font-size: clamp(14px, 1.9vw, 16.5px); }
+      .stage2 .cap p { margin: 12px auto 0; max-width: 40ch; color: var(--fg-2); font-size: clamp(14px, 1.8vw, 16px); }
 
-      .rig { position: relative; width: min(300px, 66vw); }
+      .rig { position: relative; width: min(292px, 64vw); }
       .rig .phone { position: relative; z-index: 2; }
       .rig .shot { position: relative; }
       .rig .shot img { position: absolute; inset: 0; width: 100%; border-radius: 24px;
         opacity: 0; transition: opacity 0.45s var(--swing); }
       .rig .shot img.lead { position: relative; }
       .rig .shot img.seen { opacity: 1; }
+      .rig::before { content: ""; position: absolute; inset: -18% -34%; z-index: 0; pointer-events: none;
+        background: radial-gradient(closest-side, rgba(249, 115, 22, 0.16), transparent 72%); }
 
-      /* نورِ پشتِ گوشی، تا قاب روی زمینه‌ی تیره شناور به‌نظر برسد. */
-      .rig::before {
-        content: ""; position: absolute; inset: -18% -34%; z-index: 0; pointer-events: none;
-        background: radial-gradient(closest-side, rgba(249, 115, 22, 0.16), transparent 72%);
-      }
-
-      /* کارت‌های شیشه‌ای. `will-change` فقط روی همین‌هاست چون فقط همین‌ها در
-         حین اسکرول حرکت می‌کنند. */
       .chip {
-        /* عمداً `top/left` فیزیکی، نه `inset-inline-start` منطقی. اینجا داریم
-           وسط‌چین می‌کنیم و وسط در RTL و LTR یکی‌ست؛ ولی در RTL مقدارِ منطقی
-           به `right` ترجمه می‌شود و با `translate(-50%)` کارت را از مرکز به
-           چپ پرت می‌کرد. */
+        /* عمداً `top/left` فیزیکی، نه `inset-inline-start` منطقی. اینجا وسط‌چین
+           می‌کنیم و وسط در RTL و LTR یکی‌ست؛ ولی مقدارِ منطقی در RTL به `right`
+           ترجمه می‌شود و با `translate(-50%)` کارت را از مرکز به چپ پرت می‌کرد. */
         position: absolute; top: 50%; left: 50%; z-index: 3;
         display: flex; align-items: center; gap: 10px;
         padding: 11px 14px; border-radius: 16px; white-space: nowrap;
-        background: color-mix(in srgb, #16130f 72%, transparent);
-        border: 1px solid rgba(247, 243, 238, 0.1);
+        background: color-mix(in srgb, #1c1815 74%, transparent);
+        border: 1px solid rgba(255, 255, 255, 0.1);
         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5), 0 18px 44px rgba(0, 0, 0, 0.55);
         backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
         will-change: transform, opacity;
       }
       .chip .ic { width: 17px; height: 17px; flex: none; color: var(--brand); }
-      .chip b { font-size: 13.5px; font-weight: 700; letter-spacing: -0.01em; }
+      .chip b { font-size: 13.5px; font-weight: 700; }
       .chip span { font-size: 12px; color: var(--fg-2); }
       .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); flex: none; }
-      .chip.win { border-color: var(--brand-line); background: color-mix(in srgb, #24140a 78%, transparent); }
+      .chip.win { border-color: var(--brand-line); background: color-mix(in srgb, #2a1709 80%, transparent); }
       .chip.win b { color: var(--brand); }
-
-      /* حلقه‌ی کوچکِ داخلِ کارتِ درصد. */
       .mini { width: 30px; height: 30px; flex: none; }
       .mini circle { fill: none; stroke-linecap: round; }
-      .mini .t { stroke: var(--edge-strong); stroke-width: 3; }
+      .mini .t { stroke: var(--edge-2); stroke-width: 3; }
       .mini .a { stroke: var(--brand); stroke-width: 3; stroke-dasharray: 88 88; stroke-dashoffset: 22; }
 
-      /* نوارِ پیشرفتِ خودِ بخش، تا معلوم باشد چقدر از این صحنه مانده. */
-      .meter { position: absolute; inset-block-end: clamp(22px, 5vh, 44px); inset-inline: 0;
+      .meter { position: absolute; inset-block-end: clamp(20px, 4vh, 40px); inset-inline: 0;
         display: flex; justify-content: center; gap: 7px; z-index: 4; }
-      .meter i { width: 26px; height: 3px; border-radius: 3px; background: var(--edge-strong);
+      .meter i { width: 26px; height: 3px; border-radius: 3px; background: var(--edge-2);
         overflow: hidden; position: relative; }
       .meter i::after { content: ""; position: absolute; inset: 0; background: var(--brand);
         transform-origin: right; scale: var(--f, 0) 1; transition: scale 0.2s linear; }
@@ -348,55 +260,51 @@
         .chip span { display: none; }
       }
 
-      /* بدونِ جاوااسکریپت یا با حرکتِ کم: صحنه ثابت و کامل است. کارت‌ها همان‌جا
-         که هستند می‌مانند و گوشی صفحه‌ی اولش را نشان می‌دهد. */
       .assembly:not(.live) .runway { height: auto; }
-      .assembly:not(.live) .stage2 { position: static; height: auto;
-        padding-block: var(--bay); }
-      .assembly:not(.live) .cap { position: static; margin-bottom: clamp(34px, 6vh, 60px); }
+      .assembly:not(.live) .stage2 { position: static; height: auto; padding-block: var(--bay); }
+      .assembly:not(.live) .cap { position: static; margin-bottom: clamp(30px, 5vh, 52px); }
       .assembly:not(.live) .chip { position: static; }
       .assembly:not(.live) .meter { display: none; }
-      .assembly:not(.live) .rig { display: grid; gap: 14px; justify-items: center; width: min(340px, 86vw); }
+      .assembly:not(.live) .rig { display: grid; gap: 13px; justify-items: center; width: min(340px, 86vw); }
       .assembly:not(.live) .chips { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
 
-      /* ── نوارِ مشخصات ────────────────────────────────────────── */
-      .specs { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-        gap: 1px; background: var(--edge); border-block: 1px solid var(--edge); }
-      .specs > div { background: var(--ink); padding: clamp(26px, 3.4vw, 38px) clamp(20px, 2.6vw, 30px); }
-      .specs .ic { width: 22px; height: 22px; color: var(--brand); margin-bottom: 16px; }
-      .specs h3 { margin-bottom: 8px; }
-      .specs p { font-size: 14.5px; color: var(--fg-2); line-height: 1.75; }
+      /* ── همه‌جا ─────────────────────────────────────────────── */
+      .wide { padding-block: var(--bay); }
+      .wide .head { text-align: center; max-width: 52ch; margin: 0 auto clamp(30px, 5vw, 48px); }
+      .wide .head p { margin-top: 13px; color: var(--fg-2); }
 
-      .wide { margin-top: clamp(34px, 5vw, 56px); }
-
-      /* ── نصب ────────────────────────────────────────────────── */
-      .ways { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-        gap: clamp(18px, 2.4vw, 26px); margin-top: clamp(32px, 4vw, 48px); }
-      .way { border: 1px solid var(--edge); border-radius: var(--curve); padding: clamp(24px, 3vw, 32px);
-        background: var(--raise); }
-      .way .ic { width: 24px; height: 24px; color: var(--brand); margin-bottom: 16px; }
+      /* ── گرفتنِ برنامه ───────────────────────────────────────── */
+      .ways { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+        gap: clamp(16px, 2vw, 24px); margin-top: clamp(30px, 4vw, 44px); }
+      .way { border: 1px solid var(--edge); border-radius: var(--curve);
+        padding: clamp(24px, 3vw, 32px); background: var(--ink-2); }
+      .way .ic { width: 23px; height: 23px; color: var(--brand); margin-bottom: 15px; }
       .way h3 { margin-bottom: 10px; }
       .way ol { margin: 0 0 20px; padding: 0; counter-reset: n; }
       .way li { counter-increment: n; list-style: none; display: flex; gap: 11px;
-        font-size: 14.5px; color: var(--fg-2); line-height: 1.7; padding-block: 5px; }
+        font-size: 14.5px; color: var(--fg-2); line-height: 1.7; padding-block: 4px; }
       .way li::before { content: counter(n); flex: none; display: flex; align-items: center; justify-content: center;
-        width: 22px; height: 22px; margin-top: 3px; border-radius: 7px;
+        width: 22px; height: 22px; margin-top: 4px; border-radius: 7px;
         background: var(--brand-soft); border: 1px solid var(--brand-line);
         color: var(--brand); font-weight: 700; font-size: 12px; font-variant-numeric: tabular-nums; }
       .way p { font-size: 14.5px; color: var(--fg-2); margin-bottom: 20px; }
       .way .btn { width: 100%; }
 
-      /* ── پایانه ─────────────────────────────────────────────── */
-      .close { text-align: center; padding-block: clamp(80px, 12vw, 148px); }
-      .close h2 { max-width: 17ch; margin-inline: auto; }
-      .close p { margin: 18px auto 0; max-width: 40ch; color: var(--fg-2); }
+      /* ── بنرِ پایانی ────────────────────────────────────────── */
+      .banner { padding-block: var(--bay); }
+      .banner .box { border-radius: clamp(24px, 3vw, 34px); padding: clamp(44px, 7vw, 84px) var(--gut);
+        text-align: center; border: 1px solid var(--edge);
+        background: radial-gradient(120% 130% at 50% 0%, rgba(249, 115, 22, 0.16), transparent 62%), var(--ink-2); }
+      .banner h2 { max-width: 18ch; margin-inline: auto; }
+      .banner p { margin: 16px auto 0; max-width: 42ch; color: var(--fg-2); }
+      .banner .acts { margin-top: 28px; }
 
-      footer { border-top: 1px solid var(--edge); padding-block: 44px; }
+      footer { border-top: 1px solid var(--edge); padding-block: 42px; }
       .foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 20px; }
       .foot-links { display: flex; flex-wrap: wrap; gap: 22px; font-size: 14.5px; color: var(--fg-2); }
       .foot-links a:hover { color: var(--fg); }
       .foot .copy { font-size: 13.5px; color: var(--fg-3); }
-      .seal { margin-top: 30px; }
+      .seal { margin-top: 28px; }
       .seal img { display: inline-block; }
 
       .dock { position: fixed; inset-inline: 14px; inset-block-end: 14px; z-index: 70;
@@ -404,32 +312,26 @@
         transition: opacity 0.3s var(--swing), translate 0.3s var(--swing); }
       .dock .btn { width: 100%; }
       .dock.up { opacity: 1; translate: 0 0; pointer-events: auto; }
-      @media (max-width: 760px) { .dock { display: block; } }
+      @media (max-width: 800px) { .dock { display: block; } }
 
-      /* ── ورودِ صفحه ─────────────────────────────────────────── */
-      /* قاعده: هیچ متنی برای دیده‌شدن به انیمیشن وابسته نیست. پیش‌فرض «دیده
-         می‌شود» است و مخفی‌کردن فقط زیر `.js` اتفاق می‌افتد. */
+      /* ── ورودِ بخش‌ها ─────────────────────────────────────────── */
+      /* قاعده: هیچ متنی برای دیده‌شدن به انیمیشن وابسته نیست. */
       @keyframes rise { to { opacity: 1; translate: 0 0; } }
-
       .js .rise { opacity: 0; translate: 0 16px; }
       .js .rise.lit { opacity: 1; translate: 0 0;
         transition: opacity 0.7s var(--swing), translate 0.7s var(--swing); }
       .js .hero .rise { animation: rise 0.9s var(--swing) forwards; }
-      .js .hero .rise:nth-child(1) { animation-delay: 0.05s; }
-      .js .hero .rise:nth-child(2) { animation-delay: 0.14s; }
-      .js .hero .rise:nth-child(3) { animation-delay: 0.23s; }
-      .js .hero .rise:nth-child(4) { animation-delay: 0.32s; }
-      .js .stage { opacity: 0; animation: rise 1s var(--swing) 0.36s forwards; }
+      .js .hero .rise:nth-child(2) { animation-delay: 0.06s; }
+      .js .hero .rise:nth-child(3) { animation-delay: 0.14s; }
+      .js .hero .rise:nth-child(4) { animation-delay: 0.22s; }
+      .js .hero .rise:nth-child(5) { animation-delay: 0.3s; }
 
       @media (prefers-reduced-motion: reduce) {
         html { scroll-behavior: auto; }
         *, *::before, *::after { animation-duration: 0.01ms !important; animation-delay: 0ms !important;
           transition-duration: 0.01ms !important; }
-        .js .rise, .js .stage { opacity: 1 !important; translate: none !important; }
-        .js .ring .arc { stroke-dashoffset: 75.5; }
-        .rail button i { display: none !important; }
-        /* دکمه‌ی مکث بی‌معنی می‌شود: در این حالت اصلاً فیلمی پخش نمی‌شود. */
-        .hold { display: none; }
+        .js .rise { opacity: 1 !important; translate: none !important; }
+        .meter { display: none; }
       }
     </style>
   </head>
@@ -439,72 +341,69 @@
          سیستم‌عامل شکل و رنگ خودش را دارد و کنترلش دست ما نیست. -->
     <svg class="sr" aria-hidden="true" focusable="false">
       <defs>
-        <g id="i-home" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+        <g id="i-home" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none">
           <path d="M3.6 9.7 12 3.4l8.4 6.3v9a1.6 1.6 0 0 1-1.6 1.6H5.2a1.6 1.6 0 0 1-1.6-1.6z" />
           <path d="M9.4 20.3v-7h5.2v7" />
         </g>
-        <g id="i-loop" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+        <g id="i-loop" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none">
           <path d="M3.5 8.4h13a3.6 3.6 0 0 1 3.6 3.6" /><path d="M6.6 5.3 3.5 8.4l3.1 3.1" />
           <path d="M20.5 15.6h-13A3.6 3.6 0 0 1 3.9 12" /><path d="M17.4 18.7l3.1-3.1-3.1-3.1" />
         </g>
-        <g id="i-timer" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+        <g id="i-timer" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none">
           <circle cx="12" cy="13.4" r="7.6" /><path d="M12 9.8v3.6l2.4 1.6" /><path d="M9.4 2.9h5.2" />
         </g>
-        <g id="i-book" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+        <g id="i-book" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none">
           <path d="M4.2 4.6a1.6 1.6 0 0 1 1.6-1.6h12.4a1.6 1.6 0 0 1 1.6 1.6v14.8a1.6 1.6 0 0 1-1.6 1.6H5.8a1.6 1.6 0 0 1-1.6-1.6z" />
           <path d="M8.4 3v18" /><path d="M12.2 8.6h4" /><path d="M12.2 12.4h4" />
         </g>
-        <g id="i-chart" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+        <g id="i-chart" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none">
           <path d="M4 20.4h16" /><path d="M7.3 20.4v-6.2" /><path d="M12 20.4V6.6" /><path d="M16.7 20.4v-9.4" />
         </g>
-        <g id="i-offline" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+        <g id="i-offline" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none">
           <path d="M2.6 8.9a15.6 15.6 0 0 1 5-3" /><path d="M21.4 8.9a15.6 15.6 0 0 0-8.9-3.4" />
           <path d="M6.2 12.6a10.4 10.4 0 0 1 3-1.8" /><path d="M17.8 12.6a10.4 10.4 0 0 0-3.3-1.9" />
           <path d="M9.6 16.2a5.2 5.2 0 0 1 4.8 0" /><circle cx="12" cy="19.8" r="0.9" fill="currentColor" stroke="none" />
           <path d="M3.4 3.4 20.6 20.6" />
         </g>
-        <g id="i-devices" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+        <g id="i-devices" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none">
           <path d="M2.8 5.4a1.4 1.4 0 0 1 1.4-1.4h12a1.4 1.4 0 0 1 1.4 1.4v2.2" />
           <path d="M6.2 16.4H2.4" /><path d="M2.8 12.6v2.4" />
           <rect x="14.6" y="7.6" width="6.6" height="12.8" rx="1.6" /><path d="M17.2 17.9h1.4" />
         </g>
-        <g id="i-shield" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+        <g id="i-shield" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none">
           <path d="M12 3.2 5 6.1v5.4c0 4.2 2.9 7.6 7 9.3 4.1-1.7 7-5.1 7-9.3V6.1z" />
           <path d="M9.2 12.1l2 2 3.6-3.9" />
         </g>
-        <g id="i-moon" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
-          <path d="M20 14.2A8.4 8.4 0 0 1 9.8 4a8.6 8.6 0 1 0 10.2 10.2z" />
+        <g id="i-cal" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <rect x="3.4" y="5.2" width="17.2" height="15.4" rx="2" />
+          <path d="M3.4 10h17.2" /><path d="M8.2 3.4v3.4" /><path d="M15.8 3.4v3.4" />
         </g>
-        <g id="i-arrow" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" fill="none">
-          <path d="M15.5 12H4.5" /><path d="M10.4 6.9 4.5 12l5.9 5.1" />
-        </g>
-        <g id="i-down" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" fill="none">
-          <path d="M12 3.8v11.4" /><path d="M7.4 10.9 12 15.5l4.6-4.6" /><path d="M4.6 19.4h14.8" />
-        </g>
-        <g id="i-globe" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+        <g id="i-globe" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none">
           <circle cx="12" cy="12" r="8.8" /><path d="M3.2 12h17.6" />
           <path d="M12 3.2a13.6 13.6 0 0 1 0 17.6a13.6 13.6 0 0 1 0-17.6z" />
         </g>
-        <g id="i-droid" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+        <g id="i-droid" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none">
           <path d="M5.4 10.6a6.6 6.6 0 0 1 13.2 0" /><path d="M4.8 10.6h14.4v6.2a1.6 1.6 0 0 1-1.6 1.6H6.4a1.6 1.6 0 0 1-1.6-1.6z" />
-          <path d="M8.2 5.6 7 3.8" /><path d="M15.8 5.6 17 3.8" />
-          <path d="M9.4 8.2h.01" /><path d="M14.6 8.2h.01" />
+          <path d="M8.2 5.6 7 3.8" /><path d="M15.8 5.6 17 3.8" /><path d="M9.4 8.2h.01" /><path d="M14.6 8.2h.01" />
         </g>
-        <g id="i-pause" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none">
-          <path d="M9 5v14" /><path d="M15 5v14" />
+        <g id="i-arrow" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <path d="M15.5 12H4.5" /><path d="M10.4 6.9 4.5 12l5.9 5.1" />
         </g>
-        <g id="i-play" fill="currentColor" stroke="none"><path d="M7 4.5v15l13-7.5z" /></g>
+        <g id="i-down" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <path d="M12 3.8v11.4" /><path d="M7.4 10.9 12 15.5l4.6-4.6" /><path d="M4.6 19.4h14.8" />
+        </g>
       </defs>
     </svg>
 
     <header class="top" id="top">
       <div class="wrap top-in">
         <a class="brand" href="/">
-          <img src="/favicon.svg" width="32" height="32" alt="" aria-hidden="true" />
+          <img src="/favicon.svg" width="31" height="31" alt="" aria-hidden="true" />
           <span>روتینو</span>
         </a>
         <nav class="top-nav" aria-label="بخش‌های صفحه">
-          <a href="#inside">داخل برنامه</a>
+          <a href="#features">امکانات</a>
+          <a href="#everywhere">همه‌جا</a>
           <a href="#get">گرفتن برنامه</a>
         </nav>
         <a class="btn sm" href="/app/">شروع کن</a>
@@ -513,107 +412,127 @@
 
     <main>
       <section class="hero">
-        <svg class="ring" viewBox="0 0 200 200" aria-hidden="true" focusable="false">
-          <circle class="track" cx="100" cy="100" r="48" />
-          <circle class="arc" cx="100" cy="100" r="48" transform="rotate(-90 100 100)" />
-        </svg>
-
-        <div class="wrap hero-in">
-          <h1 class="rise">عادت‌هات رو بساز و ول نکن</h1>
+        <div class="wrap">
+          <h1 class="rise">امسال رو <span class="hl">جدی</span> بگیر</h1>
           <p class="lede rise">
-            عادت، کار، تایمر تمرکز و ژورنال، همه توی یه برنامه با تقویم شمسی.
-            صبح بازش کن، ببین امروز چی داری.
+            روتینو کمکت می‌کنه عادت‌های خوب بسازی و نگهشون داری. عادت، کار،
+            تایمر تمرکز و ژورنال، همه توی یه برنامه با تقویم شمسی.
           </p>
           <div class="acts rise">
-            <a class="btn" href="/app/">برو داخل برنامه<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
-            <a class="btn line" href="#get">روی گوشی نصبش کن<svg class="ic" aria-hidden="true"><use href="#i-down" /></svg></a>
+            <a class="btn" href="/app/">شروع کن<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
+            <a class="btn line" href="#get">نصب روی گوشی<svg class="ic" aria-hidden="true"><use href="#i-down" /></svg></a>
           </div>
-          <p class="note rise">حساب هم باز نکنی کار می‌کنه. اینترنت نداشته باشی هم.</p>
 
-          <div class="stage">
-            <div class="screen desk">
-              <img src="/shots/desktop-dark.webp" width="2880" height="1800" fetchpriority="high"
-                   alt="روتینو روی لپ‌تاپ: نوار کناری، حلقه‌ی پیشرفت روز، کارها و عادت‌های امروز" />
-            </div>
-            <!-- گوشیِ گوشه‌ی سرصفحه همان فیلمِ «امروز» را نشان می‌دهد، نه یک عکس.
-                 اسکریپت پایین صفحه جایش می‌اندازد؛ تا آن لحظه فریمِ اول است. -->
-            <div class="phone tuck">
-              <img class="hero-reel" src="/shots/clip-today-still.webp" data-clip="/shots/clip-today.webp"
-                   width="320" height="696"
-                   alt="فیلم صفحه‌ی امروز: تیک‌زدن یک کار و یک عادت، و بالا رفتن درصد روز" />
+          <!-- حرف‌های راست، جای آمارِ ساختگی. تا وقتی عدد واقعیِ دانلود و امتیاز
+               نداریم، اینجا چیزی که نداریم ادعا نمی‌شود. -->
+          <div class="facts rise">
+            <span><svg class="ic" aria-hidden="true"><use href="#i-cal" /></svg>تقویم شمسی</span>
+            <span><svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg>بدون تبلیغ</span>
+            <span><svg class="ic" aria-hidden="true"><use href="#i-offline" /></svg>بدون اینترنت هم کار می‌کنه</span>
+            <span><svg class="ic" aria-hidden="true"><use href="#i-devices" /></svg>گوشی و لپ‌تاپ</span>
+          </div>
+
+          <div class="hero-stage rise">
+            <div class="phone">
+              <img class="reel" src="/shots/clip-today-still.webp" data-clip="/shots/clip-today.webp"
+                   width="320" height="696" fetchpriority="high"
+                   alt="فیلم صفحه‌ی امروز روتینو: تیک‌زدن یک کار و یک عادت و بالا رفتن درصد روز" />
             </div>
           </div>
         </div>
       </section>
 
-      <!-- کنسول. یک بخش به‌جای پنج‌تا، با فیلمِ واقعی به‌جای عکس. -->
-      <section id="inside" class="bay">
+      <!-- ردیف‌های یک‌درمیان، هرکدام با فیلمِ واقعیِ همان بخش. -->
+      <section class="rows" id="features">
         <div class="wrap">
-          <div class="head rise">
-            <h2>ببین داخلش چه خبره</h2>
-            <p>این‌ها فیلم واقعی از خود برنامه‌ست، نه انیمیشن تبلیغاتی. روی هر بخش بزن تا ببینیش.</p>
+          <div class="row">
+            <div class="txt rise">
+              <span class="kicker"><svg class="ic" aria-hidden="true"><use href="#i-loop" /></svg>عادت‌ها</span>
+              <h2>زنجیره رو <span class="hl">نشکن</span></h2>
+              <p>
+                عادت روزانه یا هفتگی بساز و هدف ماهانه بذار. روی کارت هر عادت
+                می‌بینی چند روز پشت سر هم نگهش داشتی و این ماه چقدر جلو رفتی.
+                عادت‌های آماده هم هست تا از صفر شروع نکنی.
+              </p>
+            </div>
+            <div class="pic rise">
+              <div class="phone">
+                <img class="reel" src="/shots/clip-habits-still.webp" data-clip="/shots/clip-habits.webp"
+                     width="320" height="696" loading="lazy"
+                     alt="فیلم صفحه‌ی عادت‌ها: کارت هر عادت با زنجیره و پیشرفت ماهانه" />
+              </div>
+            </div>
           </div>
 
-          <div class="console">
-            <div class="rail" role="tablist" aria-label="بخش‌های برنامه">
-              <button role="tab" id="t-today" aria-controls="p-today" aria-selected="true">
-                <svg class="ic" aria-hidden="true"><use href="#i-home" /></svg>
-                <span class="sr">امروز</span>
-                <div><b aria-hidden="true">امروز</b><span>یه کار رو تیک بزن، برو سراغ عادت‌ها، ببین درصد روزت چطور بالا میره.</span><i aria-hidden="true"></i></div>
-              </button>
-              <button role="tab" id="t-habits" aria-controls="p-habits" aria-selected="false" tabindex="-1">
-                <svg class="ic" aria-hidden="true"><use href="#i-loop" /></svg>
-                <span class="sr">عادت‌ها</span>
-                <div><b aria-hidden="true">عادت‌ها</b><span>هر عادت زنجیره‌ی خودش رو داره. ببین چند روزه پشت سر هم نگهش داشتی.</span><i aria-hidden="true"></i></div>
-              </button>
-              <button role="tab" id="t-timer" aria-controls="p-timer" aria-selected="false" tabindex="-1">
-                <svg class="ic" aria-hidden="true"><use href="#i-timer" /></svg>
-                <span class="sr">تایمر</span>
-                <div><b aria-hidden="true">تایمر</b><span>پومودورو، تایمر آزاد و کرونومتر. بشین، بزنش، فقط همون یه کار رو بکن.</span><i aria-hidden="true"></i></div>
-              </button>
-              <button role="tab" id="t-journal" aria-controls="p-journal" aria-selected="false" tabindex="-1">
-                <svg class="ic" aria-hidden="true"><use href="#i-book" /></svg>
-                <span class="sr">ژورنال</span>
-                <div><b aria-hidden="true">ژورنال</b><span>آخر شب حالت رو ثبت کن و اگه حسش بود چند خط بنویس.</span><i aria-hidden="true"></i></div>
-              </button>
-              <button role="tab" id="t-stats" aria-controls="p-stats" aria-selected="false" tabindex="-1">
-                <svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg>
-                <span class="sr">آنالیز</span>
-                <div><b aria-hidden="true">آنالیز</b><span>این هفته رو با هفته‌ی قبل مقایسه می‌کنه و نشون میده کجا لنگیدی.</span><i aria-hidden="true"></i></div>
-              </button>
+          <div class="row">
+            <div class="txt rise">
+              <span class="kicker"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg>امروز</span>
+              <h2>صبح که بازش می‌کنی، <span class="hl">کل روزت</span> جلوی چشمته</h2>
+              <p>
+                درصد پیشرفت روز، نوار هفته، کارهای امروز و عادت‌هایی که مونده،
+                همه توی یه صفحه. تیک که می‌زنی، حلقه‌ی روز جلوی چشمت بالا میره.
+              </p>
             </div>
-
-            <!-- نقشِ tabpanel روی `div` است نه روی `img`. اگر روی تصویر بنشیند،
-                 نقشِ ذاتی‌اش بازنویسی می‌شود و `alt` برای صفحه‌خوان از بین می‌رود. -->
-            <div class="deck" id="deck">
+            <div class="pic rise">
               <div class="phone">
-                <div class="reel" id="reel">
-                  <img class="frame on" id="p-today" role="tabpanel" aria-labelledby="t-today"
-                       src="/shots/clip-today-still.webp" data-clip="/shots/clip-today.webp"
-                       width="320" height="696"
-                       alt="فیلم صفحه‌ی امروز: تیک‌زدن یک کار، رفتن سراغ عادت‌ها، پیام تبریک برنامه، و بالا رفتن حلقه‌ی روز از ۵۵ به ۷۵ درصد" />
-                  <img class="frame" id="p-habits" role="tabpanel" aria-labelledby="t-habits"
-                       src="/shots/clip-habits-still.webp" data-clip="/shots/clip-habits.webp"
-                       width="320" height="696"
-                       alt="فیلم صفحه‌ی عادت‌ها: کارت هر عادت با زنجیره و پیشرفت ماهانه" />
-                  <img class="frame" id="p-timer" role="tabpanel" aria-labelledby="t-timer"
-                       src="/shots/clip-timer-still.webp" data-clip="/shots/clip-timer.webp"
-                       width="320" height="696"
-                       alt="فیلم صفحه‌ی تایمر: عوض‌کردن حالت بین کرونومتر و پومودورو و شروع شمارش معکوس" />
-                  <img class="frame" id="p-journal" role="tabpanel" aria-labelledby="t-journal"
-                       src="/shots/clip-journal-still.webp" data-clip="/shots/clip-journal.webp"
-                       width="320" height="696"
-                       alt="فیلم صفحه‌ی ژورنال: حال‌وهوا، نمره‌ی روز و یادداشت‌های گذشته" />
-                  <img class="frame" id="p-stats" role="tabpanel" aria-labelledby="t-stats"
-                       src="/shots/clip-analytics-still.webp" data-clip="/shots/clip-analytics.webp"
-                       width="320" height="696"
-                       alt="فیلم صفحه‌ی آنالیز: رشد نمودارها و شبکه‌ی تقویمی هر عادت" />
-                </div>
-                <button class="hold" id="hold" type="button" aria-pressed="false">
-                  <svg class="ic stop" aria-hidden="true"><use href="#i-pause" /></svg>
-                  <svg class="ic go" aria-hidden="true"><use href="#i-play" /></svg>
-                  <span id="hold-label">نگه‌دار</span>
-                </button>
+                <img class="reel" src="/shots/clip-today-still.webp" data-clip="/shots/clip-today.webp"
+                     width="320" height="696" loading="lazy"
+                     alt="فیلم صفحه‌ی امروز: تیک‌زدن کار و عادت و رسیدن حلقه‌ی روز به ۷۵ درصد" />
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="txt rise">
+              <span class="kicker"><svg class="ic" aria-hidden="true"><use href="#i-timer" /></svg>تایمر تمرکز</span>
+              <h2>بشین و فقط <span class="hl">همون یه کار</span> رو بکن</h2>
+              <p>
+                پومودورو، تایمر آزاد و کرونومتر. هر جلسه رو به یه عادت زمانی وصل
+                کن تا خودش ثبت بشه؛ دیگه لازم نیست چیزی دستی وارد کنی.
+              </p>
+            </div>
+            <div class="pic rise">
+              <div class="phone">
+                <img class="reel" src="/shots/clip-timer-still.webp" data-clip="/shots/clip-timer.webp"
+                     width="320" height="696" loading="lazy"
+                     alt="فیلم صفحه‌ی تایمر: عوض کردن حالت و شروع شمارش معکوس" />
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="txt rise">
+              <span class="kicker"><svg class="ic" aria-hidden="true"><use href="#i-book" /></svg>ژورنال</span>
+              <h2>آخر شب، <span class="hl">چند خط</span> برای خودت</h2>
+              <p>
+                حال‌وهوات رو ثبت کن، به روزت نمره بده و اگه حسش بود چند خط بنویس.
+                یه ماه بعد که برمی‌گردی، خودت الگوها رو می‌بینی.
+              </p>
+            </div>
+            <div class="pic rise">
+              <div class="phone">
+                <img class="reel" src="/shots/clip-journal-still.webp" data-clip="/shots/clip-journal.webp"
+                     width="320" height="696" loading="lazy"
+                     alt="فیلم صفحه‌ی ژورنال: حال‌وهوا، نمره‌ی روز و یادداشت‌های گذشته" />
+              </div>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="txt rise">
+              <span class="kicker"><svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg>آنالیز</span>
+              <h2>ببین کجا خوب بودی، <span class="hl">کجا لنگیدی</span></h2>
+              <p>
+                این هفته رو با هفته‌ی قبل مقایسه می‌کنه، نمودار ماه و سه‌ماهه رو
+                نشون میده، و برای هر عادت یه شبکه‌ی تقویمی داره که با یه نگاه
+                دستت میاد.
+              </p>
+            </div>
+            <div class="pic rise">
+              <div class="phone">
+                <img class="reel" src="/shots/clip-analytics-still.webp" data-clip="/shots/clip-analytics.webp"
+                     width="320" height="696" loading="lazy"
+                     alt="فیلم صفحه‌ی آنالیز: رشد نمودارها و شبکه‌ی تقویمی هر عادت" />
               </div>
             </div>
           </div>
@@ -621,19 +540,15 @@
       </section>
 
       <!--
-        صحنه‌ی سرهم‌شدن. گوشی وسط قفل می‌شود و تکه‌های رابط، همان‌طور که اسکرول
-        می‌کنی، می‌آیند و روی صفحه‌اش می‌نشینند.
-
-        `data-at` یعنی این کارت در چند درصدِ صحنه بنشیند، و `data-from` نقطه‌ی
-        شروعش نسبت به مرکزِ گوشی است (به em، تا با اندازه‌ی صفحه بزرگ و کوچک شود).
-        کلاسِ `live` را جاوااسکریپت می‌گذارد؛ بدونِ آن، بخش یک چیدمانِ ثابت و
-        کاملاً خواناست، نه یک صحنه‌ی نصفه.
+        صحنه‌ی سرهم‌شدن. گوشی وسط قفل می‌شود و تکه‌های رابط با اسکرول می‌آیند و
+        روی صفحه‌اش می‌نشینند. `data-at` یعنی کارت در چند درصدِ صحنه بنشیند و
+        `data-from` نقطه‌ی شروعش نسبت به مرکز است (به em).
       -->
       <section class="assembly" id="assembly">
         <div class="runway">
           <div class="stage2">
             <div class="cap">
-              <h2 class="rise">همه‌ی تکه‌ها سر جاشون می‌شینن</h2>
+              <h2 class="rise">همه‌ی تکه‌ها <span class="hl">سر جاشون</span> می‌شینن</h2>
               <p class="rise">اسکرول کن. هرچی پراکنده‌ست، می‌ره سر جای خودش توی برنامه.</p>
             </div>
 
@@ -649,86 +564,57 @@
                 </div>
               </div>
 
-              <!-- ترتیب کارت‌ها عمداً با ترتیبِ صفحه‌های گوشی یکی‌ست (۰ تا ۴).
-                   اگر دو کارت به یک صفحه اشاره کنند، گوشی وسطِ راه به عقب
-                   برمی‌گردد و حرکت شکسته به‌نظر می‌رسد. -->
+              <!-- ترتیبِ `data-screen` باید صعودی باشد، وگرنه گوشی وسطِ راه به
+                   عقب برمی‌گردد و حرکت شکسته به‌نظر می‌رسد. -->
               <div class="chips">
-                <div class="chip" data-at="0.16" data-from="-13,-7" data-screen="0">
+                <div class="chip" data-at="0.28" data-from="-13,-7" data-screen="0">
                   <svg class="mini" viewBox="0 0 32 32" aria-hidden="true">
                     <circle class="t" cx="16" cy="16" r="14" />
                     <circle class="a" cx="16" cy="16" r="14" transform="rotate(-90 16 16)" />
                   </svg>
                   <b>۷۵٪ امروز</b>
                 </div>
-                <div class="chip" data-at="0.34" data-from="12,-4" data-screen="1">
+                <div class="chip" data-at="0.44" data-from="12,-4" data-screen="1">
                   <svg class="ic" aria-hidden="true"><use href="#i-loop" /></svg>
                   <b>۱۲ روز پشت سر هم</b><span>مطالعه</span>
                 </div>
-                <div class="chip" data-at="0.52" data-from="-11,6" data-screen="2">
+                <div class="chip" data-at="0.60" data-from="-11,6" data-screen="2">
                   <svg class="ic" aria-hidden="true"><use href="#i-timer" /></svg>
                   <b>۲۴:۵۹</b><span>مونده</span>
                 </div>
-                <div class="chip" data-at="0.70" data-from="13,8" data-screen="3">
+                <div class="chip" data-at="0.75" data-from="13,8" data-screen="3">
                   <svg class="ic" aria-hidden="true"><use href="#i-book" /></svg>
                   <b>امروز: ۸ از ۱۰</b>
                 </div>
-                <div class="chip win" data-at="0.88" data-from="-9,-11" data-screen="4">
+                <div class="chip win" data-at="0.90" data-from="-9,-11" data-screen="4">
                   <span class="dot" aria-hidden="true"></span>
                   <b>۱۲٪ بهتر از هفته‌ی قبل</b>
                 </div>
               </div>
             </div>
 
-            <div class="meter" id="meter" aria-hidden="true">
-              <i></i><i></i><i></i><i></i><i></i>
-            </div>
+            <div class="meter" id="meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
           </div>
         </div>
       </section>
 
-      <div class="specs">
-        <div>
-          <svg class="ic" aria-hidden="true"><use href="#i-offline" /></svg>
-          <h3>بدون اینترنت</h3>
-          <p>تو مترو و سفر هم کامل کار می‌کنه. آنلاین که شدی خودش سینک میشه.</p>
-        </div>
-        <div>
-          <svg class="ic" aria-hidden="true"><use href="#i-devices" /></svg>
-          <h3>روی همه‌ی دستگاه‌ها</h3>
-          <p>گوشیت رو عوض کنی یا گم کنی، عادت‌ها و ژورنالت سر جاشونن.</p>
-        </div>
-        <div>
-          <svg class="ic" aria-hidden="true"><use href="#i-shield" /></svg>
-          <h3>بدون تبلیغ</h3>
-          <p>نه تبلیغی می‌بینی، نه اطلاعاتت جای دیگه‌ای میره.</p>
-        </div>
-        <div>
-          <svg class="ic" aria-hidden="true"><use href="#i-moon" /></svg>
-          <h3>تاریک و روشن</h3>
-          <p>هر دو تم رو داره، با یه کلید تو تنظیمات عوض میشه.</p>
-        </div>
-      </div>
-
-      <section class="bay">
+      <section class="wide" id="everywhere">
         <div class="wrap">
           <div class="head rise">
-            <h2>روی صفحه‌ی بزرگ، بزرگ‌تر میشه</h2>
+            <h2>روی صفحه‌ی بزرگ، <span class="hl">بزرگ‌تر</span> میشه</h2>
             <p>روی لپ‌تاپ منوی کناری باز میشه و نمودارها جا پیدا می‌کنن. همون حساب، همون اطلاعات.</p>
           </div>
-          <div class="screen wide rise">
+          <div class="glass rise">
             <img src="/shots/desktop-analytics-dark.webp" width="2880" height="1800" loading="lazy"
                  alt="روتینو روی لپ‌تاپ: صفحه‌ی آنالیز با نوار کناری و نمودارهای هفته و ماه" />
           </div>
         </div>
       </section>
 
-      <hr class="rule" />
-
-      <!-- دو راه، دو دکمه. اندروید هنوز فایل ندارد و همین‌جا صادقانه گفته شده. -->
-      <section id="get" class="bay">
+      <section class="wide" id="get">
         <div class="wrap">
           <div class="head rise">
-            <h2>برنامه رو بردار</h2>
+            <h2>برنامه رو <span class="hl">بردار</span></h2>
             <p>هر جوری راحتی. روی آیفون و کامپیوتر همین وب‌اپ کار رو راه می‌ندازه.</p>
           </div>
           <div class="ways rise">
@@ -746,7 +632,7 @@
               <svg class="ic" aria-hidden="true"><use href="#i-droid" /></svg>
               <h3>اندروید</h3>
               <p>فایل نصبی اندروید داره آماده میشه. تا اون موقع می‌تونی از همون وب‌اپ استفاده کنی؛ هیچ فرقی تو امکانات نداره.</p>
-              <!-- وقتی APK آماده شد: `href` را بگذار و `soon` و `aria-disabled` را بردار. -->
+              <!-- وقتی APK آماده شد: `href` بگذار و `soon` و `aria-disabled` را بردار. -->
               <a class="btn line soon" id="android-btn" role="link" aria-disabled="true">
                 دانلود اندروید <span class="tag">به‌زودی</span>
               </a>
@@ -755,14 +641,14 @@
         </div>
       </section>
 
-      <hr class="rule" />
-
-      <section class="close">
+      <section class="banner">
         <div class="wrap">
-          <h2 class="rise">از کدوم عادت شروع می‌کنی؟</h2>
-          <p class="rise">ساختن اولین عادت کمتر از یه دقیقه طول می‌کشه.</p>
-          <div class="acts rise">
-            <a class="btn" href="/app/">برو داخل برنامه<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
+          <div class="box">
+            <h2 class="rise">از کدوم عادت <span class="hl">شروع می‌کنی؟</span></h2>
+            <p class="rise">ساختن اولین عادت کمتر از یه دقیقه طول می‌کشه.</p>
+            <div class="acts rise">
+              <a class="btn" href="/app/">برو داخل برنامه<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
+            </div>
           </div>
         </div>
       </section>
@@ -772,7 +658,7 @@
       <div class="wrap">
         <div class="foot">
           <a class="brand" href="/">
-            <img src="/favicon.svg" width="32" height="32" alt="" aria-hidden="true" />
+            <img src="/favicon.svg" width="31" height="31" alt="" aria-hidden="true" />
             <span>روتینو</span>
           </a>
           <div class="foot-links">
@@ -787,13 +673,12 @@
     </footer>
 
     <div class="dock" id="dock">
-      <a class="btn" href="/app/">برو داخل برنامه<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
+      <a class="btn" href="/app/">شروع کن<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
     </div>
 
     <script>
       (function () {
         "use strict";
-
         var calm = matchMedia("(prefers-reduced-motion: reduce)");
 
         /* ── نوار بالا و دکمه‌ی چسبان ─────────────────────────── */
@@ -805,144 +690,60 @@
           dock.classList.toggle("up", y > innerHeight * 0.8);
         }, { passive: true });
 
-        /* ── کنسول ───────────────────────────────────────────── */
-        var tabs = [].slice.call(document.querySelectorAll('.rail [role="tab"]'));
-        var hold = document.getElementById("hold");
-        var holdLabel = document.getElementById("hold-label");
-        var deck = document.getElementById("deck");
-        var paused = false;
-        var onScreen = true;
-
-        function active() {
-          var t = tabs.filter(function (x) { return x.getAttribute("aria-selected") === "true"; })[0];
-          return document.getElementById(t.getAttribute("aria-controls"));
-        }
-
+        /* ── فیلم‌ها ──────────────────────────────────────────── */
         /**
-         * پخش یعنی `src` را روی فایلِ متحرک بگذار، مکث یعنی روی فریمِ ثابت.
-         *
-         * WebP متحرک را نمی‌شود با جاوااسکریپت نگه داشت (نه مثل `<video>` که
-         * `pause()` دارد)، پس تنها راهِ واقعیِ «مکث» همین تعویضِ فایل است.
-         *
-         * نکته‌ی مهم: تا وقتی کلیپ کامل نیامده `src` را عوض نمی‌کنیم. اگر همان
-         * لحظه‌ی کلیک عوضش کنی، قاب تا آخرِ دانلود (تا ۲۱۷ کیلوبایت) خالی
-         * می‌ماند و درست وسطِ همان چیزی که آمده‌ای نشان بدهی، یک سوراخ می‌بینی.
-         * پس اول در پس‌زمینه می‌گیریمش و بعد جا می‌اندازیم؛ فریمِ ثابت تا آن
-         * لحظه سرِ جایش است.
+         * هر قاب یک عکسِ ثابت است تا وقتی وارد کادر دید شود؛ آن‌وقت کلیپِ متحرک
+         * در پس‌زمینه گرفته می‌شود و **بعد از کامل‌شدن** جایش می‌نشیند. اگر همان
+         * لحظه `src` را عوض کنیم، قاب تا آخرِ دانلود (تا ۲۱۷ کیلوبایت) خالی
+         * می‌ماند. بیرون از کادر که رفت، دوباره عکسِ ثابت می‌شود: لوپی که کسی
+         * نمی‌بیند نباید بچرخد.
          */
+        var reels = [].slice.call(document.querySelectorAll(".reel"));
         var ready = {};
-        function paint() {
-          var img = active();
+        reels.forEach(function (img) { img.setAttribute("data-still", img.getAttribute("src")); });
+
+        function play(img, on) {
           var clip = img.getAttribute("data-clip");
-          var wantClip = !paused && onScreen && !calm.matches;
-          if (!wantClip) {
-            img.setAttribute("src", img.getAttribute("data-still"));
-            return;
-          }
-          if (ready[clip]) {
-            if (img.getAttribute("src") !== clip) img.setAttribute("src", clip);
-            return;
-          }
+          if (!on || calm.matches) { img.setAttribute("src", img.getAttribute("data-still")); return; }
+          if (ready[clip]) { if (img.getAttribute("src") !== clip) img.setAttribute("src", clip); return; }
           var pre = new Image();
           pre.onload = function () {
             ready[clip] = true;
-            // ممکن است کاربر تا رسیدنِ فایل تب را عوض کرده یا مکث زده باشد.
-            if (active() === img && !paused && onScreen && !calm.matches) img.setAttribute("src", clip);
+            if (img.dataset.on === "1" && !calm.matches) img.setAttribute("src", clip);
           };
           pre.src = clip;
         }
 
-        // آدرسِ فریمِ ثابت همان چیزی‌ست که در HTML آمده؛ نگهش می‌داریم تا بعداً
-        // بشود به آن برگشت.
-        [].forEach.call(document.querySelectorAll("[data-clip]"), function (img) {
-          img.setAttribute("data-still", img.getAttribute("src"));
-        });
-
-        function show(tab, focus) {
-          if (tab.getAttribute("aria-selected") === "true") return;
-          // کلیپِ قبلی را به فریمِ ثابتش برگردان تا در پس‌زمینه لوپ نزند.
-          var prev = active();
-          prev.setAttribute("src", prev.getAttribute("data-still"));
-
-          tabs.forEach(function (t) {
-            var on = t === tab;
-            t.setAttribute("aria-selected", on ? "true" : "false");
-            t.tabIndex = on ? 0 : -1;
-            document.getElementById(t.getAttribute("aria-controls")).classList.toggle("on", on);
-          });
-          paint();
-          if (focus) tab.focus();
-        }
-
-        tabs.forEach(function (tab, i) {
-          tab.addEventListener("click", function () { show(tab); });
-          tab.addEventListener("keydown", function (e) {
-            /* ریل عمودی‌ست، پس بالا/پایین طبیعی‌ست؛ چپ/راست را هم می‌پذیریم
-               چون در RTL جهتشان برای کاربر برعکس حس می‌شود. */
-            var step = 0;
-            if (e.key === "ArrowDown" || e.key === "ArrowLeft") step = 1;
-            else if (e.key === "ArrowUp" || e.key === "ArrowRight") step = -1;
-            else if (e.key === "Home") { e.preventDefault(); show(tabs[0], true); return; }
-            else if (e.key === "End") { e.preventDefault(); show(tabs[tabs.length - 1], true); return; }
-            if (!step) return;
-            e.preventDefault();
-            show(tabs[(i + step + tabs.length) % tabs.length], true);
-          });
-        });
-
-        hold.addEventListener("click", function () {
-          paused = !paused;
-          hold.setAttribute("aria-pressed", paused ? "true" : "false");
-          holdLabel.textContent = paused ? "پخش" : "نگه‌دار";
-          paint();
-        });
-
-        /* لوپی که کسی نمی‌بیند نباید بچرخد: هم باتری کاربر، هم قاعده‌ی
-           دسترس‌پذیریِ «حرکتِ خودکار باید متوقف‌شدنی باشد». */
         if ("IntersectionObserver" in window) {
-          new IntersectionObserver(function (es) {
-            onScreen = es[0].isIntersecting;
-            paint();
-          }, { threshold: 0.15 }).observe(deck);
+          var reelEye = new IntersectionObserver(function (es) {
+            es.forEach(function (en) {
+              en.target.dataset.on = en.isIntersecting ? "1" : "0";
+              play(en.target, en.isIntersecting);
+            });
+          }, { threshold: 0.25 });
+          reels.forEach(function (img) { reelEye.observe(img); });
+        } else {
+          reels.forEach(function (img) { img.dataset.on = "1"; play(img, true); });
         }
         document.addEventListener("visibilitychange", function () {
-          onScreen = !document.hidden;
-          paint();
+          reels.forEach(function (img) { play(img, !document.hidden && img.dataset.on === "1"); });
         });
-        calm.addEventListener("change", paint);
-        paint();
-
-        /* گوشیِ سرصفحه هم همان فیلم را می‌گیرد، ولی فقط وقتی حرکت مجاز است. */
-        var heroReel = document.querySelector(".hero-reel");
-        if (heroReel && !calm.matches) {
-          addEventListener("load", function () {
-            heroReel.setAttribute("src", heroReel.getAttribute("data-clip"));
-          });
-        }
 
         /* ── صحنه‌ی سرهم‌شدن ──────────────────────────────────── */
         /**
-         * یک هندلرِ اسکرول، یک عدد (`p` بین ۰ و ۱)، و بعد فقط `transform` و
-         * `opacity`. هیچ خصوصیتی که چیدمان را دوباره حساب کند دست نمی‌خورد،
-         * پس نه پرشِ چیدمان داریم نه کندی.
-         *
-         * چرا GSAP نه؟ چون کاری که اینجا لازم است را `position: sticky` مجانی
-         * انجام می‌دهد و باقی‌اش سی خط ریاضیِ ساده است. ScrollTrigger حدود ۷۰
-         * کیلوبایت به صفحه‌ای اضافه می‌کرد که کلِ HTMLش ۴۳ کیلوبایت است، آن هم
-         * روی اینترنت موبایلِ ایران.
+         * یک هندلرِ اسکرول، یک عدد بین ۰ و ۱، و بعد فقط `transform` و `opacity`.
+         * هیچ خصوصیتی که چیدمان را دوباره حساب کند دست نمی‌خورد، پس نه پرشِ
+         * چیدمان داریم نه کندی. قفل‌کردن را خودِ `position: sticky` انجام می‌دهد.
          */
         (function assembly() {
           var sec = document.getElementById("assembly");
-          if (!sec) return;
+          if (!sec || calm.matches) return;
+          sec.classList.add("live");
+
           var rig = document.getElementById("rig");
           var chips = [].slice.call(sec.querySelectorAll(".chip"));
           var screens = [].slice.call(sec.querySelectorAll(".shot img"));
           var bars = [].slice.call(document.querySelectorAll("#meter i"));
-
-          // با حرکتِ کم، صحنه ثابت می‌ماند: کارت‌ها زیر گوشی می‌نشینند و
-          // اسکرول هیچ چیزی را جابه‌جا نمی‌کند.
-          if (calm.matches) return;
-          sec.classList.add("live");
 
           var plan = chips.map(function (el) {
             var f = (el.getAttribute("data-from") || "0,0").split(",");
@@ -951,23 +752,16 @@
               screen: parseInt(el.getAttribute("data-screen"), 10) || 0 };
           });
 
-          var ease = function (t) { return 1 - Math.pow(1 - t, 3); }; // خروجِ نرم
+          var ease = function (t) { return 1 - Math.pow(1 - t, 3); };
           var clamp01 = function (v) { return v < 0 ? 0 : v > 1 ? 1 : v; };
           var queued = false, lastScreen = -1, k = 1;
 
-          /**
-           * فاصله‌ی شروعِ کارت‌ها به اندازه‌ی صفحه بستگی دارد.
-           *
-           * روی دسکتاپ ±۱۳em جا دارد، ولی روی گوشیِ ۳۷۵ پیکسلی نصفِ عرض فقط
-           * ۱۸۷ پیکسل است و کارت از کادر بیرون می‌زد؛ `overflow-x: hidden`
-           * اسکرول‌بار را پنهان می‌کرد ولی کارت همچنان نصفه دیده می‌شد. پس
-           * ضریب را از فضای واقعی حساب می‌کنیم، نه از یک بریک‌پوینت ثابت.
-           */
+          /* فاصله‌ی شروعِ کارت‌ها از عرضِ واقعیِ صفحه حساب می‌شود، نه از یک
+             بریک‌پوینت ثابت؛ وگرنه روی گوشیِ ۳۷۵ پیکسلی از کادر بیرون می‌زدند. */
           function fit() {
             var em = parseFloat(getComputedStyle(sec).fontSize) || 16;
             var widest = 0;
             for (var i = 0; i < plan.length; i++) widest = Math.max(widest, Math.abs(plan[i].fx));
-            // ۹۶ پیکسل ≈ نصفِ پهن‌ترین کارت به‌اضافه‌ی حاشیه‌ی نفس‌کشیدن.
             var room = (innerWidth / 2 - 96) / em;
             k = widest > 0 ? Math.min(1, Math.max(0.28, room / widest)) : 1;
           }
@@ -975,23 +769,18 @@
           function frame() {
             queued = false;
             var box = sec.getBoundingClientRect();
-            // چقدر از مسیرِ اسکرولِ این بخش طی شده. ارتفاعِ قفل‌شده یک صفحه است،
-            // پس مسیرِ مفید به همان اندازه کوتاه‌تر از کلِ بخش است.
             var run = box.height - innerHeight;
             var p = run > 0 ? clamp01(-box.top / run) : 0;
 
             for (var i = 0; i < plan.length; i++) {
               var c = plan[i];
-              // هر کارت در بازه‌ی خودش می‌نشیند؛ ۰.۲۶ یعنی مسیرها کمی روی هم
-              // بیفتند تا حرکت پیوسته حس شود نه پله‌پله.
               var lp = ease(clamp01((p - (c.at - 0.26)) / 0.26));
               var rest = 1 - lp;
               var x = c.fx * k * rest, y = c.fy * k * rest;
               var s = 1 + rest * 0.14;
               var r = c.fx * k * rest * 0.5;
-              // بعد از نشستن، کارت کاملاً محو می‌شود چون صفحه‌ی گوشی خودش همان را
-              // نشان می‌دهد؛ نگه‌داشتنش یعنی دو بار گفتنِ یک حرف. اگر محوِ کامل
-              // نشود، آخرِ صحنه پنج کارتِ نیمه‌شفاف روی هم تلنبار می‌شوند.
+              // بعد از نشستن کاملاً محو می‌شود، وگرنه آخرِ صحنه پنج کارتِ
+              // نیمه‌شفاف روی هم تلنبار می‌شوند.
               var fade = clamp01((p - c.at) / 0.1);
               c.el.style.transform =
                 "translate3d(calc(-50% + " + x.toFixed(2) + "em), calc(-50% + " + y.toFixed(2) + "em), 0)" +
@@ -1000,7 +789,6 @@
               if (bars[i]) bars[i].style.setProperty("--f", lp.toFixed(3));
             }
 
-            // صفحه‌ی گوشی همراهِ کارتی که تازه نشسته عوض می‌شود.
             var want = 0;
             for (var j = 0; j < plan.length; j++) if (p >= plan[j].at - 0.06) want = plan[j].screen;
             if (want !== lastScreen) {
@@ -1009,8 +797,6 @@
                 img.classList.toggle("seen", +img.getAttribute("data-screen") === want);
               });
             }
-
-            // خودِ گوشی هم کمی جلو می‌آید، تا صحنه تخت نباشد.
             rig.style.transform = "scale(" + (0.94 + ease(clamp01(p * 1.4)) * 0.06).toFixed(3) + ")";
           }
 
@@ -1041,10 +827,9 @@
         }
 
         /* ── سرویس‌ورکرِ کهنه ─────────────────────────────────── */
-        /* برنامه قبلاً روی ریشه‌ی دامنه بود، پس هر بازدیدکننده‌ی قدیمی یک
-           سرویس‌ورکر با دامنه‌ی «/» دارد که هنوز نسخه‌ی کش‌شده‌ی اپ را برای همین
-           آدرس سرو می‌کند و این صفحه را نمی‌گذارد دیده شود. فقط همان پاک می‌شود؛
-           سرویس‌ورکر خود برنامه روی «/app/» دست نمی‌خورد. */
+        /* برنامه قبلاً روی ریشه‌ی دامنه بود، پس بازدیدکننده‌ی قدیمی یک
+           سرویس‌ورکر با دامنه‌ی «/» دارد که نسخه‌ی کش‌شده‌ی اپ را برای همین آدرس
+           سرو می‌کند و این صفحه را نمی‌گذارد دیده شود. */
         if ("serviceWorker" in navigator) {
           navigator.serviceWorker.getRegistrations().then(function (regs) {
             var root = location.origin + "/";
