@@ -1,0 +1,329 @@
+<!doctype html>
+<!--
+  ⚠️ پیش‌نمایش است، نه بخشی از سایت.
+
+  `scripts/build-landing.mjs` فقط `index.template.html` و `legal.template.html`
+  را می‌سازد، پس این فایل هیچ‌وقت منتشر نمی‌شود. اینجاست که ایده‌ی «گوشیِ چرخان
+  با اسکرول» را ببینی و تصمیم بگیری؛ اگر پسندیدی، همین بخش به قالب اصلی منتقل
+  می‌شود.
+
+  مسیرها عمداً نسبی‌اند (../node_modules، shots/) تا با دوبار کلیک روی خود فایل
+  هم باز شود. نسخه‌ی نهایی مسیرهای مطلقِ /fonts/ و /shots/ را می‌گیرد.
+
+  بدون GSAP، بدون Tailwind، بدون CDN — دلیلش در پاسخ چت توضیح داده شده.
+-->
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>روتینو — پیش‌نمایش صحنه‌ی اسکرول</title>
+
+    <style>
+      @font-face { font-family: Vazirmatn; font-weight: 400; font-display: swap;
+        src: url(../node_modules/@fontsource/vazirmatn/files/vazirmatn-arabic-400-normal.woff2) format("woff2"); }
+      @font-face { font-family: Vazirmatn; font-weight: 700; font-display: swap;
+        src: url(../node_modules/@fontsource/vazirmatn/files/vazirmatn-arabic-700-normal.woff2) format("woff2"); }
+
+      :root {
+        --bg:#faf9f7; --card:#fff; --fg:#1c1917; --muted:#57534e; --faint:#8a827c;
+        --primary:#f97316; --border:#e9e6e2; --ring:rgba(249,115,22,.14);
+        --shadow:0 2px 6px rgba(28,25,23,.05), 0 24px 60px rgba(28,25,23,.10);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#0b0a09; --card:#171513; --fg:#faf9f8; --muted:#a8a29e; --faint:#7c756f;
+          --primary:#fb8b3c; --border:#2a2724; --ring:rgba(251,139,60,.16);
+          --shadow:0 2px 6px rgba(0,0,0,.5), 0 24px 60px rgba(0,0,0,.5); }
+      }
+
+      *{box-sizing:border-box}
+      body{margin:0;background:var(--bg);color:var(--fg);
+        font-family:Vazirmatn,"Segoe UI",Tahoma,system-ui,sans-serif;line-height:1.85;
+        -webkit-font-smoothing:antialiased;overflow-x:hidden}
+      img{max-width:100%;height:auto;display:block}
+      h1,h2{text-wrap:balance;letter-spacing:-.5px}
+      .wrap{max-width:1120px;margin:0 auto;padding:0 22px}
+
+      /* ── صحنه ──────────────────────────────────────────────
+         ارتفاع کل = یک صفحه برای فاز اول + یک بازه به ازای هر گذر.
+         محتوای واقعی داخل .sticky است که یک صفحه بیشتر نیست، پس
+         «اسکرول‌جکینگ» واقعی نداریم: نوار اسکرول مرورگر همان چیزی را
+         نشان می‌دهد که هست و کاربر هر وقت خواست رد می‌شود. */
+      .stage{position:relative;--phases:5;--per:88vh;
+        height:calc(100vh + (var(--phases) - 1) * var(--per))}
+      .sticky{position:sticky;top:0;height:100vh;overflow:hidden;
+        display:grid;place-items:center}
+
+      .sticky::before{content:"";position:absolute;inset:auto 20% 8%;height:520px;
+        background:radial-gradient(closest-side,var(--ring),transparent 70%);
+        pointer-events:none}
+
+      .scene{position:relative;width:100%;max-width:1120px;padding:0 22px;
+        display:grid;grid-template-columns:1fr 1fr;align-items:center;gap:40px}
+
+      /* ── متن‌ها ──
+         هر پنج بلوک روی هم می‌نشینند و با فاز جاری محو/ظاهر می‌شوند.
+         هر پنج‌تا در DOM هستند (نه ساخته‌شده با JS) تا screen reader و
+         جست‌وجوی گوگل کل متن را ببینند. */
+      .copy{position:relative;min-height:340px}
+      .copy-item{position:absolute;inset:0;display:flex;flex-direction:column;
+        justify-content:center;opacity:0;will-change:opacity,transform}
+      .copy-item .tag{align-self:flex-start;font-size:12px;font-weight:700;color:var(--primary);
+        background:var(--ring);padding:5px 13px;border-radius:999px;margin-bottom:16px}
+      .copy-item h2{font-size:clamp(26px,4.4vw,44px);line-height:1.4;margin:0 0 14px}
+      .copy-item p{color:var(--muted);margin:0;font-size:clamp(15px,2vw,18px);
+        max-width:34ch;text-wrap:pretty}
+
+      /* ── گوشی ── */
+      .phone-3d{perspective:1400px;display:grid;place-items:center}
+      .phone{position:relative;width:min(30vh,268px);aspect-ratio:804/1748;
+        border-radius:34px;padding:9px;background:linear-gradient(160deg,#2b2926,#111010);
+        box-shadow:var(--shadow);transform-style:preserve-3d;will-change:transform}
+      .phone .screens{position:relative;width:100%;height:100%;
+        border-radius:26px;overflow:hidden;background:#0b0a09}
+      .phone .screens img{position:absolute;inset:0;width:100%;height:100%;
+        object-fit:cover;opacity:0;will-change:opacity}
+      /* برقِ روی شیشه — یک لایه‌ی خیلی کم‌رنگ، که قاب پلاستیکی به‌نظر نرسد */
+      .phone .glare{position:absolute;inset:9px;border-radius:26px;pointer-events:none;
+        background:linear-gradient(115deg,rgba(255,255,255,.16) 0%,rgba(255,255,255,0) 42%)}
+
+      /* ── نقطه‌های فاز ──
+         اسکرولِ چسبان همیشه این سؤال را می‌سازد که «چندتا مانده؟». این
+         جواب همان است، و کلیک هم می‌شود. */
+      .dots{position:absolute;inset-inline-end:26px;top:50%;translate:0 -50%;
+        display:flex;flex-direction:column;gap:11px;z-index:3}
+      .dots button{width:8px;height:8px;padding:0;border:0;border-radius:999px;
+        background:var(--border);cursor:pointer;transition:background .25s,height .25s}
+      .dots button[aria-current="true"]{background:var(--primary);height:22px}
+
+      .scroll-hint{position:absolute;bottom:26px;left:50%;translate:-50% 0;
+        font-size:12.5px;color:var(--faint);transition:opacity .3s}
+
+      /* ── موبایل ──
+         روی گوشی، صحنه‌ی سه‌بعدی برداشته می‌شود. دلیلش پایین‌تر در چت آمده:
+         روی صفحه‌ی ۳۷۵ پیکسلی نه فضایی برای متنِ کنارِ گوشی هست نه چرخشِ
+         سه‌بعدی دیده می‌شود، و اسکرولِ چسبان روی تاچ بدترین حالتش را دارد. */
+      @media (max-width:860px){
+        .stage{height:auto}
+        .sticky{position:static;height:auto;overflow:visible;padding:34px 0}
+        .scene{grid-template-columns:1fr;gap:0}
+        .dots,.scroll-hint{display:none}
+        .phone-3d{perspective:none;margin-bottom:26px}
+        .phone{transform:none!important;width:min(62vw,250px)}
+        .copy{min-height:0;display:flex;flex-direction:column;gap:52px}
+        .copy-item{position:static;opacity:1!important;transform:none!important;
+          text-align:center;align-items:center}
+        .copy-item .tag{align-self:center}
+        .copy-item p{max-width:46ch}
+        /* روی موبایل هر بلوک متن، عکسِ خودش را کنار خودش می‌خواهد */
+        .copy-item .m-shot{display:block;width:min(58vw,240px);margin:18px auto 0;
+          border-radius:26px;padding:8px;background:linear-gradient(160deg,#2b2926,#111010);
+          box-shadow:var(--shadow)}
+        .copy-item .m-shot img{border-radius:20px}
+        .phone-3d{display:none}
+      }
+      .copy-item .m-shot{display:none}
+
+      /* ── کم‌کردن حرکت ──
+         کاربری که در سیستم‌عاملش «حرکت کمتر» را روشن کرده معمولاً دلیل
+         پزشکی دارد (سرگیجه، میگرن). اینجا صحنه کاملاً صاف می‌شود؛ همان
+         چیدمانی که موبایل می‌بیند. */
+      @media (prefers-reduced-motion:reduce){
+        .stage{height:auto}
+        .sticky{position:static;height:auto;overflow:visible}
+        .scene{grid-template-columns:1fr}
+        .dots,.scroll-hint{display:none}
+        .phone{transform:none!important}
+        .copy{min-height:0;display:flex;flex-direction:column;gap:52px}
+        .copy-item{position:static;opacity:1!important;transform:none!important}
+        .phone-3d{position:sticky;top:14vh}
+      }
+
+      /* دو تکه‌ی کمکی، فقط برای اینکه پیش‌نمایش شبیه یک صفحه‌ی واقعی باشد */
+      .intro,.outro{min-height:62vh;display:grid;place-items:center;text-align:center}
+      .intro h1{font-size:clamp(31px,6vw,54px);line-height:1.32;margin:0 0 16px}
+      .intro h1 .accent{background:linear-gradient(120deg,var(--primary),#e11d48);
+        -webkit-background-clip:text;background-clip:text;color:transparent}
+      .intro p,.outro p{color:var(--muted);max-width:46ch;margin:0 auto}
+      .note{background:var(--card);border:1px solid var(--border);border-radius:20px;
+        padding:20px 24px;margin:0 auto;max-width:640px;font-size:14px;color:var(--muted)}
+    </style>
+  </head>
+
+  <body>
+    <div class="intro wrap">
+      <div>
+        <h1>عادت‌هایت را بساز<br /><span class="accent">و ول نکن</span></h1>
+        <p>اسکرول کن ↓</p>
+      </div>
+    </div>
+
+    <section class="stage" id="stage" aria-label="معرفی بخش‌های برنامه">
+      <div class="sticky">
+        <div class="scene">
+          <!-- متن اول می‌آید تا در RTL سمت راست بنشیند، جایی که چشم شروع می‌کند -->
+          <div class="copy" id="copy">
+            <div class="copy-item">
+              <span class="tag">امروز</span>
+              <h2>صبح که باز می‌کنی، همه‌چیز جلوی چشمت است</h2>
+              <p>درصد پیشرفت روز، کارها، و عادت‌هایی که مانده. یک صفحه، بدون گشتن.</p>
+              <div class="m-shot"><img src="shots/today-dark.webp" width="804" height="1748" loading="lazy" alt="صفحه‌ی امروز: حلقه‌ی پیشرفت روز، نوار هفته و فهرست عادت‌ها" /></div>
+            </div>
+            <div class="copy-item">
+              <span class="tag">عادت‌ها</span>
+              <h2>زنجیره را نشکن</h2>
+              <p>چند روز پشت سر هم انجامش داده‌ای و این ماه چقدر جلو رفته‌ای — روی همان کارت.</p>
+              <div class="m-shot"><img src="shots/habits-dark.webp" width="804" height="1748" loading="lazy" alt="صفحه‌ی عادت‌ها: کارت هر عادت با استریک و پیشرفت ماهانه" /></div>
+            </div>
+            <div class="copy-item">
+              <span class="tag">آنالیز</span>
+              <h2>ببین کجا خوب بودی، کجا لنگیدی</h2>
+              <p>این هفته کنار هفته‌ی قبل. ماه و سه‌ماهه هم هست، با شبکه‌ی رنگیِ هر عادت.</p>
+              <div class="m-shot"><img src="shots/analytics-dark.webp" width="804" height="1748" loading="lazy" alt="صفحه‌ی آنالیز: مقایسه‌ی هفته‌ها و نمودار ماه" /></div>
+            </div>
+            <div class="copy-item">
+              <span class="tag">تایمر تمرکز</span>
+              <h2>بنشین و فقط همان یک کار را بکن</h2>
+              <p>پومودورو که به عادتت وصل است و خودش ثبت می‌شود. چیزی دستی وارد نمی‌کنی.</p>
+              <div class="m-shot"><img src="shots/timer-dark.webp" width="804" height="1748" loading="lazy" alt="صفحه‌ی تایمر: پومودورو با شمارش معکوس" /></div>
+            </div>
+            <div class="copy-item">
+              <span class="tag">ژورنال</span>
+              <h2>آخر شب، چند خط برای خودت</h2>
+              <p>یک ایموجی، یک نمره. یک ماه بعد که برمی‌گردی، خودت الگوها را می‌بینی.</p>
+              <div class="m-shot"><img src="shots/journal-dark.webp" width="804" height="1748" loading="lazy" alt="صفحه‌ی ژورنال: حال‌وهوا با ایموجی و نمره‌ی روز" /></div>
+            </div>
+          </div>
+
+          <div class="phone-3d">
+            <div class="phone" id="phone">
+              <div class="screens" id="screens">
+                <img src="shots/today-dark.webp"     width="804" height="1748" alt="" aria-hidden="true" />
+                <img src="shots/habits-dark.webp"    width="804" height="1748" alt="" aria-hidden="true" loading="lazy" />
+                <img src="shots/analytics-dark.webp" width="804" height="1748" alt="" aria-hidden="true" loading="lazy" />
+                <img src="shots/timer-dark.webp"     width="804" height="1748" alt="" aria-hidden="true" loading="lazy" />
+                <img src="shots/journal-dark.webp"   width="804" height="1748" alt="" aria-hidden="true" loading="lazy" />
+              </div>
+              <div class="glare"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="dots" id="dots" role="tablist" aria-label="بخش‌ها"></div>
+        <div class="scroll-hint" id="hint">اسکرول کن</div>
+      </div>
+    </section>
+
+    <div class="outro wrap">
+      <p class="note">
+        اینجا ته صحنه است. بقیه‌ی صفحه (تم روشن/تاریک، دستگاه‌ها، فوتر) دست‌نخورده
+        باقی می‌ماند — این پیش‌نمایش فقط همان یک بخشِ چرخان را نشان می‌دهد.
+      </p>
+    </div>
+
+    <script>
+      (function () {
+        var stage   = document.getElementById("stage");
+        var phone   = document.getElementById("phone");
+        var screens = [].slice.call(document.getElementById("screens").children);
+        var items   = [].slice.call(document.getElementById("copy").children);
+        var dotsBox = document.getElementById("dots");
+        var hint    = document.getElementById("hint");
+        var N = screens.length;
+
+        /* حالت‌های گوشی در هر فاز. عددها دستی تنظیم شده‌اند تا هر گذر یک
+           «چرخشِ کوتاه و برگشت» حس شود، نه یک چرخِ یکنواخت.
+           علامت rotateY در صفحه‌ی راست‌به‌چپ برعکس حالت چپ‌به‌راست است: گوشی
+           باید رو به متن بچرخد و متن اینجا سمت راست است. */
+        var KEYS = [
+          { ry:   0, rx:  0, rz:  0, s: 1.00, x:   0 },
+          { ry:  17, rx:  6, rz: -3, s: 0.95, x:  14 },
+          { ry: -13, rx: -4, rz:  2, s: 1.03, x: -10 },
+          { ry:  11, rx:  7, rz: -2, s: 0.96, x:  12 },
+          { ry:   0, rx:  0, rz:  0, s: 1.05, x:   0 }
+        ];
+
+        /* smoothstep: نزدیک هر فاز تقریباً می‌ایستد و وسط راه تند می‌شود.
+           همان چیزی که حرکت را «طراحی‌شده» نشان می‌دهد نه خطی. */
+        var ease = function (t) { return t * t * (3 - 2 * t); };
+        var clamp = function (v, a, b) { return v < a ? a : v > b ? b : v; };
+        var lerp = function (a, b, t) { return a + (b - a) * t; };
+
+        var current = -1;
+        var reduced = matchMedia("(prefers-reduced-motion: reduce)");
+        var flat = matchMedia("(max-width: 860px)");
+        var ticking = false;
+
+        for (var i = 0; i < N; i++) {
+          (function (idx) {
+            var b = document.createElement("button");
+            b.setAttribute("role", "tab");
+            b.setAttribute("aria-label", "بخش " + (idx + 1));
+            b.addEventListener("click", function () {
+              var top = stage.offsetTop;
+              var span = stage.offsetHeight - innerHeight;
+              scrollTo({ top: top + (span * idx) / (N - 1), behavior: "smooth" });
+            });
+            dotsBox.appendChild(b);
+          })(i);
+        }
+
+        function render() {
+          ticking = false;
+          /* در حالتِ صاف (موبایل یا «حرکت کمتر») CSS همه‌چیز را نشان می‌دهد و
+             JS نباید چیزی را با استایلِ inline خراب کند. */
+          if (flat.matches || reduced.matches) return;
+
+          var span = stage.offsetHeight - innerHeight;
+          var p = clamp((scrollY - stage.offsetTop) / (span || 1), 0, 1);
+          var pos = p * (N - 1);
+          var i = clamp(Math.floor(pos), 0, N - 2);
+          var t = ease(pos - i);
+
+          var a = KEYS[i], b = KEYS[i + 1];
+          phone.style.transform =
+            "translate3d(" + lerp(a.x, b.x, t).toFixed(2) + "px,0,0) " +
+            "rotateY(" + lerp(a.ry, b.ry, t).toFixed(2) + "deg) " +
+            "rotateX(" + lerp(a.rx, b.rx, t).toFixed(2) + "deg) " +
+            "rotateZ(" + lerp(a.rz, b.rz, t).toFixed(2) + "deg) " +
+            "scale(" + lerp(a.s, b.s, t).toFixed(4) + ")";
+
+          for (var k = 0; k < N; k++) {
+            /* محوشدنِ متقابل، لایه‌ای — نه بر اساس فاصله.
+               اگر هر دو عکس با فاصله محو شوند، وسطِ هر گذر هر دو روی ۰٫۱۵
+               می‌نشینند و چون پشتشان سیاه است، صفحه‌ی گوشی چهار بار در طول
+               اسکرول سیاه می‌زند. اینجا عکسِ فعلی کاملاً کدر می‌ماند و عکسِ
+               بعدی — که در DOM بعد از آن و در نتیجه رویش است — از صفر باز
+               می‌شود. هیچ لحظه‌ای بدون یک لایه‌ی کاملاً کدر نداریم. */
+            screens[k].style.opacity = k === i ? 1 : k === i + 1 ? t : 0;
+
+            /* متن اما باید کاملاً برود و بعدی بیاید: دو متنِ نیمه‌شفاف روی هم
+               خوانده نمی‌شود. پس این یکی بر اساس فاصله است. */
+            var d = Math.abs(pos - k);
+            var o = clamp(1 - d * 2.3, 0, 1);
+            items[k].style.opacity = o;
+            items[k].style.transform = "translateY(" + ((pos - k) * -20).toFixed(1) + "px)";
+            /* متنِ محوشده نباید با Tab قابل رسیدن یا برای screen reader فعال
+               بماند، وگرنه کاربر روی چیزی می‌رود که دیده نمی‌شود. */
+            items[k].style.visibility = o < 0.02 ? "hidden" : "visible";
+          }
+
+          var near = Math.round(pos);
+          if (near !== current) {
+            current = near;
+            for (var m = 0; m < N; m++)
+              dotsBox.children[m].setAttribute("aria-current", m === near ? "true" : "false");
+          }
+          hint.style.opacity = p > 0.04 ? 0 : 1;
+        }
+
+        addEventListener("scroll", function () {
+          if (!ticking) { ticking = true; requestAnimationFrame(render); }
+        }, { passive: true });
+        addEventListener("resize", render);
+        reduced.addEventListener("change", render);
+        flat.addEventListener("change", render);
+        render();
+      })();
+    </script>
+  </body>
+</html>
