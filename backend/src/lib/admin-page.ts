@@ -13,7 +13,7 @@ export const ADMIN_PAGE = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow">
-<title>روتینو — پنل مدیریت</title>
+<title>Novino — پنل مدیریت</title>
 <style>
   :root{--bg:#f6f5f2;--card:#fff;--line:#e7e5e4;--txt:#1c1917;--mut:#78716c;--brand:#f97316;--ok:#16a34a;--bad:#dc2626}
   *{box-sizing:border-box}
@@ -50,7 +50,7 @@ export const ADMIN_PAGE = `<!doctype html>
 </style>
 </head>
 <body>
-<header><h1>🛠️ روتینو — پنل مدیریت</h1><button class="ghost act" id="logout" style="display:none">خروج</button></header>
+<header><h1>🛠️ Novino — پنل مدیریت</h1><button class="ghost act" id="logout" style="display:none">خروج</button></header>
 
 <div id="login">
   <h2>ورود مدیر</h2>

@@ -4,7 +4,7 @@ const config: CapacitorConfig = {
   // appId باید یکتا باشد؛ فرمت معکوس دامنه (reverse-DNS). قبل از انتشار در
   // App Store / Google Play این مقدار را با دامنه‌ی واقعی خودت جایگزین کن.
   appId: 'com.routino.app',
-  appName: 'Routino',
+  appName: 'Novino',
   // خروجی بیلد SPA که vite.mobile.config.ts می‌سازد
   webDir: 'www',
   server: {

@@ -45,10 +45,10 @@ Cloudflare Pages + Supabase Edge.
 
 | تکه | آدرس / مقدار | وضعیت |
 |---|---|---|
-| بک‌اند (Supabase Edge) | `api.routino.me/health` → `{ok:true}` | ✅ بالا |
-| دیتابیس | `api.routino.me/health/ready` → `db:up` | ✅ وصل |
-| Cloudflare Worker | `api.routino.me` | ✅ کار می‌کند |
-| سایت اصلی (CF Pages) | `routino.me` → HTTP 200 | ✅ بالا |
+| بک‌اند (Supabase Edge) | `api.novino.app/health` → `{ok:true}` | ✅ بالا |
+| دیتابیس | `api.novino.app/health/ready` → `db:up` | ✅ وصل |
+| Cloudflare Worker | `api.novino.app` (Worker: `novino-api`) | ✅ کار می‌کند |
+| سایت اصلی (CF Pages) | `novino.app` → HTTP 200 | ✅ بالا |
 | پلن‌ها (از DB) | `/v1/plans` → m1=۵۹k، m3=۱۴۹k، m12=۴۴۹k تومان | ✅ seed شده |
 | `NODE_ENV` / `DB_DRIVER` | `production` / `postgres` | ✅ درست |
 | **`SMS_PROVIDER`** | **`console`** | ❌ **پیامک تستی — کاربر واقعی کد ورود نمی‌گیرد** |
@@ -101,8 +101,8 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
 ## نقشه
 
 ```
-کاربر ── routino.me ──────────► Cloudflare Pages (وب‌اپ)
-کاربر ── api.routino.me ─────► Cloudflare Worker (cloudflare/api-worker.js)
+کاربر ── novino.app ──────────► Cloudflare Pages (وب‌اپ)
+کاربر ── api.novino.app ─────► Cloudflare Worker (cloudflare/api-worker.js)
                                   │  + x-proxy-secret  + x-client-ip
                                   ▼
                     Supabase Edge Function «api» (Deno + Hono)
@@ -166,9 +166,9 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
    | `DATABASE_URL` | رشته‌ی **Transaction pooler (پورت 6543)** پروژه |
    | `JWT_SECRET` / `OTP_PEPPER` / `ADMIN_TOKEN` | رمزهای تصادفی تولیدشده |
    | `PROXY_SECRET` | همان مقدار Worker |
-   | `PUBLIC_API_URL` | `https://api.routino.me` |
-   | `PUBLIC_WEB_URL` | `https://routino.me` |
-   | `CORS_ORIGINS` | `https://routino.me,https://localhost,capacitor://localhost` |
+   | `PUBLIC_API_URL` | `https://api.novino.app` |
+   | `PUBLIC_WEB_URL` | `https://novino.app` |
+   | `CORS_ORIGINS` | `https://novino.app,https://localhost,capacitor://localhost` |
    | `OWNER_PHONE` / `OWNER_PASSWORD` / `OWNER_USERNAME` | اختیاری — بوت‌استرپ حساب صاحب اپ برای ورود با رمز از همان بوت اول (بخش «ورود با رمز عبور» بالا) |
    | `SMS_PROVIDER` | فعلاً `console` (کد ورود در لاگ تابع) → بعداً `kavenegar` + `KAVENEGAR_API_KEY` (+ `KAVENEGAR_TEMPLATE` اگر نام قالب ≠ `routino-otp`) |
    | `PSP_PROVIDER` | فعلاً `zibal` با `ZIBAL_MERCHANT=zibal` (سندباکس) → بعداً مرچنت واقعی / `PSP_PROVIDERS=zarinpal,zibal` |
@@ -183,19 +183,22 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
    npx wrangler deploy --config cloudflare/wrangler.toml
    ```
 
-   **اسم Worker: `plain-field-ead8`** — اسم تصادفیِ ساختِ Cloudflare، چون Worker
-   یک بار دستی در داشبورد ساخته شده. در `cloudflare/wrangler.toml` نوشته شده و
-   **نباید به چیز خواناتری تغییرش داد**: عوض‌کردن اسم آن‌جا Worker را رنیم
-   نمی‌کند، یک Worker **دومِ خالی** می‌سازد، `api.routino.me` روی کد قدیمی
-   می‌ماند، و دیپلوی «موفق» گزارش می‌دهد.
+   **اسم Worker: `novino-api`** — این بار با یک اسم خوانا ساخته شده (نه
+   Cloudflare-generated). در `cloudflare/wrangler.toml` هم `account_id` پین
+   شده (اکانت Cloudflare جدید: `Amir.templates@gmail.com`, id
+   `f101b0fd515f64194fe0ca362e166358`) تا دیپلوی هیچ‌وقت مجبور به حدس‌زدن
+   اکانت از طریق `/memberships` نشود (Account API Tokenها آن اندپوینت را
+   نمی‌توانند صدا بزنند و دیپلوی با خطای 400 شکست می‌خورد).
+   **همچنان نباید اسم را دستی توی داشبورد عوض کرد**: تغییر `name` در این فایل
+   بدون تغییر اسم واقعی Worker در داشبورد یک Worker دومِ خالی می‌سازد و
+   `api.novino.app` روی کد قدیمی می‌ماند.
 
-   > 🔴 **این دقیقاً همان چیزی است که ۱۶ روز اتفاق افتاد.** نسخه‌ی قبلی همین بند
-   > ادعا می‌کرد «Worker به اسم `routino` با هر push از گیت دیپلوی می‌شود» —
-   > هر سه جزئش غلط بود (`routino` اسم پروژه‌ی **Pages** است؛ `wrangler.toml`
-   > در `cloudflare/` است نه ریشه؛ و `name` داخلش یک placeholder پرنشده بود).
-   > نتیجه: آخرین دیپلوی واقعی Worker **۲۰ جولای** بود و دو کامیت
-   > (`a73e313` و `f700b02` — که CSP پنل ادمین را برمی‌گرداند) هرگز به
-   > پروداکشن نرسیدند، در حالی که همه فکر می‌کردند رسیده‌اند.
+   > 🔴 **تاریخچه (روتینو/`plain-field-ead8`):** قبلاً همین ستاپ روی
+   > `routino.me` و اکانت Cloudflare قدیمی (`amir87.s.business@gmail.com`) بود؛
+   > Worker آن‌جا `plain-field-ead8` نام داشت (اسم تصادفیِ Cloudflare، چون یک‌بار
+   > دستی در داشبورد ساخته شده بود) و ۲۰۲۶-۰۸-۱۲ کل زیرساخت (Pages + Worker) به
+   > این اکانت و دامنه‌ی جدید منتقل شد؛ `routino.me` و آن اکانت برای یک پروژه‌ی
+   > دیگر کنار گذاشته شدند، بدون هیچ ریدایرکتی به novino.app.
    > **درس:** بعد از هر تغییر `cloudflare/api-worker.js`، دیپلوی را با یک
    > چک واقعی تأیید کن، نه با «push شد پس رفت».
 
@@ -206,13 +209,13 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
      فایل؛ و باید با `PROXY_SECRET` تابع Supabase یکی باشد وگرنه همه‌چیز ۴۰۳.
      `wrangler deploy` سکرت‌های موجود را پاک نمی‌کند.
    - `cloudflare/wrangler.toml` عمداً route/custom-domain ندارد، تا دیپلوی با
-     اتصالِ موجودِ `api.routino.me` سر شاخ نشود.
+     اتصالِ موجودِ `api.novino.app` سر شاخ نشود.
 
    **تست دودِ Worker بعد از هر دیپلوی** (هر سه باید درست باشند):
    ```bash
-   curl -s https://api.routino.me/health                      # {"ok":true}
-   curl -sI https://api.routino.me/admin | grep -i content-security-policy   # باید باشد
-   for i in 1 2 3; do curl -sI --compressed https://api.routino.me/v1/plans | grep -i sb-request-id; done
+   curl -s https://api.novino.app/health                      # {"ok":true}
+   curl -sI https://api.novino.app/admin | grep -i content-security-policy   # باید باشد
+   for i in 1 2 3; do curl -sI --compressed https://api.novino.app/v1/plans | grep -i sb-request-id; done
    # ↑ خطِ دوم و سوم باید شناسه‌ی یکسان بدهند = کش لبه کار می‌کند
    ```
 
@@ -222,8 +225,8 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
    سالم است. ضمناً کش هر دیتاسنترِ Cloudflare جداست، پس شناسه‌ها بین شبکه‌های
    مختلف لزوماً یکی نیستند.
 
-6. **تست دود**: `https://api.routino.me/health` و `/health/ready` باید
-   `{ok:true}` بدهند؛ `https://routino.me` → ورود با شماره → کد را از
+6. **تست دود**: `https://api.novino.app/health` و `/health/ready` باید
+   `{ok:true}` بدهند؛ `https://novino.app` → ورود با شماره → کد را از
    Dashboard → Edge Functions → api → Logs بردار.
 
 ---

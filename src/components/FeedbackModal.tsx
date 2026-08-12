@@ -54,7 +54,7 @@ export function FeedbackModal({
   };
 
   return (
-    <Modal open={open} onClose={() => finish(false)} title={t("نظرت درباره روتینو؟", "How is Routino?")}>
+    <Modal open={open} onClose={() => finish(false)} title={t("نظرت درباره نوینو؟", "How is Novino?")}>
       <div className="flex flex-col gap-4">
         <div className="flex justify-center gap-2" dir="ltr">
           {[1, 2, 3, 4, 5].map((s) => (

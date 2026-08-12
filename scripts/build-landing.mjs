@@ -23,7 +23,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = join(ROOT, "dist");
 
 /** آدرسِ عمومی سایت. در متاتگ‌ها، sitemap و robots تکرار می‌شود، پس یک‌جا. */
-const SITE = "https://routino.me";
+const SITE = "https://novino.app";
 
 /** HTML-escape. متن از ما می‌آید نه از کاربر، ولی یک `<` بی‌جا نباید صفحه را
  * خراب کند. کد اینماد عمداً از این مسیر رد نمی‌شود (باید عیناً درج شود). */

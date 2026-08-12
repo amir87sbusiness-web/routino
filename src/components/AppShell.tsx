@@ -22,7 +22,7 @@ function Splash() {
     <div className="flex min-h-screen items-center justify-center bg-background">
       <div className="flex flex-col items-center gap-3">
         <Logo className="h-16 w-16" />
-        <p className="text-sm font-medium text-muted-foreground">روتینو · Routino</p>
+        <p className="text-sm font-medium text-muted-foreground">Novino</p>
       </div>
     </div>
   );
@@ -127,7 +127,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           <Logo className="h-10 w-10" />
           <div>
-            <p className="text-sm font-black text-foreground">{t("روتینو", "Routino")}</p>
+            <p className="text-sm font-black text-foreground">{t("Novino", "Novino")}</p>
             <p className="text-[10px] text-muted-foreground">
               {t("عادت‌ساز روزانه", "Daily habit builder")}
             </p>
@@ -171,7 +171,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             className="-mx-1 flex items-center gap-2 rounded-xl px-1 py-0.5 transition-colors hover:bg-secondary lg:hidden"
           >
             <Logo className="h-8 w-8" />
-            <span className="text-sm font-black text-foreground">{t("روتینو", "Routino")}</span>
+            <span className="text-sm font-black text-foreground">{t("Novino", "Novino")}</span>
           </Link>
           <span className="hidden text-sm font-bold text-foreground lg:block">
             {NAV.find((n) => n.to === pathname)

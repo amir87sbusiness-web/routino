@@ -60,7 +60,7 @@ export function renderResultPage(
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>روتینو — نتیجه پرداخت</title>
+<title>Novino — نتیجه پرداخت</title>
 <style>
   body{margin:0;font-family:Vazirmatn,Tahoma,sans-serif;background:#f8f7f4;color:#1c1917;
        min-height:100vh;display:flex;align-items:center;justify-content:center}
@@ -79,7 +79,7 @@ export function renderResultPage(
   <div class="icon">${ok ? "✅" : outcome === "canceled" ? "↩️" : outcome === "pending" ? "⏳" : "❌"}</div>
   <h1>${title}</h1>
   <p>${detail}</p>
-  <a class="btn" href="${esc(target)}">بازگشت به روتینو</a>
+  <a class="btn" href="${esc(target)}">بازگشت به نوینو</a>
   ${native ? `<a class="alt" href="${esc(webUrl)}">باز نشد؟ نسخه وب را باز کن</a>` : ""}
 </div>
 <script>

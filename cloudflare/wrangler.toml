@@ -1,23 +1,22 @@
-# Cloudflare Workers Builds config — this is what lets `api.routino.me` deploy
+# Cloudflare Workers Builds config — this is what lets `api.novino.app` deploy
 # from git instead of being pasted into the dashboard by hand.
 #
 # Kept OUT of the repo root deliberately. The root is the build directory of the
-# Cloudflare PAGES project (also called `routino`) that serves routino.me, and a
+# Cloudflare PAGES project (also called `novino`) that serves novino.app, and a
 # wrangler config there is read as a Pages config — where `main` is not a valid
 # key and `pages_build_output_dir` is required. Risking the frontend build to
 # save a header is a bad trade, so this stays in `cloudflare/` and the Worker's
 # build must set:  Worker → Settings → Build → Root directory = `cloudflare`
 #
-# ⚠️ `routino` in the dashboard is the PAGES project (the frontend), NOT this.
-# Do not "correct" the name below to something readable: it is the real,
-# Cloudflare-generated name of the Worker that owns the api.routino.me custom
-# domain, confirmed 2026-08-05 from the dashboard list. Renaming it here does
-# not rename the Worker — it creates a SECOND, empty one, leaves api.routino.me
-# serving the old code, and reports success. That is not hypothetical: this file
-# carried a placeholder name for 16 days, so two committed worker changes
-# (a73e313, f700b02 — the latter restoring the admin panel's CSP) sat undeployed
-# while the deploy guide insisted they shipped on every push.
-name = "plain-field-ead8"
+# ⚠️ `novino` in the dashboard is the PAGES project (the frontend), NOT this.
+# Renaming the Worker below does not rename an existing deployed Worker under
+# an account — it creates a SECOND, empty one and leaves the custom domain
+# serving the old code while reporting success. Only rename this if you also
+# rename the Worker in the dashboard (or accept that a fresh Worker is created).
+name = "novino-api"
+# Pinned so `wrangler deploy` never has to disambiguate via the Cloudflare
+# /memberships endpoint, which Account-scoped API tokens can't call.
+account_id = "f101b0fd515f64194fe0ca362e166358"
 
 main = "api-worker.js"
 compatibility_date = "2025-09-01"
@@ -29,8 +28,8 @@ compatibility_date = "2025-09-01"
 #    Worker reads it as `env.PROXY_SECRET`; the Supabase function must hold the
 #    identical value or every request through this Worker gets a 403.
 #
-#  - routes / custom domains. `api.routino.me` is already attached in the
-#    dashboard, and declaring it here would risk this file fighting that
+#  - routes / custom domains. `api.novino.app` is attached in the dashboard
+#    instead, and declaring it here would risk this file fighting that
 #    binding on every deploy. Leaving it out means the existing binding is
 #    simply left alone.
 
