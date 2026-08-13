@@ -14,11 +14,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>قوانین و حریم خصوصی | Novino</title>
-    <meta name="description" content="قوانین و مقررات، حریم خصوصی و راه‌های تماس با پشتیبانی Novino." />
+    <title>قوانین و حریم خصوصی | روتینو</title>
+    <meta name="description" content="قوانین و مقررات، حریم خصوصی و راه‌های تماس با پشتیبانی روتینو." />
     <link rel="icon" href="/favicon.svg" />
-    <link rel="canonical" href="https://novino.app/legal/" />
-    <meta name="theme-color" content="#0e0a08" />
+    <meta name="theme-color" content="#f97316" />
     <style>
       @font-face {
         font-family: Vazirmatn; src: url(/fonts/vazirmatn-arabic-400.woff2) format("woff2");
@@ -34,29 +33,24 @@
         font-family: Vazirmatn; src: url(/fonts/vazirmatn-latin-400.woff2) format("woff2");
         font-weight: 400; font-display: swap; unicode-range: U+0000-00FF, U+2000-206F;
       }
-      /* عیناً همان توکن‌هایی که صفحه‌ی اصلی و تم تاریکِ اپ دارند. قبلاً این صفحه
-         پالتِ جداگانه‌ی خودش را داشت (روشن، با نارنجیِ قدیمیِ #f97316) و
-         بازدیدکننده با کلیک روی «قوانین» انگار به سایتِ دیگری می‌رفت. حالت
-         روشن هم عمداً برداشته شد: صفحه‌ی اصلی حالتِ روشن ندارد. */
       :root {
-        color-scheme: dark;
-        --bg: #0e0a08; --card: #1a1512; --fg: #f3f1ee; --muted: #b3aea9;
-        --faint: #7b7671; --primary: #fe7825; --border: #322d29;
+        --bg: #faf9f7; --card: #fff; --fg: #1c1917; --muted: #57534e;
+        --faint: #8a827c; --primary: #f97316; --border: #e9e6e2;
+        --ring: rgba(249,115,22,.14);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root { --bg:#0b0a09; --card:#171513; --fg:#faf9f8; --muted:#a8a29e;
+                --faint:#7c756f; --primary:#fb8b3c; --border:#2a2724; --ring:rgba(251,139,60,.16); }
       }
       * { box-sizing: border-box; }
       html { scroll-behavior: smooth; }
       body {
         margin: 0; background: var(--bg); color: var(--fg);
-        font-family: "Vazirmatn", system-ui, sans-serif;
+        font-family: Vazirmatn, "Segoe UI", Tahoma, system-ui, sans-serif;
         line-height: 2; -webkit-font-smoothing: antialiased;
       }
-      ::selection { background: var(--primary); color: #0a0704; }
-      :focus-visible { outline: 2px solid var(--primary); outline-offset: 3px; border-radius: 6px; }
       .wrap { max-width: 760px; margin: 0 auto; padding: 0 22px; }
-      /* `:not(.toc)` لازم است: فهرستِ داخلیِ صفحه هم یک `<nav>` است و با سلکتورِ
-         بی‌قید، پس‌زمینه و خطِ زیرینِ نوارِ بالا را می‌گرفت و پشتِ دکمه‌هایش یک
-         نوارِ روشنِ بی‌دلیل می‌افتاد. */
-      nav:not(.toc) { border-bottom: 1px solid var(--border); background: var(--card); }
+      nav { border-bottom: 1px solid var(--border); background: var(--card); }
       .nav-in { display: flex; align-items: center; justify-content: space-between; height: 66px; }
       .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; text-decoration: none; color: inherit; }
       /* لوگوی خودِ برنامه (`public/favicon.svg`)؛ نارنجی و گوشه‌ی گرد داخل SVG است. */
@@ -96,7 +90,7 @@
   <body>
     <nav>
       <div class="wrap nav-in">
-        <a class="brand" href="/"><img class="mark" src="/favicon.svg" width="32" height="32" alt="" aria-hidden="true" /><span>Novino</span></a>
+        <a class="brand" href="/"><img class="mark" src="/favicon.svg" width="32" height="32" alt="" aria-hidden="true" /><span>روتینو</span></a>
         <a class="back" href="/">← بازگشت به صفحه‌ی اصلی</a>
       </div>
     </nav>
@@ -116,7 +110,7 @@
 
       <footer>
         <div class="seal"><!--ENAMAD--></div>
-        <div class="copy">© Novino، همه‌ی حقوق محفوظ است.</div>
+        <div class="copy">© روتینو، همه‌ی حقوق محفوظ است.</div>
       </footer>
     </div>
   </body>

@@ -55,7 +55,7 @@ export function zarinpalPsp(merchant: string): PspProvider {
         amount: input.amountRial,
         currency: "IRR",
         callback_url: input.callbackUrl,
-        description: input.description ?? "Novino",
+        description: input.description ?? "Routino",
         metadata: input.mobile ? { mobile: input.mobile } : undefined,
       });
 

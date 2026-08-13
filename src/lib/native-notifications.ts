@@ -83,7 +83,7 @@ export async function syncRecurringReminders(db: Db): Promise<void> {
     const [hh, mm] = db.settings.journalReminder.split(":").map(Number);
     toSchedule.push({
       id: idFromString("journal-daily"),
-      title: fa ? "ژورنال نوینو" : "Novino Journal",
+      title: fa ? "ژورنال روتینو" : "Routino Journal",
       body: fa ? "وقت ژورنال‌نویسیه ✍️" : "Time to write your journal ✍️",
       schedule: { on: { hour: hh, minute: mm } },
       extra: { kind: "recurring" },

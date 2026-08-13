@@ -17,13 +17,9 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import sharp from "sharp";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const OUT_DIR = join(ROOT, "dist");
-
-/** آدرسِ عمومی سایت. در متاتگ‌ها، sitemap و robots تکرار می‌شود، پس یک‌جا. */
-const SITE = "https://novino.app";
 
 /** HTML-escape. متن از ما می‌آید نه از کاربر، ولی یک `<` بی‌جا نباید صفحه را
  * خراب کند. کد اینماد عمداً از این مسیر رد نمی‌شود (باید عیناً درج شود). */
@@ -160,56 +156,6 @@ function copyShots(htmlPages) {
   return { count: used.size, skipped: available.length - used.size, bytes };
 }
 
-/**
- * عکسِ پیش‌نمایشِ اشتراک‌گذاری، ۱۲۰۰×۶۳۰.
- *
- * چرا ساخته می‌شود و مستقیم به اسکرین‌شات لینک نمی‌دهیم؟ چون `desktop-dark.webp`
- * دو چیز دارد که برای پیش‌نمایش بد است: ۲۸۸۰×۱۸۰۰ است (نسبتِ اشتباه، حجمِ زیاد)
- * و webp است — تلگرام و واتساپ که بیشترین سهمِ اشتراکِ این لینک‌اند، همیشه webp
- * را رندر نمی‌کنند. `contain` روی زمینه‌ی برند، نه `cover`: با cover بالا و
- * پایینِ نمای اپ بریده می‌شد.
- */
-async function makeOgImage() {
-  const src = join(ROOT, "landing", "shots", "desktop-dark.webp");
-  if (!existsSync(src)) throw new Error("shots/desktop-dark.webp نیست — عکسِ پیش‌نمایش از همان ساخته می‌شود");
-  const out = join(OUT_DIR, "og.jpg");
-  await sharp(src)
-    .resize(1200, 630, { fit: "contain", background: "#0e0a08" })
-    .jpeg({ quality: 82, mozjpeg: true })
-    .toFile(out);
-  return statSync(out).size;
-}
-
-/**
- * robots و sitemap.
- *
- * ⚠️ `public/robots.txt` وجود دارد ولی `vite build` آن را داخلِ `dist/app/`
- * می‌گذارد، و خزنده فقط `/robots.txt` را می‌خواند — یعنی تا امروز عملاً هیچ
- * robotsی نداشتیم. این یکی در ریشه می‌نشیند.
- *
- * `/app/` عمداً از ایندکس بیرون است: خودِ برنامه پشتِ ورود است و صفحه‌ی خالیِ
- * لودینگ ایندکس‌شدنی نیست. ASCII، مثل بقیه‌ی فایل‌های پیکربندی.
- */
-function writeSeoFiles() {
-  writeFileSync(
-    join(OUT_DIR, "robots.txt"),
-    ["User-agent: *", "Allow: /", "Disallow: /app/", "", `Sitemap: ${SITE}/sitemap.xml`, ""].join("\n"),
-  );
-
-  const today = new Date().toISOString().slice(0, 10);
-  writeFileSync(
-    join(OUT_DIR, "sitemap.xml"),
-    [
-      '<?xml version="1.0" encoding="UTF-8"?>',
-      '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-      `  <url><loc>${SITE}/</loc><lastmod>${today}</lastmod><priority>1.0</priority></url>`,
-      `  <url><loc>${SITE}/legal/</loc><lastmod>${today}</lastmod><priority>0.3</priority></url>`,
-      "</urlset>",
-      "",
-    ].join("\n"),
-  );
-}
-
 function fill(templateName, replacements) {
   const tpl = readFileSync(join(ROOT, "landing", templateName), "utf8");
   let out = tpl;
@@ -220,7 +166,7 @@ function fill(templateName, replacements) {
   return out;
 }
 
-async function main() {
+function main() {
   const data = JSON.parse(readFileSync(join(ROOT, "src", "lib", "legal-text.json"), "utf8"));
   const { terms: TERMS, privacy: PRIVACY, enamadSeal: ENAMAD_SEAL } = data;
   validate(TERMS, "terms");
@@ -265,8 +211,6 @@ async function main() {
   const fontBytes = copyFonts();
   const logoBytes = copyLogo();
   const shots = copyShots([homeHtml, legalHtml]);
-  const ogBytes = await makeOgImage();
-  writeSeoFiles();
 
   // ── پیکربندی Cloudflare Pages ───────────────────────────
   // ASCII only, deliberately. The first version of this file had Persian
@@ -320,7 +264,7 @@ async function main() {
       `(${TERMS.length} بند قوانین، ${PRIVACY.length} بند حریم خصوصی، فونت ${kb(fontBytes)}، لوگو ${kb(logoBytes)}، ` +
       `${shots.count} عکس ${kb(shots.bytes)}` +
       (shots.skipped ? `، ${shots.skipped} عکسِ بی‌استفاده کپی نشد` : "") +
-      `، og.jpg ${kb(ogBytes)}، robots.txt + sitemap.xml)`,
+      `)`,
   );
 }
 

@@ -170,7 +170,7 @@ function PayResultPage() {
       <div className="flex w-full max-w-xs flex-col gap-2">
         {status === "paid" ? (
           <Button onClick={() => navigate({ to: "/" })} className="py-3">
-            {t("شروع نوینو 🚀", "Start Novino 🚀")}
+            {t("شروع روتینو 🚀", "Start Routino 🚀")}
           </Button>
         ) : (
           <>

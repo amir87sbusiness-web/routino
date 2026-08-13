@@ -198,7 +198,7 @@ function SubscribePage() {
     <div className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-5 bg-background px-5 py-screen-safe">
       <div className="flex flex-col items-center gap-2 text-center">
         <Logo className="h-14 w-14" />
-        <h1 className="text-xl font-black text-foreground">{t("اشتراک نوینو", "Novino Subscription")}</h1>
+        <h1 className="text-xl font-black text-foreground">{t("اشتراک روتینو", "Routino Subscription")}</h1>
         {db.meta.tampered && (
           <div className="flex items-center gap-2 rounded-xl bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
             <ShieldAlert className="h-4 w-4" />
@@ -219,8 +219,8 @@ function SubscribePage() {
         ) : (
           <p className="text-xs text-muted-foreground">
             {t(
-              "برای استفاده از نوینو به اشتراک فعال نیاز داری.",
-              "You need an active subscription to use Novino.",
+              "برای استفاده از روتینو به اشتراک فعال نیاز داری.",
+              "You need an active subscription to use Routino.",
             )}
           </p>
         )}

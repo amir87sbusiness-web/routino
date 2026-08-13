@@ -84,7 +84,7 @@ function TimerPage() {
   const notify = (body: string) => {
     if (typeof Notification !== "undefined" && Notification.permission === "granted") {
       try {
-        new Notification("Novino", { body });
+        new Notification("Routino", { body });
       } catch {
         /* noop */
       }

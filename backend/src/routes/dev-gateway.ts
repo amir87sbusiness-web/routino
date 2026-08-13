@@ -26,7 +26,7 @@ export const devGatewayRoutes: FastifyPluginAsync = async (app) => {
 <html lang="fa" dir="rtl">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Novino — درگاه تستی</title>
+<title>درگاه تستی روتینو</title>
 <style>
   body{margin:0;font-family:Vazirmatn,Tahoma,sans-serif;background:#eef2f7;min-height:100vh;
        display:flex;align-items:center;justify-content:center;color:#111}

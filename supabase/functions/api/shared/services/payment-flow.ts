@@ -187,7 +187,7 @@ export async function checkoutPayment(
     amountRial: q.finalRial,
     callbackUrl: `${env.PUBLIC_API_URL}/v1/payments/callback`,
     orderId: payment.id,
-    description: `Novino ${q.planId} (${q.months}m)`,
+    description: `Routino ${q.planId} (${q.months}m)`,
     mobile: toLocalPhone(user.phone),
   });
 

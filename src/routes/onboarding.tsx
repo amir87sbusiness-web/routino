@@ -35,8 +35,8 @@ function OnboardingPage() {
   const slides = [
     {
       emoji: "🎯",
-      titleFa: "به نوینو خوش اومدی!",
-      titleEn: "Welcome to Novino!",
+      titleFa: "به روتینو خوش اومدی!",
+      titleEn: "Welcome to Routino!",
       bodyFa: "عادت‌های خوب بساز، کارهات رو مدیریت کن و هر روز پیشرفتت رو ببین.",
       bodyEn: "Build good habits, manage your tasks, and see your progress every day.",
     },

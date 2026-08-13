@@ -147,7 +147,7 @@ function SettingsPage() {
     try {
       setPendingImport(parseBackup(await file.text()));
     } catch {
-      toast.error(t("این فایل یک پشتیبان معتبر نوینو نیست", "This isn't a valid Novino backup"));
+      toast.error(t("این فایل یک پشتیبان معتبر روتینو نیست", "This isn't a valid Routino backup"));
     }
   };
 
@@ -439,7 +439,7 @@ function SettingsPage() {
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="text-xs font-bold text-foreground">
-                {t("نظرت درباره نوینو", "Your feedback on Novino")}
+                {t("نظرت درباره روتینو", "Your feedback on Routino")}
               </p>
               <p className="text-[10px] text-muted-foreground">
                 {t("هر وقت حرفی داشتی، همین‌جا بگو.", "Tell us any time you have something to say.")}
@@ -747,7 +747,7 @@ function SettingsPage() {
       </Card>
 
       <p className="text-center text-[10px] text-muted-foreground">
-        {t("نوینو نسخه 1.0 - آفلاین فرست", "Novino v1.0 · offline-first")}
+        {t("روتینو نسخه 1.0 - آفلاین فرست", "Routino v1.0 · offline-first")}
       </p>
 
       {/* new category modal */}

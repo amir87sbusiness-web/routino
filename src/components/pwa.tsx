@@ -28,7 +28,7 @@ export function UpdateWatcher() {
 
   useEffect(() => {
     onNewVersion(() => {
-      toast(t("نسخه‌ی جدید نوینو آماده‌ست", "A new version of Novino is ready"), {
+      toast(t("نسخه‌ی جدید روتینو آماده‌ست", "A new version of Routino is ready"), {
         duration: Infinity,
         action: {
           label: t("بروزرسانی", "Update"),
@@ -96,7 +96,7 @@ export function InstallBanner() {
           <Download className="h-4 w-4" />
         </div>
         <div className="flex-1">
-          <p className="text-xs font-bold text-foreground">{t("نوینو رو نصب کن", "Install Novino")}</p>
+          <p className="text-xs font-bold text-foreground">{t("روتینو رو نصب کن", "Install Routino")}</p>
           <p className="text-[10px] text-muted-foreground">
             {t("سریع‌تر باز می‌شه و بدون اینترنت هم کار می‌کنه", "Opens faster and works without internet")}
           </p>

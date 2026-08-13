@@ -421,7 +421,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (!fired.has(k) && !cur.journal[dk]?.text) {
           newFired.push(k);
           newNotifs.push({
-            title: fa ? "ژورنال نوینو" : "Novino Journal",
+            title: fa ? "ژورنال روتینو" : "Routino Journal",
             body: fa ? "وقت ژورنال‌نویسیه ✍️" : "Time to write your journal ✍️",
           });
         }

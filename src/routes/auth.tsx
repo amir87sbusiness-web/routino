@@ -206,7 +206,7 @@ function AuthPage() {
         <div className="mb-8 flex flex-col items-center gap-3">
           <Logo className="h-16 w-16" />
           <h1 className="text-xl font-black text-foreground">
-            {t("ورود به نوینو", "Sign in to Novino")}
+            {t("ورود به روتینو", "Sign in to Routino")}
           </h1>
           <p className="text-center text-xs text-muted-foreground">
             {method === "password"

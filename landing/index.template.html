@@ -5,19 +5,11 @@
   ⚠️ قالب است؛ خروجی را `node scripts/build-landing.mjs` می‌سازد. متن حقوقی
   اینجا نیست: رفته به `/legal/` و فقط یک لینک کم‌رنگ در فوتر دارد.
 
-  ⚠️ **ساختار عمداً عیناً از productiveapp.io گرفته شده** — ده بخش، به همین
-  ترتیب و نه یکی بیشتر: نوار بالا، سرصفحه، گوشیِ سرصفحه، نوار اعتماد، چهار
-  ردیف قابلیت، ریلِ «چرا روتینو»، دکمه‌های گرفتن برنامه، بنر پایانی، فوتر.
-  **فقط شکل** گرفته شده: رنگ، فونت، متن، عکس و آیکون همه از خودِ روتینو است.
-
-  ⚠️ قاعده‌ی انیمیشن در این صفحه یک خط است: **هیچ متنی حرکت نمی‌کند.** فقط
-  تصویرها ظاهر می‌شوند، آن هم با opacity خالص بدون هیچ جابه‌جایی. نسخه‌ی قبل
-  روی تیتر و زیرنویسِ هر بخش انیمیشنِ `rise` داشت (opacity + translateY) —
-  عمداً برداشته شد، از قلم نیفتاده.
-
-  ⚠️ نوار بالا **sticky نیست**. با اسکرول بالا می‌رود و ناپدید می‌شود؛ نه
-  blur دارد نه خطِ زیرین که با اسکرول ظاهر شود. آن‌ها هم عمداً برداشته شدند.
-  دکمه‌ی شناورِ چسبانِ پایینِ موبایل (`.dock`) هم همین‌طور.
+  ⚠️ چیدمانِ صفحه عمداً از قراردادِ رایجِ سایت‌های اپِ موبایل گرفته شده — همان
+  ترتیبی که productiveapp.io هم دارد: سرصفحه‌ی دوستونه با گوشی، نوارِ چهارتاییِ
+  نشان‌ها، ردیف‌های یک‌درمیانِ قابلیت، کارت‌های «چرا ما»، نشان‌های فروشگاه،
+  بنرِ پایانی، فوتر. مالک همین را خواست. ولی **فقط شکل** گرفته شده: متن، رنگ،
+  فونت، تصویر و آیکون همه از خودِ روتینو است.
 
   ⚠️ اینجا حرفی از قیمت، اشتراک و دوره‌ی آزمایشی زده نمی‌شود. تصمیم مالک: صفحه‌ی
   اول فقط باید بازدیدکننده را ببرد داخل برنامه. اگر روزی خواستی قیمت را برگردانی،
@@ -32,57 +24,28 @@
   `aria-disabled` را بردار.
 
   ⚠️ **هیچ فیلمی روی این صفحه پخش نمی‌شود.** فقط عکسِ ثابت، با انیمیشنِ
-  ظاهرشدن — تصمیم مالک. عکس‌ها را `npm run shots` می‌گیرد و **`*-dark.webp`**اند،
-  یعنی رندرِ کاملِ خودِ اپ در ۸۰۴×۱۷۴۸ (دو برابرِ قابِ ۴۰۲×۸۷۴). قبلاً
-  `clip-*-still.webp` بود — فریمِ اولِ کلیپ‌ها در ۳۲۰×۶۹۶ — که روی هر صفحه‌ی
-  رتینا تار دیده می‌شد. فایل‌های `clip-*` هنوز در `landing/shots/` هستند ولی
-  چون ارجاع نمی‌شوند، بیلد آن‌ها را به `dist/` نمی‌برد.
+  ظاهرشدن — تصمیم مالک. عکس‌ها را `npm run shots` می‌گیرد (فریمِ اولِ کلیپ‌ها،
+  یعنی `clip-*-still.webp`). فایل‌های `clip-*.webp` هنوز در `landing/shots/`
+  هستند ولی چون در صفحه ارجاع نمی‌شوند، بیلد آن‌ها را به `dist/` نمی‌برد.
 -->
 <html lang="fa" dir="rtl">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Novino | عادت‌ساز روزانه</title>
+    <title>روتینو | عادت‌ساز روزانه با تقویم شمسی</title>
     <meta
       name="description"
-      content="عادت بساز، کارهای روزت رو بچین و پیشرفتت رو ببین. بدون تبلیغ، روی گوشی و لپ‌تاپ. بدون اینترنت هم کار می‌کنه."
+      content="عادت بساز، کارهای روزت رو بچین و پیشرفتت رو ببین. تقویم شمسی، بدون تبلیغ، روی گوشی و لپ‌تاپ. بدون اینترنت هم کار می‌کنه."
     />
     <link rel="icon" href="/favicon.svg" />
-    <link rel="canonical" href="https://novino.app/" />
-    <meta name="theme-color" content="#0e0a08" />
-
-    <!-- پیش‌نمایشِ اشتراک‌گذاری. لینکِ این سایت عمدتاً در تلگرام و واتساپ دست
-         به دست می‌شود، و آن‌ها عکسِ ۱۲۰۰×۶۳۰ می‌خواهند نه اسکرین‌شاتِ ۲۸۸۰×۱۸۰۰.
-         `og.jpg` را خودِ `build-landing.mjs` از همان عکسِ دسکتاپ می‌سازد؛ jpg
-         است نه webp، چون بعضی پیش‌نمایش‌سازها هنوز webp را رد می‌کنند. -->
-    <meta property="og:title" content="Novino | عادت‌ساز روزانه" />
+    <meta name="theme-color" content="#17120e" />
+    <meta property="og:title" content="روتینو | عادت‌ساز روزانه" />
     <meta property="og:description" content="عادت بساز، کارهات رو بچین و پیشرفتت رو ببین. روی گوشی و لپ‌تاپ، بدون تبلیغ." />
-    <meta property="og:image" content="https://novino.app/og.jpg" />
-    <meta property="og:image:width" content="1200" />
-    <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="Novino روی لپ‌تاپ: صفحه‌ی امروز با عادت‌ها و کارها" />
+    <meta property="og:image" content="https://routino.me/shots/desktop-dark.webp" />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://novino.app/" />
-    <meta property="og:site_name" content="Novino" />
-    <meta property="og:locale" content="fa_IR" />
-    <meta name="twitter:card" content="summary_large_image" />
-
-    <!-- تا گوگل بداند این یک برنامه است، نه یک مقاله. قیمت عمداً نیست: تا وقتی
-         صفحه‌ی اول از قیمت حرف نمی‌زند، اینجا هم نباید عددی ادعا شود. -->
-    <script type="application/ld+json">
-      {
-        "@context": "https://schema.org",
-        "@type": "SoftwareApplication",
-        "name": "Novino",
-        "url": "https://novino.app/",
-        "applicationCategory": "LifestyleApplication",
-        "operatingSystem": "Web, Android",
-        "inLanguage": "fa-IR",
-        "description": "عادت بساز، کارهای روزت رو بچین و پیشرفتت رو ببین. بدون تبلیغ، بدون اینترنت هم کار می‌کنه."
-      }
-    </script>
+    <meta property="og:url" content="https://routino.me" />
     <!-- اولین عکسِ گوشیِ سرصفحه؛ بقیه بعدش ظاهر می‌شوند و عجله‌ای ندارند. -->
-    <link rel="preload" as="image" href="/shots/habits-dark.webp" />
+    <link rel="preload" as="image" href="/shots/clip-habits-still.webp" />
 
     <!-- قبل از رسم صفحه اجرا می‌شود تا محتوا یک لحظه هم پرش نکند. اگر
          جاوااسکریپت خاموش باشد این خط اجرا نمی‌شود و صفحه بدون انیمیشن ولی
@@ -103,37 +66,26 @@
       @font-face { font-family: Vazirmatn; src: url(/fonts/vazirmatn-latin-700.woff2) format("woff2");
         font-weight: 700; font-display: swap; unicode-range: U+0000-00FF,U+2000-206F; }
 
-      /* رنگ‌ها **عیناً توکن‌های تم تاریکِ خودِ اپ‌اند** (`.dark` در
-         `src/styles.css`)، فقط از oklch به hex برگردانده شده تا این فایل به
-         هیچ ابزاری وابسته نباشد. قبلاً یک پالتِ جداگانه و روشن‌تر بود؛ نتیجه‌اش
-         این بود که بازدیدکننده از صفحه‌ی معرفی وارد اپ می‌شد و رنگ زیرِ پایش
-         عوض می‌شد. اگر روزی `.dark` در استایلِ اپ عوض شد، این‌ها را هم بروز کن.
-
-         نگاشت: --ink=background، --card=card، --edge=border، --brand=primary،
-         --fg=foreground، --fg-2=muted-foreground. سه تای مشتق (--ink-2،
-         --edge-2، --brand-lit/deep) در اپ معادل ندارند و فقط برای گرادیان و
-         لبه‌ی این صفحه‌اند. */
+      /* رنگ‌ها: زمینه عمداً مشکیِ خنثی نیست. قهوه‌ایِ خیلی تیره است تا نارنجیِ
+         برند رویش گرم و برجسته بنشیند و صفحه شبیه کپیِ رنگیِ هیچ سایتِ دیگری
+         نباشد. هر سطحی که بالاتر می‌آید، یک پله روشن‌تر می‌شود. */
       :root {
         color-scheme: dark;
 
-        --ink: #0e0a08;
-        --ink-2: #14100d;
-        --card: #1a1512;
-        --edge: #322d29;
-        --edge-2: #45403b;
+        --ink: #17120e;
+        --ink-2: #201a15;
+        --card: #2a221c;
+        --edge: #382e26;
+        --edge-2: #4a3d33;
 
-        --fg: #f3f1ee;
-        --fg-2: #938e89;
-        --fg-3: #7b7671;
+        --fg: #ffffff;
+        --fg-2: #a79e97;
+        --fg-3: #8a807a;
 
-        --brand: #fe7825;
-        --brand-lit: #ff9d5b;
-        --brand-deep: #df5200;
-        --on-brand: #0a0704;
-        /* همان --brand، جدا، چون درخشش‌ها و سایه‌های رنگی به alpha نیاز دارند و
-           `rgba()` رنگِ hex را قبول نمی‌کند. قبلاً عددِ نارنجیِ قدیمی در ۹ جای
-           مختلف دستی تکرار شده بود و با عوض‌شدنِ برند از قلم می‌افتاد. */
-        --brand-rgb: 254, 120, 37;
+        --brand: #f97316;
+        --brand-lit: #ff9a4d;
+        --brand-deep: #d95c08;
+        --on-brand: #1a0d02;
 
         /* برجستگی: یک خطِ نورِ داخلی بالا، یک سایه‌ی داخلی پایین، یک سایه‌ی
            بیرونیِ نرم. همین سه‌تا هرچیزی را از صفحه بیرون می‌آورد. */
@@ -142,7 +94,7 @@
         --lift: 0 3px 8px rgba(0, 0, 0, 0.45), 0 34px 80px rgba(0, 0, 0, 0.62);
 
         --gut: clamp(20px, 4vw, 30px);
-        --bay: clamp(70px, 9vw, 116px);
+        --bay: clamp(66px, 9vw, 108px);
         --curve: 20px;
         --swing: cubic-bezier(0.16, 1, 0.3, 1);
       }
@@ -152,10 +104,8 @@
       html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
       body {
         margin: 0; color: var(--fg);
-        background: linear-gradient(180deg, #14100d 0%, var(--ink) 34%, #0a0705 100%) var(--ink);
-        /* عیناً همان پشته‌ی `--font-sans` در `src/styles.css` — تا صفحه‌ی معرفی و
-           خودِ اپ در حالتِ fallback هم یک شکل باشند. */
-        font-family: "Vazirmatn", system-ui, sans-serif;
+        background: linear-gradient(180deg, #1c1611 0%, var(--ink) 34%, #130f0c 100%) var(--ink);
+        font-family: Vazirmatn, "Segoe UI", Tahoma, system-ui, sans-serif;
         font-size: 16px; line-height: 1.9;
         -webkit-font-smoothing: antialiased; overflow-x: hidden;
       }
@@ -177,13 +127,10 @@
          برند در متن ظاهر می‌شود. سایه‌ی خیلی کمِ زیرِ تیتر آن را از زمینه جدا
          می‌کند بدون اینکه دیده شود. */
       h1, h2, h3 { margin: 0; font-weight: 900; letter-spacing: -0.02em; line-height: 1.42; text-wrap: balance; }
-      h1 { font-size: clamp(32px, 5vw, 52px); line-height: 1.34; text-shadow: 0 2px 20px rgba(0, 0, 0, 0.45); }
+      h1 { font-size: clamp(30px, 4.4vw, 46px); line-height: 1.38; text-shadow: 0 2px 20px rgba(0, 0, 0, 0.45); }
       h2 { font-size: clamp(25px, 3.1vw, 33px); }
       h3 { font-size: clamp(16px, 1.9vw, 18px); font-weight: 700; }
       .hl { color: var(--brand); }
-      /* «بهترین سالِ» یک عبارت است و نباید وسطش بشکند — `text-wrap: balance`
-         بدون این، «بهترین» را ته سطر جا می‌گذاشت و «سالِ» را می‌برد سطر بعد. */
-      .nb { white-space: nowrap; }
 
       .wrap { width: 100%; max-width: 1040px; margin-inline: auto; padding-inline: var(--gut); }
       .sr { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
@@ -198,18 +145,18 @@
         padding: 19px 30px; border-radius: 999px; border: 0; cursor: pointer;
         background: linear-gradient(180deg, var(--brand-lit), var(--brand) 55%, var(--brand-deep));
         color: var(--on-brand);
-        box-shadow: var(--emboss), 0 10px 26px rgba(var(--brand-rgb), 0.32);
+        box-shadow: var(--emboss), 0 10px 26px rgba(249, 115, 22, 0.32);
         transition: transform 0.18s var(--swing), box-shadow 0.18s var(--swing), filter 0.18s;
       }
       .btn:hover { transform: translateY(-2px); filter: brightness(1.06);
-        box-shadow: var(--emboss), 0 16px 34px rgba(var(--brand-rgb), 0.42); }
+        box-shadow: var(--emboss), 0 16px 34px rgba(249, 115, 22, 0.42); }
       .btn:active { transform: translateY(0); }
       .btn .ic { width: 18px; height: 18px; }
-      .btn.wide { width: 100%; max-width: 300px; }
+      .btn.wide { width: 100%; max-width: 320px; }
 
       .btn.line { background: transparent; color: var(--brand);
         border: 2px solid var(--brand); box-shadow: none; }
-      .btn.line:hover { background: rgba(var(--brand-rgb), 0.12); filter: none; box-shadow: none; }
+      .btn.line:hover { background: rgba(249, 115, 22, 0.12); filter: none; box-shadow: none; }
       .btn.ghost { background: var(--ink-2); color: var(--fg); border: 1px solid var(--edge-2);
         box-shadow: var(--lift-sm); }
       .btn.ghost:hover { background: var(--card); filter: none; }
@@ -220,50 +167,60 @@
         border: 1px solid var(--edge-2); border-radius: 999px; padding: 2px 8px; }
 
       /* ── نوار بالا ───────────────────────────────────────────── */
-      /* فقط لوگو و دو دکمه، بدون منوی وسط. **در جریانِ عادیِ صفحه است**، نه
-         sticky: با اسکرول بالا می‌رود و می‌رود. نه پس‌زمینه‌ی مات دارد، نه blur،
-         نه خطی که موقع اسکرول زیرش سبز شود. */
-      .top { position: relative; z-index: 10; }
-      .top-in { display: flex; align-items: center; justify-content: space-between; gap: 16px;
-        height: clamp(64px, 8vw, 78px); }
+      /* مثل خودِ سایت‌های اپ: فقط لوگو و دو دکمه. بدون منوی وسط. */
+      .top { position: sticky; top: 0; z-index: 60;
+        background: color-mix(in srgb, var(--ink) 80%, transparent);
+        backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+        border-bottom: 1px solid transparent; transition: border-color 0.25s var(--swing); }
+      .top.dropped { border-bottom-color: var(--edge); }
+      .top-in { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 72px; }
       .brand { display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 18px; letter-spacing: -0.01em; }
       .brand img { width: 32px; height: 32px; border-radius: 10px; }
       .top-acts { display: flex; align-items: center; gap: 10px; }
       @media (max-width: 460px) { .top-acts .btn.line { display: none; } }
 
       /* ── سرصفحه ─────────────────────────────────────────────── */
-      /* متنِ اینجا هیچ انیمیشنی ندارد — از همان فریمِ اول کامل و ثابت است. */
-      .home { position: relative; overflow: hidden; padding-block: clamp(16px, 2.6vw, 38px) 0; }
+      .home { position: relative; overflow: hidden; padding-block: clamp(28px, 4vw, 44px) 0; }
       /* درخشش نارنجی پشتِ گوشی — در RTL گوشی سمتِ چپ است، پس درخشش هم چپ. */
       .home::before {
         content: ""; position: absolute; top: -22%; left: -6%;
         width: min(760px, 118vw); aspect-ratio: 1; pointer-events: none; z-index: 0;
-        background: radial-gradient(closest-side, rgba(var(--brand-rgb), 0.22), transparent 70%);
+        background: radial-gradient(closest-side, rgba(249, 115, 22, 0.22), transparent 70%);
       }
       .home > * { position: relative; z-index: 1; }
 
-      .home-in { display: flex; align-items: center; justify-content: space-between;
-        gap: clamp(24px, 5vw, 56px); }
-      .home-copy { flex: 1 1 480px; max-width: 540px; }
-      /* `0 0 auto` یعنی ستونِ تصویر دقیقاً به عرضِ گوشی است. با عرضِ ثابت، گوشی
-         وسطِ ستون شناور می‌ماند و کنارِ متن یک حفره‌ی خالی می‌افتد. */
-      .home-art { flex: 0 0 auto; display: flex; justify-content: center; }
+      .home-in { display: flex; align-items: center; gap: clamp(24px, 4vw, 40px); }
+      .home-copy { flex: 1 1 470px; max-width: 490px; }
+      .home-art { flex: 1 1 430px; display: flex; justify-content: center; }
 
       .home-title { margin-top: 8px; }
-      /* زیرنویس یک خط است، پس `ch` جلوی کش‌آمدنش تا لبه‌ی ستون را می‌گیرد و طولِ
-         سطر در محدوده‌ی خوانا می‌ماند. */
-      .home-sub { margin: 22px 0 34px; max-width: 40ch; font-size: clamp(16.5px, 1.7vw, 19px);
-        font-weight: 500; line-height: 1.95; color: #cfcac5; }
+      .home-sub { margin: 26px 0 34px; font-size: clamp(16px, 1.9vw, 20px);
+        font-weight: 500; line-height: 1.95; color: #d6cfc9; }
       /* اسمِ برند در متن آرام رنگ عوض می‌کند؛ همان تکِ ظریفی که چشم را می‌گیرد. */
       .home-sub b { font-weight: 900; color: var(--brand); animation: hue 5s linear infinite; }
       @keyframes hue { 0%, 100% { color: var(--brand); } 50% { color: var(--brand-lit); } }
 
-      /* ── گوشیِ سرصفحه ───────────────────────────────────────── */
-      /* قابِ گوشی: بدنه‌ی گرادیانی + لبه‌ی روشن + سایه‌ی عمیق = گوشیِ واقعی،
-         نه مستطیلِ تخت. */
+      /* ── نوارِ نشان‌ها ───────────────────────────────────────── */
+      /* جای «۱۵ میلیون دانلود» و «امتیاز اپ‌استور». چهار حرفِ راست، نه چهار عددِ
+         ساختگی. مدال‌ها برجسته‌اند تا همان وزنِ بصریِ نشان‌های جایزه را داشته باشند. */
+      .awards { display: flex; justify-content: space-between; gap: 12px;
+        max-width: 760px; margin: clamp(40px, 5vw, 62px) auto 0; padding-bottom: clamp(10px, 2vw, 24px); }
+      .award { flex: 1 1 0; max-width: 160px; text-align: center; }
+      .medal {
+        width: 62px; height: 62px; margin: 0 auto 12px; border-radius: 20px;
+        display: grid; place-items: center;
+        background: linear-gradient(160deg, var(--card), #1b1510);
+        border: 1px solid var(--edge-2);
+        box-shadow: var(--emboss), var(--lift-sm);
+      }
+      .medal .ic { width: 27px; height: 27px; color: var(--brand); }
+      .award-name { font-size: 14px; font-weight: 700; line-height: 1.6; color: #cec6c0; }
+
+      /* ── قابِ گوشی ──────────────────────────────────────────── */
+      /* بدنه‌ی گرادیانی + لبه‌ی روشن + سایه‌ی عمیق = گوشیِ واقعی، نه مستطیلِ تخت. */
       .phone {
         position: relative; border-radius: 38px; padding: 8px;
-        background: linear-gradient(155deg, #4a423b, #1c1815 42%, #0c0a09);
+        background: linear-gradient(155deg, #55483d, #221c17 42%, #100d0b);
         box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.07), var(--lift);
       }
       .phone img { border-radius: 30px; width: 100%; background: var(--ink-2); }
@@ -272,13 +229,11 @@
         background: linear-gradient(200deg, rgba(255, 255, 255, 0.12), transparent 34%);
       }
 
-      /* پنج صفحه‌ی واقعیِ برنامه روی هم چیده‌اند و **یک بار** پشتِ سرِ هم ظاهر
-         می‌شوند؛ آخری روی همه می‌ماند. عکسِ ثابت است، نه فیلم: نه چیزی دانلود
-         می‌شود، نه لوپی می‌چرخد که کسی نگاهش نمی‌کند.
+      /* گوشیِ سرصفحه: پنج صفحه‌ی واقعیِ برنامه روی هم چیده‌اند و **یک بار** پشتِ
+         سرِ هم ظاهر می‌شوند؛ آخری روی همه می‌ماند. عکسِ ثابت است، نه فیلم: نه
+         چیزی دانلود می‌شود، نه لوپی می‌چرخد که کسی نگاهش نمی‌کند.
          بدون جاوااسکریپت، عکسِ اول تنها می‌ماند و صفحه سالم است. */
-      /* عمداً از این بزرگ‌تر نمی‌شود: با گوشیِ بلندتر، نوارِ اعتماد روی لپ‌تاپِ
-         ۹۰۰ پیکسلی کاملاً زیرِ خطِ دید می‌رود و کسی نمی‌فهمد صفحه ادامه دارد. */
-      .home-phone { width: min(300px, 76vw); }
+      .home-phone { width: min(288px, 74vw); }
       .home-phone .slider { position: relative; }
       .home-phone .slider img { position: absolute; inset: 0; opacity: 0; }
       .home-phone .slider img:first-child { position: relative; opacity: 1; }
@@ -288,194 +243,118 @@
       .js .home-phone .slider img:nth-child(4) { animation: appear 0.5s linear 2s 1 both; }
       .js .home-phone .slider img:nth-child(5) { animation: appear 0.5s linear 2.5s 1 both; }
 
-      /* `flex: none` روی هر دو ستون لازم است، نه اضافه: در حالتِ ستونی، آن
-         `flex-basis: 460px`ِ ستونِ متن به **ارتفاع** تبدیل می‌شود و زیرِ دکمه
-         ۲۰۰ پیکسل فضای خالیِ بی‌دلیل باز می‌کند. */
       @media (max-width: 900px) {
-        .home-in { flex-direction: column; text-align: center; gap: clamp(28px, 5vw, 40px); }
-        .home-copy { flex: none; max-width: 44ch; }
-        .home-art { flex: none; }
-        .home-sub { margin-inline: auto; margin-bottom: 28px; }
+        .home-in { flex-direction: column; text-align: center; gap: 40px; }
+        .home-copy { max-width: 46ch; }
+        .home-sub { margin-bottom: 28px; }
         .btn.wide { max-width: 100%; }
-      }
-
-      /* ── نوارِ اعتماد ────────────────────────────────────────── */
-      /* جای «۱۵ میلیون دانلود» و «امتیاز اپ‌استور». چهار حرفِ راست، نه چهار عددِ
-         ساختگی. مدال‌ها برجسته‌اند تا همان وزنِ بصریِ نشان‌های جایزه را داشته باشند.
-         گرید است نه flex-wrap: روی لپ‌تاپ چهارتا در یک ردیفِ هم‌عرض، روی موبایل
-         دو‌در‌دو. با wrap، نشانِ چهارم تنها می‌افتاد وسطِ ردیفِ دوم. */
-      .awards {
-        display: grid; grid-template-columns: repeat(5, 1fr); gap: clamp(10px, 1.6vw, 18px);
-        max-width: 940px; margin: clamp(40px, 5vw, 62px) auto 0;
-        padding-bottom: clamp(10px, 2vw, 24px);
-      }
-      .award { text-align: center; }
-      .medal {
-        width: clamp(54px, 7vw, 62px); aspect-ratio: 1; margin: 0 auto 12px; border-radius: 20px;
-        display: grid; place-items: center;
-        background: linear-gradient(160deg, var(--card), #12100e);
-        border: 1px solid var(--edge-2);
-        box-shadow: var(--emboss), var(--lift-sm);
-      }
-      .medal .ic { width: 27px; height: 27px; color: var(--brand); }
-      .award-name { font-size: clamp(13px, 1.5vw, 14px); font-weight: 700; line-height: 1.6; color: #c6c1bc; }
-      /* مستقیم از ۵ به ۲ ستون — ۳ ستون یعنی ردیفِ دوم دوتایی می‌شود و یک خانه‌ی
-         خالی کنارش می‌ماند. با ۲ ستون، نشانِ پنجم عرضِ کامل می‌گیرد تا وسطِ
-         خودش بنشیند نه اینکه گوشه‌ی ردیفِ آخر لق بزند. */
-      @media (max-width: 700px) {
-        .awards { grid-template-columns: repeat(2, 1fr); gap: 28px 12px; }
-        .award:last-child { grid-column: 1 / -1; }
+        .awards { flex-wrap: wrap; gap: 26px 12px; }
+        .award { flex: 1 1 40%; }
       }
 
       /* ── ردیف‌های قابلیت ─────────────────────────────────────── */
-      /* دقیقاً چهار ردیف، یک‌درمیان جا عوض می‌کنند. ستونِ متن وسط‌چین است با یک
-         مدالِ بزرگ بالای تیتر و **یک جمله** زیرش، نه پاراگراف. */
+      /* یک‌درمیان جا عوض می‌کنند. ستونِ متن وسط‌چین است با یک مدالِ بزرگ بالای
+         تیتر — همان ریتمی که سایت‌های اپ دارند. */
       .features { padding-block: var(--bay); }
       .feat { display: flex; align-items: center; justify-content: space-between;
-        gap: clamp(28px, 5vw, 72px); padding-bottom: clamp(60px, 9vw, 112px); }
+        gap: clamp(28px, 5vw, 64px); padding-bottom: clamp(64px, 9vw, 104px); }
       .feat:last-child { padding-bottom: 0; }
       .feat:nth-child(even) { flex-direction: row-reverse; }
 
-      .feat-art { flex: 1 1 460px; max-width: 460px; display: flex; justify-content: center; }
-      .feat-copy { flex: 0 1 420px; max-width: 420px; text-align: center; }
-      .feat-copy h2 { font-size: clamp(23px, 2.8vw, 30px); }
-      .feat-copy p { margin-top: 14px; font-size: clamp(16px, 1.7vw, 18px);
-        font-weight: 500; line-height: 1.9; color: var(--fg-2); }
+      .feat-art { flex: 1 1 520px; display: flex; justify-content: center; }
+      .feat-copy { flex: 0 0 380px; max-width: 380px; text-align: center; }
+      .feat-copy p { margin-top: 16px; font-size: clamp(15px, 1.8vw, 18px);
+        font-weight: 500; line-height: 1.95; color: var(--fg-2); }
 
       /* صحنه: یک تخته‌ی گرد و گرم که گوشی کمی کج رویش نشسته. جای عکسِ سبکِ
-         زندگی را می‌گیرد بدون اینکه عکسِ آدمِ قلابی بگذاریم.
-         گوشی از بالا فاصله می‌گیرد و از پایینِ صحنه بیرون می‌زند؛ نسبتِ صحنه
-         طوری تنظیم شده که حدود یک‌ششمِ پایینِ گوشی بریده شود — این‌قدر که عمدی
-         به‌نظر برسد، نه این‌قدر که ناقص.
-         عرضِ گوشی **درصدی** از صحنه است نه عددِ ثابت. با عددِ ثابت، روی لپ‌تاپ
-         صحنه پهن می‌شد و گوشی همان‌قدر می‌ماند؛ نتیجه یک جعبه‌ی قهوه‌ایِ خالی بود
-         با یک گوشیِ کوچک وسطش. حالا در هر اندازه‌ای صحنه واقعاً قابِ گوشی است. */
+         زندگی را می‌گیرد بدون اینکه عکسِ آدمِ قلابی بگذاریم. */
       .scene {
-        position: relative; width: 100%; max-width: 460px; aspect-ratio: 1 / 1.4;
+        position: relative; width: 100%; max-width: 520px; aspect-ratio: 520 / 460;
         border-radius: 28px; overflow: hidden;
-        display: grid; justify-items: center; align-items: start; padding-top: clamp(32px, 4vw, 44px);
-        /* پایه `--card` است نه `--ink-2`: با پالتِ تیره‌ی اپ، `--ink-2` تقریباً
-           همان پس‌زمینه‌ی صفحه است و صحنه ناپدید می‌شد. `card` روی `background`
-           همان اختلافِ سطحی‌ست که خودِ اپ بین کارت و زمینه دارد. */
-        background: radial-gradient(120% 100% at 50% 0%, rgba(var(--brand-rgb), 0.16), transparent 62%),
-          linear-gradient(160deg, var(--card), #100d0b);
+        /* گوشی از بالا فاصله می‌گیرد و از پایینِ صحنه بیرون می‌زند. اگر وسط‌چین
+           بماند، چون از خودِ صحنه بلندتر است لبه‌ی گردِ بالایش هم بریده می‌شود. */
+        display: grid; justify-items: center; align-items: start; padding-top: 46px;
+        background: radial-gradient(120% 100% at 50% 0%, rgba(249, 115, 22, 0.16), transparent 62%),
+          linear-gradient(160deg, var(--ink-2), #14100d);
         border: 1px solid var(--edge);
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), var(--lift-sm);
       }
       .scene::before {
         content: ""; position: absolute; top: 46%; left: 50%; translate: -50% -50%;
         width: 82%; aspect-ratio: 1; border-radius: 50%;
-        background: radial-gradient(closest-side, rgba(var(--brand-rgb), 0.18), transparent 72%);
+        background: radial-gradient(closest-side, rgba(249, 115, 22, 0.18), transparent 72%);
       }
-      .scene .phone { position: relative; width: 70%; max-width: 322px; }
+      .scene .phone { position: relative; width: min(248px, 56vw); }
       .feat:nth-child(odd) .scene .phone { rotate: -4deg; }
       .feat:nth-child(even) .scene .phone { rotate: 4deg; }
 
       .medal-lg {
-        width: clamp(78px, 9vw, 96px); aspect-ratio: 1; margin: 0 auto clamp(16px, 2vw, 20px);
-        border-radius: 30px; display: grid; place-items: center;
-        background: radial-gradient(120% 120% at 30% 20%, #332b25, #14100e);
+        width: 96px; height: 96px; margin: 0 auto 20px; border-radius: 30px;
+        display: grid; place-items: center;
+        background: radial-gradient(120% 120% at 30% 20%, #3a2f26, #1a1410);
         border: 1px solid var(--edge-2);
-        box-shadow: var(--emboss), 0 14px 32px rgba(0, 0, 0, 0.45), 0 0 40px rgba(var(--brand-rgb), 0.12);
+        box-shadow: var(--emboss), 0 14px 32px rgba(0, 0, 0, 0.45), 0 0 40px rgba(249, 115, 22, 0.12);
       }
-      .medal-lg .ic { width: clamp(38px, 4.6vw, 46px); aspect-ratio: 1; color: var(--brand); }
+      .medal-lg .ic { width: 42px; height: 42px; color: var(--brand); }
 
       /* در ستونی‌شدن، `align-items: center` جلوی کش‌آمدن را می‌گیرد و ستونِ تصویر
          به عرضِ ذاتیِ خودش (۵۲۰) می‌رسد و از صفحه می‌زند بیرون. `width: 100%`
          لازم است، نه اضافه. */
       @media (max-width: 900px) {
-        .feat, .feat:nth-child(even) { flex-direction: column; gap: clamp(26px, 5vw, 34px); }
-        .feat-art { flex: none; width: 100%; margin-inline: auto; }
-        .feat-copy { flex: none; max-width: 44ch; }
+        .feat, .feat:nth-child(even) { flex-direction: column; gap: 34px; }
+        .feat-art { flex: none; width: 100%; }
+        .feat-copy { flex: none; max-width: 46ch; }
+        /* روی موبایل صحنه بلندتر است، وگرنه گوشی نصف می‌شود. */
+        .scene { aspect-ratio: 460 / 500; padding-top: 36px; }
       }
 
-      /* ── ظاهرشدنِ تصویرها ────────────────────────────────────── */
-      /* تنها انیمیشنِ اسکرولیِ این صفحه. **opacity خالص** — بدون هیچ translate،
-         بدون scale. یک‌بار اجرا می‌شود و تمام (JS بعدش unobserve می‌کند).
-         روی ستونِ متن هیچ‌وقت گذاشته نمی‌شود؛ متن باید بی‌حرکت باشد. */
-      /* ۰٫۵ ثانیه و **linear** — این دو عدد از خودِ productiveapp.io خوانده شده،
-         نه حدس: کی‌فریمِ `showImage` آن‌ها دقیقاً `0% {opacity:0} 100% {opacity:1}`
-         است با `0.5s linear`. قبلاً اینجا ease-in-out بود. */
-      .js .fade { opacity: 0; }
-      .js .fade.lit { opacity: 1; transition: opacity 0.5s linear; }
+      /* ── لپ‌تاپ ─────────────────────────────────────────────── */
+      .desk { padding-bottom: var(--bay); }
+      .head { text-align: center; max-width: 52ch; margin: 0 auto clamp(30px, 5vw, 46px); }
+      .head p { margin-top: 14px; font-size: clamp(15px, 1.8vw, 18px); color: var(--fg-2); }
+      .glass { border: 1px solid var(--edge); border-radius: var(--curve);
+        background: var(--card); box-shadow: var(--lift); overflow: hidden; }
 
       /* ── چرا روتینو ─────────────────────────────────────────── */
       /* شکلِ همان ریلِ نظرِ کاربران، ولی داخلش حرفِ راستِ محصول است نه نظرِ
          ساختگی. تا کاربرِ واقعی نداشته باشیم، اینجا نقلِ‌قول نمی‌گذاریم. */
       .choose { position: relative; padding-block: var(--bay);
-        background: radial-gradient(90% 60% at 50% 100%, rgba(var(--brand-rgb), 0.1), transparent 70%); }
-      .choose h2 { text-align: center; margin-bottom: clamp(26px, 4vw, 44px); }
+        background: radial-gradient(90% 60% at 50% 100%, rgba(249, 115, 22, 0.1), transparent 70%); }
+      .choose h2 { text-align: center; margin-bottom: clamp(26px, 4vw, 40px); }
 
       .rail-box { position: relative; }
-
-      /**
-       * ریل اسکرول نمی‌شود. یک ردیفِ وسط‌چینِ ثابت است که از دو طرف بیرون می‌زند و
-       * کلیپ می‌شود؛ چرخش با جابه‌جا کردنِ گره در DOM انجام می‌گیرد، نه با
-       * `scrollLeft`/`scrollIntoView`. دلیلش: در صفحه‌ی راست‌چین هر موتور مرورگر
-       * عددِ `scrollLeft` را جور دیگری می‌شمارد و همان کد روی یکی کار می‌کرد و
-       * روی بقیه تکان نمی‌خورد.
-       *
-       * محوشدنِ لبه‌ها با `mask` است نه با یک لایه‌ی رنگی روی لبه: پس‌زمینه‌ی این
-       * بخش یکدست نیست (یک درخششِ نارنجی دارد) و لایه‌ی رنگی به‌شکل دو نوارِ
-       * تیره‌ی واضح دیده می‌شد. mask هرچه پشتش باشد را درست محو می‌کند.
-       *
-       * `--fade` عمداً پیکسل است نه درصد: با درصد، روی موبایل که ریل باریک است
-       * محوشدگی می‌آمد روی خودِ کارتِ وسط و کم‌رنگش می‌کرد.
-       */
-      .rail {
-        --fade: 44px;
-        display: flex; justify-content: center; align-items: stretch;
-        gap: clamp(12px, 1.6vw, 18px);
-        overflow: hidden; padding: 6px 0 18px;
-        -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--fade),
-          #000 calc(100% - var(--fade)), transparent);
-        mask-image: linear-gradient(to right, transparent, #000 var(--fade),
-          #000 calc(100% - var(--fade)), transparent);
-      }
-      @media (min-width: 700px) { .rail { --fade: 90px; } }
-      @media (min-width: 1000px) { .rail { --fade: 150px; } }
-
-      /* فقط کارتِ وسط کاملاً واضح است؛ بقیه هستند ولی خوانده نمی‌شوند. */
+      .rail { display: flex; gap: 16px; overflow-x: auto; scroll-behavior: smooth;
+        scroll-snap-type: x mandatory; padding: 6px 2px 18px;
+        scrollbar-width: none; -ms-overflow-style: none; }
+      .rail::-webkit-scrollbar { display: none; }
       .card {
-        flex: 0 0 clamp(238px, 26vw, 292px);
-        display: flex; flex-direction: column; justify-content: center;
-        border-radius: var(--curve); padding: 26px 22px; text-align: center;
-        background: linear-gradient(170deg, var(--card), #141110);
+        flex: 0 0 288px; scroll-snap-align: center; border-radius: var(--curve);
+        padding: 24px 22px; text-align: center;
+        background: linear-gradient(170deg, var(--card), #221b16);
         border: 1px solid var(--edge);
         box-shadow: var(--emboss), 0 8px 22px rgba(0, 0, 0, 0.32);
-        opacity: 0.2; transition: opacity 0.5s ease;
       }
-      .card.mid { opacity: 1; }
-      .card p { font-size: 15px; line-height: 1.95; color: #c6c1bc; }
+      .card p { font-size: 15px; line-height: 1.95; color: #cdc5bf; }
       .card b { display: block; margin-top: 14px; font-size: 13.5px; font-weight: 700; color: var(--brand); }
 
-      /* راست‌چین: «قبلی» سمتِ راست و فلشش به راست، «بعدی» سمتِ چپ و فلشش به چپ.
-         روی صفحه‌ی پهن بیرونِ ستونِ متن می‌نشینند، روی صفحه‌ی باریک روی کارت‌های
-         کم‌رنگِ کناری — ولی هیچ‌وقت مخفی نمی‌شوند، چون ریل دیگر با انگشت اسکرول
-         نمی‌شود و بدونشان کاربرِ موبایل هیچ کنترلی نداشت. */
       .arrow {
-        position: absolute; top: calc(50% - 6px); z-index: 3; width: 46px; aspect-ratio: 1;
-        border-radius: 50%; display: grid; place-items: center; cursor: pointer; translate: 0 -50%;
+        position: absolute; top: 50%; z-index: 3; width: 48px; height: 48px; border-radius: 50%;
+        display: grid; place-items: center; cursor: pointer; translate: 0 -50%;
         background: rgba(255, 255, 255, 0.09); border: 1px solid var(--edge-2);
         box-shadow: var(--lift-sm); transition: background 0.18s, transform 0.18s var(--swing);
       }
-      .arrow:hover { background: rgba(255, 255, 255, 0.18); }
-      .arrow:active { transform: scale(0.94); }
+      .arrow:hover { background: rgba(255, 255, 255, 0.16); }
       .arrow .ic { width: 20px; height: 20px; }
-      .arrow.prev { inset-inline-start: 0; }
-      .arrow.next { inset-inline-end: 0; }
-      .arrow.prev .ic { rotate: 180deg; }
-      @media (min-width: 1160px) {
-        .arrow.prev { inset-inline-start: calc(var(--gut) * -1 - 8px); }
-        .arrow.next { inset-inline-end: calc(var(--gut) * -1 - 8px); }
-      }
+      .arrow.prev { inset-inline-start: calc(var(--gut) * -1); }
+      .arrow.next { inset-inline-end: calc(var(--gut) * -1); }
+      .arrow.next .ic { rotate: 180deg; }
+      .arrow[hidden] { display: none; }
+      @media (max-width: 1120px) { .arrow { display: none; } }
 
       /* ── گرفتنِ برنامه ───────────────────────────────────────── */
       .get { text-align: center; padding-bottom: var(--bay); }
       .badges { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; }
       .get .hint { margin-top: 20px; font-size: 14.5px; color: var(--fg-3); }
-      /* روی گوشیِ باریک دو دکمه‌ی نصفه‌نیمه کنار هم بد می‌نشیند؛ تمام‌عرض بهتر است. */
-      @media (max-width: 520px) { .badges .btn { width: 100%; } }
 
       /* ── بنرِ پایانی ────────────────────────────────────────── */
       .banner { padding-bottom: var(--bay); }
@@ -483,23 +362,16 @@
         position: relative; overflow: hidden; border-radius: clamp(22px, 3vw, 30px);
         max-width: 760px; margin-inline: auto; padding: clamp(38px, 6vw, 56px) var(--gut);
         display: flex; align-items: center; justify-content: center; gap: clamp(20px, 4vw, 48px);
-        background: radial-gradient(110% 130% at 20% 0%, rgba(var(--brand-rgb), 0.3), transparent 60%),
-          linear-gradient(160deg, #231b16, #0e0a08);
+        background: radial-gradient(110% 130% at 20% 0%, rgba(249, 115, 22, 0.3), transparent 60%),
+          linear-gradient(160deg, #2b2019, #17120e);
         border: 1px solid var(--edge-2);
         box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.09), var(--lift);
-        transition: transform 0.28s var(--swing), box-shadow 0.28s var(--swing);
       }
-      /* فقط جایی که موس واقعی هست — وگرنه روی لمسی حالتِ hover بعدِ تپ گیر می‌کند. */
-      @media (hover: hover) {
-        .banner .box:hover {
-          transform: translateY(-10px);
-          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12),
-            0 8px 20px rgba(0, 0, 0, 0.5), 0 48px 104px rgba(0, 0, 0, 0.72);
-        }
-      }
-      .banner .say { flex: 0 1 480px; text-align: center; }
-      .banner h2 { font-size: clamp(24px, 3vw, 32px); text-shadow: 0 2px 14px rgba(0, 0, 0, 0.35); }
-      .banner .btn { margin-top: 26px; }
+      .banner .peek { flex: none; width: 152px; margin-bottom: -18%; rotate: -6deg; }
+      .banner .say { flex: 0 1 360px; text-align: center; }
+      .banner h2 { font-size: clamp(24px, 3vw, 30px); text-shadow: 0 2px 14px rgba(0, 0, 0, 0.35); }
+      .banner .btn { margin-top: 24px; }
+      @media (max-width: 700px) { .banner .peek { display: none; } }
 
       /* ── فوتر ───────────────────────────────────────────────── */
       footer { border-top: 1px solid var(--edge); padding-block: 40px; }
@@ -509,17 +381,31 @@
       .foot .copy { font-size: 13.5px; color: var(--fg-3); }
       .seal { margin-top: 26px; }
       .seal img { display: inline-block; }
-      @media (max-width: 640px) {
-        .foot { justify-content: center; text-align: center; gap: 18px; }
-        .foot-links { justify-content: center; gap: 18px; }
-      }
+
+      .dock { position: fixed; inset-inline: 14px; inset-block-end: 14px; z-index: 70;
+        display: none; opacity: 0; translate: 0 14px; pointer-events: none;
+        transition: opacity 0.3s var(--swing), translate 0.3s var(--swing); }
+      .dock .btn { width: 100%; }
+      .dock.up { opacity: 1; translate: 0 0; pointer-events: auto; }
+      @media (max-width: 800px) { .dock { display: block; } }
+
+      /* ── ورودِ بخش‌ها ─────────────────────────────────────────── */
+      /* قاعده: هیچ متنی برای دیده‌شدن به انیمیشن وابسته نیست. */
+      @keyframes rise { to { opacity: 1; translate: 0 0; } }
+      .js .rise { opacity: 0; translate: 0 16px; }
+      .js .rise.lit { opacity: 1; translate: 0 0;
+        transition: opacity 0.7s var(--swing), translate 0.7s var(--swing); }
+      .js .home .rise { animation: rise 0.9s var(--swing) forwards; }
+      .js .home .rise:nth-child(2) { animation-delay: 0.07s; }
+      .js .home .rise:nth-child(3) { animation-delay: 0.15s; }
+      .js .home .rise:nth-child(4) { animation-delay: 0.23s; }
 
       @media (prefers-reduced-motion: reduce) {
         html { scroll-behavior: auto; }
         *, *::before, *::after { animation-duration: 0.01ms !important; animation-delay: 0ms !important;
           animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
-        /* هیچ تصویری نباید منتظرِ انیمیشن بماند تا دیده شود. */
-        .js .fade { opacity: 1 !important; }
+        .js .rise { opacity: 1 !important; translate: none !important; }
+        .rail { scroll-behavior: auto; }
       }
     </style>
   </head>
@@ -539,6 +425,10 @@
         </g>
         <g id="i-timer" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none">
           <circle cx="12" cy="13.4" r="7.6" /><path d="M12 9.8v3.6l2.4 1.6" /><path d="M9.4 2.9h5.2" />
+        </g>
+        <g id="i-book" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <path d="M4.2 4.6a1.6 1.6 0 0 1 1.6-1.6h12.4a1.6 1.6 0 0 1 1.6 1.6v14.8a1.6 1.6 0 0 1-1.6 1.6H5.8a1.6 1.6 0 0 1-1.6-1.6z" />
+          <path d="M8.4 3v18" /><path d="M12.2 8.6h4" /><path d="M12.2 12.4h4" />
         </g>
         <g id="i-chart" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none">
           <path d="M4 20.4h16" /><path d="M7.3 20.4v-6.2" /><path d="M12 20.4V6.6" /><path d="M16.7 20.4v-9.4" />
@@ -573,15 +463,17 @@
         <g id="i-arrow" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
           <path d="M15.5 12H4.5" /><path d="M10.4 6.9 4.5 12l5.9 5.1" />
         </g>
+        <g id="i-down" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <path d="M12 3.8v11.4" /><path d="M7.4 10.9 12 15.5l4.6-4.6" /><path d="M4.6 19.4h14.8" />
+        </g>
       </defs>
     </svg>
 
-    <!-- ۱ ── نوار بالا: در جریانِ صفحه، با اسکرول می‌رود بالا و ناپدید می‌شود. -->
-    <header class="top">
+    <header class="top" id="top">
       <div class="wrap top-in">
         <a class="brand" href="/">
           <img src="/favicon.svg" width="32" height="32" alt="" aria-hidden="true" />
-          <span>Novino</span>
+          <span>روتینو</span>
         </a>
         <div class="top-acts">
           <a class="btn line sm" href="/app/">ورود</a>
@@ -591,37 +483,37 @@
     </header>
 
     <main>
-      <!-- ۲ ── سرصفحه: تیتر + یک خط زیرنویس + یک دکمه. متن بی‌حرکت. -->
       <section class="home">
         <div class="wrap home-in">
           <div class="home-copy">
-            <h1 class="home-title">امسال رو <span class="nb"><span class="hl">بهترین</span> سالِ</span> زندگیت کن</h1>
-            <p class="home-sub">
-              <b>Novino</b> کمکت می‌کنه عادت‌های خوب بسازی و نگهشون داری. عادت،
+            <h1 class="home-title rise">امسال رو <span class="hl">بهترین سالِ</span><br />زندگیت کن</h1>
+            <p class="home-sub rise">
+              <b>روتینو</b> کمکت می‌کنه عادت‌های خوب بسازی و نگهشون داری. عادت،
               کار، تایمر تمرکز و ژورنال — همه توی یه برنامه، با تقویم شمسی.
             </p>
-            <a class="btn wide" href="/app/">شروع کن<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
+            <div class="rise">
+              <a class="btn wide" href="/app/">شروع کن<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
+            </div>
           </div>
 
-          <!-- ۳ ── گوشیِ سرصفحه: پنج صفحه‌ی واقعیِ برنامه، نه ماکِتِ کشیده‌شده.
-                   ترتیب مهم است: «امروز» آخر است چون بعد از سه ثانیه همان
-                   روی گوشی می‌ماند. -->
-          <div class="home-art">
+          <div class="home-art rise">
+            <!-- پنج صفحه‌ی واقعیِ برنامه، نه ماکِتِ کشیده‌شده. ترتیب مهم است:
+                 «امروز» آخر است چون بعد از سه ثانیه همان روی گوشی می‌ماند. -->
             <div class="phone home-phone">
               <div class="slider">
-                <img src="/shots/habits-dark.webp" width="804" height="1748" fetchpriority="high"
-                     alt="صفحه‌ی عادت‌های Novino" />
-                <img src="/shots/timer-dark.webp" width="804" height="1748" alt="" aria-hidden="true" />
-                <img src="/shots/journal-dark.webp" width="804" height="1748" alt="" aria-hidden="true" />
-                <img src="/shots/analytics-dark.webp" width="804" height="1748" alt="" aria-hidden="true" />
-                <img src="/shots/today-dark.webp" width="804" height="1748"
-                     alt="صفحه‌ی امروزِ Novino: درصد پیشرفت روز، کارها و عادت‌های امروز" />
+                <img src="/shots/clip-habits-still.webp" width="320" height="696" fetchpriority="high"
+                     alt="صفحه‌ی عادت‌های روتینو" />
+                <img src="/shots/clip-timer-still.webp" width="320" height="696" alt="" aria-hidden="true" />
+                <img src="/shots/clip-journal-still.webp" width="320" height="696" alt="" aria-hidden="true" />
+                <img src="/shots/clip-analytics-still.webp" width="320" height="696" alt="" aria-hidden="true" />
+                <img src="/shots/clip-today-still.webp" width="320" height="696"
+                     alt="صفحه‌ی امروزِ روتینو: درصد پیشرفت روز، کارها و عادت‌های امروز" />
               </div>
             </div>
           </div>
         </div>
 
-        <!-- ۴ ── نوارِ اعتماد: جای نشان‌های جایزه و آمارِ دانلود. چهار حرفِ راست. -->
+        <!-- جای نشان‌های جایزه و آمارِ دانلود. چهار حرفِ راست. -->
         <div class="wrap">
           <div class="awards">
             <div class="award">
@@ -634,34 +526,29 @@
             </div>
             <div class="award">
               <div class="medal"><svg class="ic" aria-hidden="true"><use href="#i-offline" /></svg></div>
-              <div class="award-name">بدون اینترنت</div>
+              <div class="award-name">بدون اینترنت هم کار می‌کنه</div>
             </div>
             <div class="award">
               <div class="medal"><svg class="ic" aria-hidden="true"><use href="#i-devices" /></svg></div>
               <div class="award-name">گوشی و لپ‌تاپ</div>
             </div>
-            <div class="award">
-              <div class="medal"><svg class="ic" aria-hidden="true"><use href="#i-globe" /></svg></div>
-              <div class="award-name">فارسی و انگلیسی</div>
-            </div>
           </div>
         </div>
       </section>
 
-      <!-- ۵ ── چهار ردیفِ یک‌درمیان. هرکدام: آیکون + تیتر + یک جمله.
-               `fade` فقط روی ستونِ تصویر است، هیچ‌وقت روی متن. -->
+      <!-- ردیف‌های یک‌درمیان، هرکدام با عکسِ واقعیِ همان بخش از برنامه. -->
       <section class="features wrap" id="features">
         <div class="feat">
-          <div class="feat-art fade">
+          <div class="feat-art rise">
             <div class="scene">
               <div class="phone">
-                <img src="/shots/habits-dark.webp"
-                     width="804" height="1748" loading="lazy"
+                <img src="/shots/clip-habits-still.webp"
+                     width="320" height="696" loading="lazy"
                      alt="صفحه‌ی عادت‌ها: کارت هر عادت با زنجیره و پیشرفت ماهانه" />
               </div>
             </div>
           </div>
-          <div class="feat-copy">
+          <div class="feat-copy rise">
             <div class="medal-lg"><svg class="ic" aria-hidden="true"><use href="#i-loop" /></svg></div>
             <h2>ساختن و مدیریت عادت</h2>
             <p>
@@ -673,16 +560,16 @@
         </div>
 
         <div class="feat">
-          <div class="feat-art fade">
+          <div class="feat-art rise">
             <div class="scene">
               <div class="phone">
-                <img src="/shots/today-dark.webp"
-                     width="804" height="1748" loading="lazy"
+                <img src="/shots/clip-today-still.webp"
+                     width="320" height="696" loading="lazy"
                      alt="صفحه‌ی امروز: تیک‌زدن کار و عادت و رسیدن حلقه‌ی روز به ۷۵ درصد" />
               </div>
             </div>
           </div>
-          <div class="feat-copy">
+          <div class="feat-copy rise">
             <div class="medal-lg"><svg class="ic" aria-hidden="true"><use href="#i-home" /></svg></div>
             <h2>صفحه‌ی امروز</h2>
             <p>
@@ -694,16 +581,16 @@
         </div>
 
         <div class="feat">
-          <div class="feat-art fade">
+          <div class="feat-art rise">
             <div class="scene">
               <div class="phone">
-                <img src="/shots/timer-dark.webp"
-                     width="804" height="1748" loading="lazy"
+                <img src="/shots/clip-timer-still.webp"
+                     width="320" height="696" loading="lazy"
                      alt="صفحه‌ی تایمر: عوض کردن حالت و شروع شمارش معکوس" />
               </div>
             </div>
           </div>
-          <div class="feat-copy">
+          <div class="feat-copy rise">
             <div class="medal-lg"><svg class="ic" aria-hidden="true"><use href="#i-timer" /></svg></div>
             <h2>تایمر تمرکز</h2>
             <p>
@@ -715,16 +602,37 @@
         </div>
 
         <div class="feat">
-          <div class="feat-art fade">
+          <div class="feat-art rise">
             <div class="scene">
               <div class="phone">
-                <img src="/shots/analytics-dark.webp"
-                     width="804" height="1748" loading="lazy"
+                <img src="/shots/clip-journal-still.webp"
+                     width="320" height="696" loading="lazy"
+                     alt="صفحه‌ی ژورنال: حال‌وهوا، نمره‌ی روز و یادداشت‌های گذشته" />
+              </div>
+            </div>
+          </div>
+          <div class="feat-copy rise">
+            <div class="medal-lg"><svg class="ic" aria-hidden="true"><use href="#i-book" /></svg></div>
+            <h2>ژورنال روزانه</h2>
+            <p>
+              آخر شب چند خط برای خودت. حال‌وهوات رو ثبت کن، به روزت نمره بده و
+              اگه حسش بود بنویس. یه ماه بعد که برمی‌گردی، خودت الگوها رو
+              می‌بینی.
+            </p>
+          </div>
+        </div>
+
+        <div class="feat">
+          <div class="feat-art rise">
+            <div class="scene">
+              <div class="phone">
+                <img src="/shots/clip-analytics-still.webp"
+                     width="320" height="696" loading="lazy"
                      alt="صفحه‌ی آنالیز: رشد نمودارها و شبکه‌ی تقویمی هر عادت" />
               </div>
             </div>
           </div>
-          <div class="feat-copy">
+          <div class="feat-copy rise">
             <div class="medal-lg"><svg class="ic" aria-hidden="true"><use href="#i-chart" /></svg></div>
             <h2>آمار و تحلیل</h2>
             <p>
@@ -736,12 +644,22 @@
         </div>
       </section>
 
-      <!-- ۶ ── ریلِ «چرا روتینو». جای «نظر کاربران»؛ تا نظرِ واقعی نداشته باشیم،
-               حرفِ خودِ محصول اینجاست. کارتِ چهارم (اندیس ۳) اولین کارتِ وسط است. -->
+      <section class="desk wrap" id="everywhere">
+        <div class="head rise">
+          <h2>روی صفحه‌ی بزرگ، <span class="hl">بزرگ‌تر</span> میشه</h2>
+          <p>روی لپ‌تاپ منوی کناری باز میشه و نمودارها جا پیدا می‌کنن. همون حساب، همون اطلاعات.</p>
+        </div>
+        <div class="glass rise">
+          <img src="/shots/desktop-analytics-dark.webp" width="2880" height="1800" loading="lazy"
+               alt="روتینو روی لپ‌تاپ: صفحه‌ی آنالیز با نوار کناری و نمودارهای هفته و ماه" />
+        </div>
+      </section>
+
+      <!-- جای «نظر کاربران». تا نظرِ واقعی نداشته باشیم، حرفِ خودِ محصول اینجاست. -->
       <section class="choose" id="why">
         <div class="wrap">
-          <h2>چرا <span class="hl">Novino</span>؟</h2>
-          <div class="rail-box">
+          <h2 class="rise">چرا <span class="hl">روتینو</span>؟</h2>
+          <div class="rail-box rise">
             <button class="arrow prev" id="rail-prev" type="button" aria-label="قبلی">
               <svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg>
             </button>
@@ -750,8 +668,8 @@
             </button>
             <div class="rail" id="rail">
               <div class="card">
-                <p>عادت، کار، تایمر تمرکز و ژورنال کنار همن. لازم نیست چهار تا برنامه‌ی جدا باز کنی.</p>
-                <b>همه‌چیز یک‌جا</b>
+                <p>تاریخ‌ها شمسی‌ان و هفته از شنبه شروع می‌شه. لازم نیست توی ذهنت تاریخ تبدیل کنی.</p>
+                <b>تقویم شمسی</b>
               </div>
               <div class="card">
                 <p>اول روی خود دستگاه ذخیره می‌شه و بعد همگام می‌شه؛ برای همین بدون اینترنت هم کار می‌کنه.</p>
@@ -762,8 +680,8 @@
                 <b>بدون تبلیغ</b>
               </div>
               <div class="card">
-                <p>تاریخ‌ها شمسی‌ان و هفته از شنبه شروع می‌شه. لازم نیست توی ذهنت تاریخ تبدیل کنی.</p>
-                <b>تقویم شمسی</b>
+                <p>عادت، کار، تایمر تمرکز و ژورنال کنار همن. لازم نیست چهار تا برنامه‌ی جدا باز کنی.</p>
+                <b>همه‌چیز یک‌جا</b>
               </div>
               <div class="card">
                 <p>با یه حساب وارد شو؛ همون اطلاعات روی گوشی و لپ‌تاپت باز می‌شه.</p>
@@ -782,29 +700,25 @@
         </div>
       </section>
 
-      <!-- ۷ ── گرفتنِ برنامه: وب + اندرویدِ غیرفعال. -->
       <section class="get wrap" id="get">
-        <div class="badges">
+        <div class="badges rise">
           <a class="btn" href="/app/">
             <svg class="ic" aria-hidden="true"><use href="#i-globe" /></svg>باز کردن برنامه
           </a>
-          <!-- `button disabled` است نه `a`، چون هنوز مقصدی ندارد: یک `<a>` بدونِ
-               `href` با `role="link"` را صفحه‌خوان «لینک» می‌خواند، کاربر فعالش
-               می‌کند و هیچ اتفاقی نمی‌افتد. دکمه‌ی غیرفعال درست اعلام می‌شود.
-               وقتی APK آماده شد، این را به
-               `<a class="btn ghost" id="android-btn" href="...">` عوض کن و
-               `soon` را بردار. -->
-          <button type="button" class="btn ghost soon" id="android-btn" disabled>
+          <!-- وقتی APK آماده شد: `href` بگذار و `soon` و `aria-disabled` را بردار. -->
+          <a class="btn ghost soon" id="android-btn" role="link" aria-disabled="true">
             <svg class="ic" aria-hidden="true"><use href="#i-droid" /></svg>
             دانلود اندروید <span class="tag">به‌زودی</span>
-          </button>
+          </a>
         </div>
-        <p class="hint">روی آیفون، از منوی مرورگر بزن «افزودن به صفحه اصلی» تا آیکونش بیاد روی گوشیت.</p>
+        <p class="hint rise">روی آیفون، از منوی مرورگر بزن «افزودن به صفحه اصلی» تا آیکونش بیاد روی گوشیت.</p>
       </section>
 
-      <!-- ۸ ── بنرِ پایانی: با hover کمی بالا می‌رود و سایه‌اش پررنگ‌تر می‌شود. -->
       <section class="banner wrap">
-        <div class="box">
+        <div class="box rise">
+          <div class="phone peek" aria-hidden="true">
+            <img src="/shots/clip-habits-still.webp" width="320" height="696" alt="" loading="lazy" />
+          </div>
           <div class="say">
             <h2>از کدوم عادت شروع می‌کنی؟</h2>
             <a class="btn" href="/app/">برو داخل برنامه<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
@@ -813,81 +727,100 @@
       </section>
     </main>
 
-    <!-- ۹ ── فوتر -->
     <footer>
       <div class="wrap">
         <div class="foot">
           <a class="brand" href="/">
             <img src="/favicon.svg" width="32" height="32" alt="" aria-hidden="true" />
-            <span>Novino</span>
+            <span>روتینو</span>
           </a>
           <div class="foot-links">
             <a href="/legal/">قوانین و مقررات</a>
             <a href="/legal/#privacy">حریم خصوصی</a>
             <a href="/legal/#contact">تماس با ما</a>
           </div>
-          <div class="copy">© Novino</div>
+          <div class="copy">© روتینو</div>
         </div>
         <div class="seal"><!--ENAMAD--></div>
       </div>
     </footer>
+
+    <div class="dock" id="dock">
+      <a class="btn" href="/app/">شروع کن<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
+    </div>
 
     <script>
       (function () {
         "use strict";
         var calm = matchMedia("(prefers-reduced-motion: reduce)");
 
+        /* ── نوار بالا و دکمه‌ی چسبان ─────────────────────────── */
+        var top = document.getElementById("top");
+        var dock = document.getElementById("dock");
+        addEventListener("scroll", function () {
+          var y = scrollY;
+          top.classList.toggle("dropped", y > 8);
+          dock.classList.toggle("up", y > innerHeight * 0.8);
+        }, { passive: true });
+
         /* ── ریلِ کارت‌ها ─────────────────────────────────────── */
         /**
-         * چرخش با جابه‌جا کردنِ گره در DOM، نه با اسکرول.
-         *
-         * صفحه راست‌چین است، پس فرزندِ اول سمتِ **راست** می‌نشیند و فرزندِ آخر
-         * سمتِ چپ. بردنِ اولی به ته یعنی همه یک خانه به راست می‌لغزند و کارتِ
-         * بعدی می‌آید وسط — همان چیزی که «بعدی» باید بکند. برعکسش «قبلی».
+         * به `scrollLeft` و `scrollBy` دست نمی‌زنیم. در صفحه‌ی راست‌چین هر موتور
+         * مرورگر عددِ `scrollLeft` را جور دیگری می‌شمارد — یکی از صفر به منفی
+         * می‌رود، یکی از بیشینه به صفر — و دکمه‌ها روی یکی کار می‌کنند و روی
+         * بقیه تکان نمی‌خورند. به‌جایش کارتِ مقصد را پیدا می‌کنیم و از خودِ
+         * مرورگر می‌خواهیم بیاوردش وسط؛ این یکی همه‌جا یک‌جور رفتار می‌کند.
          */
         (function rail() {
           var box = document.getElementById("rail");
           var prev = document.getElementById("rail-prev");
           var next = document.getElementById("rail-next");
           if (!box || !prev || !next) return;
-          if (box.children.length < 3) return;
+          var cards = [].slice.call(box.querySelectorAll(".card"));
+          if (!cards.length) return;
 
-          function paint() {
-            var kids = box.children;
-            var mid = Math.floor(kids.length / 2);
-            for (var i = 0; i < kids.length; i++) kids[i].classList.toggle("mid", i === mid);
+          /** کارتی که مرکزش به مرکزِ ریل نزدیک‌تر از همه است. */
+          function current() {
+            var mid = box.getBoundingClientRect().left + box.clientWidth / 2;
+            var best = 0, bestGap = Infinity;
+            for (var i = 0; i < cards.length; i++) {
+              var r = cards[i].getBoundingClientRect();
+              var gap = Math.abs(r.left + r.width / 2 - mid);
+              if (gap < bestGap) { bestGap = gap; best = i; }
+            }
+            return best;
           }
 
-          function step(dir) {
-            if (dir > 0) box.appendChild(box.firstElementChild);
-            else box.insertBefore(box.lastElementChild, box.firstElementChild);
-            paint();
+          function go(delta) {
+            var i = Math.min(cards.length - 1, Math.max(0, current() + delta));
+            // `block: nearest` لازم است، وگرنه مرورگر کلِ صفحه را هم عمودی
+            // می‌پراند تا ریل را وسط بیاورد.
+            //
+            // و «instant»، نه «auto»: «auto» یعنی «هرچه CSS گفته»، و CSS اینجا
+            // `scroll-behavior: smooth` گفته. پس با «auto» کاربری که انیمیشن را
+            // خاموش کرده باز هم حرکتِ نرم می‌گرفت.
+            cards[i].scrollIntoView({
+              behavior: calm.matches ? "instant" : "smooth",
+              inline: "center",
+              block: "nearest",
+            });
           }
+          prev.addEventListener("click", function () { go(-1); });
+          next.addEventListener("click", function () { go(1); });
 
-          /* هر کلیک تایمر را از نو کوک می‌کند، وگرنه ممکن است بلافاصله بعدِ کلیکِ
-             کاربر خودش هم یک قدم برود و انگار دو تا پریده. */
-          var tick = 0;
-          function arm() {
-            clearInterval(tick);
-            if (!calm.matches) tick = setInterval(function () { step(1); }, 5000);
+          function fit() {
+            var tight = box.scrollWidth <= box.clientWidth + 4;
+            prev.hidden = tight;
+            next.hidden = tight;
           }
-
-          prev.addEventListener("click", function () { step(-1); arm(); });
-          next.addEventListener("click", function () { step(1); arm(); });
-          paint();
-          arm();
+          addEventListener("resize", fit);
+          fit();
         })();
 
-        /* ── ظاهرشدنِ تصویرها ─────────────────────────────────── */
-        /**
-         * آستانه ۰٫۵ است نه ۱. با ۱ باید کلِ عکس توی دید بیاید، و روی گوشیِ
-         * خوابیده عکس از خودِ صفحه بلندتر است — یعنی شرط هیچ‌وقت برقرار نمی‌شد و
-         * عکس تا ابد نامرئی می‌ماند. ۰٫۵ عملاً همان «وارد دید شد» است ولی
-         * هیچ‌جا شکست نمی‌خورد.
-         */
-        var arts = [].slice.call(document.querySelectorAll(".fade"));
+        /* ── ورودِ بخش‌ها ─────────────────────────────────────── */
+        var risers = [].slice.call(document.querySelectorAll("main > section:not(.home) .rise"));
         if (!("IntersectionObserver" in window)) {
-          arts.forEach(function (el) { el.classList.add("lit"); });
+          risers.forEach(function (el) { el.classList.add("lit"); });
         } else {
           var eye = new IntersectionObserver(function (entries) {
             entries.forEach(function (en) {
@@ -895,8 +828,8 @@
               en.target.classList.add("lit");
               eye.unobserve(en.target);
             });
-          }, { threshold: 0.5 });
-          arts.forEach(function (el) { eye.observe(el); });
+          }, { rootMargin: "0px 0px -12% 0px" });
+          risers.forEach(function (el) { eye.observe(el); });
         }
 
         /* ── سرویس‌ورکرِ کهنه ─────────────────────────────────── */
