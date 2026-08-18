@@ -7,6 +7,35 @@
  * with Pages/assets.
  */
 const API_ORIGIN = "https://api.routino.me";
+const MAX_BODY_BYTES = 64 * 1024;
+
+async function readBoundedBody(request) {
+  const declared = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) return null;
+  if (!request.body) return new Uint8Array();
+
+  const reader = request.body.getReader();
+  const chunks = [];
+  let total = 0;
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > MAX_BODY_BYTES) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
+}
 
 export async function onRequest({ request }) {
   const incoming = new URL(request.url);
@@ -14,11 +43,21 @@ export async function onRequest({ request }) {
 
   try {
     const hasBody = request.method !== "GET" && request.method !== "HEAD";
+    const body = hasBody ? await readBoundedBody(request) : undefined;
+    if (body === null) {
+      return Response.json(
+        { error: "body_too_large" },
+        { status: 413, headers: { "cache-control": "no-store", "x-routino-pages-proxy": "1" } },
+      );
+    }
+    const requestHeaders = new Headers(request.headers);
+    requestHeaders.delete("content-length");
+    requestHeaders.delete("host");
     const upstream = await fetch(
       new Request(target, {
         method: request.method,
-        headers: request.headers,
-        body: hasBody ? await request.arrayBuffer() : undefined,
+        headers: requestHeaders,
+        body,
         redirect: "manual",
       }),
     );

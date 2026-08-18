@@ -43,4 +43,21 @@ describe("Cloudflare Pages /v1 proxy", () => {
     expect(response.status).toBe(502);
     expect(await response.json()).toEqual({ error: "api_unavailable" });
   });
+
+  it("rejects an oversized body before making an upstream request", async () => {
+    const upstream = vi.fn();
+    vi.stubGlobal("fetch", upstream);
+    const { onRequest } = await import("../functions/v1/[[path]].js");
+
+    const response = await onRequest({
+      request: new Request("https://routino.me/v1/auth/password/login", {
+        method: "POST",
+        body: "x".repeat(64 * 1024 + 1),
+      }),
+    } as never);
+
+    expect(response.status).toBe(413);
+    expect(await response.json()).toEqual({ error: "body_too_large" });
+    expect(upstream).not.toHaveBeenCalled();
+  });
 });
