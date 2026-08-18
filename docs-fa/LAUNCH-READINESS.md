@@ -41,8 +41,10 @@
 - VPN و IP در هویت دستگاه استفاده نمی‌شوند؛ در نتیجه تغییر VPN باعث ساخت دستگاه تازه یا قفل اشتباه نمی‌شود.
 - روی این سیستم device/AVD اندروید در دسترس نبود؛ بنابراین نصب و smoke روی سخت‌افزار واقعی هنوز باید پس از انتقال APK انجام شود، هرچند build، lint، امضا و metadata پاس شده‌اند.
 
-## ترتیب انتشار
+## وضعیت انتشار
 
-1. ابتدا API/Edge جدید را منتشر کن تا sync قدیمی بسته و device policy فعال شود.
-2. سپس frontend Cloudflare Pages و بعد build موبایل را منتشر کن.
-3. بعد از انتشار، با یک حساب trial و یک حساب paid مسیر OTP، Export، Import قفل/باز، پرداخت واقعی و revoke دستگاه را smoke test کن.
+1. Supabase Edge Function `api` نسخهٔ 44 و Git/Cloudflare Pages روی commit `ad59ec1` زنده‌اند.
+2. smoke زندهٔ `routino.me`، deep route، service worker، same-origin `/v1/plans`، ping بدون auth، bad POST و DB readiness پاس شد. هیچ OTP واقعی درخواست نشد.
+3. نسخهٔ تازهٔ `cloudflare/api-worker.js` هنوز به‌دلیل نبود login در Wrangler deploy نشده است؛ Worker قبلی فعال و cache پلن‌ها سالم است، اما بهینه‌سازی local health/preflight و هدر `x-routino-cache` منتظر deploy دستی است.
+4. APK آماده است؛ پس از آپلود HTTPS باید build لندینگ با `ANDROID_DOWNLOAD_URL` تکرار و روی گوشی واقعی smoke شود.
+5. یک OTP و پرداخت واقعی فقط با تأیید صریح مالک اجرا شود؛ این دو تست خودکار نیستند چون هزینه/تراکنش واقعی دارند.
