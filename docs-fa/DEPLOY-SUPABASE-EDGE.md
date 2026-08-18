@@ -27,7 +27,7 @@ OTP یا پرداختی برای دورزدن این مرز استفاده نم�
 
 ### چه چیزی تمام شده ✅
 
-`main=ad59ec1` روی GitHub و Cloudflare Pages زنده است. `routino.me/v1/*` از Pages
+شاخهٔ `main` شامل commit عملکردی `ad59ec1` روی GitHub و Cloudflare Pages زنده است. `routino.me/v1/*` از Pages
 Function ثابت به API می‌رود و smoke زندهٔ landing، deep route، service worker،
 plans، ping بدون auth، bad POST و DB readiness پاس شده است. Edge Function `api`
 نسخهٔ 44 فعال است. تست‌های فرانت/Edge/Backend، load محلی، Android lint و امضای

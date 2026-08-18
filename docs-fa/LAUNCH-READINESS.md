@@ -43,7 +43,7 @@
 
 ## وضعیت انتشار
 
-1. Supabase Edge Function `api` نسخهٔ 44 و Git/Cloudflare Pages روی commit `ad59ec1` زنده‌اند.
+1. Supabase Edge Function `api` نسخهٔ 44 و Git/Cloudflare Pages شامل commit عملکردی `ad59ec1` زنده‌اند.
 2. smoke زندهٔ `routino.me`، deep route، service worker، same-origin `/v1/plans`، ping بدون auth، bad POST و DB readiness پاس شد. هیچ OTP واقعی درخواست نشد.
 3. نسخهٔ تازهٔ `cloudflare/api-worker.js` هنوز به‌دلیل نبود login در Wrangler deploy نشده است؛ Worker قبلی فعال و cache پلن‌ها سالم است، اما بهینه‌سازی local health/preflight و هدر `x-routino-cache` منتظر deploy دستی است.
 4. APK آماده است؛ پس از آپلود HTTPS باید build لندینگ با `ANDROID_DOWNLOAD_URL` تکرار و روی گوشی واقعی smoke شود.
