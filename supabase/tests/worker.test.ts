@@ -11,6 +11,8 @@
  * Supabase origin.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 // @ts-expect-error — plain JS with no types; the shape is asserted below.
 import workerModule from "../../cloudflare/api-worker.js";
 
@@ -22,6 +24,14 @@ type Worker = { fetch(req: Request, env: any, ctx: any): Promise<Response> };
 const worker = workerModule as Worker;
 
 const SUPABASE = "https://axychfrteevhfdhgvfuv.supabase.co/functions/v1/api";
+
+describe("deployment contract", () => {
+  it("deploys the Worker that owns api.routino.me", () => {
+    const configPath = fileURLToPath(new URL("../../cloudflare/wrangler.toml", import.meta.url));
+    const config = readFileSync(configPath, "utf8");
+    expect(config).toMatch(/^name\s*=\s*"routino-api"\s*$/m);
+  });
+});
 
 /** Minimal stand-in for Cloudflare's `caches.default`, matching on URL+method. */
 function stubCache() {

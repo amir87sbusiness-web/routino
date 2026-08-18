@@ -24,7 +24,7 @@
 
 - Frontend unit/integration: ۲۲ فایل، ۱۴۵ تست پاس.
 - Backend: ۲۶ فایل، ۲۵۳ تست پاس؛ typecheck و production build پاس.
-- Supabase Edge parity/integration: ۱۰ فایل، ۹۳ تست پاس.
+- Supabase Edge parity/integration: ۱۰ فایل، ۹۴ تست پاس.
 - Web production build و mobile build پاس؛ service worker وب ۷۷ فایل ضروری را precache می‌کند و در mobile غیرفعال است.
 - Production dependency audit فرانت و بک‌اند: صفر آسیب‌پذیری شناخته‌شده. هشدارهای باقیمانده فقط ابزارهای توسعهٔ Capacitor 7 هستند و وارد bundle/runtime لانچ نمی‌شوند.
 - مرورگر واقعی Chromium، موبایل 390×844 و دسکتاپ 1440×900: onboarding، OTP محلی، صفحهٔ اصلی، تنظیمات، دستگاه حساب و RTL بررسی شد؛ هیچ پیامک کاوه‌نگار در تست‌های لانچ ارسال نشد.
@@ -45,6 +45,6 @@
 
 1. Supabase Edge Function `api` نسخهٔ 44 و Git/Cloudflare Pages شامل commit عملکردی `ad59ec1` زنده‌اند.
 2. smoke زندهٔ `routino.me`، deep route، service worker، same-origin `/v1/plans`، ping بدون auth، bad POST و DB readiness پاس شد. هیچ OTP واقعی درخواست نشد.
-3. نسخهٔ تازهٔ `cloudflare/api-worker.js` هنوز به‌دلیل نبود login در Wrangler deploy نشده است؛ Worker قبلی فعال و cache پلن‌ها سالم است، اما بهینه‌سازی local health/preflight و هدر `x-routino-cache` منتظر deploy دستی است.
+3. `cloudflare/api-worker.js` روی service درست `routino-api` با نسخهٔ `a8a84906-8245-4ae9-94f1-cd8d8b76d9a5` deploy شد. روی دامنهٔ واقعی health محلی، DB readiness، CORS، نگهبان احراز هویت، CSP پنل و توالی cache `MISS` سپس `HIT` پاس شدند.
 4. APK آماده است؛ پس از آپلود HTTPS باید build لندینگ با `ANDROID_DOWNLOAD_URL` تکرار و روی گوشی واقعی smoke شود.
 5. یک OTP و پرداخت واقعی فقط با تأیید صریح مالک اجرا شود؛ این دو تست خودکار نیستند چون هزینه/تراکنش واقعی دارند.

@@ -14,9 +14,10 @@
  *    `x-routino-html`; here — on OUR domain — we restore `text/html` and drop
  *    the sandbox CSP.
  *
- * Deploy: from git. Cloudflare Workers Builds watches `main` and redeploys this
- * file on every push, using `cloudflare/wrangler.toml` — so DO NOT edit this
- * Worker in the dashboard, or the next push will silently overwrite the edit.
+ * Deploy from the repository with
+ * `npx wrangler deploy --config cloudflare/wrangler.toml`. The config targets
+ * the existing `routino-api` service that owns api.routino.me; a different name
+ * creates a second Worker and leaves production unchanged.
  *
  * One-time dashboard setup (already done, listed for when it has to be redone):
  *  1. Worker → Settings → Build → connect the repo, Root directory = `cloudflare`
@@ -160,7 +161,10 @@ export default {
       return stamped(
         new Response(JSON.stringify({ ok: true, edge: "cloudflare" }), {
           status: 200,
-          headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "no-store",
+          },
         }),
         requestId,
         "LOCAL",

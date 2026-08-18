@@ -9,15 +9,11 @@
 # build must set:  Worker → Settings → Build → Root directory = `cloudflare`
 #
 # ⚠️ `routino` in the dashboard is the PAGES project (the frontend), NOT this.
-# Do not "correct" the name below to something readable: it is the real,
-# Cloudflare-generated name of the Worker that owns the api.routino.me custom
-# domain, confirmed 2026-08-05 from the dashboard list. Renaming it here does
-# not rename the Worker — it creates a SECOND, empty one, leaves api.routino.me
-# serving the old code, and reports success. That is not hypothetical: this file
-# carried a placeholder name for 16 days, so two committed worker changes
-# (a73e313, f700b02 — the latter restoring the admin panel's CSP) sat undeployed
-# while the deploy guide insisted they shipped on every push.
-name = "plain-field-ead8"
+# `routino-api` is the Worker service that owns the api.routino.me custom domain,
+# confirmed from Cloudflare's account-level custom-domain API on 2026-08-18.
+# Changing this name does not rename a Worker: it deploys a second service and
+# leaves api.routino.me on old code, even though Wrangler reports success.
+name = "routino-api"
 
 main = "api-worker.js"
 compatibility_date = "2025-09-01"

@@ -9,58 +9,61 @@
 
 ## 📍 وضعیت فعلی لانچ (به‌روز: ۲۷ مرداد ۱۴۰۵ / 2026-08-18)
 
-> **خلاصه در یک خط:** کد `main`، سایت، Pages API proxy و Supabase Edge v44 زنده‌اند؛
-> APK امضاشده آمادهٔ بارگذاری است. فقط انتشار نسخهٔ تازهٔ API Worker به login
-> Cloudflare، گذاشتن لینک APK بعد از آپلود، و smoke روی گوشی واقعی باقی مانده است.
+> **خلاصه در یک خط:** کد `main`، سایت، Pages API proxy، Supabase Edge v44 و API
+> Worker جدید زنده‌اند؛ APK امضاشده آمادهٔ بارگذاری است. فقط گذاشتن لینک APK بعد
+> از آپلود و smoke روی گوشی واقعی باقی مانده است.
 
 ### چه چیزی مانده (به ترتیب اهمیت)
 
-| # | کار | چه کسی | بلاکِ چی است |
-|---|---|---|---|
-| ۱ | `wrangler login` و سپس `npx wrangler deploy --config cloudflare/wrangler.toml` | مالک login می‌کند؛ بعد قابل ادامه است | بهینه‌سازی تازهٔ `/health`/preflight و هدرهای cache. Worker قدیمی فعال است و `/plans` را cache می‌کند، پس مسیر اصلی down نیست |
-| ۲ | بارگذاری `output/android/routino-android-1.0.apk` روی فضای ابری و دادن URL HTTPS | مالک | فعال‌شدن دکمهٔ دانلود اندروید با `ANDROID_DOWNLOAD_URL` |
-| ۳ | نصب APK روی یک گوشی واقعی و smoke ورود/اعلان/export | مالک + Claude | تأیید سخت‌افزار؛ این سیستم device/AVD نداشت |
-| ۴ | یک OTP واقعی و یک پرداخت واقعی کنترل‌شده | فقط با تأیید صریح مالک | عمداً در تست خودکار اجرا نشد تا کاوه‌نگار یا پول واقعی مصرف نشود |
+| #   | کار                                                                              | چه کسی                 | بلاکِ چی است                                                     |
+| --- | -------------------------------------------------------------------------------- | ---------------------- | ---------------------------------------------------------------- |
+| ۱   | بارگذاری `output/android/routino-android-1.0.apk` روی فضای ابری و دادن URL HTTPS | مالک                   | فعال‌شدن دکمهٔ دانلود اندروید با `ANDROID_DOWNLOAD_URL`          |
+| ۲   | نصب APK روی یک گوشی واقعی و smoke ورود/اعلان/export                              | مالک + Codex           | تأیید سخت‌افزار؛ این سیستم device/AVD نداشت                      |
+| ۳   | یک OTP واقعی و یک پرداخت واقعی کنترل‌شده                                         | فقط با تأیید صریح مالک | عمداً در تست خودکار اجرا نشد تا کاوه‌نگار یا پول واقعی مصرف نشود |
 
-ورود Cloudflare و هر تراکنش واقعی نیازمند اقدام/تأیید مالک است؛ هیچ credential،
-OTP یا پرداختی برای دورزدن این مرز استفاده نمی‌شود.
+هر تراکنش واقعی نیازمند اقدام/تأیید مالک است؛ هیچ OTP یا پرداختی برای دورزدن
+این مرز استفاده نمی‌شود.
 
 ### چه چیزی تمام شده ✅
 
 شاخهٔ `main` شامل commit عملکردی `ad59ec1` روی GitHub و Cloudflare Pages زنده است. `routino.me/v1/*` از Pages
 Function ثابت به API می‌رود و smoke زندهٔ landing، deep route، service worker،
 plans، ping بدون auth، bad POST و DB readiness پاس شده است. Edge Function `api`
-نسخهٔ 44 فعال است. تست‌های فرانت/Edge/Backend، load محلی، Android lint و امضای
-APK پاس شده‌اند؛ نتیجهٔ کامل در `docs-fa/LAUNCH-READINESS.md` است.
+نسخهٔ 44 فعال است. Worker `routino-api` نیز با نسخهٔ
+`a8a84906-8245-4ae9-94f1-cd8d8b76d9a5` زنده و با smoke واقعی `LOCAL`،
+`MISS`، `HIT` و `BYPASS` تأیید شده است. تست‌های فرانت/Edge/Backend، load محلی،
+Android lint و امضای APK پاس شده‌اند؛ نتیجهٔ کامل در
+`docs-fa/LAUNCH-READINESS.md` است.
 
 ---
 
 <details>
 <summary>بایگانی وضعیت تاریخی ۴ اوت (برای مرجع؛ وضعیت فعلی نیست)</summary>
 
-
 > ⚠️ این بخش بایگانی است و نباید برای تصمیم لانچ امروز استفاده شود.
 
 **زیرساخت وب کامل دیپلوی شده و بالاست**، ولی هنوز در **حالت تست** برای پیامک و پرداخت:
 
-| تکه | آدرس / مقدار | وضعیت |
-|---|---|---|
-| بک‌اند (Supabase Edge) | `api.routino.me/health` → `{ok:true}` | ✅ بالا |
-| دیتابیس | `api.routino.me/health/ready` → `db:up` | ✅ وصل |
-| Cloudflare Worker | `api.routino.me` | ✅ کار می‌کند |
-| سایت اصلی (CF Pages) | `routino.me` → HTTP 200 | ✅ بالا |
-| پلن‌ها (از DB) | `/v1/plans` → m1=۵۹k، m3=۱۴۹k، m12=۴۴۹k تومان | ✅ seed شده |
-| `NODE_ENV` / `DB_DRIVER` | `production` / `postgres` | ✅ درست |
-| **`SMS_PROVIDER`** | **`console`** | ❌ **پیامک تستی — کاربر واقعی کد ورود نمی‌گیرد** |
-| **`ZIBAL_MERCHANT`** | **`zibal`** (سندباکس) | ❌ **پول واقعی جابه‌جا نمی‌شود** |
-| **`ALLOW_TEST_PROVIDERS`** | **باید `true` باشد** | ⚠️ **تا وقتی دو ردیف بالا تستی‌اند، بدون این تابع بالا نمی‌آید** |
+| تکه                        | آدرس / مقدار                                  | وضعیت                                                            |
+| -------------------------- | --------------------------------------------- | ---------------------------------------------------------------- |
+| بک‌اند (Supabase Edge)     | `api.routino.me/health` → `{ok:true}`         | ✅ بالا                                                          |
+| دیتابیس                    | `api.routino.me/health/ready` → `db:up`       | ✅ وصل                                                           |
+| Cloudflare Worker          | `api.routino.me`                              | ✅ کار می‌کند                                                    |
+| سایت اصلی (CF Pages)       | `routino.me` → HTTP 200                       | ✅ بالا                                                          |
+| پلن‌ها (از DB)             | `/v1/plans` → m1=۵۹k، m3=۱۴۹k، m12=۴۴۹k تومان | ✅ seed شده                                                      |
+| `NODE_ENV` / `DB_DRIVER`   | `production` / `postgres`                     | ✅ درست                                                          |
+| **`SMS_PROVIDER`**         | **`console`**                                 | ❌ **پیامک تستی — کاربر واقعی کد ورود نمی‌گیرد**                 |
+| **`ZIBAL_MERCHANT`**       | **`zibal`** (سندباکس)                         | ❌ **پول واقعی جابه‌جا نمی‌شود**                                 |
+| **`ALLOW_TEST_PROVIDERS`** | **باید `true` باشد**                          | ⚠️ **تا وقتی دو ردیف بالا تستی‌اند، بدون این تابع بالا نمی‌آید** |
 
 > 🛑 **قبل از دیپلوی بعدی حتماً بخوان.**
 > از این به بعد اگر `NODE_ENV=production` باشد، تابع با `ZIBAL_MERCHANT=zibal` (سندباکس) یا `SMS_PROVIDER=console` **بالا نمی‌آید** — مگر با اجازه‌ی صریح. چون سندباکس زیبال از بیرون هیچ تفاوتی ندارد: کاربر درگاه واقعی می‌بیند، «موفق» می‌گیرد، اشتراک واقعی هم می‌گیرد، و پول به حسابت نمی‌رسد.
 > وضعیت فعلی (سندباکس عمدی) یعنی **اول این را بزن، بعد دیپلوی کن**:
+>
 > ```bash
 > supabase secrets set ALLOW_TEST_PROVIDERS=true --project-ref axychfrteevhfdhgvfuv
 > ```
+>
 > و روزی که مرچنت واقعی + کاوه‌نگار وصل شد، این را **پاک کن** (`supabase secrets unset ALLOW_TEST_PROVIDERS`) تا محافظ برگردد.
 > هر بالا آمدن تابع، هرچه تستی باشد را با `[!] TEST MODE — …` در لاگ چاپ می‌کند.
 
@@ -75,6 +78,7 @@ APK پاس شده‌اند؛ نتیجهٔ کامل در `docs-fa/LAUNCH-READINES
 هر دو: کاربر یک secret را ست می‌کند → سپس redeploy. **قالب کاوه‌نگار و مرچنت زیبال هر دو بررسی انسانیِ چندروزه دارند — زودتر شروع شوند.** (Claude نباید کلید/مرچنت را خودش وارد کند؛ کاربر `secrets set` را می‌زند، Claude فقط redeploy + تست.)
 
 **۱) پیامک واقعی (بلاکر اصلی ورود):**
+
 ```bash
 # کاربر (بعد از گرفتن کلید + تأیید قالب verify/lookup به نام routino-otp):
 supabase secrets set SMS_PROVIDER=kavenegar KAVENEGAR_API_KEY=<key> --project-ref axychfrteevhfdhgvfuv
@@ -82,18 +86,22 @@ supabase secrets set SMS_PROVIDER=kavenegar KAVENEGAR_API_KEY=<key> --project-re
 # سپس:
 npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhgvfuv
 ```
+
 (احتیاط env.ts: در production اگر `SMS_PROVIDER=kavenegar` باشد و `KAVENEGAR_API_KEY` نباشد، تابع اصلاً بالا نمی‌آید.)
 
 **۲) درگاه واقعی زیبال (قبل از پایان ۷ روز رایگانِ کاربرها):**
+
 ```bash
 supabase secrets set ZIBAL_MERCHANT=<کد-پذیرنده-واقعی> --project-ref axychfrteevhfdhgvfuv
 # و حالا که هم پیامک هم درگاه واقعی شد، محافظ را برگردان:
 supabase secrets unset ALLOW_TEST_PROVIDERS --project-ref axychfrteevhfdhgvfuv
 npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhgvfuv
 ```
+
 بعد از دیپلوی، لاگ تابع **نباید** هیچ خط `[!] TEST MODE` داشته باشد. اگر داشت، یعنی یکی از دو سرویس هنوز تستی است.
 
 ### تست محلی (تأییدشده کار می‌کند)
+
 `cd backend && npm run dev` (سرور :3000، sms=console → کد در ترمینال، psp=fake) + `npm run dev` (وب :5180، به :3000 پروکسی می‌شود). کل مسیر آنبوردینگ → ورود OTP → اپ اصلی محلی تست و سالم است.
 
 ---
@@ -151,8 +159,9 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
 
 ۱) **migration**: `supabase/setup.sql` را دوباره در SQL Editor اجرا کن (ستون‌های `username`/`password_hash` روی `users` + جدول `login_attempts` را می‌سازد).
 ۲) **ساخت حساب صاحب اپ** — یکی از دو راه:
-   - **پنل ادمین** (`api.routino.me/admin` یا مستقیم روی تابع): تب «کاربران» → «تنظیم/ریست رمز عبور» → شماره + رمز → اعمال (اگر حساب نباشد می‌سازد).
-   - **خودکار با env**: secretهای `OWNER_PHONE`، `OWNER_PASSWORD` (و اختیاری `OWNER_USERNAME`) را ست کن؛ سرور موقع بالا آمدن حساب را می‌سازد و رمز اولیه را می‌گذارد. **هیچ‌وقت رمزی را که کاربر خودش عوض کرده بازنویسی نمی‌کند.**
+
+- **پنل ادمین** (`api.routino.me/admin` یا مستقیم روی تابع): تب «کاربران» → «تنظیم/ریست رمز عبور» → شماره + رمز → اعمال (اگر حساب نباشد می‌سازد).
+- **خودکار با env**: secretهای `OWNER_PHONE`، `OWNER_PASSWORD` (و اختیاری `OWNER_USERNAME`) را ست کن؛ سرور موقع بالا آمدن حساب را می‌سازد و رمز اولیه را می‌گذارد. **هیچ‌وقت رمزی را که کاربر خودش عوض کرده بازنویسی نمی‌کند.**
 
 ## راه‌اندازی (یک‌بار)
 
@@ -164,19 +173,19 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
 3. **Secrets تابع** (CLI: `npx supabase secrets set KEY=VALUE --project-ref …`
    یا Dashboard → Edge Functions → Secrets):
 
-   | کلید | مقدار |
-   |---|---|
-   | `NODE_ENV` | `production` |
-   | `DB_DRIVER` | `postgres` |
-   | `DATABASE_URL` | رشته‌ی **Transaction pooler (پورت 6543)** پروژه |
-   | `JWT_SECRET` / `OTP_PEPPER` / `ADMIN_TOKEN` | رمزهای تصادفی تولیدشده |
-   | `PROXY_SECRET` | همان مقدار Worker |
-   | `PUBLIC_API_URL` | `https://api.routino.me` |
-   | `PUBLIC_WEB_URL` | `https://routino.me` |
-   | `CORS_ORIGINS` | `https://routino.me,https://localhost,capacitor://localhost` |
-   | `OWNER_PHONE` / `OWNER_PASSWORD` / `OWNER_USERNAME` | اختیاری — بوت‌استرپ حساب صاحب اپ برای ورود با رمز از همان بوت اول (بخش «ورود با رمز عبور» بالا) |
-   | `SMS_PROVIDER` | فعلاً `console` (کد ورود در لاگ تابع) → بعداً `kavenegar` + `KAVENEGAR_API_KEY` (+ `KAVENEGAR_TEMPLATE` اگر نام قالب ≠ `routino-otp`) |
-   | `PSP_PROVIDER` | فعلاً `zibal` با `ZIBAL_MERCHANT=zibal` (سندباکس) → بعداً مرچنت واقعی / `PSP_PROVIDERS=zarinpal,zibal` |
+   | کلید                                                | مقدار                                                                                                                                 |
+   | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+   | `NODE_ENV`                                          | `production`                                                                                                                          |
+   | `DB_DRIVER`                                         | `postgres`                                                                                                                            |
+   | `DATABASE_URL`                                      | رشته‌ی **Transaction pooler (پورت 6543)** پروژه                                                                                       |
+   | `JWT_SECRET` / `OTP_PEPPER` / `ADMIN_TOKEN`         | رمزهای تصادفی تولیدشده                                                                                                                |
+   | `PROXY_SECRET`                                      | همان مقدار Worker                                                                                                                     |
+   | `PUBLIC_API_URL`                                    | `https://api.routino.me`                                                                                                              |
+   | `PUBLIC_WEB_URL`                                    | `https://routino.me`                                                                                                                  |
+   | `CORS_ORIGINS`                                      | `https://routino.me,https://localhost,capacitor://localhost`                                                                          |
+   | `OWNER_PHONE` / `OWNER_PASSWORD` / `OWNER_USERNAME` | اختیاری — بوت‌استرپ حساب صاحب اپ برای ورود با رمز از همان بوت اول (بخش «ورود با رمز عبور» بالا)                                       |
+   | `SMS_PROVIDER`                                      | فعلاً `console` (کد ورود در لاگ تابع) → بعداً `kavenegar` + `KAVENEGAR_API_KEY` (+ `KAVENEGAR_TEMPLATE` اگر نام قالب ≠ `routino-otp`) |
+   | `PSP_PROVIDER`                                      | فعلاً `zibal` با `ZIBAL_MERCHANT=zibal` (سندباکس) → بعداً مرچنت واقعی / `PSP_PROVIDERS=zarinpal,zibal`                                |
 
    > وضعیت فعلیِ همین secretها و دستورهای دقیقِ «واقعی‌کردن» در بخش [«📍 وضعیت فعلی لانچ»](#-وضعیت-فعلی-لانچ-به‌روز-۳-مرداد-۱۴۰۵--2026-07-25) بالای همین فایل است.
 
@@ -188,22 +197,18 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
    npx wrangler deploy --config cloudflare/wrangler.toml
    ```
 
-   **اسم Worker: `plain-field-ead8`** — اسم تصادفیِ ساختِ Cloudflare، چون Worker
-   یک بار دستی در داشبورد ساخته شده. در `cloudflare/wrangler.toml` نوشته شده و
-   **نباید به چیز خواناتری تغییرش داد**: عوض‌کردن اسم آن‌جا Worker را رنیم
-   نمی‌کند، یک Worker **دومِ خالی** می‌سازد، `api.routino.me` روی کد قدیمی
-   می‌ماند، و دیپلوی «موفق» گزارش می‌دهد.
+   **اسم Worker: `routino-api`** — اتصال account-level دامنهٔ
+   `api.routino.me` در ۱۸ اوت ۲۰۲۶ مستقیماً روی همین service تأیید شده است. در
+   `cloudflare/wrangler.toml` نوشته شده و **نباید خودسرانه تغییر کند**: عوض‌کردن
+   اسم آن‌جا Worker را رنیم نمی‌کند، یک Worker **دوم** می‌سازد، دامنه روی کد
+   قبلی می‌ماند، و دیپلوی همچنان «موفق» گزارش می‌دهد.
 
-   > 🔴 **این دقیقاً همان چیزی است که ۱۶ روز اتفاق افتاد.** نسخه‌ی قبلی همین بند
-   > ادعا می‌کرد «Worker به اسم `routino` با هر push از گیت دیپلوی می‌شود» —
-   > هر سه جزئش غلط بود (`routino` اسم پروژه‌ی **Pages** است؛ `wrangler.toml`
-   > در `cloudflare/` است نه ریشه؛ و `name` داخلش یک placeholder پرنشده بود).
-   > نتیجه: آخرین دیپلوی واقعی Worker **۲۰ جولای** بود و دو کامیت
-   > (`a73e313` و `f700b02` — که CSP پنل ادمین را برمی‌گرداند) هرگز به
-   > پروداکشن نرسیدند، در حالی که همه فکر می‌کردند رسیده‌اند.
+   > 🔴 **این خطا دوبار رخ داده است.** ابتدا `routino` (نام پروژهٔ Pages) و بعد
+   > `plain-field-ead8` در فایل قرار داشتند. هر دو deploy موفق گزارش می‌دادند،
+   > اما API حساب Cloudflare نشان داد custom domain واقعاً متعلق به
+   > `routino-api` است. تست `deployment contract` اکنون نام درست را قفل می‌کند.
    > **درس:** بعد از هر تغییر `cloudflare/api-worker.js`، دیپلوی را با یک
    > چک واقعی تأیید کن، نه با «push شد پس رفت».
-
    - **اگر می‌خواهی خودکار شود:** داشبورد → آن Worker → Settings → Build →
      اتصال به ریپو با **Root directory = `cloudflare`**. (الان وصل نیست —
      شمارنده‌ی «Workers build mins» صفر است.)
@@ -214,11 +219,12 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
      اتصالِ موجودِ `api.routino.me` سر شاخ نشود.
 
    **تست دودِ Worker بعد از هر دیپلوی** (هر سه باید درست باشند):
+
    ```bash
-   curl -s https://api.routino.me/health                      # {"ok":true}
+   curl -s https://api.routino.me/health                      # {"ok":true,"edge":"cloudflare"}
    curl -sI https://api.routino.me/admin | grep -i content-security-policy   # باید باشد
-   for i in 1 2 3; do curl -sI --compressed https://api.routino.me/v1/plans | grep -i sb-request-id; done
-   # ↑ خطِ دوم و سوم باید شناسه‌ی یکسان بدهند = کش لبه کار می‌کند
+   for i in 1 2; do curl -sI --compressed https://api.routino.me/v1/plans | grep -i x-routino-cache; done
+   # ↑ پاسخ اول MISS و پاسخ دوم HIT است = کش لبه کار می‌کند
    ```
 
    ⚠️ **خط اول را نشمار.** کش ۵ دقیقه عمر دارد و نوشتنش غیرهمزمان است
