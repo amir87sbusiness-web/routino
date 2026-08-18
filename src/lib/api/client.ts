@@ -8,6 +8,7 @@
  *  - hold any UI. Nothing here is ever awaited on a render path.
  */
 import { Capacitor } from "@capacitor/core";
+import { recordDiagnostic } from "../diagnostics";
 
 /** Same-origin `/v1` in dev (Vite proxies it); absolute in native builds, where
  * the app is served from `https://localhost` and has no server of its own. */
@@ -69,10 +70,14 @@ async function nativeRequest(
     connectTimeout: opts.timeoutMs ?? 15_000,
     readTimeout: opts.timeoutMs ?? 15_000,
   });
+  const normalizedHeaders: Record<string, string> = {};
+  for (const [key, value] of Object.entries(res.headers ?? {})) {
+    normalizedHeaders[key.toLowerCase()] = String(value);
+  }
   return {
     status: res.status,
     body: res.data,
-    headers: (res.headers ?? {}) as Record<string, string>,
+    headers: normalizedHeaders,
   };
 }
 
@@ -105,6 +110,7 @@ async function webRequest(
 
 export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const url = `${BASE}${path}`;
+  const startedAt = performance.now();
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (opts.token) headers.Authorization = `Bearer ${opts.token}`;
 
@@ -115,6 +121,17 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Pr
       : await webRequest(url, opts, headers);
   } catch (err) {
     // Offline, DNS failure, timeout, blocked. Not exceptional for this app.
+    recordDiagnostic({
+      name: "api_offline",
+      meta: {
+        source: "api",
+        path,
+        method: opts.method ?? "GET",
+        durationMs: performance.now() - startedAt,
+        offline: true,
+        timeout: err instanceof DOMException && err.name === "AbortError",
+      },
+    });
     throw new ApiError(
       0,
       "offline",
@@ -123,10 +140,39 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Pr
     );
   }
 
-  if (raw.status >= 200 && raw.status < 300) return raw.body as T;
+  const durationMs = performance.now() - startedAt;
+  const requestId = raw.headers["x-request-id"];
+  if (raw.status >= 200 && raw.status < 300) {
+    if (durationMs >= 3_000) {
+      recordDiagnostic({
+        name: "api_slow",
+        meta: {
+          source: "api",
+          path,
+          method: opts.method ?? "GET",
+          status: raw.status,
+          durationMs,
+          requestId,
+        },
+      });
+    }
+    return raw.body as T;
+  }
 
   const body = (raw.body ?? {}) as { error?: string; message?: string; support?: string };
   const retryAfter = raw.headers["retry-after"] ? Number(raw.headers["retry-after"]) : undefined;
+  recordDiagnostic({
+    name: "api_error",
+    meta: {
+      source: "api",
+      path,
+      method: opts.method ?? "GET",
+      status: raw.status,
+      durationMs,
+      requestId,
+      code: body.error,
+    },
+  });
   throw new ApiError(
     raw.status,
     body.error ?? "http_error",

@@ -16,10 +16,13 @@ export async function readStorageHealth(): Promise<StorageHealth> {
   const storage = typeof navigator === "undefined" ? undefined : navigator.storage;
   if (!storage) return unsupported();
 
-  const [persisted, estimate] = await Promise.all([
-    storage.persisted?.().catch(() => false) ?? false,
-    storage.estimate?.().catch(() => ({})) ?? {},
-  ]);
+  const persistedPromise = storage.persisted
+    ? storage.persisted().catch(() => false)
+    : Promise.resolve(false);
+  const estimatePromise: Promise<StorageEstimate> = storage.estimate
+    ? storage.estimate().catch(() => ({}))
+    : Promise.resolve({});
+  const [persisted, estimate] = await Promise.all([persistedPromise, estimatePromise]);
 
   return {
     supported: true,
