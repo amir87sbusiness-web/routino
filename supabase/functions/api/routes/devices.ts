@@ -14,6 +14,8 @@ export function deviceRoutes(deps: Deps) {
   const now = () => new Date(deps.now());
   const r = new Hono<AppEnv>();
 
+  r.get("/devices/ping", auth, (c) => c.json({ ok: true as const }));
+
   r.get("/devices", auth, async (c) => {
     const caller = requireUser(c);
     const [account] = await db.select().from(users).where(eq(users.id, caller.id)).limit(1);

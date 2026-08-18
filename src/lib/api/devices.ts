@@ -25,6 +25,11 @@ export function fetchDevices(): Promise<DeviceOverview> {
   return authedRequest("/devices");
 }
 
+/** Lightweight session/device validation for the one-minute security cadence. */
+export function pingDevice(): Promise<{ ok: true }> {
+  return authedRequest("/devices/ping");
+}
+
 export function revokeDevice(id: string): Promise<{ ok: true }> {
   return authedRequest(`/devices/${encodeURIComponent(id)}/revoke`, { method: "POST" });
 }

@@ -28,6 +28,31 @@ async function login(key: string) {
 }
 
 describe("device APIs", () => {
+  it("pings the current device without returning the expensive device overview", async () => {
+    const current = await login("current-device-key");
+    const response = await h.app.inject({
+      method: "GET",
+      url: "/v1/devices/ping",
+      headers: { authorization: `Bearer ${current.access}` },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ ok: true });
+  });
+
+  it("rejects a ping as soon as the current device is revoked", async () => {
+    const current = await login("current-device-key");
+    await h.raw(
+      `update devices set revoked_at = now(), revocation_reason = 'user_revoked' where id = '${current.deviceId}'`,
+    );
+    const response = await h.app.inject({
+      method: "GET",
+      url: "/v1/devices/ping",
+      headers: { authorization: `Bearer ${current.access}` },
+    });
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error).toBe("device_revoked");
+  });
+
   it("lists safe presentation fields and identifies the current device", async () => {
     const current = await login("current-device-key");
     const response = await h.app.inject({

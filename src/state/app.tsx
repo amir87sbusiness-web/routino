@@ -30,7 +30,7 @@ import {
   loadTokens,
 } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
-import { fetchDevices } from "@/lib/api/devices";
+import { pingDevice } from "@/lib/api/devices";
 import { todayKey, type Calendar, type Lang } from "@/lib/dates";
 import { diffDb } from "@/lib/db/diff";
 import { hydrate } from "@/lib/db/hydrate";
@@ -49,6 +49,7 @@ import { syncNativeBars } from "@/lib/native";
 import { loginAs } from "@/lib/wipe";
 import { decideSession, isSessionRevocationReason } from "@/lib/security-session";
 import { subscriptionReminderEvents } from "@/lib/subscription-reminders";
+import { shouldRefreshEntitlement } from "@/lib/entitlement-refresh";
 
 type Updater = (fn: (db: Db) => Db) => void;
 
@@ -265,14 +266,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
     checkingSession.current = true;
     try {
-      await fetchDevices();
+      await pingDevice();
       setSessionGate("ready");
-      void fetchEntitlement()
-        .then(({ entitlement }) => {
-          const sub = entitlementToSubscription(entitlement);
-          if (sub) setDb((prev) => (prev ? applyServerEntitlement(prev, sub) : prev));
+      const latest = loadTokens() ?? tokens;
+      if (
+        shouldRefreshEntitlement({
+          now: Date.now(),
+          lastCheckedAt: latest.lastEntitlementCheckedAt,
+          expiresAt: current.subscription?.expiresAt,
+          force: localDecision.kind === "needs-online-confirmation",
         })
-        .catch(() => undefined);
+      ) {
+        void fetchEntitlement()
+          .then(({ entitlement }) => {
+            const sub = entitlementToSubscription(entitlement);
+            if (sub) setDb((prev) => (prev ? applyServerEntitlement(prev, sub) : prev));
+          })
+          .catch(() => undefined);
+      }
     } catch (err) {
       const code = err instanceof ApiError ? err.code : "";
       if (isSessionRevocationReason(code)) {

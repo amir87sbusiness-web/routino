@@ -12,6 +12,10 @@ export const deviceRoutes: FastifyPluginAsync = async (app) => {
   const { db } = app.deps;
   const now = () => new Date(app.deps.now());
 
+  app.get("/devices/ping", { preHandler: app.authenticate }, async () => {
+    return { ok: true as const };
+  });
+
   app.get("/devices", { preHandler: app.authenticate }, async (req) => {
     const caller = requireUser(req);
     const [account] = await db.select().from(users).where(eq(users.id, caller.id)).limit(1);

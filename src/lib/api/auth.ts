@@ -24,6 +24,8 @@ export interface Tokens {
   accessExpiresAt: number;
   /** Last successful authenticated server response. Drives the 15-day offline lease. */
   lastServerConfirmedAt: number;
+  /** Last successful subscription read; absent on sessions created by older builds. */
+  lastEntitlementCheckedAt?: number;
 }
 
 export interface ServerEntitlement {
@@ -70,17 +72,30 @@ export function clearTokens(): void {
 
 /** Picks only the token fields: callers pass whole API responses, and the store
  * must not accumulate a stale copy of `entitlement`/`user` alongside them. */
-const withExpiry = (t: { access: string; refresh: string; deviceId: string }): Tokens => ({
-  access: t.access,
-  refresh: t.refresh,
-  deviceId: t.deviceId,
-  accessExpiresAt: Date.now() + ASSUMED_ACCESS_TTL_MS,
-  lastServerConfirmedAt: Date.now(),
-});
+const withExpiry = (
+  t: { access: string; refresh: string; deviceId: string },
+  previous?: Pick<Tokens, "lastEntitlementCheckedAt">,
+  entitlementCheckedAt?: number,
+): Tokens => {
+  const now = Date.now();
+  return {
+    access: t.access,
+    refresh: t.refresh,
+    deviceId: t.deviceId,
+    accessExpiresAt: now + ASSUMED_ACCESS_TTL_MS,
+    lastServerConfirmedAt: now,
+    lastEntitlementCheckedAt: entitlementCheckedAt ?? previous?.lastEntitlementCheckedAt,
+  };
+};
 
 export function markServerConfirmed(now = Date.now()): void {
   const tokens = loadTokens();
   if (tokens) saveTokens({ ...tokens, lastServerConfirmedAt: now });
+}
+
+export function markEntitlementChecked(now = Date.now()): void {
+  const tokens = loadTokens();
+  if (tokens) saveTokens({ ...tokens, lastEntitlementCheckedAt: now });
 }
 
 /* ---------------- endpoints ---------------- */
@@ -108,7 +123,7 @@ export async function verifyOtp(
     method: "POST",
     body: { phone, code, device: descriptor },
   });
-  saveTokens(withExpiry(res));
+  saveTokens(withExpiry(res, undefined, Date.now()));
   return res;
 }
 
@@ -125,7 +140,7 @@ export async function passwordLogin(
     method: "POST",
     body: { identifier, password, device: descriptor },
   });
-  saveTokens(withExpiry(res));
+  saveTokens(withExpiry(res, undefined, Date.now()));
   return res;
 }
 
@@ -166,7 +181,9 @@ export async function importSubscription(sub: {
 }
 
 export async function fetchEntitlement(): Promise<{ entitlement: ServerEntitlement }> {
-  return authedRequest("/subscriptions/me");
+  const result = await authedRequest<{ entitlement: ServerEntitlement }>("/subscriptions/me");
+  markEntitlementChecked();
+  return result;
 }
 
 export async function logout(): Promise<void> {
@@ -200,7 +217,7 @@ async function refreshTokens(): Promise<Tokens | null> {
           body: { refresh: current.refresh },
         },
       );
-      const next = withExpiry(res);
+      const next = withExpiry(res, current);
       saveTokens(next);
       return next;
     } catch (err) {
