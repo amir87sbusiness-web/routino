@@ -96,7 +96,7 @@ supabase secrets unset ALLOW_TEST_PROVIDERS --project-ref axychfrteevhfdhgvfuv
 npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhgvfuv
 ```
 
-قبل از این دستور، `payment-relay/` را روی میزبان دارای IPv4 ثابت اجرا کن، همان IPv4 خروجی را در تنظیمات درگاه روتینو داخل زیبال ثبت کن و `/health` رله را بگیر. Cloudflare Worker و Supabase Edge معمولی IP خروجی ثابت ندارند و نباید IPهای فعلی یا رنج عمومی آن‌ها را در زیبال ثبت کرد.
+قبل از این دستور، `payment-relay/` را روی میزبان دارای IPv4 ثابت اجرا کن، همان IPv4 خروجی را در تنظیمات درگاه روتینو داخل زیبال ثبت کن و `/health` رله را بگیر. Cloudflare Worker و Supabase Edge معمولی IP خروجی ثابت ندارند و نباید IPهای فعلی یا رنج عمومی آن‌ها را در زیبال ثبت کرد. رله در production با merchant آزمایشی `zibal` عمداً بالا نمی‌آید، دیتابیس/cron/polling ندارد و فقط هنگام `request` یا `verify` پرداخت مصرف ایجاد می‌کند.
 
 بعد از دیپلوی، لاگ تابع **نباید** هیچ خط `[!] TEST MODE` داشته باشد. اگر داشت، یعنی یکی از دو سرویس هنوز تستی است.
 

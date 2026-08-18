@@ -1,11 +1,37 @@
 import { describe, expect, it, vi } from "vitest";
 // @ts-expect-error — the relay is dependency-free production JavaScript.
-import { createRelayHandler, signRelayRequest } from "../../payment-relay/relay.js";
+import {
+  createRelayHandler,
+  signRelayRequest,
+  validateRelayConfig,
+} from "../../payment-relay/relay.js";
 
 const SECRET = "relay-secret-with-at-least-32-bytes";
 const NOW = 1_787_098_000_000;
 
 describe("Zibal fixed-egress relay", () => {
+  it("refuses the Zibal sandbox merchant in production unless explicitly allowed", () => {
+    expect(() =>
+      validateRelayConfig({
+        merchant: "zibal",
+        secret: SECRET,
+        nodeEnv: "production",
+      }),
+    ).toThrow(/sandbox merchant/i);
+
+    expect(() =>
+      validateRelayConfig({
+        merchant: "zibal",
+        secret: SECRET,
+        nodeEnv: "production",
+        allowTestProviders: "true",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      validateRelayConfig({ merchant: "merchant-live", secret: SECRET, nodeEnv: "production" }),
+    ).not.toThrow();
+  });
+
   it("accepts a valid signed request and replaces an untrusted merchant", async () => {
     let upstreamBody: Record<string, unknown> | undefined;
     let upstreamUrl = "";
@@ -114,6 +140,101 @@ describe("Zibal fixed-egress relay", () => {
     expect((await relay(makeRequest())).status).toBe(200);
     expect((await relay(makeRequest())).status).toBe(409);
     expect(upstream).toHaveBeenCalledTimes(1);
+  });
+
+  it("remembers a future-dated nonce for the request's whole validity window", async () => {
+    let currentTime = NOW;
+    const upstream = vi.fn(async () => Response.json({ result: 100 }));
+    const relay = createRelayHandler({
+      merchant: "merchant-live",
+      secret: SECRET,
+      fetchImpl: upstream,
+      now: () => currentTime,
+    });
+    const path = "/v1/verify";
+    const body = JSON.stringify({ trackId: 42 });
+    const timestamp = String(NOW + 60_000);
+    const nonce = "123e4567-e89b-42d3-a456-426614174005";
+    const signature = await signRelayRequest({ secret: SECRET, timestamp, nonce, path, body });
+    const makeRequest = () =>
+      new Request(`https://relay.routino.me${path}`, {
+        method: "POST",
+        body,
+        headers: {
+          "x-routino-timestamp": timestamp,
+          "x-routino-nonce": nonce,
+          "x-routino-signature": signature,
+        },
+      });
+
+    expect((await relay(makeRequest())).status).toBe(200);
+    currentTime = NOW + 60_001;
+    expect((await relay(makeRequest())).status).toBe(409);
+    expect(upstream).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects new work instead of evicting a still-valid replay nonce at capacity", async () => {
+    const upstream = vi.fn(async () => Response.json({ result: 100 }));
+    const relay = createRelayHandler({
+      merchant: "merchant-live",
+      secret: SECRET,
+      fetchImpl: upstream,
+      now: () => NOW,
+      maxNonces: 2,
+    });
+    const path = "/v1/verify";
+    const body = JSON.stringify({ trackId: 42 });
+    const timestamp = String(NOW);
+    const send = async (nonce: string) => {
+      const signature = await signRelayRequest({ secret: SECRET, timestamp, nonce, path, body });
+      return relay(
+        new Request(`https://relay.routino.me${path}`, {
+          method: "POST",
+          body,
+          headers: {
+            "x-routino-timestamp": timestamp,
+            "x-routino-nonce": nonce,
+            "x-routino-signature": signature,
+          },
+        }),
+      );
+    };
+
+    expect((await send("123e4567-e89b-42d3-a456-426614174006")).status).toBe(200);
+    expect((await send("123e4567-e89b-42d3-a456-426614174007")).status).toBe(200);
+    expect((await send("123e4567-e89b-42d3-a456-426614174008")).status).toBe(503);
+    expect((await send("123e4567-e89b-42d3-a456-426614174006")).status).toBe(409);
+    expect(upstream).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a mutated HMAC without contacting Zibal", async () => {
+    const upstream = vi.fn();
+    const relay = createRelayHandler({
+      merchant: "merchant-live",
+      secret: SECRET,
+      fetchImpl: upstream,
+      now: () => NOW,
+    });
+    const path = "/v1/request";
+    const body = JSON.stringify({ amount: 1_490_000 });
+    const timestamp = String(NOW);
+    const nonce = "123e4567-e89b-42d3-a456-426614174009";
+    const valid = await signRelayRequest({ secret: SECRET, timestamp, nonce, path, body });
+    const signature = `${valid[0] === "0" ? "1" : "0"}${valid.slice(1)}`;
+    const response = await relay(
+      new Request(`https://relay.routino.me${path}`, {
+        method: "POST",
+        body,
+        headers: {
+          "x-routino-timestamp": timestamp,
+          "x-routino-nonce": nonce,
+          "x-routino-signature": signature,
+        },
+      }),
+    );
+
+    expect(response.status).toBe(401);
+    expect(upstream).not.toHaveBeenCalled();
   });
 
   it("keeps health local and allows only the two Zibal operations", async () => {

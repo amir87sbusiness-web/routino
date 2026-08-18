@@ -38,7 +38,34 @@ const json = (value, status) =>
     headers: { "cache-control": "no-store", "x-content-type-options": "nosniff" },
   });
 
-export function createRelayHandler({ merchant, secret, fetchImpl = fetch, now = Date.now }) {
+export function validateRelayConfig({ merchant, secret, nodeEnv, allowTestProviders }) {
+  if (typeof merchant !== "string" || !merchant.trim()) {
+    throw new Error("ZIBAL_MERCHANT is required");
+  }
+  if (typeof secret !== "string" || secret.length < 32) {
+    throw new Error("RELAY_SECRET must be at least 32 characters");
+  }
+  if (
+    nodeEnv === "production" &&
+    merchant.trim().toLowerCase() === "zibal" &&
+    allowTestProviders !== "true"
+  ) {
+    throw new Error(
+      "Zibal sandbox merchant is disabled in production; set a real merchant or explicitly allow test providers",
+    );
+  }
+}
+
+export function createRelayHandler({
+  merchant,
+  secret,
+  fetchImpl = fetch,
+  now = Date.now,
+  maxNonces = MAX_NONCES,
+}) {
+  if (!Number.isSafeInteger(maxNonces) || maxNonces < 1) {
+    throw new Error("maxNonces must be a positive safe integer");
+  }
   const nonces = new Map();
 
   return async function relay(request) {
@@ -77,8 +104,8 @@ export function createRelayHandler({ merchant, secret, fetchImpl = fetch, now = 
       if (expiresAt < currentTime) nonces.delete(seenNonce);
     }
     if (nonces.has(nonce)) return json({ error: "replayed_request" }, 409);
-    if (nonces.size >= MAX_NONCES) nonces.delete(nonces.keys().next().value);
-    nonces.set(nonce, currentTime + MAX_CLOCK_SKEW_MS);
+    if (nonces.size >= maxNonces) return json({ error: "relay_busy" }, 503);
+    nonces.set(nonce, timestampMs + MAX_CLOCK_SKEW_MS);
 
     let parsed;
     try {
