@@ -213,12 +213,20 @@ window.openUser = async (id) => {
     "<h3 dir='ltr'>" + esc(localPhone(d.user.phone)) + "</h3>" +
     "<p class='muted'>اشتراک: " + esc(d.entitlement.planId || "—") + " تا " + dt(d.entitlement.expiresAt) +
     (d.user.blocked ? " — <b style='color:var(--bad)'>مسدود</b>" : "") + "</p>" +
+    "<p class='muted'>امنیت دستگاه: سقف " + fa(d.user.maxActiveDevices) + " دستگاه — " + fa(d.user.switchCount30d) + " جابه‌جایی در ۳۰ روز" +
+    (d.user.securityLockedAt ? " — <b style='color:var(--bad)'>قفل امنیتی</b>" : "") + "</p>" +
     "<div class='row'>" +
       "<input id='gMonths' type='number' min='0' max='36' placeholder='ماه' style='width:70px'>" +
       "<input id='gDays' type='number' min='0' max='366' placeholder='روز' style='width:70px'>" +
       "<button class='act mini' id='gGo'>گرنت اشتراک</button>" +
       "<button class='act mini " + (d.user.blocked ? "" : "ghost") + "' id='bGo'>" + (d.user.blocked ? "رفع مسدودی" : "مسدود کردن") + "</button>" +
       "<button class='ghost act mini' onclick='userDlg.close()'>بستن</button>" +
+    "</div>" +
+    "<div class='row' style='margin-top:10px'>" +
+      "<input id='maxDevices' type='number' min='1' max='10' value='" + esc(d.user.maxActiveDevices) + "' aria-label='حداکثر دستگاه فعال' style='width:90px'>" +
+      "<button class='act mini' id='devicePolicyGo'>ثبت سقف دستگاه</button>" +
+      "<button class='ghost act mini' id='resetSwitchGo'>صفرکردن شمارنده ۳۰روزه</button>" +
+      (d.user.securityLockedAt ? "<button class='act mini' id='unlockGo'>رفع قفل امنیتی</button>" : "") +
     "</div>" +
     "<h4>پرداخت‌ها</h4><div class='wrap'><table>" +
     "<tr><th>تاریخ</th><th>پلن</th><th>مبلغ</th><th>وضعیت</th><th>پیگیری</th></tr>" +
@@ -229,8 +237,8 @@ window.openUser = async (id) => {
     d.grants.map((g) => "<tr><td>" + dt(g.createdAt) + "</td><td>" + esc(g.source) + "</td><td>" + fa(g.months) + " ماه " + fa(g.days) + " روز</td><td>" + dt(g.expiresAfter) + "</td></tr>").join("") +
     "</table></div>" +
     "<h4>دستگاه‌ها</h4><div class='wrap'><table>" +
-    "<tr><th>نام</th><th>آخرین فعالیت</th><th>ساخت</th><th>وضعیت</th></tr>" +
-    (d.devices.length ? d.devices : []).map((v) => "<tr><td>" + esc(v.name || "—") + "</td><td>" + dt(v.lastSeenAt) + "</td><td>" + dt(v.createdAt) + "</td><td>" + (v.revokedAt ? "<span class='pill mut'>باطل‌شده</span>" : "<span class='pill ok'>فعال</span>") + "</td></tr>").join("") +
+    "<tr><th>نام</th><th>پلتفرم</th><th>آخرین فعالیت</th><th>ساخت</th><th>وضعیت</th></tr>" +
+    (d.devices.length ? d.devices : []).map((v) => "<tr><td>" + esc(v.name || "—") + "</td><td>" + esc([v.platform, v.browser, v.os].filter(Boolean).join(" · ") || "—") + "</td><td>" + dt(v.lastSeenAt) + "</td><td>" + dt(v.createdAt) + "</td><td>" + (v.revokedAt ? "<span class='pill mut'>باطل‌شده</span>" : "<span class='pill ok'>فعال</span>") + "</td></tr>").join("") +
     "</table></div>";
   dlg.showModal();
   $("#gGo").onclick = async () => {
@@ -243,6 +251,22 @@ window.openUser = async (id) => {
     if (!confirm(d.user.blocked ? "رفع مسدودی؟" : "این کاربر مسدود شود؟")) return;
     await api("/users/" + id + "/block", { method: "POST", body: { blocked: !d.user.blocked } });
     dlg.close(); loadUsers();
+  };
+  $("#devicePolicyGo").onclick = async () => {
+    const maxActiveDevices = Number($("#maxDevices").value);
+    if (!Number.isInteger(maxActiveDevices) || maxActiveDevices < 1 || maxActiveDevices > 10) return alert("عدد باید بین ۱ تا ۱۰ باشد");
+    await api("/users/" + id + "/device-policy", { method: "POST", body: { maxActiveDevices } });
+    dlg.close(); window.openUser(id);
+  };
+  $("#resetSwitchGo").onclick = async () => {
+    if (!confirm("شمارنده جابه‌جایی ۳۰روزه صفر شود؟")) return;
+    await api("/users/" + id + "/device-policy", { method: "POST", body: { resetSwitchCount: true } });
+    dlg.close(); window.openUser(id);
+  };
+  if ($("#unlockGo")) $("#unlockGo").onclick = async () => {
+    if (!confirm("قفل امنیتی حساب رفع شود؟")) return;
+    await api("/users/" + id + "/device-policy", { method: "POST", body: { unlock: true, resetSwitchCount: true } });
+    dlg.close(); window.openUser(id);
   };
 };
 

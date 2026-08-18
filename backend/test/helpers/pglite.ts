@@ -72,7 +72,12 @@ async function seedPlans(db: PgliteDatabase<typeof schema>): Promise<void> {
 }
 
 export async function makeHarness(overrides: Partial<NodeJS.ProcessEnv> = {}): Promise<Harness> {
-  const env = loadEnv({ ...process.env, NODE_ENV: "test", ...overrides });
+  const env = loadEnv({
+    ...process.env,
+    NODE_ENV: "test",
+    LEGACY_PERSONAL_SYNC_ENABLED: "true",
+    ...overrides,
+  });
   const pglite = new PGlite();
   const db = drizzle(pglite, { schema });
 

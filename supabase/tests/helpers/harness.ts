@@ -70,6 +70,7 @@ export async function makeHarness(overrides: Record<string, string> = {}): Promi
   const env = loadEnv({
     ...process.env,
     NODE_ENV: "test",
+    LEGACY_PERSONAL_SYNC_ENABLED: "true",
     PROXY_SECRET: "",
     // Production-like origin list, so the CORS behaviour asserted here is the
     // one routino.me actually gets.
