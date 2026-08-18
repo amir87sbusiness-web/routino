@@ -23,7 +23,7 @@
 ## تست‌های انجام‌شده
 
 - Frontend unit/integration: ۲۲ فایل، ۱۴۵ تست پاس.
-- Backend: ۲۶ فایل، ۲۵۲ تست پاس؛ typecheck و production build پاس.
+- Backend: ۲۶ فایل، ۲۵۳ تست پاس؛ typecheck و production build پاس.
 - Supabase Edge parity/integration: ۱۰ فایل، ۹۳ تست پاس.
 - Web production build و mobile build پاس؛ service worker وب ۷۷ فایل ضروری را precache می‌کند و در mobile غیرفعال است.
 - Production dependency audit فرانت و بک‌اند: صفر آسیب‌پذیری شناخته‌شده. هشدارهای باقیمانده فقط ابزارهای توسعهٔ Capacitor 7 هستند و وارد bundle/runtime لانچ نمی‌شوند.

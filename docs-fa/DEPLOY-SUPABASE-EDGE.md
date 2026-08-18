@@ -133,8 +133,8 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
 - **لایه‌ی HTTP اج** (Hono): `supabase/functions/api/{app,deps,routes/*}.ts` —
   آداپتور نازک روی همان سرویس‌ها. ورودی Deno فقط `index.ts` است.
 - **تست‌ها**: `npm run test:edge` (ریشه) همین اپ اج را با PGlite زیر Node اجرا
-  می‌کند — ۵۰ تست شامل کل مسیر پول. بک‌اند Node همچنان مرجع توسعه‌ی محلی است
-  (`cd backend && npm run dev`) و ۱۱۶ تست خودش را دارد.
+  می‌کند — در بررسی لانچ ۹۳ تست پاس شد. بک‌اند Node همچنان مرجع توسعه‌ی محلی است
+  (`cd backend && npm run dev`) و در همان بررسی ۲۵۳ تست خودش پاس شد.
 
 ## چرخه‌ی یک تغییر بک‌اند
 

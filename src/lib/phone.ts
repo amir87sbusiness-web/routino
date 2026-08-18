@@ -37,9 +37,12 @@ export function normalizePhone(input: string): string | null {
   const d = toAsciiDigits(input).replace(/\D/g, "");
 
   let national: string | null = null;
-  if (d.length === 10 && d.startsWith("9")) national = d; // 9123334444
-  else if (d.length === 11 && d.startsWith("09")) national = d.slice(1); // 09123334444
-  else if (d.length === 12 && d.startsWith("989")) national = d.slice(2); // 989123334444 / +98…
+  if (d.length === 10 && d.startsWith("9"))
+    national = d; // 9123334444
+  else if (d.length === 11 && d.startsWith("09"))
+    national = d.slice(1); // 09123334444
+  else if (d.length === 12 && d.startsWith("989"))
+    national = d.slice(2); // 989123334444 / +98…
   else if (d.length === 14 && d.startsWith("00989")) national = d.slice(4); // 00989123334444
 
   return national && /^9\d{9}$/.test(national) ? `98${national}` : null;

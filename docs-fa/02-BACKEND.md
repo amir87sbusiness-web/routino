@@ -239,7 +239,7 @@ Fastify رو می‌سازه، CORS و فشرده‌سازی و helmet رو فع
 | `entitlement.test.ts` | تمدید و دفترکل |
 | `subscriptions.test.ts` | انتقال اشتراک قدیمی و محدودیت‌هاش |
 | `admin.test.ts` | پنل ادمین |
-| `phone.parity.test.ts` | ⚠️ **یکسان‌بودن نرمال‌سازی شماره بین فرانت و بک** — اگه یکی رو عوض کنی این تست می‌شکنه (عمداً) |
+| `phone.parity.test.ts` | ⚠️ **یکسان‌بودن بایت‌به‌بایت `src/lib/phone.ts` و `backend/src/lib/phone.ts`** + بردارهای رفتاری نرمال‌سازی — اگه یکی رو عوض کنی این تست می‌شکنه (عمداً) |
 | `app.test.ts` | ساخت اپ Fastify، health check ها |
 | `psp.test.ts` | درگاه‌های پرداخت (زیبال/زرین‌پال/فیک) مستقل از مسیر HTTP |
 | `edge-parity.test.ts` | یکسان‌بودن `backend/src` با کپیِ سینک‌شده در `supabase/functions/api/shared/` — اگه فراموش کنی `sync:edge` بزنی این می‌شکنه |
