@@ -22,32 +22,58 @@ import {
 } from "../services/password.js";
 import { SmsNotSentError } from "../providers/sms/index.js";
 import {
-  enforceDeviceLimit,
   issueForDevice,
   revokeOtherDevices,
   revokeRefresh,
   rotateRefresh,
 } from "../services/tokens.js";
+import type { DeviceDescriptor } from "../services/tokens.js";
 
 const TRIAL_DAYS = 7;
+
+const deviceDescriptorBody = z.object({
+  installationKey: z.string().min(8).max(256),
+  name: z.string().min(1).max(64),
+  platform: z.enum(["web", "pwa", "android", "ios"]),
+  browser: z.string().max(32).optional(),
+  os: z.string().max(32).optional(),
+});
 
 const requestBody = z.object({ phone: z.string().min(1).max(32) });
 const verifyBody = z.object({
   phone: z.string().min(1).max(32),
   code: z.string().min(4).max(8),
   deviceName: z.string().max(64).optional(),
+  device: deviceDescriptorBody.optional(),
 });
 const refreshBody = z.object({ refresh: z.string().min(16).max(256) });
 const passwordLoginBody = z.object({
   identifier: z.string().min(1).max(64),
   password: z.string().min(1).max(128),
   deviceName: z.string().max(64).optional(),
+  device: deviceDescriptorBody.optional(),
 });
 const setUsernameBody = z.object({ username: z.string().min(1).max(64) });
 const setPasswordBody = z.object({
   newPassword: z.string().min(1).max(128),
   currentPassword: z.string().max(128).optional(),
 });
+
+function deviceDescriptor(
+  device: DeviceDescriptor | undefined,
+  legacyName: string | undefined,
+): DeviceDescriptor {
+  if (device) return device;
+  const name = legacyName?.trim() || "Web browser";
+  return {
+    // Compatibility for clients released before installation keys. It keeps a
+    // stable UA/name on one row instead of counting every token refresh/login as
+    // a new physical device. New clients always send a random installation key.
+    installationKey: `legacy:${name}`,
+    name,
+    platform: "web",
+  };
+}
 
 /** `req.ip` already resolves x-forwarded-for when (and ONLY when) TRUST_PROXY
  * is on — reading the header directly here would let any client spoof its IP
@@ -118,7 +144,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
    * client, where anyone could re-grant it forever.
    */
   app.post("/auth/otp/verify", async (req) => {
-    const { phone: raw, code, deviceName } = verifyBody.parse(req.body);
+    const { phone: raw, code, deviceName, device } = verifyBody.parse(req.body);
     const phone = normalizePhone(raw);
     if (!phone) throw badRequest("invalid_phone", "Enter a valid Iranian mobile number");
 
@@ -143,8 +169,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       await grantInterval(db, user.id, { planId: "trial", days: TRIAL_DAYS, source: "trial" }, t);
     }
 
-    const tokens = await issueForDevice(db, env, user.id, deviceName ?? null, t);
-    await enforceDeviceLimit(db, user.id, tokens.deviceId, t);
+    const tokens = await issueForDevice(db, env, user.id, deviceDescriptor(device, deviceName), t);
     const entitlement = await readEntitlement(db, user.id, t);
 
     return {
@@ -169,7 +194,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
    * has an account.
    */
   app.post("/auth/password/login", async (req) => {
-    const { identifier, password, deviceName } = passwordLoginBody.parse(req.body);
+    const { identifier, password, deviceName, device } = passwordLoginBody.parse(req.body);
     const t = now();
     const ip = clientIp(req);
 
@@ -200,8 +225,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     if (user.blocked) throw unauthorized("blocked", "Account is blocked");
 
     await clearLoginFailures(db, key);
-    const tokens = await issueForDevice(db, env, user.id, deviceName ?? null, t);
-    await enforceDeviceLimit(db, user.id, tokens.deviceId, t);
+    const tokens = await issueForDevice(db, env, user.id, deviceDescriptor(device, deviceName), t);
     const entitlement = await readEntitlement(db, user.id, t);
 
     return {

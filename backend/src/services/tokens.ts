@@ -10,12 +10,12 @@
  * is issued.
  */
 import { createHash, randomBytes } from "node:crypto";
-import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
 import { SignJWT, jwtVerify } from "jose";
 import type { Database } from "../db/client.js";
-import { devices } from "../db/schema.js";
+import { deviceSecurityEvents, devices, users } from "../db/schema.js";
 import type { Env } from "../env.js";
-import { unauthorized } from "../lib/http-errors.js";
+import { locked, unauthorized } from "../lib/http-errors.js";
 
 export interface AccessClaims {
   sub: string; // userId
@@ -55,24 +55,144 @@ export interface IssuedTokens {
   deviceId: string;
 }
 
+export interface DeviceDescriptor {
+  installationKey: string;
+  name: string;
+  platform: "web" | "pwa" | "android" | "ios";
+  browser?: string;
+  os?: string;
+}
+
+const SWITCH_WINDOW_MS = 30 * 86_400_000;
+export const MAX_SWITCHES_PER_WINDOW = 3;
+export const SUPPORT_ID = "routino_support";
+
 export async function issueForDevice(
   db: Database,
   env: Env,
   userId: string,
-  deviceName: string | null,
+  descriptor: DeviceDescriptor,
   now: Date,
 ): Promise<IssuedTokens> {
-  const refresh = newRefreshToken();
-  // Plain `.returning()`: a projected `.returning({...})` doesn't typecheck
-  // across the NodePg | PGlite union, and the full row costs nothing here.
-  const [device] = await db
-    .insert(devices)
-    .values({ userId, refreshHash: hashToken(refresh), name: deviceName, lastSeenAt: now })
-    .returning();
+  const installationKeyHash = hashToken(descriptor.installationKey);
+  const outcome = await db.transaction(async (tx) => {
+    // Serialise all device decisions for this account. Without this lock, two
+    // simultaneous logins can both observe a free slot and both enter it.
+    await tx.execute(sql`select id from users where id = ${userId} for update`);
+    const [user] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!user) throw unauthorized("unknown_user", "User no longer exists");
+    if (user.securityLockedAt) return { locked: true as const };
 
-  if (!device) throw new Error("failed to create device");
-  const access = await signAccessToken(env, { sub: userId, did: device.id }, now);
-  return { access, refresh, deviceId: device.id };
+    const [existing] = await tx
+      .select()
+      .from(devices)
+      .where(
+        and(
+          eq(devices.userId, userId),
+          eq(devices.installationKeyHash, installationKeyHash),
+        ),
+      )
+      .limit(1);
+
+    const active = await tx
+      .select()
+      .from(devices)
+      .where(and(eq(devices.userId, userId), isNull(devices.revokedAt)))
+      .orderBy(sql`${devices.lastSeenAt} asc nulls first`, asc(devices.createdAt));
+
+    const alreadyActive = existing && !existing.revokedAt;
+    let replacedDeviceId: string | null = null;
+    if (!alreadyActive && active.length >= user.maxActiveDevices) {
+      const rollingStart = new Date(now.getTime() - SWITCH_WINDOW_MS);
+      const since =
+        user.deviceSwitchResetAt && user.deviceSwitchResetAt > rollingStart
+          ? user.deviceSwitchResetAt
+          : rollingStart;
+      const recent = await tx
+        .select({ id: deviceSecurityEvents.id })
+        .from(deviceSecurityEvents)
+        .where(
+          and(
+            eq(deviceSecurityEvents.userId, userId),
+            eq(deviceSecurityEvents.kind, "replacement"),
+            gt(deviceSecurityEvents.createdAt, since),
+          ),
+        )
+        .limit(MAX_SWITCHES_PER_WINDOW);
+
+      if (recent.length >= MAX_SWITCHES_PER_WINDOW) {
+        await tx
+          .update(users)
+          .set({
+            securityLockedAt: now,
+            securityLockReason: "device_switch_limit",
+          })
+          .where(eq(users.id, userId));
+        await tx
+          .update(devices)
+          .set({
+            revokedAt: now,
+            revocationReason: "security_lock",
+          })
+          .where(and(eq(devices.userId, userId), isNull(devices.revokedAt)));
+        await tx.insert(deviceSecurityEvents).values({
+          userId,
+          kind: "security_lock",
+          createdAt: now,
+        });
+        return { locked: true as const };
+      }
+
+      const stale = active[0];
+      if (stale) {
+        replacedDeviceId = stale.id;
+        await tx
+          .update(devices)
+          .set({ revokedAt: now, revocationReason: "replaced" })
+          .where(eq(devices.id, stale.id));
+      }
+    }
+
+    const refresh = newRefreshToken();
+    const patch = {
+      refreshHash: hashToken(refresh),
+      name: descriptor.name,
+      platform: descriptor.platform,
+      browser: descriptor.browser ?? null,
+      os: descriptor.os ?? null,
+      lastSeenAt: now,
+      revokedAt: null,
+      revocationReason: null,
+    };
+    const [device] = existing
+      ? await tx.update(devices).set(patch).where(eq(devices.id, existing.id)).returning()
+      : await tx
+          .insert(devices)
+          .values({ userId, installationKeyHash, createdAt: now, ...patch })
+          .returning();
+    if (!device) throw new Error("failed to create device");
+
+    if (replacedDeviceId) {
+      await tx.insert(deviceSecurityEvents).values({
+        userId,
+        deviceId: device.id,
+        replacedDeviceId,
+        kind: "replacement",
+        createdAt: now,
+      });
+    }
+    return { locked: false as const, refresh, deviceId: device.id };
+  });
+
+  if (outcome.locked) {
+    throw locked(
+      "device_security_locked",
+      "For account security, sign-in is temporarily locked. Contact support.",
+      { support: SUPPORT_ID },
+    );
+  }
+  const access = await signAccessToken(env, { sub: userId, did: outcome.deviceId }, now);
+  return { access, refresh: outcome.refresh, deviceId: outcome.deviceId };
 }
 
 /**
@@ -148,7 +268,7 @@ export async function revokeOtherDevices(
  * Two, not one: the person who PAID typically has a phone and a laptop browser,
  * and at one they would evict themselves daily. A family of five finds two just
  * as unusable as one, so the extra slot costs nothing in sharing pressure. */
-export const MAX_ACTIVE_DEVICES = 2;
+export const MAX_ACTIVE_DEVICES = 1;
 
 /**
  * Keeps the `max` most recently used devices signed in and revokes the rest.

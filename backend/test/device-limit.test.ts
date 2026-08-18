@@ -36,7 +36,15 @@ async function signIn(deviceName?: string) {
   const res = await h.app.inject({
     method: "POST",
     url: "/v1/auth/otp/verify",
-    payload: { phone: PHONE, code, deviceName },
+    payload: {
+      phone: PHONE,
+      code,
+      device: {
+        installationKey: `test-key-${deviceName ?? "unknown"}`,
+        name: deviceName ?? "unknown",
+        platform: "web",
+      },
+    },
   });
   expect(res.statusCode).toBe(200);
   return res.json() as { access: string; refresh: string; deviceId: string };
@@ -61,8 +69,9 @@ const makeStale = (deviceId?: string) =>
   );
 
 describe("device limit", () => {
-  it("lets a phone and a laptop both stay signed in", async () => {
+  it("lets a phone and a laptop stay signed in when admin grants two slots", async () => {
     const a = await signIn("phone");
+    await h.raw(`update users set max_active_devices = 2`);
     const b = await signIn("laptop");
 
     expect(await liveDeviceIds()).toEqual([a.deviceId, b.deviceId].sort());
@@ -72,6 +81,7 @@ describe("device limit", () => {
 
   it("evicts the least recently seen device, not the oldest one", async () => {
     const a = await signIn("phone");
+    await h.raw(`update users set max_active_devices = 2`);
     const b = await signIn("laptop");
     // `a` was created first but is the device in daily use; `b` has not been
     // opened in months. Ordering by `created_at` would evict `a` — the phone
@@ -88,7 +98,6 @@ describe("device limit", () => {
     const a = await signIn("phone");
     await makeStale();
     await signIn("laptop");
-    await signIn("tablet");
 
     // Nothing on the request path reads the device row, so this 401 is the only
     // thing proving an eviction reaches the user at all: `rotateRefresh` refuses
@@ -98,8 +107,7 @@ describe("device limit", () => {
 
   it("never evicts the device that just signed in", async () => {
     await signIn("one");
-    await signIn("two");
-    const c = await signIn("three");
+    const c = await signIn("two");
 
     // The newcomer holds a slot even when every other device looks fresher.
     expect((await refresh(c.refresh)).statusCode).toBe(200);

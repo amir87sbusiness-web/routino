@@ -21,6 +21,7 @@ import { adminRoutes } from "./routes/admin.js";
 import { adminPanelRoutes } from "./routes/admin-panel.js";
 import { authRoutes } from "./routes/auth.js";
 import { devGatewayRoutes } from "./routes/dev-gateway.js";
+import { deviceRoutes } from "./routes/devices.js";
 import { healthRoutes } from "./routes/health.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { planRoutes } from "./routes/plans.js";
@@ -101,6 +102,7 @@ export async function buildApp(deps: Omit<Deps, "now"> & { now?: () => number })
   await app.register(healthRoutes);
   await app.register(planRoutes, { prefix: "/v1" });
   await app.register(authRoutes, { prefix: "/v1" });
+  await app.register(deviceRoutes, { prefix: "/v1" });
   await app.register(subscriptionRoutes, { prefix: "/v1" });
   await app.register(syncRoutes, { prefix: "/v1" });
   await app.register(paymentRoutes, { prefix: "/v1" });

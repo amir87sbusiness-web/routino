@@ -21,6 +21,7 @@ import { adminRoutes } from "./routes/admin.ts";
 import { adminPanelRoutes } from "./routes/admin-panel.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { devGatewayRoutes } from "./routes/dev-gateway.ts";
+import { deviceRoutes } from "./routes/devices.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { paymentRoutes } from "./routes/payments.ts";
 import { planRoutes } from "./routes/plans.ts";
@@ -100,7 +101,7 @@ export function buildApp(deps: Deps) {
       const retryAfter = (err as HttpError & { retryAfter?: number }).retryAfter;
       if (retryAfter) c.header("Retry-After", String(retryAfter));
       return c.json(
-        { error: err.code, message: err.message },
+        { error: err.code, message: err.message, ...(err.details ?? {}) },
         err.statusCode as ContentfulStatusCode,
       );
     }
@@ -124,6 +125,7 @@ export function buildApp(deps: Deps) {
   app.route("/", healthRoutes(deps));
   app.route("/v1", planRoutes(deps));
   app.route("/v1", authRoutes(deps));
+  app.route("/v1", deviceRoutes(deps));
   app.route("/v1", subscriptionRoutes(deps));
   app.route("/v1", syncRoutes(deps));
   app.route("/v1", paymentRoutes(deps));

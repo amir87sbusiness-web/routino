@@ -21,6 +21,7 @@ import {
   adminListUsers,
   adminOverview,
   adminSetBlocked,
+  adminSetDevicePolicy,
   adminSetPassword,
   adminUpdateDiscount,
   adminUserDetail,
@@ -54,6 +55,13 @@ const grantBody = z.object({
 });
 
 const blockBody = z.object({ blocked: z.boolean() });
+const devicePolicyBody = z
+  .object({
+    maxActiveDevices: z.number().int().min(1).max(10).optional(),
+    resetSwitchCount: z.boolean().optional(),
+    unlock: z.boolean().optional(),
+  })
+  .refine((body) => Object.values(body).some((value) => value !== undefined), "empty patch");
 
 const setPasswordBody = z.object({
   phone: z.string().min(1).max(32),
@@ -128,6 +136,14 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     const res = await adminSetBlocked(db, id, blocked, now());
     req.log.info({ userId: id, blocked }, "admin block toggle");
     return res;
+  });
+
+  app.post("/admin/users/:id/device-policy", opts, async (req) => {
+    const { id } = req.params as { id: string };
+    const body = devicePolicyBody.parse(req.body);
+    const result = await adminSetDevicePolicy(db, id, body, now());
+    req.log.info({ userId: id, ...body }, "admin device policy update");
+    return result;
   });
 
   app.post("/admin/users/:id/grant", opts, async (req) => {

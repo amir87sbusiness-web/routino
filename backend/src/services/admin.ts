@@ -7,10 +7,11 @@
  * single `Promise.all`, so the panel's landing query is one round-trip's worth
  * of latency instead of seven. The per-user detail view does the same.
  */
-import { and, count, desc, eq, gt, ilike, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, ilike, inArray, isNull, sql } from "drizzle-orm";
 import type { Database } from "../db/client.js";
 import {
   devices,
+  deviceSecurityEvents,
   discounts,
   entitlements,
   grants,
@@ -102,25 +103,110 @@ export async function adminUserDetail(db: Database, id: string, now: Date) {
   const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
   if (!user) throw notFound("unknown_user", "No such user");
 
-  const [userDevices, userPayments, userGrants, entitlement] = await Promise.all([
+  const rollingStart = new Date(now.getTime() - 30 * DAY_MS);
+  const switchSince =
+    user.deviceSwitchResetAt && user.deviceSwitchResetAt > rollingStart
+      ? user.deviceSwitchResetAt
+      : rollingStart;
+  const [userDevices, userPayments, userGrants, entitlement, switchRows] = await Promise.all([
     db.select().from(devices).where(eq(devices.userId, id)).orderBy(desc(devices.createdAt)),
     db.select().from(payments).where(eq(payments.userId, id)).orderBy(desc(payments.createdAt)),
     listGrants(db, id),
     readEntitlement(db, id, now),
+    db
+      .select({ n: count() })
+      .from(deviceSecurityEvents)
+      .where(
+        and(
+          eq(deviceSecurityEvents.userId, id),
+          eq(deviceSecurityEvents.kind, "replacement"),
+          gt(deviceSecurityEvents.createdAt, switchSince),
+        ),
+      ),
   ]);
 
   return {
-    user: { id: user.id, phone: user.phone, blocked: user.blocked, createdAt: user.createdAt },
+    user: {
+      id: user.id,
+      phone: user.phone,
+      blocked: user.blocked,
+      maxActiveDevices: user.maxActiveDevices,
+      securityLockedAt: user.securityLockedAt,
+      securityLockReason: user.securityLockReason,
+      switchCount30d: switchRows[0]?.n ?? 0,
+      createdAt: user.createdAt,
+    },
     entitlement,
     devices: userDevices.map((d) => ({
       id: d.id,
       name: d.name,
+      platform: d.platform,
+      browser: d.browser,
+      os: d.os,
       lastSeenAt: d.lastSeenAt,
       revokedAt: d.revokedAt,
+      revocationReason: d.revocationReason,
       createdAt: d.createdAt,
     })),
     payments: userPayments,
     grants: userGrants,
+  };
+}
+
+export async function adminSetDevicePolicy(
+  db: Database,
+  id: string,
+  body: { maxActiveDevices?: number; resetSwitchCount?: boolean; unlock?: boolean },
+  now: Date,
+) {
+  if (!UUID_RE.test(id)) throw badRequest("bad_id", "Malformed user id");
+  const patch: Record<string, unknown> = {};
+  if (body.maxActiveDevices !== undefined) patch.maxActiveDevices = body.maxActiveDevices;
+  if (body.resetSwitchCount) patch.deviceSwitchResetAt = now;
+  if (body.unlock) {
+    patch.securityLockedAt = null;
+    patch.securityLockReason = null;
+  }
+  if (!Object.keys(patch).length) throw badRequest("empty_patch", "Nothing to update");
+
+  const [user] = await db.update(users).set(patch).where(eq(users.id, id)).returning();
+  if (!user) throw notFound("unknown_user", "No such user");
+
+  // Lowering the limit takes effect now. Keep the most recently active rows and
+  // revoke only the excess; local data on those devices remains untouched.
+  const active = await db
+    .select()
+    .from(devices)
+    .where(and(eq(devices.userId, id), isNull(devices.revokedAt)))
+    .orderBy(sql`${devices.lastSeenAt} desc nulls last`, desc(devices.createdAt));
+  const excess = active.slice(user.maxActiveDevices);
+  if (excess.length) {
+    await db
+      .update(devices)
+      .set({ revokedAt: now, revocationReason: "admin_limit" })
+      .where(inArray(devices.id, excess.map((device) => device.id)));
+  }
+
+  const rollingStart = new Date(now.getTime() - 30 * DAY_MS);
+  const since =
+    user.deviceSwitchResetAt && user.deviceSwitchResetAt > rollingStart
+      ? user.deviceSwitchResetAt
+      : rollingStart;
+  const counts = await db
+    .select({ n: count() })
+    .from(deviceSecurityEvents)
+    .where(
+      and(
+        eq(deviceSecurityEvents.userId, id),
+        eq(deviceSecurityEvents.kind, "replacement"),
+        gt(deviceSecurityEvents.createdAt, since),
+      ),
+    );
+  return {
+    ok: true as const,
+    maxActiveDevices: user.maxActiveDevices,
+    securityLocked: !!user.securityLockedAt,
+    switchCount30d: counts[0]?.n ?? 0,
   };
 }
 

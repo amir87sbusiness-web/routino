@@ -9,6 +9,7 @@ export {
   badRequest,
   unauthorized,
   forbidden,
+  locked,
   notFound,
   tooMany,
 } from "../lib/http-errors.js";
@@ -18,7 +19,9 @@ export function registerErrorHandler(app: FastifyInstance): void {
     if (err instanceof HttpError) {
       const retryAfter = (err as HttpError & { retryAfter?: number }).retryAfter;
       if (retryAfter) void reply.header("Retry-After", String(retryAfter));
-      return reply.status(err.statusCode).send({ error: err.code, message: err.message });
+      return reply
+        .status(err.statusCode)
+        .send({ error: err.code, message: err.message, ...(err.details ?? {}) });
     }
     if (err instanceof ZodError) {
       return reply.status(400).send({
