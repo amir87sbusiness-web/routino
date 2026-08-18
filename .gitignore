@@ -41,6 +41,9 @@ android/local.properties
 # TanStack Router temp/cache
 .tanstack
 
+# Isolated Codex feature worktrees
+.worktrees/
+
 # Written by `supabase link`: project ref and pooler URL for THIS machine.
 # Local connection state, not project source.
 supabase/.temp/
