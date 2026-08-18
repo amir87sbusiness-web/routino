@@ -95,6 +95,50 @@ export async function syncRecurringReminders(db: Db): Promise<void> {
   }
 }
 
+/** Schedule subscription lifecycle alerts with the mobile OS so they can fire
+ * while the native app is fully closed. Web catches missed alerts on next open. */
+export async function syncSubscriptionReminders(db: Db): Promise<void> {
+  if (!Capacitor.isNativePlatform()) return;
+  const { LocalNotifications } = await import("@capacitor/local-notifications");
+  const pending = await LocalNotifications.getPending();
+  const oldIds = pending.notifications
+    .filter((item) => item.extra?.kind === "subscription")
+    .map((item) => item.id);
+  if (oldIds.length) {
+    await LocalNotifications.cancel({ notifications: oldIds.map((id) => ({ id })) });
+  }
+  if (!db.settings.notificationsEnabled || !db.subscription || db.subscription.trial) return;
+
+  const fa = db.settings.lang === "fa";
+  const expiry = db.subscription.expiresAt;
+  const threeDaysBefore = expiry - 3 * 86_400_000;
+  const notifications = [
+    threeDaysBefore > Date.now()
+      ? {
+          id: idFromString(`subscription-soon|${expiry}`),
+          title: fa ? "یادآوری اشتراک روتینو" : "Routino subscription reminder",
+          body: fa
+            ? "سه روز تا پایان اشتراکت باقی مانده است."
+            : "Your subscription expires in three days.",
+          schedule: { at: new Date(threeDaysBefore) },
+          extra: { kind: "subscription" },
+        }
+      : null,
+    expiry > Date.now()
+      ? {
+          id: idFromString(`subscription-expired|${expiry}`),
+          title: fa ? "اشتراک روتینو پایان یافت" : "Routino subscription expired",
+          body: fa
+            ? "اشتراکت پایان یافت؛ اطلاعات روی دستگاهت باقی می‌ماند."
+            : "Your subscription ended; your on-device data remains safe.",
+          schedule: { at: new Date(expiry) },
+          extra: { kind: "subscription" },
+        }
+      : null,
+  ].filter((item): item is NonNullable<typeof item> => item !== null);
+  if (notifications.length) await LocalNotifications.schedule({ notifications });
+}
+
 /**
  * برای یادآوری‌های یک‌بارمصرف تسک‌ها (task.reminderAt) — این‌ها یک زمان دقیق
  * دارند نه یک ساعت تکرارشونده، پس جدا زمان‌بندی می‌شوند.

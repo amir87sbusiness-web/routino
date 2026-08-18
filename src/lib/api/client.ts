@@ -21,6 +21,7 @@ export class ApiError extends Error {
     /** True when the request never reached the server. */
     readonly offline = false,
     readonly retryAfter?: number,
+    readonly support?: string,
   ) {
     super(message);
     this.name = "ApiError";
@@ -107,7 +108,14 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Pr
 
   if (raw.status >= 200 && raw.status < 300) return raw.body as T;
 
-  const body = (raw.body ?? {}) as { error?: string; message?: string };
+  const body = (raw.body ?? {}) as { error?: string; message?: string; support?: string };
   const retryAfter = raw.headers["retry-after"] ? Number(raw.headers["retry-after"]) : undefined;
-  throw new ApiError(raw.status, body.error ?? "http_error", body.message ?? `HTTP ${raw.status}`, false, retryAfter);
+  throw new ApiError(
+    raw.status,
+    body.error ?? "http_error",
+    body.message ?? `HTTP ${raw.status}`,
+    false,
+    retryAfter,
+    body.support,
+  );
 }

@@ -12,6 +12,7 @@
  * anyone out — offline has to be indistinguishable from online.
  */
 import { apiRequest, ApiError } from "./client";
+import { getOrCreateDeviceDescriptor, type DeviceDescriptor } from "../device-identity";
 
 const TOKEN_KEY = "routino:auth:v1";
 
@@ -21,6 +22,8 @@ export interface Tokens {
   deviceId: string;
   /** Epoch ms when `access` expires, so we can refresh proactively. */
   accessExpiresAt: number;
+  /** Last successful authenticated server response. Drives the 15-day offline lease. */
+  lastServerConfirmedAt: number;
 }
 
 export interface ServerEntitlement {
@@ -37,7 +40,13 @@ const ASSUMED_ACCESS_TTL_MS = 15 * 60_000;
 export function loadTokens(): Tokens | null {
   try {
     const raw = localStorage.getItem(TOKEN_KEY);
-    return raw ? (JSON.parse(raw) as Tokens) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Tokens;
+    if (!parsed.lastServerConfirmedAt) {
+      parsed.lastServerConfirmedAt = Date.now();
+      saveTokens(parsed);
+    }
+    return parsed;
   } catch {
     return null;
   }
@@ -66,7 +75,13 @@ const withExpiry = (t: { access: string; refresh: string; deviceId: string }): T
   refresh: t.refresh,
   deviceId: t.deviceId,
   accessExpiresAt: Date.now() + ASSUMED_ACCESS_TTL_MS,
+  lastServerConfirmedAt: Date.now(),
 });
+
+export function markServerConfirmed(now = Date.now()): void {
+  const tokens = loadTokens();
+  if (tokens) saveTokens({ ...tokens, lastServerConfirmedAt: now });
+}
 
 /* ---------------- endpoints ---------------- */
 
@@ -86,11 +101,12 @@ export interface VerifyResult {
 export async function verifyOtp(
   phone: string,
   code: string,
-  deviceName?: string,
+  device?: DeviceDescriptor,
 ): Promise<VerifyResult> {
+  const descriptor = device ?? (await getOrCreateDeviceDescriptor());
   const res = await apiRequest<VerifyResult>("/auth/otp/verify", {
     method: "POST",
-    body: { phone, code, deviceName },
+    body: { phone, code, device: descriptor },
   });
   saveTokens(withExpiry(res));
   return res;
@@ -102,11 +118,12 @@ export async function verifyOtp(
 export async function passwordLogin(
   identifier: string,
   password: string,
-  deviceName?: string,
+  device?: DeviceDescriptor,
 ): Promise<VerifyResult> {
+  const descriptor = device ?? (await getOrCreateDeviceDescriptor());
   const res = await apiRequest<VerifyResult>("/auth/password/login", {
     method: "POST",
-    body: { identifier, password, deviceName },
+    body: { identifier, password, device: descriptor },
   });
   saveTokens(withExpiry(res));
   return res;
@@ -212,11 +229,17 @@ export async function authedRequest<T>(
   }
 
   try {
-    return await apiRequest<T>(path, { ...opts, token: tokens.access });
+    const result = await apiRequest<T>(path, { ...opts, token: tokens.access });
+    markServerConfirmed();
+    return result;
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {
       const next = await refreshTokens();
-      if (next) return apiRequest<T>(path, { ...opts, token: next.access });
+      if (next) {
+        const result = await apiRequest<T>(path, { ...opts, token: next.access });
+        markServerConfirmed();
+        return result;
+      }
     }
     throw err;
   }

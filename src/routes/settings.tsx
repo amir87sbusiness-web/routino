@@ -12,7 +12,9 @@ import {
   EyeOff,
   FileText,
   Globe,
+  HardDrive,
   KeyRound,
+  Laptop,
   Lock,
   LogOut,
   MessageSquare,
@@ -41,6 +43,7 @@ import {
 } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
 import { fetchAccount, logout, setPassword, setUsername, type AccountInfo } from "@/lib/api/auth";
+import { fetchDevices, revokeDevice, type DeviceOverview } from "@/lib/api/devices";
 import {
   backupSummary,
   copyBackupToClipboard,
@@ -51,11 +54,17 @@ import {
 } from "@/lib/backup";
 import { isNative, shareBackupNative } from "@/lib/backup-native";
 import { dateKey, faNum, formatDate } from "@/lib/dates";
-import { subscriptionActive } from "@/lib/logic";
+import { canImportBackup } from "@/lib/import-policy";
+import { requestNativePermission } from "@/lib/native-notifications";
 import { toLocalPhone } from "@/lib/phone";
 import { CATEGORY_COLOR_CHOICES } from "@/lib/presets";
 import { applyDemoContent } from "@/lib/seed-demo";
 import { uid } from "@/lib/store";
+import {
+  readStorageHealth,
+  requestPersistentStorage,
+  type StorageHealth,
+} from "@/lib/storage-health";
 import { wipeContent } from "@/lib/wipe";
 import { useAppMaybe } from "@/state/app";
 
@@ -96,7 +105,7 @@ const SHOW_DEMO_SEED = false;
  * هیچ کدی حذف نشده — `exportData`/`onFilePicked`/`confirmImport` سر جایشان‌اند.
  * برای برگرداندن کافی است این را `true` کنی.
  */
-const BACKUP_UI: boolean = false;
+const BACKUP_UI: boolean = true;
 
 function SettingsPage() {
   const ctx = useAppMaybe();
@@ -115,6 +124,18 @@ function SettingsPage() {
   const [pendingImport, setPendingImport] = useState<Backup | null>(null);
   const [wipeOpen, setWipeOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
+  const [devices, setDevices] = useState<DeviceOverview | null>(null);
+  const [devicesBusy, setDevicesBusy] = useState(false);
+  const [storageHealth, setStorageHealth] = useState<StorageHealth | null>(null);
+
+  useEffect(() => {
+    setDevicesBusy(true);
+    void fetchDevices()
+      .then(setDevices)
+      .catch(() => undefined)
+      .finally(() => setDevicesBusy(false));
+    void readStorageHealth().then(setStorageHealth);
+  }, []);
 
   if (!ctx?.db) return null;
   const { db, update, t, lang, cal } = ctx;
@@ -141,6 +162,11 @@ function SettingsPage() {
   };
 
   const onFilePicked = async (e: ChangeEvent<HTMLInputElement>) => {
+    if (!canImportBackup(db)) {
+      e.target.value = "";
+      toast.error(t("بازیابی فقط با اشتراک پولی فعال است", "Import requires an active paid plan"));
+      return;
+    }
     const file = e.target.files?.[0];
     e.target.value = ""; // let the user re-pick the same file after a cancel
     if (!file) return;
@@ -153,6 +179,11 @@ function SettingsPage() {
 
   const confirmImport = () => {
     if (!pendingImport) return;
+    if (!canImportBackup(db)) {
+      setPendingImport(null);
+      toast.error(t("اشتراک پولی فعال نیست؛ بازیابی انجام نشد", "Import was blocked because there is no active paid plan"));
+      return;
+    }
     update((d) => restoreDb(d, pendingImport));
     setPendingImport(null);
     toast.success(t("اطلاعاتت بازگردانی شد", "Your data was restored"));
@@ -172,19 +203,48 @@ function SettingsPage() {
   const s = db.settings;
   // «اشتراک پولی» = اشتراک فعالِ غیرآزمایشی. بازیابی اطلاعات فقط برای این‌ها باز است؛
   // در اشتراک رایگان/آزمایشی قفل می‌ماند تا کاربر ارتقا بدهد.
-  const paidActive = subscriptionActive(db) && !db.subscription?.trial;
+  const paidActive = canImportBackup(db);
   // رنگ دلخواه = رنگی که در لیست پیش‌فرض‌ها نیست.
   const isCustomBrand = !!s.brandColor && !BRAND_COLORS.includes(s.brandColor);
 
-  const requestNotifs = () => {
-    if (typeof Notification !== "undefined" && Notification.permission === "default") {
-      Notification.requestPermission();
+  const requestNotifs = async () => {
+    if (s.notificationsEnabled) {
+      update((d) => ({ ...d, settings: { ...d.settings, notificationsEnabled: false } }));
+      return;
     }
-    update((d) => ({
-      ...d,
-      settings: { ...d.settings, notificationsEnabled: !d.settings.notificationsEnabled },
-    }));
+    let granted = await requestNativePermission();
+    if (typeof Notification !== "undefined") {
+      const permission =
+        Notification.permission === "default"
+          ? await Notification.requestPermission()
+          : Notification.permission;
+      granted = permission === "granted";
+    }
+    if (!granted) {
+      toast.error(
+        t(
+          "مجوز اعلان بسته است؛ از تنظیمات مرورگر یا گوشی فعالش کن.",
+          "Notification permission is blocked. Enable it in browser or device settings.",
+        ),
+      );
+      return;
+    }
+    update((d) => ({ ...d, settings: { ...d.settings, notificationsEnabled: true } }));
   };
+
+  const loadDevices = async () => {
+    setDevicesBusy(true);
+    try {
+      setDevices(await fetchDevices());
+    } catch {
+      // Settings stays useful offline; the last local data remains available.
+    } finally {
+      setDevicesBusy(false);
+    }
+  };
+
+  const bytes = (value: number | null) =>
+    value === null ? "—" : `${(value / 1024 / 1024).toFixed(value >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
 
   const addCategory = () => {
     if (!catName.trim()) return;
@@ -409,6 +469,10 @@ function SettingsPage() {
             <Bell className="h-4 w-4 text-primary" /> {t("نوتیفیکیشن‌ها", "Notifications")}
           </div>
           <button
+            type="button"
+            role="switch"
+            aria-checked={s.notificationsEnabled}
+            aria-label={t("فعال‌سازی اعلان‌ها", "Enable notifications")}
             onClick={requestNotifs}
             className={`relative h-6 w-11 rounded-full transition-colors ${s.notificationsEnabled ? "bg-primary" : "bg-secondary"}`}
           >
@@ -419,6 +483,12 @@ function SettingsPage() {
             />
           </button>
         </div>
+        <p className="mt-3 text-xs leading-6 text-muted-foreground">
+          {t(
+            "یادآوری عادت‌ها، کارها، سه روز مانده به پایان اشتراک و روز پایان اشتراک. در وب، اعلان سیستمی به اجازهٔ مرورگر وابسته است؛ اعلان داخل روتینو از دست نمی‌رود.",
+            "Habit and task reminders, plus alerts three days before and on subscription expiry. On web, system alerts depend on browser permission; the in-app alert is still kept.",
+          )}
+        </p>
         <div className="mt-3">
           <p className="mb-1.5 text-xs font-medium text-muted-foreground">
             {t("ساعت یادآوری ژورنال", "Journal reminder time")}
@@ -588,6 +658,98 @@ function SettingsPage() {
       </Card>
       )}
 
+      <Card className="flex flex-col gap-3">
+        <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+          <HardDrive className="h-4 w-4 text-primary" aria-hidden="true" />
+          {t("امنیت نگهداری روی این دستگاه", "On-device storage safety")}
+        </div>
+        <p className="text-xs leading-6 text-muted-foreground">
+          {t(
+            "عادت‌ها، گزارش‌ها، کارها و ژورنال فقط در این مرورگر ذخیره می‌شوند. پاک‌کردن دادهٔ سایت یا حالت ناشناس می‌تواند آن‌ها را از بین ببرد؛ Export را مرتب نگه دار.",
+            "Habits, logs, tasks and journal stay only in this browser. Clearing site data or private browsing can remove them, so keep regular exports.",
+          )}
+        </p>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+          <span>
+            {t("فضای مصرف‌شده", "Used")}: {bytes(storageHealth?.usageBytes ?? null)}
+          </span>
+          <span>
+            {storageHealth?.persisted
+              ? t("حفاظت مرورگر فعال است", "Browser protection is active")
+              : t("حفاظت مرورگر تأیید نشده", "Browser protection is not confirmed")}
+          </span>
+        </div>
+        {!storageHealth?.persisted && (
+          <Button
+            variant="secondary"
+            onClick={() => void requestPersistentStorage().then(setStorageHealth)}
+          >
+            {t("درخواست نگهداری پایدار", "Request persistent storage")}
+          </Button>
+        )}
+      </Card>
+
+      <Card className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2 text-sm font-bold text-foreground">
+            <Laptop className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            {t("دستگاه‌های حساب", "Account devices")}
+          </div>
+          <button
+            type="button"
+            disabled={devicesBusy}
+            onClick={() => void loadDevices()}
+            className="shrink-0 rounded-lg px-2 py-1 text-xs font-bold text-primary hover:bg-primary-soft disabled:opacity-50"
+          >
+            {devicesBusy ? t("در حال بررسی…", "Checking…") : t("تازه‌سازی", "Refresh")}
+          </button>
+        </div>
+        <p className="text-xs leading-6 text-muted-foreground">
+          {devices
+            ? t(
+                `حداکثر ${faNum(devices.maxActiveDevices, lang)} دستگاه فعال؛ ${faNum(devices.switchCount30d, lang)} جابه‌جایی در ۳۰ روز اخیر.`,
+                `Up to ${devices.maxActiveDevices} active devices; ${devices.switchCount30d} replacements in the last 30 days.`,
+              )
+            : t(
+                "برای دیدن دستگاه‌ها یک اتصال کوتاه اینترنت لازم است.",
+                "A brief internet connection is needed to show devices.",
+              )}
+        </p>
+        {devices?.devices.map((device) => (
+          <div key={device.id} className="flex min-w-0 items-center gap-3 border-t border-border pt-3">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-bold text-foreground">
+                {device.name || [device.browser, device.os].filter(Boolean).join(" · ") || t("دستگاه", "Device")}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {device.current
+                  ? t("همین دستگاه", "This device")
+                  : device.active
+                    ? t("فعال", "Active")
+                    : t("نشست پایان‌یافته", "Session ended")}
+              </p>
+            </div>
+            {device.active && !device.current && (
+              <Button
+                variant="secondary"
+                className="shrink-0 px-3 py-2 text-xs"
+                onClick={async () => {
+                  try {
+                    await revokeDevice(device.id);
+                    await loadDevices();
+                    toast.success(t("نشست آن دستگاه پایان یافت", "That device was signed out"));
+                  } catch {
+                    toast.error(t("پایان‌دادن نشست ناموفق بود", "Could not sign out that device"));
+                  }
+                }}
+              >
+                {t("پایان نشست", "Sign out")}
+              </Button>
+            )}
+          </div>
+        ))}
+      </Card>
+
       {/* danger zone: sign out + erase everything, together in one red box */}
       <Card className="flex flex-col gap-3 border-destructive/40 bg-destructive/5">
         <div className="flex items-center gap-2 text-sm font-bold text-destructive">
@@ -626,8 +788,8 @@ function SettingsPage() {
         <div className="flex flex-col gap-4">
           <p className="text-sm text-muted-foreground">
             {t(
-              "اطلاعاتت روی این دستگاه می‌مونه و با ورود دوباره‌ی همین شماره برمی‌گرده. ولی اگه با یک شماره‌ی دیگه وارد بشی، همه‌چیز این دستگاه پاک می‌شه.",
-              "Your data stays on this device and comes back when this same number signs in again. But signing in with a different number erases everything here.",
+              "اطلاعاتت روی این دستگاه می‌مونه و با ورود دوباره‌ی همین حساب برمی‌گرده. ورود با حساب دیگر، فضای جداگانه‌ای باز می‌کند و چیزی را پاک نمی‌کند.",
+              "Your data stays on this device and returns when this account signs in again. Another account opens a separate local space and deletes nothing.",
             )}
           </p>
           <div className="flex gap-2">

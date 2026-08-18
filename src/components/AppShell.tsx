@@ -4,7 +4,7 @@
  * feedback popup, and celebration popups.
  */
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { BarChart3, Bell, BookHeart, Home, ListTodo, Repeat, Settings, Timer } from "lucide-react";
+import { BarChart3, Bell, BookHeart, Home, ListTodo, Repeat, Settings, Timer, WifiOff } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { FeedbackModal } from "@/components/FeedbackModal";
 import { InstallBanner } from "@/components/pwa";
@@ -25,6 +25,45 @@ function Splash() {
         <p className="text-sm font-medium text-muted-foreground">روتینو · Routino</p>
       </div>
     </div>
+  );
+}
+
+function ReconnectGate({
+  t,
+  retry,
+}: {
+  t: (fa: string, en: string) => string;
+  retry: () => Promise<void>;
+}) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-background px-5">
+      <section className="w-full max-w-md rounded-3xl border border-border bg-card p-6 text-center shadow-sm">
+        <WifiOff className="mx-auto mb-4 h-8 w-8 text-primary" aria-hidden="true" />
+        <h1 className="text-xl font-black text-foreground">
+          {t("یک اتصال کوتاه لازم است", "A quick connection is needed")}
+        </h1>
+        <p className="mt-3 text-sm leading-7 text-muted-foreground">
+          {t(
+            "برای امنیت حسابت، بعد از ۱۵ روز آفلاین باید دستگاه دوباره تأیید شود. اطلاعاتت روی همین دستگاه ذخیره شده و پاک نمی‌شود.",
+            "For account security, this device must be verified after 15 offline days. Your local data is still saved and will not be deleted.",
+          )}
+        </p>
+        <Button
+          className="mt-5 w-full"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true);
+            void retry().finally(() => setBusy(false));
+          }}
+        >
+          {busy ? t("در حال بررسی…", "Checking…") : t("بررسی دوباره", "Check again")}
+        </Button>
+        <p className="mt-4 text-xs leading-6 text-muted-foreground">
+          {t("اگر مشکل ادامه داشت به @routino_support پیام بده.", "If this continues, message @routino_support.")}
+        </p>
+      </section>
+    </main>
   );
 }
 
@@ -53,9 +92,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (!db) return "loading";
     if (!db.settings.onboarded) return "onboarding";
     if (!db.auth) return "auth";
+    if (ctx?.sessionGate === "checking") return "loading";
+    if (ctx?.sessionGate === "needs-online") return "needs-online";
     if (!subscriptionActive(db)) return "subscribe";
     return "ok";
-  }, [db]);
+  }, [db, ctx?.sessionGate]);
 
   useEffect(() => {
     if (gate === "onboarding") navigate({ to: "/onboarding" });
@@ -110,6 +151,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   if (!ctx || !db) return <Splash />;
+  if (gate === "needs-online") return <ReconnectGate t={ctx.t} retry={ctx.retrySession} />;
   if (gate !== "ok") return <Splash />;
 
   const { t, lang, update } = ctx;

@@ -22,9 +22,15 @@ import {
   type ReactNode,
 } from "react";
 import { toast } from "sonner";
-import { entitlementToSubscription, fetchEntitlement, hasSession } from "@/lib/api/auth";
+import {
+  clearTokens,
+  entitlementToSubscription,
+  fetchEntitlement,
+  hasSession,
+  loadTokens,
+} from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
-import { syncNow } from "@/lib/sync/engine";
+import { fetchDevices } from "@/lib/api/devices";
 import { todayKey, type Calendar, type Lang } from "@/lib/dates";
 import { diffDb } from "@/lib/db/diff";
 import { hydrate } from "@/lib/db/hydrate";
@@ -34,9 +40,15 @@ import { switchOwnerVault } from "@/lib/db/vault";
 import { DEFAULT_CATEGORIES } from "@/lib/presets";
 import { defaultDb, uid, type Db } from "@/lib/store";
 import { applyServerEntitlement, dueHabitsOn, isCompleted, getLog } from "@/lib/logic";
-import { requestNativePermission, syncRecurringReminders } from "@/lib/native-notifications";
+import {
+  requestNativePermission,
+  syncRecurringReminders,
+  syncSubscriptionReminders,
+} from "@/lib/native-notifications";
 import { syncNativeBars } from "@/lib/native";
 import { loginAs } from "@/lib/wipe";
+import { decideSession, isSessionRevocationReason } from "@/lib/security-session";
+import { subscriptionReminderEvents } from "@/lib/subscription-reminders";
 
 type Updater = (fn: (db: Db) => Db) => void;
 
@@ -47,6 +59,8 @@ interface AppCtx {
     user: { id: string; phone: string },
     subscription: Db["subscription"],
   ) => Promise<void>;
+  sessionGate: "ready" | "checking" | "needs-online";
+  retrySession: () => Promise<void>;
   lang: Lang;
   cal: Calendar;
   t: (fa: string, en: string) => string;
@@ -82,6 +96,7 @@ const TAMPER_TOLERANCE = 6 * 60 * 60 * 1000;
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [db, setDb] = useState<Db | null>(null);
+  const [sessionGate, setSessionGate] = useState<AppCtx["sessionGate"]>("checking");
   const dbRef = useRef<Db | null>(null);
   dbRef.current = db;
 
@@ -113,9 +128,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
         await switchOwnerVault(user.id);
         const { db: loaded } = await hydrate();
         const next = loginAs(loaded, user.phone, subscription, Date.now(), user.id);
+        next.notifications = [
+          {
+            id: uid(),
+            title: next.settings.lang === "fa" ? "ورود امن ثبت شد" : "Secure sign-in recorded",
+            body:
+              next.settings.lang === "fa"
+                ? "ورود این دستگاه به حسابت ثبت شد. اگر این دستگاه را نمی‌شناسی به @routino_support پیام بده."
+                : "This device signed in to your account. If you do not recognize it, message @routino_support.",
+            at: Date.now(),
+            read: false,
+          },
+          ...next.notifications,
+        ].slice(0, 100);
         saveLocal(toLocalState(next));
         lastPersisted.current = next;
         setDb(next);
+        setSessionGate("ready");
       } finally {
         switchingVault.current = false;
       }
@@ -207,154 +236,91 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [db]);
 
-  // Refresh the entitlement cache from the server once per app start.
-  // The paywall gates on the LOCAL `db.subscription`; this keeps that local
-  // copy honest (a payment made on another device, an admin grant, an expiry).
-  // Offline or signed-out: silently keep whatever we have — offline must stay
-  // indistinguishable from online.
-  const entitlementFetched = useRef(false);
-  const entitlementRetryAfter = useRef(0);
-  /** Set once the first sync of this session has finished, successfully or not. */
-  const syncSettled = useRef(false);
-  useEffect(() => {
-    if (!db || entitlementFetched.current || !hasSession()) return;
-    // Wait for sync to have its turn. The pull's last page carries the same
-    // entitlement, so on the normal path this request never happens at all —
-    // that is one Supabase invocation saved on every app open, and invocations
-    // are the free tier's real ceiling (not storage, not bandwidth). This stays
-    // as the fallback for when sync could not reach the server, because a server
-    // answer is the ONLY thing that clears `meta.tampered`.
-    if (!syncSettled.current) return;
-    // Latching only on SUCCESS is load-bearing. This used to set the flag before
-    // awaiting, so a single failed request — one dropped connection at launch —
-    // burned the only attempt of the whole session. That is worst for the users
-    // who need it most: a server answer is the ONLY thing that clears
-    // `meta.tampered`, and while that flag is set `subscriptionActive` is false,
-    // so a paying customer whose phone clock drifted backwards stayed locked out
-    // of the app until they fully restarted it, even once they were back online.
-    //
-    // The cooldown is what keeps the retry from becoming a storm: this effect
-    // re-runs on every `db` change, and the 60s heartbeat guarantees one.
-    if (Date.now() < entitlementRetryAfter.current) return;
-    entitlementRetryAfter.current = Date.now() + 60_000;
-    void fetchEntitlement()
-      .then(({ entitlement }) => {
-        entitlementFetched.current = true;
-        const sub = entitlementToSubscription(entitlement);
-        // `none` (null) is NOT applied: a legacy local subscription that hasn't
-        // been imported yet must not be wiped by an empty server answer.
-        if (!sub) return;
-        // Clears `meta.tampered` and re-baselines the clock guard — see
-        // `applyServerEntitlement` for why both halves are load-bearing.
-        setDb((prev) => (prev ? applyServerEntitlement(prev, sub) : prev));
-      })
-      .catch((err: unknown) => {
-        /* offline — the local cache stays authoritative, and the next heartbeat
-           retries once the cooldown lapses.
+  const checkingSession = useRef(false);
+  const checkSession = useCallback(async () => {
+    const current = dbRef.current;
+    if (!current?.auth || checkingSession.current) return;
+    const tokens = loadTokens();
+    if (!tokens) {
+      setDb((prev) => (prev ? { ...prev, auth: null } : prev));
+      setSessionGate("ready");
+      return;
+    }
 
-           A DEFINITIVE 401 is different: this device's session is gone (another
-           device took its slot, or an admin blocked the account). `refreshTokens`
-           has already cleared the tokens by the time we get here, so the app is
-           signed out but the gate reads `db.auth` from a different store and
-           would keep showing a signed-in shell that can no longer talk to the
-           server. Drop `db.auth` so the sign-in screen actually appears.
-
-           The `hasSession()` test is the safety catch, not decoration: it is
-           false ONLY because `refreshTokens` decided the session was dead. When
-           the failure is a dropped connection the tokens are deliberately left
-           in place, so this cannot sign anyone out for being offline. */
-        if (err instanceof ApiError && !err.offline && err.status === 401 && !hasSession()) {
-          setDb((prev) => (prev ? { ...prev, auth: null } : prev));
-        }
-      });
-  }, [db]);
-
-  /**
-   * Delta sync with the server.
-   *
-   * Triggered on boot, whenever the app returns to the foreground, and on a slow
-   * timer while it stays open. Foreground is the one that makes it feel instant:
-   * you pick up the laptop, it syncs before you have finished looking at it.
-   *
-   * Keyed on the phone number alone, deliberately. Depending on `db` would
-   * re-arm the effect on every keystroke, and — because a successful sync writes
-   * to storage and therefore changes `db` — would loop forever.
-   */
-  const syncOwner = db?.auth?.phone ?? null;
-  const syncing = useRef(false);
-  useEffect(() => {
-    if (!syncOwner) return;
-
-    const runSync = async () => {
-      if (syncing.current || !hasSession()) return;
-      syncing.current = true;
-      try {
-        const outcome = await syncNow(syncOwner);
-
-        // Same answer `GET /subscriptions/me` would have given, for free.
-        // `none` (null) is deliberately not applied — see the fetch above.
-        if (outcome.entitlement) {
-          entitlementFetched.current = true;
-          const sub = entitlementToSubscription(outcome.entitlement);
+    checkingSession.current = true;
+    try {
+      await fetchDevices();
+      setSessionGate("ready");
+      void fetchEntitlement()
+        .then(({ entitlement }) => {
+          const sub = entitlementToSubscription(entitlement);
           if (sub) setDb((prev) => (prev ? applyServerEntitlement(prev, sub) : prev));
-        }
-
-        if (!outcome.changed) return;
-
-        // Sync wrote straight to IndexedDB, so the in-memory copy the UI renders
-        // is now stale and has to be rebuilt.
-        const { db: loaded } = await hydrate();
-        const base = lastPersisted.current;
-        const merged: Db = base
-          ? {
-              ...loaded,
-              // Device-local state belongs to the running app, not to what sync
-              // just fetched: re-reading it here could undo a sign-in, a fresh
-              // entitlement, or a heartbeat still in flight.
-              auth: base.auth,
-              subscription: base.subscription,
-              notifications: base.notifications,
-              meta: base.meta,
-              settings: {
-                ...loaded.settings,
-                theme: base.settings.theme,
-                notificationsEnabled: base.settings.notificationsEnabled,
+        })
+        .catch(() => undefined);
+    } catch (err) {
+      const code = err instanceof ApiError ? err.code : "";
+      if (isSessionRevocationReason(code)) {
+        clearTokens();
+        setDb((prev) => {
+          if (!prev) return prev;
+          const fa = prev.settings.lang === "fa";
+          return {
+            ...prev,
+            auth: null,
+            notifications: [
+              {
+                id: uid(),
+                title: fa ? "بررسی امنیت حساب" : "Account security check",
+                body: fa
+                  ? "نشست این دستگاه پایان یافت. اطلاعاتت روی این دستگاه باقی مانده؛ برای راهنمایی به @routino_support پیام بده."
+                  : "This device session ended. Your local data is still here; message @routino_support for help.",
+                at: Date.now(),
+                read: false,
               },
-            }
-          : loaded;
-
-        // Re-baseline BEFORE the state lands. The persist effect diffs against
-        // this ref by REFERENCE, so a fresh hydrate that skipped this line would
-        // read as "every record changed", mark the whole database dirty, and
-        // push the entire account back to the server on the next sync.
-        lastPersisted.current = merged;
-        setDb(merged);
-      } catch {
-        /* offline, or the session lapsed — the outbox keeps its rows and the
-           next trigger drains it. Sync is never allowed to surface an error:
-           offline is the normal state of an offline-first app. */
-      } finally {
-        syncing.current = false;
-        // Releases the entitlement fallback above whether or not sync worked.
-        syncSettled.current = true;
+              ...prev.notifications,
+            ].slice(0, 100),
+          };
+        });
+        setSessionGate("ready");
+        return;
       }
-    };
+      const latest = loadTokens() ?? tokens;
+      const decision = decideSession({
+        now: Date.now(),
+        lastServerConfirmedAt: latest.lastServerConfirmedAt,
+        online: navigator.onLine,
+      });
+      setSessionGate(decision.kind === "needs-online-confirmation" ? "needs-online" : "ready");
+    } finally {
+      checkingSession.current = false;
+    }
+  }, []);
 
-    void runSync();
+  // Validate on boot, immediately when connectivity returns, whenever the app
+  // comes to the foreground, and once a minute while it is visible. A closed web
+  // app cannot execute code; the next open performs the same check before data UI.
+  const sessionOwner = db?.auth?.userId ?? db?.auth?.phone ?? null;
+  useEffect(() => {
+    if (!sessionOwner) {
+      setSessionGate("ready");
+      return;
+    }
+    void checkSession();
+    const onOnline = () => void checkSession();
     const onVisibility = () => {
-      if (document.visibilityState === "visible") void runSync();
+      if (document.visibilityState === "visible") void checkSession();
     };
+    window.addEventListener("online", onOnline);
     document.addEventListener("visibilitychange", onVisibility);
-    // 15 minutes, not 5. A tab left open all day was 96 pulls before this and is
-    // 32 after — and since sync also fires on every foreground, nobody who is
-    // actually LOOKING at the app waits for the timer. Purely a cost knob: on the
-    // free tier this is the difference between roughly 1k and 2k daily users.
-    const iv = setInterval(() => void runSync(), 15 * 60_000);
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") void checkSession();
+    }, 60_000);
     return () => {
+      window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVisibility);
-      clearInterval(iv);
+      clearInterval(interval);
     };
-  }, [syncOwner]);
+  }, [sessionOwner, checkSession]);
 
   // heartbeat: keep lastSeen fresh so the clock-tampering guard stays accurate.
   // `meta` is device-local, so this touches localStorage only — it no longer
@@ -378,6 +344,54 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }, 60_000);
     return () => clearInterval(iv);
   }, []);
+
+  // Subscription reminders are local and idempotent. They fire on the first
+  // open inside the three-day window and again after expiry, even if the exact
+  // scheduled instant was missed while the web app was closed.
+  useEffect(() => {
+    const checkSubscription = () => {
+      const cur = dbRef.current;
+      if (!cur || !cur.settings.notificationsEnabled) return;
+      const events = subscriptionReminderEvents(cur);
+      if (!events.length) return;
+      const fa = cur.settings.lang === "fa";
+      if (typeof Notification !== "undefined" && Notification.permission === "granted") {
+        for (const event of events) {
+          try {
+            new Notification(fa ? event.title.fa : event.title.en, {
+              body: fa ? event.body.fa : event.body.en,
+            });
+          } catch {
+            /* in-app notification below remains the guaranteed fallback */
+          }
+        }
+      }
+      setDb((prev) =>
+        prev
+          ? {
+              ...prev,
+              notifications: [
+                ...events.map((event) => ({
+                  id: uid(),
+                  title: fa ? event.title.fa : event.title.en,
+                  body: fa ? event.body.fa : event.body.en,
+                  at: Date.now(),
+                  read: false,
+                })),
+                ...prev.notifications,
+              ].slice(0, 100),
+              meta: {
+                ...prev.meta,
+                firedReminders: [...prev.meta.firedReminders, ...events.map((event) => event.key)].slice(-300),
+              },
+            }
+          : prev,
+      );
+    };
+    checkSubscription();
+    const interval = setInterval(checkSubscription, 60 * 60_000);
+    return () => clearInterval(interval);
+  }, [db?.subscription?.expiresAt, db?.settings.notificationsEnabled]);
 
   // apply theme / dir / lang / brand color
   useEffect(() => {
@@ -405,12 +419,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!db) return;
     if (db.settings.notificationsEnabled) {
       requestNativePermission().then((granted) => {
-        if (granted) syncRecurringReminders(db);
+        if (granted) {
+          syncRecurringReminders(db);
+          syncSubscriptionReminders(db);
+        }
       });
     } else {
       syncRecurringReminders(db); // will clear pending recurring notifications
+      syncSubscriptionReminders(db);
     }
-  }, [db?.settings.notificationsEnabled, db?.settings.journalReminder, db?.habits]);
+  }, [
+    db?.settings.notificationsEnabled,
+    db?.settings.journalReminder,
+    db?.habits,
+    db?.subscription?.expiresAt,
+  ]);
 
   // reminder scheduler (habits, tasks, journal) — checks every 30s.
   // Kept as-is: this still drives in-app/foreground browser notifications on
@@ -509,8 +532,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const t = useCallback((faStr: string, enStr: string) => (lang === "fa" ? faStr : enStr), [lang]);
 
   const value = useMemo<AppCtx>(
-    () => ({ db, update, switchAccount, lang, cal, t }),
-    [db, update, switchAccount, lang, cal, t],
+    () => ({ db, update, switchAccount, sessionGate, retrySession: checkSession, lang, cal, t }),
+    [db, update, switchAccount, sessionGate, checkSession, lang, cal, t],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

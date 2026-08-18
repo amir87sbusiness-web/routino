@@ -18,7 +18,20 @@ export function buildBackup(db: Db): Backup {
     format: "routino-backup",
     formatVersion: 1,
     exportedAt: new Date().toISOString(),
-    db,
+    // A backup is portable personal content, not a portable login session.
+    // Identity, entitlement and device-only notification/security bookkeeping
+    // must stay with the current installation.
+    db: {
+      ...db,
+      auth: null,
+      subscription: null,
+      notifications: [],
+      meta: {
+        ...db.meta,
+        dataOwner: null,
+        firedReminders: [],
+      },
+    },
   };
 }
 

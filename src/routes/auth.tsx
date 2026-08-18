@@ -78,6 +78,11 @@ function AuthPage() {
         return t("کد اشتباهه یا منقضی شده.", "The code is wrong or has expired.");
       case "blocked":
         return t("این حساب مسدود شده.", "This account is blocked.");
+      case "device_security_locked":
+        return t(
+          "برای محافظت از حسابت، ورود موقتاً قفل شده. به @routino_support پیام بده.",
+          "For your account security, sign-in is temporarily locked. Message @routino_support.",
+        );
     }
     // A gateway failure returns no JSON body, so `err.message` falls back to the
     // bare status line and the user was shown the literal text "HTTP 502" — in
@@ -141,11 +146,7 @@ function AuthPage() {
     setError("");
     setBusy(true);
     try {
-      const res = await passwordLogin(
-        identifier.trim(),
-        password,
-        navigator.userAgent.slice(0, 64),
-      );
+      const res = await passwordLogin(identifier.trim(), password);
       await completeLogin(res.user, res.entitlement);
     } catch (err) {
       setError(explain(err));
@@ -188,7 +189,7 @@ function AuthPage() {
     setError("");
     setBusy(true);
     try {
-      const res = await verifyOtp(canonical, code, navigator.userAgent.slice(0, 64));
+      const res = await verifyOtp(canonical, code);
       await completeLogin(res.user, res.entitlement);
     } catch (err) {
       setError(explain(err));
