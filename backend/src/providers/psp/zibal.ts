@@ -29,13 +29,63 @@ const BASE = "https://gateway.zibal.ir";
  */
 export const PSP_TIMEOUT_MS = 12_000;
 
-export function zibalPsp(merchant: string): PspProvider {
+export interface ZibalRelayOptions {
+  url: string;
+  secret: string;
+  /** Test seams; production uses the platform clock and crypto UUID. */
+  now?: () => number;
+  nonce?: () => string;
+}
+
+const encoder = new TextEncoder();
+
+async function relaySignature(
+  secret: string,
+  timestamp: string,
+  nonce: string,
+  path: string,
+  body: string,
+): Promise<string> {
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(secret),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signed = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    encoder.encode(`${timestamp}\n${nonce}\n${path}\n${body}`),
+  );
+  return Array.from(new Uint8Array(signed), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export function zibalPsp(merchant: string, relay?: ZibalRelayOptions): PspProvider {
   async function post<T>(path: string, body: unknown): Promise<T> {
-    const res = await fetch(`${BASE}/v1/${path}`, {
+    const relayPath = `/v1/${path}`;
+    const rawBody = JSON.stringify(body);
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (relay) {
+      const timestamp = String((relay.now ?? Date.now)());
+      const nonce = relay.nonce ? relay.nonce() : crypto.randomUUID();
+      headers["x-routino-timestamp"] = timestamp;
+      headers["x-routino-nonce"] = nonce;
+      headers["x-routino-signature"] = await relaySignature(
+        relay.secret,
+        timestamp,
+        nonce,
+        relayPath,
+        rawBody,
+      );
+    }
+    const target = relay ? `${relay.url.replace(/\/+$/, "")}${relayPath}` : `${BASE}${relayPath}`;
+    const res = await fetch(target, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      headers,
+      body: rawBody,
       signal: AbortSignal.timeout(PSP_TIMEOUT_MS),
+      redirect: "error",
     });
     if (!res.ok) throw new Error(`zibal ${path} HTTP ${res.status}`);
     return (await res.json()) as T;

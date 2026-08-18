@@ -35,6 +35,7 @@ export const ZIBAL_RESULT = {
   AMOUNT_TOO_LOW: 105, // amount must be > 1000 Rial
   CALLBACK_INVALID: 106, // rejects non-http(s) URLs — why a custom scheme can't be the callback
   AMOUNT_TOO_HIGH: 113,
+  IP_NOT_ALLOWED: 115,
   ALREADY_VERIFIED: 201,
 } as const;
 
