@@ -1,13 +1,16 @@
 apply plugin: 'com.android.application'
 
 // امضای نسخه‌ی release از روی android/keystore.properties خوانده می‌شود.
-// اگر این فایل موجود نباشد (مثلاً روی سیستم دیگری بدون کلید امضا)، بیلد release
-// بدون امضا انجام می‌شود تا خطا ندهد.
+// نسخه‌ی release بدون این کلید نباید ساخته شود؛ APK بدون امضا قابل انتشار نیست.
 def keystorePropsFile = rootProject.file("keystore.properties")
 def hasKeystore = keystorePropsFile.exists()
 def keystoreProps = new Properties()
 if (hasKeystore) {
     keystoreProps.load(new FileInputStream(keystorePropsFile))
+}
+def releaseRequested = gradle.startParameter.taskNames.any { it.toLowerCase().contains("release") }
+if (releaseRequested && !hasKeystore) {
+    throw new GradleException("Release signing is missing. Run: npm run android:signing:init")
 }
 
 android {
@@ -38,8 +41,9 @@ android {
     }
     buildTypes {
         release {
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             if (hasKeystore) {
                 signingConfig signingConfigs.release
             }
