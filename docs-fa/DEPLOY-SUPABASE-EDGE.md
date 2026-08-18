@@ -102,6 +102,7 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
 
 ```
 کاربر ── routino.me ──────────► Cloudflare Pages (وب‌اپ)
+مرورگر ─ routino.me/v1/* ─────► Pages Function (`functions/v1/[[path]].js`)
 کاربر ── api.routino.me ─────► Cloudflare Worker (cloudflare/api-worker.js)
                                   │  + x-proxy-secret  + x-client-ip
                                   ▼
@@ -114,6 +115,10 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
 - **Worker چرا؟** کاربر ایرانی به لبه‌ی Cloudflare می‌رسد؛ آدرس خام
   `*.supabase.co` هم با `PROXY_SECRET` مسدود است (فقط Worker می‌تواند تابع را
   صدا بزند) و هدر IP کاربر برای سقف‌های پیامکی قابل‌اعتماد می‌شود.
+- **Pages Function چرا؟** bundle وب same-origin `/v1` را صدا می‌زند. این Function
+  فقط همان namespace را به `api.routino.me` می‌فرستد تا login/اشتراک هیچ‌وقت به
+  fallback لندینگ نخورد و CORS هم در مسیر وب دخیل نباشد. بعد از هر deploy،
+  `https://routino.me/v1/plans` باید JSON و هدر `x-routino-pages-proxy: 1` بدهد.
 - مسیرهای عمومی (`/v1/...`، `/admin`، `/health`) عیناً مثل قبل‌اند — فرانت و
   callback درگاه و پنل ادمین هیچ تغییری نمی‌خواهند.
 

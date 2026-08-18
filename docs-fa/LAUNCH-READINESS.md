@@ -22,7 +22,7 @@
 
 ## تست‌های انجام‌شده
 
-- Frontend unit/integration: ۲۱ فایل، ۱۴۲ تست پاس.
+- Frontend unit/integration: ۲۲ فایل، ۱۴۴ تست پاس.
 - Backend: ۲۶ فایل، ۲۵۲ تست پاس؛ typecheck و production build پاس.
 - Supabase Edge parity/integration: ۱۰ فایل، ۹۳ تست پاس.
 - Web production build و mobile build پاس؛ service worker وب ۷۷ فایل ضروری را precache می‌کند و در mobile غیرفعال است.
@@ -32,6 +32,7 @@
 - تست فشار محلی API: ۳۰۰ درخواست با concurrency=30، صفر خطا؛ p50=23ms، p95=35ms و بیشینه=56ms. این تست فقط از providerهای `console`/`fake` استفاده کرد.
 - شبیه‌سازی lease منقضی: صفحهٔ اتصال امنیتی نمایش داده شد؛ با برگشت اینترنت همان حساب و همان دیتای محلی بدون حذف باز شد.
 - Android Release lint پاس شد. APK امضاشدهٔ `com.routino.app` نسخهٔ 1.0 با اندازهٔ 2,486,166 بایت و SHA-256 برابر `c9c0a6eb74c5e102bc8da57f500073ea4608dadabc7766d45ab975a7f736ed23` توسط `apksigner` و `aapt2` تأیید شد.
+- مسیر production وب `/v1/*` با Pages Function ثابت به `api.routino.me` پروکسی می‌شود؛ تست contract آن method، query، authorization، body و خطای 502 بدون نشت جزئیات را پوشش می‌دهد.
 
 ## محدودیت‌های واقعی مرورگر
 

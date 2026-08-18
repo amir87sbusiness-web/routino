@@ -16,6 +16,7 @@
 
 مسیر فیزیکی اتصال:
 - **وب (توسعه):** فرانت آدرس `/v1/...` رو صدا می‌زنه ← وایت (`vite.config.ts` بخش `proxy`) می‌فرستدش به `http://localhost:3000`
+- **وب (production):** همان `/v1/...` ← Pages Function در `functions/v1/[[path]].js` ← `https://api.routino.me/v1/...`. این مسیر same-origin است و به CORS وابسته نیست.
 - **موبایل:** WebView آدرس کامل می‌خواد ← متغیر `VITE_API_URL` موقع `build:mobile` + موتور HTTP نیتیو Capacitor (بدون CORS)
 - **مرورگر → سرور مستقیم:** فقط صفحه‌ی callback پرداخت و پنل `/admin`
 
@@ -31,7 +32,8 @@
 | ۲ب | `routes/auth.tsx` — دکمه «ورود» (پیش‌فرض) | `auth.ts` ← `passwordLogin` | `POST /v1/auth/password/login` | `backend/src/routes/auth.ts` |
 | ۲ج | `routes/settings.tsx` — کارت «نام کاربری و رمز عبور» | `auth.ts` ← `fetchAccount`/`setUsername`/`setPassword` | `GET /v1/auth/account` · `POST /v1/auth/username` · `POST /v1/auth/password` | `backend/src/routes/auth.ts` |
 | ۴ | `routes/settings.tsx` — دکمه «خروج» | `auth.ts` ← `logout` | `POST /v1/auth/logout` | `backend/src/routes/auth.ts` |
-| ۵ | `state/app.tsx` — یک بار در هر اجرا | `auth.ts` ← `fetchEntitlement` | `GET /v1/subscriptions/me` | `backend/src/routes/subscriptions.ts` |
+| ۵ | `state/app.tsx` — هر ۶ ساعت؛ در سه روز پایانی هر ۱ ساعت | `auth.ts` ← `fetchEntitlement` | `GET /v1/subscriptions/me` | `backend/src/routes/subscriptions.ts`؛ پرداخت callback‌گم‌شده را هم ترمیم می‌کند |
+| ۵الف | `state/app.tsx` — boot/online/foreground و هر دقیقهٔ visible | `devices.ts` ← `pingDevice` | `GET /v1/devices/ping` | فقط اعتبار کاربر/دستگاه؛ پاسخ کوچک `{ok:true}` |
 | ۵ب | (فقط پنل ادمین/دیباگ) | — | `GET /v1/subscriptions/grants` | `backend/src/routes/subscriptions.ts` — دفترکل تمدیدهای یک کاربر |
 | ۶ | `routes/auth.tsx` — بعد از ورود، اگه اشتراک قدیمی محلی باشه | `auth.ts` ← `importSubscription` | `POST /v1/subscriptions/import` | `backend/src/routes/subscriptions.ts` |
 | ۷ | `routes/subscribe.tsx` — موقع باز شدن صفحه | `payments.ts` ← `fetchPlans` | `GET /v1/plans` | `backend/src/routes/plans.ts` |
@@ -177,7 +179,7 @@ subscribe.tsx (فرانت)
 | کد خطای جدید در بک | `explain()` در `auth.tsx` / `explainReason()` در `subscribe.tsx` |
 | `ACCESS_TTL_SECONDS` (بک) | تست `src/lib/api/auth-expiry.test.ts` برای parse کردن `exp` و fallback |
 | دیپ‌لینک `routino://` | `APP_DEEP_LINK` (env بک) + `src/client.tsx` + `AndroidManifest.xml` |
-| آدرس سرور | `VITE_API_URL` (بیلد موبایل) + `CORS_ORIGINS` + `PUBLIC_API_URL` + `PUBLIC_WEB_URL` |
+| آدرس سرور | `VITE_API_URL` (بیلد موبایل) + `functions/v1/[[path]].js` (وب) + `CORS_ORIGINS` + `PUBLIC_API_URL` + `PUBLIC_WEB_URL` |
 | `androidScheme` در capacitor.config.ts | `CORS_ORIGINS` بک |
 | جدول سینک‌شونده جدید | `SYNCED_TABLES` (فرانت) + `SYNC_KINDS` و قید `records_kind_valid` (بک) |
 | شکل جواب entitlement | `entitlementToSubscription` در `src/lib/api/auth.ts` |
