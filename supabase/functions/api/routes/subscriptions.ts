@@ -10,6 +10,7 @@ import {
   listGrants,
   readEntitlement,
 } from "../shared/services/entitlement.ts";
+import { settleOpenPayments } from "../shared/services/payment-flow.ts";
 
 /** The largest instant a JS `Date` can represent; past this it is Invalid Date. */
 const MAX_TIMESTAMP_MS = 8_640_000_000_000_000;
@@ -23,14 +24,16 @@ const importBody = z.object({
 });
 
 export function subscriptionRoutes(deps: Deps) {
-  const { db, env } = deps;
+  const { db, env, psp } = deps;
   const now = () => new Date(deps.now());
   const auth = makeAuthenticate(deps);
   const r = new Hono<AppEnv>();
 
   r.get("/subscriptions/me", auth, async (c) => {
     const user = requireUser(c);
-    return c.json({ entitlement: await readEntitlement(db, user.id, now()) });
+    const t = now();
+    await settleOpenPayments(db, psp, user.id, t);
+    return c.json({ entitlement: await readEntitlement(db, user.id, t) });
   });
 
   /** Imports a legacy client-side subscription — trusted exactly once, bounded

@@ -4,9 +4,9 @@ import { z } from "zod";
 import { makeAuthenticate, requireUser, type AppEnv, type Deps } from "../deps.ts";
 import { deviceSecurityEvents, devices, users } from "../shared/db/schema.ts";
 import { notFound } from "../shared/lib/http-errors.ts";
+import { DEVICE_SWITCH_WINDOW_MS } from "../shared/services/tokens.ts";
 
 const paramsBody = z.object({ id: z.string().uuid() });
-const SWITCH_WINDOW_MS = 30 * 86_400_000;
 
 export function deviceRoutes(deps: Deps) {
   const { db } = deps;
@@ -20,7 +20,7 @@ export function deviceRoutes(deps: Deps) {
     const caller = requireUser(c);
     const [account] = await db.select().from(users).where(eq(users.id, caller.id)).limit(1);
     if (!account) throw notFound("unknown_user", "No such user");
-    const rollingStart = new Date(now().getTime() - SWITCH_WINDOW_MS);
+    const rollingStart = new Date(now().getTime() - DEVICE_SWITCH_WINDOW_MS);
     const since =
       account.deviceSwitchResetAt && account.deviceSwitchResetAt > rollingStart
         ? account.deviceSwitchResetAt

@@ -35,9 +35,23 @@ export interface ServerEntitlement {
   issuedAt: string;
 }
 
-/** Access tokens are ~15 min; refresh a little early to avoid a guaranteed 401. */
+/** Refresh a little early to avoid a guaranteed 401 at the boundary. */
 const REFRESH_SKEW_MS = 60_000;
-const ASSUMED_ACCESS_TTL_MS = 15 * 60_000;
+const FALLBACK_ACCESS_TTL_MS = 60 * 60_000;
+
+export function accessExpiryAt(access: string, now = Date.now()): number {
+  try {
+    const segment = access.split(".")[1];
+    if (!segment) throw new TypeError("Missing JWT payload");
+    const base64 = segment.replaceAll("-", "+").replaceAll("_", "/");
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    const payload = JSON.parse(atob(padded)) as { exp?: unknown };
+    if (typeof payload.exp === "number" && Number.isFinite(payload.exp)) return payload.exp * 1000;
+  } catch {
+    // Old/corrupt tokens still get one server attempt; a 401 triggers refresh.
+  }
+  return now + FALLBACK_ACCESS_TTL_MS;
+}
 
 export function loadTokens(): Tokens | null {
   try {
@@ -82,7 +96,7 @@ const withExpiry = (
     access: t.access,
     refresh: t.refresh,
     deviceId: t.deviceId,
-    accessExpiresAt: now + ASSUMED_ACCESS_TTL_MS,
+    accessExpiresAt: accessExpiryAt(t.access, now),
     lastServerConfirmedAt: now,
     lastEntitlementCheckedAt: entitlementCheckedAt ?? previous?.lastEntitlementCheckedAt,
   };

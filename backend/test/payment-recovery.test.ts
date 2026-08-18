@@ -48,7 +48,7 @@ async function checkout(access: string) {
 async function openApp(access: string) {
   const res = await h.app.inject({
     method: "GET",
-    url: "/v1/sync/pull?cursor=0",
+    url: "/v1/subscriptions/me",
     headers: auth(access),
   });
   expect(res.statusCode).toBe(200);

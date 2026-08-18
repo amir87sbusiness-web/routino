@@ -124,10 +124,10 @@ subscribe.tsx (فرانت)
 ### 🔐 قرارداد ۷: عمر توکن‌ها
 | طرف | کجا | مقدار |
 |---|---|---|
-| بک (مرجع) | env ← `ACCESS_TTL_SECONDS` | ۹۰۰ ثانیه (۱۵ دقیقه) |
-| فرانت (فرض) | `src/lib/api/auth.ts` ← `ASSUMED_ACCESS_TTL_MS` | ۱۵ دقیقه (۱ دقیقه زودتر تمدید می‌کنه) |
+| بک (مرجع) | env ← `ACCESS_TTL_SECONDS` | ۳۶۰۰ ثانیه (۱ ساعت) |
+| فرانت | `src/lib/api/auth.ts` | زمان واقعی `exp` را از JWT می‌خواند و ۱ دقیقه زودتر تمدید می‌کند |
 
-فرانت عمر واقعی رو از سرور نمی‌گیره — «فرض» می‌کنه. اگه `ACCESS_TTL_SECONDS` رو **کمتر** از ۱۵ دقیقه کنی، فرانت دیر تمدید می‌کنه (یه ۴۰۱ اضافه می‌خوره که خودش جبران می‌کنه، ولی کنده). بهتره این دو رو با هم عوض کنی.
+اگر توکن قدیمی/خراب `exp` نداشته باشد، فرانت فقط به‌عنوان fallback یک ساعت فرض می‌کند. هر درخواست خصوصی همچنان وضعیت کاربر و دستگاه را از سرور می‌سنجد؛ در نتیجه revoke منتظر انقضای JWT نمی‌ماند.
 
 ### 🔒 قرارداد ۸: دیتای شخصی فقط لوکال — ✅ سیاست لانچ
 
@@ -140,7 +140,7 @@ subscribe.tsx (فرانت)
 
 ### 🎁 قرارداد ۹: دوره آزمایشی و گِیت اشتراک
 - تریال ۷ روزه رو **فقط سرور** می‌ده (`TRIAL_DAYS` در `backend/src/routes/auth.ts`، موقع اولین ورود) — کلاینت دیگه حق نداره خودش تریال بسازه.
-- ولی گِیت اپ (`subscriptionActive` در `src/lib/logic.ts`) از **کپی محلی** (`db.subscription`) می‌خونه، نه مستقیم از سرور — که آفلاین هم کار کنه. سرور فقط اول هر اجرا این کپی رو تازه می‌کنه.
+- ولی گِیت اپ (`subscriptionActive` در `src/lib/logic.ts`) از **کپی محلی** (`db.subscription`) می‌خونه، نه مستقیم از سرور — که آفلاین هم کار کنه. refresh کامل سرور در حالت عادی هر ۶ ساعت و در سه روز پایانی اشتراک هر ۱ ساعت انجام می‌شود؛ ping امنیت دستگاه جدا و سبک است.
 - نتیجه: دکمه‌ی تستی فرانت (`TEST_GRANT_BUTTON`) فقط همین کپی محلی رو پر می‌کنه — سرور خبردار نمی‌شه و خرید واقعی باهاش تست نمی‌شه. (`TEST_LOGIN_BUTTON` دیگه وجود نداره.)
 
 ---
@@ -175,7 +175,7 @@ subscribe.tsx (فرانت)
 | `src/lib/phone.ts` | `backend/src/lib/phone.ts` + تست parity |
 | قیمت/پلن در دیتابیس سرور | `PLANS` در `src/lib/presets.ts` |
 | کد خطای جدید در بک | `explain()` در `auth.tsx` / `explainReason()` در `subscribe.tsx` |
-| `ACCESS_TTL_SECONDS` (بک) | `ASSUMED_ACCESS_TTL_MS` در `src/lib/api/auth.ts` |
+| `ACCESS_TTL_SECONDS` (بک) | تست `src/lib/api/auth-expiry.test.ts` برای parse کردن `exp` و fallback |
 | دیپ‌لینک `routino://` | `APP_DEEP_LINK` (env بک) + `src/client.tsx` + `AndroidManifest.xml` |
 | آدرس سرور | `VITE_API_URL` (بیلد موبایل) + `CORS_ORIGINS` + `PUBLIC_API_URL` + `PUBLIC_WEB_URL` |
 | `androidScheme` در capacitor.config.ts | `CORS_ORIGINS` بک |

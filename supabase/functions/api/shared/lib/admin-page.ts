@@ -213,7 +213,7 @@ window.openUser = async (id) => {
     "<h3 dir='ltr'>" + esc(localPhone(d.user.phone)) + "</h3>" +
     "<p class='muted'>اشتراک: " + esc(d.entitlement.planId || "—") + " تا " + dt(d.entitlement.expiresAt) +
     (d.user.blocked ? " — <b style='color:var(--bad)'>مسدود</b>" : "") + "</p>" +
-    "<p class='muted'>امنیت دستگاه: سقف " + fa(d.user.maxActiveDevices) + " دستگاه — " + fa(d.user.switchCount30d) + " جابه‌جایی در ۳۰ روز" +
+    "<p class='muted'>امنیت دستگاه: سقف " + fa(d.user.maxActiveDevices) + " دستگاه — " + fa(d.user.switchCount30d) + " جابه‌جایی در ۱۵ روز" +
     (d.user.securityLockedAt ? " — <b style='color:var(--bad)'>قفل امنیتی</b>" : "") + "</p>" +
     "<div class='row'>" +
       "<input id='gMonths' type='number' min='0' max='36' placeholder='ماه' style='width:70px'>" +
@@ -259,7 +259,7 @@ window.openUser = async (id) => {
     dlg.close(); window.openUser(id);
   };
   $("#resetSwitchGo").onclick = async () => {
-    if (!confirm("شمارنده جابه‌جایی ۳۰روزه صفر شود؟")) return;
+    if (!confirm("شمارنده جابه‌جایی ۱۵روزه صفر شود؟")) return;
     await api("/users/" + id + "/device-policy", { method: "POST", body: { resetSwitchCount: true } });
     dlg.close(); window.openUser(id);
   };

@@ -16,6 +16,7 @@
     "cap:android": "npm run cap:sync && npx cap open android",
     "android:signing:init": "node scripts/build-android-release.mjs --init-signing",
     "android:release": "node scripts/build-android-release.mjs",
+    "load:smoke": "node scripts/load-smoke.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
     "test": "vitest run",

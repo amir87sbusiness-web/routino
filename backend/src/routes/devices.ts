@@ -4,9 +4,9 @@ import { z } from "zod";
 import { deviceSecurityEvents, devices, users } from "../db/schema.js";
 import { requireUser } from "../plugins/auth.js";
 import { notFound } from "../plugins/errors.js";
+import { DEVICE_SWITCH_WINDOW_MS } from "../services/tokens.js";
 
 const paramsBody = z.object({ id: z.string().uuid() });
-const SWITCH_WINDOW_MS = 30 * 86_400_000;
 
 export const deviceRoutes: FastifyPluginAsync = async (app) => {
   const { db } = app.deps;
@@ -21,7 +21,7 @@ export const deviceRoutes: FastifyPluginAsync = async (app) => {
     const [account] = await db.select().from(users).where(eq(users.id, caller.id)).limit(1);
     if (!account) throw notFound("unknown_user", "No such user");
 
-    const rollingStart = new Date(now().getTime() - SWITCH_WINDOW_MS);
+    const rollingStart = new Date(now().getTime() - DEVICE_SWITCH_WINDOW_MS);
     const since =
       account.deviceSwitchResetAt && account.deviceSwitchResetAt > rollingStart
         ? account.deviceSwitchResetAt

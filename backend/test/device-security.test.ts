@@ -109,12 +109,12 @@ describe("device security policy", () => {
     expect(await eventCount()).toBe(1);
   });
 
-  it("ignores replacement events older than 30 days", async () => {
+  it("ignores replacement events older than 15 days", async () => {
     await successfulLogin("device-a");
     await successfulLogin("device-b");
     await successfulLogin("device-c");
     await successfulLogin("device-d");
-    await h.raw(`update device_security_events set created_at = now() - interval '31 days'`);
+    await h.raw(`update device_security_events set created_at = now() - interval '16 days'`);
 
     const response = await login("device-e");
     expect(response.statusCode).toBe(200);

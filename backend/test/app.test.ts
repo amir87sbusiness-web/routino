@@ -89,6 +89,10 @@ describe("production env guards", () => {
     expect(() => loadEnv({ ...prod, ZIBAL_MERCHANT: "real-merchant-id" })).not.toThrow();
   });
 
+  it("defaults access tokens to one hour because every protected call rechecks the device row", () => {
+    expect(loadEnv({ NODE_ENV: "test" }).ACCESS_TTL_SECONDS).toBe(3600);
+  });
+
   it("refuses to start with console SMS", () => {
     expect(() =>
       loadEnv({ ...prod, ZIBAL_MERCHANT: "real-merchant-id", SMS_PROVIDER: "console" }),
@@ -105,9 +109,13 @@ describe("production env guards", () => {
 
   it("still rejects dev secrets and the fake gateway", () => {
     const ok = { ...prod, ZIBAL_MERCHANT: "real-merchant-id" };
-    expect(() => loadEnv({ ...ok, JWT_SECRET: "dev-only-secret-change-me-in-production-32+" })).toThrow(/JWT_SECRET/);
+    expect(() =>
+      loadEnv({ ...ok, JWT_SECRET: "dev-only-secret-change-me-in-production-32+" }),
+    ).toThrow(/JWT_SECRET/);
     expect(() => loadEnv({ ...ok, ADMIN_TOKEN: "dev-only-admin-token" })).toThrow(/ADMIN_TOKEN/);
-    expect(() => loadEnv({ ...ok, PSP_PROVIDER: "fake", ALLOW_TEST_PROVIDERS: "true" })).toThrow(/fake/);
+    expect(() => loadEnv({ ...ok, PSP_PROVIDER: "fake", ALLOW_TEST_PROVIDERS: "true" })).toThrow(
+      /fake/,
+    );
   });
 });
 
@@ -115,7 +123,9 @@ describe("schema guarantees", () => {
   it("rejects a record kind the client must never sync", async () => {
     // `feedback` has its own relational table. If it could enter `records` it
     // would round-trip back to the device and re-dirty forever.
-    await h.raw(`insert into users (id, phone) values ('11111111-1111-1111-1111-111111111111', '989123334444')`);
+    await h.raw(
+      `insert into users (id, phone) values ('11111111-1111-1111-1111-111111111111', '989123334444')`,
+    );
     await expect(
       h.raw(
         `insert into records (user_id, kind, id, data, updated_at, seq)
@@ -130,13 +140,17 @@ describe("schema guarantees", () => {
   });
 
   it("allows only one redemption of a code per user", async () => {
-    await h.raw(`insert into users (id, phone) values ('22222222-2222-2222-2222-222222222222', '989123334444')`);
+    await h.raw(
+      `insert into users (id, phone) values ('22222222-2222-2222-2222-222222222222', '989123334444')`,
+    );
     await h.raw(`insert into discounts (code, percent) values ('ROUTINO20', 20)`);
     await h.raw(
       `insert into redemptions (code, user_id) values ('ROUTINO20', '22222222-2222-2222-2222-222222222222')`,
     );
     await expect(
-      h.raw(`insert into redemptions (code, user_id) values ('ROUTINO20', '22222222-2222-2222-2222-222222222222')`),
+      h.raw(
+        `insert into redemptions (code, user_id) values ('ROUTINO20', '22222222-2222-2222-2222-222222222222')`,
+      ),
     ).rejects.toThrow();
   });
 });

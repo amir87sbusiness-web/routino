@@ -24,7 +24,7 @@ import { badRequest, notFound } from "../lib/http-errors.ts";
 import { normalizePhone, toAsciiDigits } from "../lib/phone.ts";
 import { grantInterval, listGrants, readEntitlement } from "./entitlement.ts";
 import { hashPassword, validatePassword } from "./password.ts";
-import { revokeAllDevices } from "./tokens.ts";
+import { DEVICE_SWITCH_WINDOW_MS, revokeAllDevices } from "./tokens.ts";
 
 const DAY_MS = 86_400_000;
 
@@ -104,7 +104,7 @@ export async function adminUserDetail(db: Database, id: string, now: Date) {
   const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
   if (!user) throw notFound("unknown_user", "No such user");
 
-  const rollingStart = new Date(now.getTime() - 30 * DAY_MS);
+  const rollingStart = new Date(now.getTime() - DEVICE_SWITCH_WINDOW_MS);
   const switchSince =
     user.deviceSwitchResetAt && user.deviceSwitchResetAt > rollingStart
       ? user.deviceSwitchResetAt
@@ -185,10 +185,15 @@ export async function adminSetDevicePolicy(
     await db
       .update(devices)
       .set({ revokedAt: now, revocationReason: "admin_limit" })
-      .where(inArray(devices.id, excess.map((device) => device.id)));
+      .where(
+        inArray(
+          devices.id,
+          excess.map((device) => device.id),
+        ),
+      );
   }
 
-  const rollingStart = new Date(now.getTime() - 30 * DAY_MS);
+  const rollingStart = new Date(now.getTime() - DEVICE_SWITCH_WINDOW_MS);
   const since =
     user.deviceSwitchResetAt && user.deviceSwitchResetAt > rollingStart
       ? user.deviceSwitchResetAt

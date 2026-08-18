@@ -2,7 +2,13 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../plugins/auth.js";
 import { badRequest } from "../plugins/errors.js";
-import { ensureExpiresAt, hasSettledGrant, listGrants, readEntitlement } from "../services/entitlement.js";
+import {
+  ensureExpiresAt,
+  hasSettledGrant,
+  listGrants,
+  readEntitlement,
+} from "../services/entitlement.js";
+import { settleOpenPayments } from "../services/payment-flow.js";
 
 /** The largest instant a JS `Date` can represent; past this it is Invalid Date. */
 const MAX_TIMESTAMP_MS = 8_640_000_000_000_000;
@@ -16,12 +22,14 @@ const importBody = z.object({
 });
 
 export const subscriptionRoutes: FastifyPluginAsync = async (app) => {
-  const { db, env } = app.deps;
+  const { db, env, psp } = app.deps;
   const now = () => new Date(app.deps.now());
 
   app.get("/subscriptions/me", { preHandler: app.authenticate }, async (req) => {
     const user = requireUser(req);
-    return { entitlement: await readEntitlement(db, user.id, now()) };
+    const t = now();
+    await settleOpenPayments(db, psp, user.id, t);
+    return { entitlement: await readEntitlement(db, user.id, t) };
   });
 
   /**
@@ -46,7 +54,11 @@ export const subscriptionRoutes: FastifyPluginAsync = async (app) => {
 
     if (await hasSettledGrant(db, user.id)) {
       // Already paid or already imported — replaying this must not extend anything.
-      return { entitlement: await readEntitlement(db, user.id, t), imported: false, reason: "already_settled" };
+      return {
+        entitlement: await readEntitlement(db, user.id, t),
+        imported: false,
+        reason: "already_settled",
+      };
     }
 
     // `z.number().int().positive()` still admits values past the largest instant
@@ -61,7 +73,11 @@ export const subscriptionRoutes: FastifyPluginAsync = async (app) => {
     // them out with an error. The raw claim is still recorded in the note below.
     const claimed = new Date(Math.min(body.expiresAt, MAX_TIMESTAMP_MS));
     if (claimed <= t) {
-      return { entitlement: await readEntitlement(db, user.id, t), imported: false, reason: "already_expired" };
+      return {
+        entitlement: await readEntitlement(db, user.id, t),
+        imported: false,
+        reason: "already_expired",
+      };
     }
 
     const cap = new Date(t.getTime() + env.IMPORT_MAX_DAYS * 86_400_000);
@@ -75,7 +91,11 @@ export const subscriptionRoutes: FastifyPluginAsync = async (app) => {
         claimed: granted,
         source: "migration",
         // Keep exactly what was claimed, so an implausible import is visible later.
-        note: JSON.stringify({ claimed: body.expiresAt, capped: granted.getTime() !== claimed.getTime(), trial: body.trial ?? false }),
+        note: JSON.stringify({
+          claimed: body.expiresAt,
+          capped: granted.getTime() !== claimed.getTime(),
+          trial: body.trial ?? false,
+        }),
       },
       t,
     );

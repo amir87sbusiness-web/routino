@@ -56,7 +56,9 @@ export function buildApp(deps: Deps) {
     };
     if (c.res.status >= 500) console.error("request completed", details);
     else if (durationMs >= 1_000) console.warn("slow request", details);
-    else if (Math.random() < 0.01) console.info("request sample", details);
+    else if (deps.env.NODE_ENV !== "test" && Math.random() < 0.01) {
+      console.info("request sample", details);
+    }
   });
 
   // CORS first, so even a rejected request gets a well-formed preflight answer.

@@ -44,7 +44,9 @@ const schema = z.object({
   ADMIN_TOKEN: z.string().min(12).default("dev-only-admin-token"),
 
   JWT_SECRET: z.string().min(32).default("dev-only-secret-change-me-in-production-32+"),
-  ACCESS_TTL_SECONDS: z.coerce.number().default(900), // 15 min; a blocked user keeps access until this expires
+  // Every protected request rechecks the user and device rows, so revocation is
+  // immediate even with a longer JWT. One hour avoids needless refresh calls.
+  ACCESS_TTL_SECONDS: z.coerce.number().default(3600),
   REFRESH_TTL_DAYS: z.coerce.number().default(180),
 
   /** Mixed into the OTP hash so a DB leak alone can't reverse 6-digit codes. */

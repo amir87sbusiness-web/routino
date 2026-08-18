@@ -159,7 +159,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.post("/admin/users/set-password", opts, async (req) => {
     const body = setPasswordBody.parse(req.body);
     const res = await adminSetPassword(db, body, now());
-    req.log.info({ phone: res.phone, created: res.created }, "admin set password");
+    req.log.info({ created: res.created }, "admin set password");
     return res;
   });
 

@@ -154,7 +154,7 @@ export function adminRoutes(deps: Deps) {
   r.post("/admin/users/set-password", async (c) => {
     const body = setPasswordBody.parse(await readJson(c));
     const res = await adminSetPassword(db, body, now());
-    console.info("admin set password", { phone: res.phone, created: res.created });
+    console.info("admin set password", { created: res.created });
     return c.json(res);
   });
 

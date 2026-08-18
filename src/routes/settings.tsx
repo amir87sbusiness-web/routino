@@ -703,8 +703,8 @@ function SettingsPage() {
         <p className="text-xs leading-6 text-muted-foreground">
           {devices
             ? t(
-                `حداکثر ${faNum(devices.maxActiveDevices, lang)} دستگاه فعال؛ ${faNum(devices.switchCount30d, lang)} جابه‌جایی در ۳۰ روز اخیر.`,
-                `Up to ${devices.maxActiveDevices} active devices; ${devices.switchCount30d} replacements in the last 30 days.`,
+                `حداکثر ${faNum(devices.maxActiveDevices, lang)} دستگاه فعال؛ ${faNum(devices.switchCount30d, lang)} جابه‌جایی در ۱۵ روز اخیر.`,
+                `Up to ${devices.maxActiveDevices} active devices; ${devices.switchCount30d} replacements in the last 15 days.`,
               )
             : t(
                 "برای دیدن دستگاه‌ها یک اتصال کوتاه اینترنت لازم است.",

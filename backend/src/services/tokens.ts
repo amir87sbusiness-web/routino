@@ -63,7 +63,7 @@ export interface DeviceDescriptor {
   os?: string;
 }
 
-const SWITCH_WINDOW_MS = 30 * 86_400_000;
+export const DEVICE_SWITCH_WINDOW_MS = 15 * 86_400_000;
 export const MAX_SWITCHES_PER_WINDOW = 3;
 export const SUPPORT_ID = "routino_support";
 
@@ -86,12 +86,7 @@ export async function issueForDevice(
     const [existing] = await tx
       .select()
       .from(devices)
-      .where(
-        and(
-          eq(devices.userId, userId),
-          eq(devices.installationKeyHash, installationKeyHash),
-        ),
-      )
+      .where(and(eq(devices.userId, userId), eq(devices.installationKeyHash, installationKeyHash)))
       .limit(1);
 
     const active = await tx
@@ -103,7 +98,7 @@ export async function issueForDevice(
     const alreadyActive = existing && !existing.revokedAt;
     let replacedDeviceId: string | null = null;
     if (!alreadyActive && active.length >= user.maxActiveDevices) {
-      const rollingStart = new Date(now.getTime() - SWITCH_WINDOW_MS);
+      const rollingStart = new Date(now.getTime() - DEVICE_SWITCH_WINDOW_MS);
       const since =
         user.deviceSwitchResetAt && user.deviceSwitchResetAt > rollingStart
           ? user.deviceSwitchResetAt
@@ -201,7 +196,12 @@ export async function issueForDevice(
  * A token that doesn't match is either forged or already rotated; either way it
  * is a 401, never a silent re-issue.
  */
-export async function rotateRefresh(db: Database, env: Env, raw: string, now: Date): Promise<IssuedTokens> {
+export async function rotateRefresh(
+  db: Database,
+  env: Env,
+  raw: string,
+  now: Date,
+): Promise<IssuedTokens> {
   const hash = hashToken(raw);
   const [device] = await db
     .select()
@@ -209,7 +209,8 @@ export async function rotateRefresh(db: Database, env: Env, raw: string, now: Da
     .where(and(eq(devices.refreshHash, hash), isNull(devices.revokedAt)))
     .limit(1);
 
-  if (!device) throw unauthorized("invalid_refresh", "Refresh token is invalid or has been rotated");
+  if (!device)
+    throw unauthorized("invalid_refresh", "Refresh token is invalid or has been rotated");
 
   const expiresAt = new Date(device.createdAt.getTime() + env.REFRESH_TTL_DAYS * 86_400_000);
   if (expiresAt <= now) throw unauthorized("expired_refresh", "Refresh token expired");
@@ -224,15 +225,21 @@ export async function rotateRefresh(db: Database, env: Env, raw: string, now: Da
   return { access, refresh: next, deviceId: device.id };
 }
 
-/** Revokes one device. The access token stays valid until it expires — that's
- * why ACCESS_TTL_SECONDS is minutes, not hours. */
+/** Revokes one device. Protected routes re-read this device row, so even an
+ * otherwise-valid access token is rejected on the next request. */
 export async function revokeRefresh(db: Database, raw: string, now: Date): Promise<void> {
-  await db.update(devices).set({ revokedAt: now }).where(eq(devices.refreshHash, hashToken(raw)));
+  await db
+    .update(devices)
+    .set({ revokedAt: now })
+    .where(eq(devices.refreshHash, hashToken(raw)));
 }
 
 /** Revokes every device for a user. Call this when blocking an account. */
 export async function revokeAllDevices(db: Database, userId: string, now: Date): Promise<void> {
-  await db.update(devices).set({ revokedAt: now }).where(and(eq(devices.userId, userId), isNull(devices.revokedAt)));
+  await db
+    .update(devices)
+    .set({ revokedAt: now })
+    .where(and(eq(devices.userId, userId), isNull(devices.revokedAt)));
 }
 
 /**
