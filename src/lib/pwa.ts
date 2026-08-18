@@ -12,9 +12,9 @@ import { Capacitor } from "@capacitor/core";
  * Asks the browser not to evict our data.
  *
  * This matters more here than in most apps: IndexedDB is the ONLY copy of the
- * user's habits until sync exists. Safari evicts unauthenticated origin storage
- * after 7 days without interaction, and Chrome evicts under disk pressure —
- * either one silently deletes months of a user's history.
+ * user's personal content. Browsers may evict best-effort storage under pressure;
+ * persistence greatly reduces that risk but cannot override an explicit site-data
+ * clear, private browsing, or browser/profile removal.
  *
  * Chrome usually grants this once the app is installed or sufficiently engaged;
  * Firefox prompts; Safari grants for installed apps. There is nothing to do when

@@ -195,7 +195,11 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     // are taking real money" and "we are giving subscriptions away" is this
     // check. ZarinPal has had the equivalent guard since day one; Zibal did not,
     // which made forgetting one environment variable a silent revenue hole.
-    if (psps.includes("zibal") && parsed.data.ZIBAL_MERCHANT === "zibal" && !parsed.data.ALLOW_TEST_PROVIDERS) {
+    if (
+      psps.includes("zibal") &&
+      parsed.data.ZIBAL_MERCHANT === "zibal" &&
+      !parsed.data.ALLOW_TEST_PROVIDERS
+    ) {
       throw new Error(
         "ZIBAL_MERCHANT is still the sandbox merchant 'zibal' — no real money would be collected. " +
           "Set the real merchant id, or set ALLOW_TEST_PROVIDERS=true to stay in sandbox on purpose.",
@@ -218,7 +222,9 @@ export function testProviderWarnings(env: Env): string[] {
   const out: string[] = [];
   if (pspProviderNames(env).includes("fake")) out.push("PAYMENTS: fake gateway — no real money.");
   if (pspProviderNames(env).includes("zibal") && env.ZIBAL_MERCHANT === "zibal")
-    out.push("PAYMENTS: Zibal SANDBOX merchant — subscriptions are granted, no real money is collected.");
+    out.push(
+      "PAYMENTS: Zibal SANDBOX merchant — subscriptions are granted, no real money is collected.",
+    );
   if (env.SMS_PROVIDER === "console")
     out.push("SMS: console mode — login codes are printed to this log, not sent to anyone.");
   return out;

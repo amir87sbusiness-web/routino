@@ -97,7 +97,9 @@ function AuthPage() {
     }
     // Any other unmapped status: the server's own message is English and written
     // for a developer, so prefer the generic line unless it is clearly absent.
-    return err.message || t("یه مشکلی پیش اومد. دوباره تلاش کن.", "Something went wrong. Try again.");
+    return (
+      err.message || t("یه مشکلی پیش اومد. دوباره تلاش کن.", "Something went wrong. Try again.")
+    );
   };
 
   /**

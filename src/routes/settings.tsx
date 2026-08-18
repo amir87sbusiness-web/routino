@@ -92,19 +92,7 @@ const BRAND_COLORS = [
 // ⚠️ TEST-ONLY — دکمهٔ «ساخت یک سال دادهٔ آزمایشی». برای انتشار false بماند.
 const SHOW_DEMO_SEED = false;
 
-/**
- * کارت «پشتیبان‌گیری و بازیابی» فعلاً پنهان است.
- *
- * دلیلش سوءاستفاده از دورهٔ آزمایشی است: کاربر می‌توانست پشتیبان بگیرد، با شمارهٔ
- * تازه وارد شود (که ۷ روز آزمایشی جدید می‌دهد) و اطلاعاتش را برگرداند.
- *
- * ⚠️ هزینه‌اش را بدان: اطلاعات فقط روی همین دستگاه است و این کارت **تنها** راه
- * نجات کاربر از پاک شدن داده بود. تا وقتی سینک سرور نیامده، کاربری که حافظهٔ
- * مرورگرش پاک شود همه‌چیزش را برای همیشه از دست می‌دهد و هیچ راه بازگشتی ندارد.
- *
- * هیچ کدی حذف نشده — `exportData`/`onFilePicked`/`confirmImport` سر جایشان‌اند.
- * برای برگرداندن کافی است این را `true` کنی.
- */
+/** Export is permanently visible; Import is gated independently in logic. */
 const BACKUP_UI: boolean = true;
 
 function SettingsPage() {
@@ -181,7 +169,12 @@ function SettingsPage() {
     if (!pendingImport) return;
     if (!canImportBackup(db)) {
       setPendingImport(null);
-      toast.error(t("اشتراک پولی فعال نیست؛ بازیابی انجام نشد", "Import was blocked because there is no active paid plan"));
+      toast.error(
+        t(
+          "اشتراک پولی فعال نیست؛ بازیابی انجام نشد",
+          "Import was blocked because there is no active paid plan",
+        ),
+      );
       return;
     }
     update((d) => restoreDb(d, pendingImport));
@@ -512,7 +505,10 @@ function SettingsPage() {
                 {t("نظرت درباره روتینو", "Your feedback on Routino")}
               </p>
               <p className="text-[10px] text-muted-foreground">
-                {t("هر وقت حرفی داشتی، همین‌جا بگو.", "Tell us any time you have something to say.")}
+                {t(
+                  "هر وقت حرفی داشتی، همین‌جا بگو.",
+                  "Tell us any time you have something to say.",
+                )}
               </p>
             </div>
             <Button
@@ -592,70 +588,70 @@ function SettingsPage() {
 
       {/* backup & restore — behind BACKUP_UI; that flag explains what hiding it costs */}
       {(BACKUP_UI || SHOW_DEMO_SEED) && (
-      <Card className="flex flex-col gap-3">
-        {BACKUP_UI && (
-          <>
-        <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-          <Archive className="h-4 w-4 text-primary" />{" "}
-          {t("پشتیبان‌گیری و بازیابی", "Backup & restore")}
-        </div>
-        <p className="text-[11px] leading-5 text-muted-foreground">
-          {t(
-            "اطلاعاتت فقط روی همین دستگاه ذخیره می‌شه. یک فایل پشتیبان بگیر و جای امن نگهش دار تا اگه اپ رو پاک کردی یا گوشی عوض کردی، اطلاعاتت نپره.",
-            "Your data is stored only on this device. Export a backup file and keep it somewhere safe, so nothing is lost if you reinstall the app or switch devices.",
+        <Card className="flex flex-col gap-3">
+          {BACKUP_UI && (
+            <>
+              <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+                <Archive className="h-4 w-4 text-primary" />{" "}
+                {t("پشتیبان‌گیری و بازیابی", "Backup & restore")}
+              </div>
+              <p className="text-[11px] leading-5 text-muted-foreground">
+                {t(
+                  "اطلاعاتت فقط روی همین دستگاه ذخیره می‌شه. یک فایل پشتیبان بگیر و جای امن نگهش دار تا اگه اپ رو پاک کردی یا گوشی عوض کردی، اطلاعاتت نپره.",
+                  "Your data is stored only on this device. Export a backup file and keep it somewhere safe, so nothing is lost if you reinstall the app or switch devices.",
+                )}
+              </p>
+              <div className="grid grid-cols-2 gap-2">
+                <Button variant="secondary" onClick={exportData}>
+                  <Download className="h-4 w-4" /> {t("گرفتن پشتیبان", "Export")}
+                </Button>
+                <Button
+                  variant="secondary"
+                  disabled={!paidActive}
+                  onClick={() => fileRef.current?.click()}
+                >
+                  {paidActive ? <Upload className="h-4 w-4" /> : <Lock className="h-4 w-4" />}{" "}
+                  {t("بازیابی", "Import")}
+                </Button>
+              </div>
+              {/* بازیابی داده‌ها فقط برای اشتراک پولی — در اشتراک رایگان قفل است */}
+              {!paidActive && (
+                <Link
+                  to="/subscribe"
+                  className="flex items-center justify-center gap-1.5 rounded-xl bg-primary-soft px-3 py-2 text-[11px] font-bold text-primary"
+                >
+                  <Lock className="h-3.5 w-3.5" />
+                  {t(
+                    "بازیابی اطلاعات فقط برای اشتراک پولی فعال است",
+                    "Restoring data is available on paid plans only",
+                  )}
+                </Link>
+              )}
+              <input
+                ref={fileRef}
+                type="file"
+                accept="application/json,.json"
+                hidden
+                onChange={onFilePicked}
+              />
+            </>
           )}
-        </p>
-        <div className="grid grid-cols-2 gap-2">
-          <Button variant="secondary" onClick={exportData}>
-            <Download className="h-4 w-4" /> {t("گرفتن پشتیبان", "Export")}
-          </Button>
-          <Button
-            variant="secondary"
-            disabled={!paidActive}
-            onClick={() => fileRef.current?.click()}
-          >
-            {paidActive ? <Upload className="h-4 w-4" /> : <Lock className="h-4 w-4" />}{" "}
-            {t("بازیابی", "Import")}
-          </Button>
-        </div>
-        {/* بازیابی داده‌ها فقط برای اشتراک پولی — در اشتراک رایگان قفل است */}
-        {!paidActive && (
-          <Link
-            to="/subscribe"
-            className="flex items-center justify-center gap-1.5 rounded-xl bg-primary-soft px-3 py-2 text-[11px] font-bold text-primary"
-          >
-            <Lock className="h-3.5 w-3.5" />
-            {t(
-              "بازیابی اطلاعات فقط برای اشتراک پولی فعال است",
-              "Restoring data is available on paid plans only",
-            )}
-          </Link>
-        )}
-        <input
-          ref={fileRef}
-          type="file"
-          accept="application/json,.json"
-          hidden
-          onChange={onFilePicked}
-        />
-          </>
-        )}
-        {/* ═══ TEST-ONLY: دادهٔ آزمایشی یک‌ساله — با SHOW_DEMO_SEED کنترل می‌شود ═══ */}
-        {SHOW_DEMO_SEED && (
-          <button
-            type="button"
-            onClick={seedDemo}
-            className="rounded-xl border border-dashed border-muted-foreground/40 py-2 text-xs text-muted-foreground"
-          >
-            🧪{" "}
-            {t(
-              "ساخت یک سال دادهٔ آزمایشی (جایگزین دیتای فعلی)",
-              "Seed 1 year of demo data (replaces current)",
-            )}
-          </button>
-        )}
-        {/* ═══ پایان TEST-ONLY ═══ */}
-      </Card>
+          {/* ═══ TEST-ONLY: دادهٔ آزمایشی یک‌ساله — با SHOW_DEMO_SEED کنترل می‌شود ═══ */}
+          {SHOW_DEMO_SEED && (
+            <button
+              type="button"
+              onClick={seedDemo}
+              className="rounded-xl border border-dashed border-muted-foreground/40 py-2 text-xs text-muted-foreground"
+            >
+              🧪{" "}
+              {t(
+                "ساخت یک سال دادهٔ آزمایشی (جایگزین دیتای فعلی)",
+                "Seed 1 year of demo data (replaces current)",
+              )}
+            </button>
+          )}
+          {/* ═══ پایان TEST-ONLY ═══ */}
+        </Card>
       )}
 
       <Card className="flex flex-col gap-3">
@@ -716,10 +712,15 @@ function SettingsPage() {
               )}
         </p>
         {devices?.devices.map((device) => (
-          <div key={device.id} className="flex min-w-0 items-center gap-3 border-t border-border pt-3">
+          <div
+            key={device.id}
+            className="flex min-w-0 items-center gap-3 border-t border-border pt-3"
+          >
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-bold text-foreground">
-                {device.name || [device.browser, device.os].filter(Boolean).join(" · ") || t("دستگاه", "Device")}
+                {device.name ||
+                  [device.browser, device.os].filter(Boolean).join(" · ") ||
+                  t("دستگاه", "Device")}
               </p>
               <p className="mt-1 text-[11px] text-muted-foreground">
                 {device.current

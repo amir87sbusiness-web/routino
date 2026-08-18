@@ -9,10 +9,7 @@ export interface SubscriptionReminderEvent {
   body: { fa: string; en: string };
 }
 
-export function subscriptionReminderEvents(
-  db: Db,
-  now = Date.now(),
-): SubscriptionReminderEvent[] {
+export function subscriptionReminderEvents(db: Db, now = Date.now()): SubscriptionReminderEvent[] {
   if (!db.auth || !db.subscription || db.subscription.trial) return [];
   const expiry = db.subscription.expiresAt;
   const remaining = expiry - now;

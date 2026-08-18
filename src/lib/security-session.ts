@@ -1,9 +1,7 @@
 export const OFFLINE_LEASE_MS = 15 * 86_400_000;
 
 export type SessionRevocationReason =
-  | "device_replaced"
-  | "device_revoked"
-  | "device_security_locked";
+  "device_replaced" | "device_revoked" | "device_security_locked";
 
 export interface SessionDecisionInput {
   now: number;
@@ -30,8 +28,6 @@ export function decideSession(input: SessionDecisionInput): SessionDecision {
 
 export function isSessionRevocationReason(value: string): value is SessionRevocationReason {
   return (
-    value === "device_replaced" ||
-    value === "device_revoked" ||
-    value === "device_security_locked"
+    value === "device_replaced" || value === "device_revoked" || value === "device_security_locked"
   );
 }

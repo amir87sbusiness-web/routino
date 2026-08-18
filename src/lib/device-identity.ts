@@ -52,11 +52,7 @@ export async function getOrCreateDeviceDescriptor(): Promise<DeviceDescriptor> {
   const os = osName(navigator.userAgent).slice(0, 32);
   const native = Capacitor.isNativePlatform();
   const nativePlatform = Capacitor.getPlatform();
-  const platform = native
-    ? nativePlatform === "ios"
-      ? "ios"
-      : "android"
-    : webPlatform();
+  const platform = native ? (nativePlatform === "ios" ? "ios" : "android") : webPlatform();
 
   return {
     installationKey,

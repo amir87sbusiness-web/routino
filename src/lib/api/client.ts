@@ -55,7 +55,11 @@ interface RawResponse {
  * of the web bundle entirely — the same pattern `lib/native-notifications.ts`
  * already uses.
  */
-async function nativeRequest(url: string, opts: RequestOptions, headers: Record<string, string>): Promise<RawResponse> {
+async function nativeRequest(
+  url: string,
+  opts: RequestOptions,
+  headers: Record<string, string>,
+): Promise<RawResponse> {
   const { CapacitorHttp } = await import("@capacitor/core");
   const res = await CapacitorHttp.request({
     url,
@@ -65,10 +69,18 @@ async function nativeRequest(url: string, opts: RequestOptions, headers: Record<
     connectTimeout: opts.timeoutMs ?? 15_000,
     readTimeout: opts.timeoutMs ?? 15_000,
   });
-  return { status: res.status, body: res.data, headers: (res.headers ?? {}) as Record<string, string> };
+  return {
+    status: res.status,
+    body: res.data,
+    headers: (res.headers ?? {}) as Record<string, string>,
+  };
 }
 
-async function webRequest(url: string, opts: RequestOptions, headers: Record<string, string>): Promise<RawResponse> {
+async function webRequest(
+  url: string,
+  opts: RequestOptions,
+  headers: Record<string, string>,
+): Promise<RawResponse> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 15_000);
   // Honour a caller's signal as well as our timeout.
@@ -103,7 +115,12 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Pr
       : await webRequest(url, opts, headers);
   } catch (err) {
     // Offline, DNS failure, timeout, blocked. Not exceptional for this app.
-    throw new ApiError(0, "offline", err instanceof Error ? err.message : "Network unavailable", true);
+    throw new ApiError(
+      0,
+      "offline",
+      err instanceof Error ? err.message : "Network unavailable",
+      true,
+    );
   }
 
   if (raw.status >= 200 && raw.status < 300) return raw.body as T;

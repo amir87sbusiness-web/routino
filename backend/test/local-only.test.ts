@@ -6,7 +6,11 @@ let access: string;
 
 beforeAll(async () => {
   h = await makeHarness({ LEGACY_PERSONAL_SYNC_ENABLED: "false" });
-  await h.app.inject({ method: "POST", url: "/v1/auth/otp/request", payload: { phone: "09121112233" } });
+  await h.app.inject({
+    method: "POST",
+    url: "/v1/auth/otp/request",
+    payload: { phone: "09121112233" },
+  });
   const response = await h.app.inject({
     method: "POST",
     url: "/v1/auth/otp/verify",

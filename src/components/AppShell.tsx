@@ -4,7 +4,17 @@
  * feedback popup, and celebration popups.
  */
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { BarChart3, Bell, BookHeart, Home, ListTodo, Repeat, Settings, Timer, WifiOff } from "lucide-react";
+import {
+  BarChart3,
+  Bell,
+  BookHeart,
+  Home,
+  ListTodo,
+  Repeat,
+  Settings,
+  Timer,
+  WifiOff,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { FeedbackModal } from "@/components/FeedbackModal";
 import { InstallBanner } from "@/components/pwa";
@@ -60,7 +70,10 @@ function ReconnectGate({
           {busy ? t("در حال بررسی…", "Checking…") : t("بررسی دوباره", "Check again")}
         </Button>
         <p className="mt-4 text-xs leading-6 text-muted-foreground">
-          {t("اگر مشکل ادامه داشت به @routino_support پیام بده.", "If this continues, message @routino_support.")}
+          {t(
+            "اگر مشکل ادامه داشت به @routino_support پیام بده.",
+            "If this continues, message @routino_support.",
+          )}
         </p>
       </section>
     </main>
@@ -106,9 +119,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   // Ask the browser to keep our data as soon as onboarding is done — before the
   // auth/subscribe screens — so everything entered from then on is under durable
-  // storage. IndexedDB is the only copy of their habits until sync exists, and
-  // Safari evicts origin storage after 7 days without interaction; this stops
-  // that. Not fired on the first onboarding paint on purpose: a few browsers
+  // storage. IndexedDB is the only copy of their personal content. Persistence
+  // reduces eviction risk, but browsers still control their own storage and an
+  // explicit Clear site data always wins. Not fired on the first onboarding paint:
   // prompt for it, and engagement makes the grant likelier. The call no-ops when
   // durability is already granted, so re-running it is free.
   useEffect(() => {
@@ -200,7 +213,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             the user signs in on, and that is exactly the reassurance someone
             worries about when they pick up a new phone — so say it. */}
         <div className="mt-auto px-2 text-[10px] text-muted-foreground">
-          {t("همگام با حساب کاربری‌ات", "Synced to your account")}
+          {t("ذخیره‌شده روی همین دستگاه", "Saved on this device")}
         </div>
       </aside>
 

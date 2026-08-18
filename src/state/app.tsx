@@ -247,6 +247,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    // Do not hold the local UI behind a slow or half-connected network. A valid
+    // lease opens immediately; server verification continues in the background.
+    // Only an already-expired lease needs a successful online answer first.
+    const localDecision = decideSession({
+      now: Date.now(),
+      lastServerConfirmedAt: tokens.lastServerConfirmedAt,
+      online: navigator.onLine,
+    });
+    setSessionGate(
+      localDecision.kind === "needs-online-confirmation"
+        ? navigator.onLine
+          ? "checking"
+          : "needs-online"
+        : "ready",
+    );
+
     checkingSession.current = true;
     try {
       await fetchDevices();
@@ -261,6 +277,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const code = err instanceof ApiError ? err.code : "";
       if (isSessionRevocationReason(code)) {
         clearTokens();
+        toast.error(
+          current.settings.lang === "fa"
+            ? "برای امنیت حسابت، نشست این دستگاه پایان یافت. اطلاعاتت پاک نشده؛ برای راهنمایی به @routino_support پیام بده."
+            : "For account security, this device session ended. Your data was not deleted; message @routino_support for help.",
+          { duration: 15_000 },
+        );
         setDb((prev) => {
           if (!prev) return prev;
           const fa = prev.settings.lang === "fa";
@@ -382,7 +404,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
               ].slice(0, 100),
               meta: {
                 ...prev.meta,
-                firedReminders: [...prev.meta.firedReminders, ...events.map((event) => event.key)].slice(-300),
+                firedReminders: [
+                  ...prev.meta.firedReminders,
+                  ...events.map((event) => event.key),
+                ].slice(-300),
               },
             }
           : prev,

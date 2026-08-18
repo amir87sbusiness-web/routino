@@ -143,7 +143,11 @@ export async function syncSubscriptionReminders(db: Db): Promise<void> {
  * برای یادآوری‌های یک‌بارمصرف تسک‌ها (task.reminderAt) — این‌ها یک زمان دقیق
  * دارند نه یک ساعت تکرارشونده، پس جدا زمان‌بندی می‌شوند.
  */
-export async function scheduleTaskReminder(taskId: string, title: string, reminderAtIso: string): Promise<void> {
+export async function scheduleTaskReminder(
+  taskId: string,
+  title: string,
+  reminderAtIso: string,
+): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
   const at = new Date(reminderAtIso);
   if (at.getTime() <= Date.now()) return;
@@ -166,5 +170,3 @@ export async function cancelTaskReminder(taskId: string): Promise<void> {
   const { LocalNotifications } = await import("@capacitor/local-notifications");
   await LocalNotifications.cancel({ notifications: [{ id: idFromString(`task|${taskId}`) }] });
 }
-
-

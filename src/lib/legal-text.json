@@ -34,6 +34,10 @@
         [
           "ورود به حساب از طریق شماره موبایل یا نام کاربری و رمز عبور، یا کد یک‌بارمصرفِ پیامکی انجام می‌شود. مسئولیت حفظ رمز عبور و دسترسی به شماره موبایل و جلوگیری از استفاده‌ی دیگران از حساب، بر عهده‌ی شماست.",
           "Sign-in is via your mobile number or username with a password, or a one-time SMS code. You are responsible for keeping your password, keeping access to your number, and preventing others from using your account."
+        ],
+        [
+          "هر حساب به‌طور پیش‌فرض برای یک دستگاه فعال است؛ مدیر سرویس می‌تواند این سقف را برای هر حساب تغییر دهد. ورود دستگاه تازه در صورت پر بودن ظرفیت، نشست قدیمی‌تر را برای امنیت حساب پایان می‌دهد. حداکثر سه جابه‌جایی دستگاه در هر بازهٔ ۳۰روزه مجاز است و جابه‌جایی چهارم حساب را تا بررسی پشتیبانی قفل می‌کند. هر ورود دستگاه در اعلان‌های حساب ثبت می‌شود.",
+          "Each account allows one active device by default; the service administrator may change this limit per account. When the limit is full, signing in on a new device ends the older session for account security. Up to three device replacements are allowed in any rolling 30-day period; a fourth locks the account pending support review. Each device sign-in is recorded in account notifications."
         ]
       ]
     },
@@ -72,8 +76,8 @@
       ],
       "paras": [
         [
-          "استفاده از روتینو باید قانونی و مطابق مقررات باشد. سوءاستفاده، تلاش برای اخلال در سرویس، یا دسترسی غیرمجاز مجاز نیست.",
-          "Use of Routino must be lawful. Abuse, attempts to disrupt the service, or unauthorized access are not permitted."
+          "استفاده از روتینو باید قانونی و مطابق مقررات باشد. حساب و اشتراک برای استفاده طبق سقف دستگاه تعیین‌شده است. تلاش برای اخلال در سرویس یا دسترسی غیرمجاز مجاز نیست. اگر ورود ناشناسی دیدید، فوراً به @routino_support پیام دهید.",
+          "Use of Routino must be lawful and within the device limit assigned to the account. Attempts to disrupt the service or gain unauthorized access are not permitted. If you see an unfamiliar sign-in, message @routino_support immediately."
         ]
       ]
     },
@@ -84,8 +88,8 @@
       ],
       "paras": [
         [
-          "سرویس «همان‌گونه که هست» ارائه می‌شود. تلاش ما بر ارائه‌ی سرویسی پایدار است و یک نسخه از اطلاعات شما روی سرور نگهداری می‌شود، اما مسئولیتی در قبال از دست رفتن اطلاعات، قطعی سرویس یا خسارات ناشی از آن نداریم.",
-          "The service is provided “as is”. We aim to keep it reliable and a copy of your data is kept on the server, but we accept no liability for data loss, service interruption, or any damages arising from them."
+          "سرویس «همان‌گونه که هست» ارائه می‌شود. محتوای شخصی برنامه فقط روی دستگاه شماست و نسخه‌ای از آن روی سرور روتینو نگهداری نمی‌شود. پاک‌کردن دادهٔ مرورگر، استفاده از حالت ناشناس، حذف برنامه یا خرابی دستگاه می‌تواند اطلاعات را از بین ببرد؛ Export همیشه فعال است و مسئولیت نگهداری فایل پشتیبان با کاربر است.",
+          "The service is provided “as is”. Personal app content exists only on your device and Routino keeps no server copy. Clearing browser data, private browsing, uninstalling the app, or device failure may remove it. Export is always available, and you are responsible for keeping backup files safe."
         ]
       ]
     },
@@ -138,8 +142,12 @@
           "Mobile number: used only for sign-in and authentication (sending the one-time code)."
         ],
         [
-          "محتوای برنامه: عادت‌ها، کارها، ژورنال و تنظیمات شما — برای اینکه روی همه‌ی دستگاه‌هایتان یکسان باشد و با گم‌شدن گوشی از بین نرود — روی سرور ما هم نگهداری می‌شود. این اطلاعات به حساب شما گره خورده و فقط با ورود به همان حساب در دسترس است.",
-          "App content: your habits, tasks, journal, and settings are also stored on our server — so they stay identical across your devices and survive a lost phone. This data is tied to your account and is only accessible by signing in to it."
+          "محتوای برنامه: عادت‌ها، ثبت‌ها، کارها، ژورنال، تایمر، آنالیز و تنظیمات شخصی فقط در حافظهٔ محلی همان دستگاه نگهداری می‌شوند و به سرور روتینو ارسال نمی‌شوند.",
+          "App content: habits, logs, tasks, journal, timer history, analytics data, and personal settings are stored only in that device's local storage and are not sent to Routino's server."
+        ],
+        [
+          "اطلاعات حساب و امنیت: سرور شماره موبایل، نام کاربری و هش رمز (در صورت تنظیم)، اطلاعات عمومی نصب/مرورگر و نشست دستگاه، رویدادهای امنیتی جابه‌جایی، وضعیت اشتراک و سوابق لازم پرداخت را نگهداری می‌کند. IP یا VPN برای ساخت هویت دستگاه استفاده نمی‌شود.",
+          "Account and security data: the server stores your mobile number, username and password hash (if set), general installation/browser and device-session details, device-replacement security events, subscription status, and necessary payment records. IP address or VPN state is not used to create device identity."
         ],
         [
           "اطلاعات پرداخت: پرداخت‌ها از طریق درگاه بانکی انجام می‌شود. ما اطلاعات کارت بانکی شما (شماره کارت، رمز و…) را دریافت، مشاهده یا ذخیره نمی‌کنیم؛ این اطلاعات مستقیماً توسط درگاه بانکی مدیریت می‌شود.",
@@ -154,8 +162,8 @@
       ],
       "paras": [
         [
-          "یک نسخه از اطلاعات شما همیشه روی خود دستگاه نگهداری می‌شود، بنابراین برنامه بدون اینترنت هم کامل کار می‌کند. هر تغییری که آفلاین بدهید، دفعه‌ی بعد که به اینترنت وصل شوید همگام می‌شود.",
-          "A copy of your data is always kept on the device itself, so the app works fully offline. Anything you change offline is synced the next time you are online."
+          "اطلاعات شخصی روی خود دستگاه نگهداری می‌شود و امکانات اصلی بدون اینترنت کار می‌کنند. برای تأیید امنیت نشست، دستگاه باید دست‌کم هر ۱۵ روز یک‌بار به سرور متصل شود. این بررسی هیچ محتوای شخصی را ارسال نمی‌کند و در صورت نیاز به اتصال، اطلاعات محلی پاک نمی‌شود.",
+          "Personal data is kept on-device and core features work offline. For session security, the device must contact the server at least once every 15 days. This check sends no personal app content, and local data is not deleted if reconnection is required."
         ]
       ]
     },
@@ -190,8 +198,8 @@
       ],
       "paras": [
         [
-          "کدهای ورود به‌صورت رمزنگاری‌شده نگهداری می‌شوند و پس از مدت کوتاهی منقضی می‌شوند. با این حال، هیچ سیستمی صددرصد ایمن نیست و ما در حد توان معقول از اطلاعات محافظت می‌کنیم.",
-          "Login codes are stored encrypted and expire after a short time. However, no system is 100% secure; we protect your information with reasonable care."
+          "کدهای ورود به‌صورت هش‌شده نگهداری و پس از مدت کوتاهی منقضی می‌شوند. نشست دستگاه قابل ابطال فوری پس از اتصال است و جابه‌جایی‌های پرتکرار برای بررسی امنیتی قفل می‌شوند. با این حال هیچ سیستمی صددرصد ایمن نیست.",
+          "Login codes are stored as hashes and expire quickly. Device sessions can be revoked immediately once connected, and repeated replacements trigger a security lock. No system, however, is 100% secure."
         ]
       ]
     },
@@ -202,8 +210,8 @@
       ],
       "paras": [
         [
-          "شما می‌توانید حذف حساب و تمام اطلاعات مرتبط با شماره‌ی خود — شامل نسخه‌ی ذخیره‌شده روی سرور — را از طریق تماس با پشتیبانی درخواست کنید.",
-          "You can request deletion of your account and all data associated with your number — including the copy stored on our server — by contacting support."
+          "Export اطلاعات شخصی همیشه فعال است. Import فقط با اشتراک پولی فعال و در دورهٔ آزمایشی یا پلن رایگان غیرفعال است. می‌توانید حذف اطلاعات حسابِ نگهداری‌شده روی سرور را از پشتیبانی درخواست کنید؛ محتوای محلی فقط با اقدام صریح خودتان از دستگاه حذف می‌شود.",
+          "Personal-data export is always available. Import requires an active paid subscription and is disabled during trial or free access. You may ask support to delete server-held account data; local content is removed only by your explicit action on the device."
         ]
       ]
     }
