@@ -16,7 +16,7 @@
  */
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import sharp from "sharp";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -29,6 +29,40 @@ const SITE = "https://routino.me";
  * خراب کند. کد اینماد عمداً از این مسیر رد نمی‌شود (باید عیناً درج شود). */
 const esc = (s) =>
   String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/**
+ * The APK is uploaded outside this repository. Until its final HTTPS URL is
+ * known, the public page must show a real disabled button instead of a link
+ * that goes nowhere. Keeping this renderer in the build step means adding the
+ * cloud URL later needs no hand-edit inside the landing template.
+ */
+export function renderAndroidDownload(rawUrl) {
+  const value = String(rawUrl ?? "").trim();
+  if (!value) {
+    return (
+      '          <button type="button" class="btn ghost soon" id="android-btn" disabled>\n' +
+      '            <svg class="ic" aria-hidden="true"><use href="#i-droid" /></svg>\n' +
+      '            دانلود اندروید <span class="tag">بعد از انتشار</span>\n' +
+      "          </button>"
+    );
+  }
+
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("ANDROID_DOWNLOAD_URL باید یک آدرس HTTPS معتبر باشد");
+  }
+  if (url.protocol !== "https:") {
+    throw new Error("ANDROID_DOWNLOAD_URL باید با HTTPS شروع شود");
+  }
+  return (
+    `          <a class="btn ghost" id="android-btn" href="${esc(url.href)}" rel="noreferrer">\n` +
+    '            <svg class="ic" aria-hidden="true"><use href="#i-droid" /></svg>\n' +
+    "            دانلود نسخه اندروید\n" +
+    "          </a>"
+  );
+}
 
 /** فارسیِ هر جفت [fa, en]. سایت عمومی فارسی‌ست؛ نسخه‌ی دوزبانه داخل خود اپ است. */
 const fa = (pair) => pair[0];
@@ -233,7 +267,10 @@ async function main() {
 
   // ── صفحه‌ی اصلی ──────────────────────────────────────────
   // مهر اینماد عیناً درج می‌شود، بدون escape — باید همان HTMLی باشد که صادر شده.
-  const homeHtml = fill("index.template.html", { "<!--ENAMAD-->": ENAMAD_SEAL });
+  const homeHtml = fill("index.template.html", {
+    "<!--ANDROID-DOWNLOAD-->": renderAndroidDownload(process.env.ANDROID_DOWNLOAD_URL),
+    "<!--ENAMAD-->": ENAMAD_SEAL,
+  });
   writeFileSync(join(OUT_DIR, "index.html"), homeHtml);
 
   // ── صفحه‌ی قوانین ────────────────────────────────────────
@@ -324,4 +361,6 @@ async function main() {
   );
 }
 
-main();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}

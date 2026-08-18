@@ -44,6 +44,7 @@ android/local.properties
 # Isolated Codex feature worktrees
 .worktrees/
 .playwright-cli/
+/tmp/
 
 # Written by `supabase link`: project ref and pooler URL for THIS machine.
 # Local connection state, not project source.
