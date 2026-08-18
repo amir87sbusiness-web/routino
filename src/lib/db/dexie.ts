@@ -105,7 +105,7 @@ export interface SyncMetaRow {
   lastSyncedAt: number;
 }
 
-class RoutinoDexie extends Dexie {
+export class RoutinoDexie extends Dexie {
   categories!: Table<RecordRow<Category>, string>;
   habits!: Table<RecordRow<Habit>, string>;
   logs!: Table<RecordRow<HabitLog>, string>;
@@ -137,7 +137,21 @@ class RoutinoDexie extends Dexie {
   }
 }
 
-export const db = new RoutinoDexie();
+/**
+ * Live binding to the currently selected account vault.
+ *
+ * Every storage module imports this binding rather than capturing a table, so
+ * changing it during an account switch makes all subsequent writes target the
+ * selected vault without copying or deleting another account's rows.
+ */
+export let db = new RoutinoDexie();
+
+export async function useDatabase(name: string): Promise<void> {
+  if (db.name === name && db.isOpen()) return;
+  db.close();
+  db = new RoutinoDexie(name);
+  await db.open();
+}
 
 /** Wraps a fresh entity for storage. Callers that are applying a remote record
  * pass `dirty: 0` — only local edits go in the outbox. */

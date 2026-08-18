@@ -30,17 +30,23 @@ import { diffDb } from "@/lib/db/diff";
 import { hydrate } from "@/lib/db/hydrate";
 import { loadLocal, localChanged, mergeSettings, saveLocal, toLocalState } from "@/lib/db/local";
 import { applyChanges } from "@/lib/db/persist";
+import { switchOwnerVault } from "@/lib/db/vault";
 import { DEFAULT_CATEGORIES } from "@/lib/presets";
 import { defaultDb, uid, type Db } from "@/lib/store";
 import { applyServerEntitlement, dueHabitsOn, isCompleted, getLog } from "@/lib/logic";
 import { requestNativePermission, syncRecurringReminders } from "@/lib/native-notifications";
 import { syncNativeBars } from "@/lib/native";
+import { loginAs } from "@/lib/wipe";
 
 type Updater = (fn: (db: Db) => Db) => void;
 
 interface AppCtx {
   db: Db | null;
   update: Updater;
+  switchAccount: (
+    user: { id: string; phone: string },
+    subscription: Db["subscription"],
+  ) => Promise<void>;
   lang: Lang;
   cal: Calendar;
   t: (fa: string, en: string) => string;
@@ -83,10 +89,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const lastPersisted = useRef<Db | null>(null);
   /** So a broken IndexedDB warns once, not on every keystroke. */
   const persistFailed = useRef(false);
+  /** All IndexedDB writes are serialized so an account switch can wait until
+   * the old vault is fully flushed before selecting the new one. */
+  const persistQueue = useRef<Promise<void>>(Promise.resolve());
+  const switchingVault = useRef(false);
 
   const update: Updater = useCallback((fn) => {
     setDb((prev) => (prev ? fn(prev) : prev));
   }, []);
+
+  const switchAccount = useCallback(
+    async (user: { id: string; phone: string }, subscription: Db["subscription"]) => {
+      const current = dbRef.current;
+      if (current) {
+        await persistQueue.current;
+        const pending = diffDb(lastPersisted.current, current);
+        if (localChanged(lastPersisted.current, current)) saveLocal(toLocalState(current));
+        if (pending.length) await applyChanges(pending);
+      }
+
+      switchingVault.current = true;
+      try {
+        await switchOwnerVault(user.id);
+        const { db: loaded } = await hydrate();
+        const next = loginAs(loaded, user.phone, subscription, Date.now(), user.id);
+        saveLocal(toLocalState(next));
+        lastPersisted.current = next;
+        setDb(next);
+      } finally {
+        switchingVault.current = false;
+      }
+    },
+    [],
+  );
 
   // Hydrate on mount (client only). AppShell already renders a splash while
   // `db` is null, which covers the async gap.
@@ -139,7 +174,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // `lastPersisted` rather than the previous render lets React's batching
   // coalesce several updates into one diff — fewer writes, same result.
   useEffect(() => {
-    if (!db || db === lastPersisted.current) return;
+    if (!db || db === lastPersisted.current || switchingVault.current) return;
     const prev = lastPersisted.current;
     const changes = diffDb(prev, db);
     // Set before the await so a second update can't interleave and re-diff the
@@ -155,7 +190,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // `BACKUP_UI` now, so the message names the causes the user can actually act
     // on instead of a button they will not find.
     if (changes.length) {
-      void applyChanges(changes).catch((err) => {
+      const write = persistQueue.current.then(() => applyChanges(changes));
+      persistQueue.current = write.catch(() => undefined);
+      void write.catch((err) => {
         console.error("failed to persist changes", err);
         if (!persistFailed.current) {
           persistFailed.current = true;
@@ -471,7 +508,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const t = useCallback((faStr: string, enStr: string) => (lang === "fa" ? faStr : enStr), [lang]);
 
-  const value = useMemo<AppCtx>(() => ({ db, update, lang, cal, t }), [db, update, lang, cal, t]);
+  const value = useMemo<AppCtx>(
+    () => ({ db, update, switchAccount, lang, cal, t }),
+    [db, update, switchAccount, lang, cal, t],
+  );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

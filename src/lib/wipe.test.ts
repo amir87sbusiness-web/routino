@@ -65,13 +65,13 @@ describe("loginAs — account isolation", () => {
     expect(next.meta.dataOwner).toBe("989111111111");
   });
 
-  it("a DIFFERENT phone wipes the previous owner's content and subscription", () => {
+  it("never deletes current-vault content while applying a different account identity", () => {
     const signedOut: Db = { ...seededDb(), auth: null };
     const next = loginAs(signedOut, "989222222222", undefined, 5000);
-    expect(next.habits).toEqual([]);
-    expect(next.logs).toEqual({});
-    expect(next.journal).toEqual({});
-    expect(next.subscription).toBeNull(); // the old owner's plan must not carry over
+    expect(next.habits).toHaveLength(1);
+    expect(next.logs).toEqual(signedOut.logs);
+    expect(next.journal).toEqual(signedOut.journal);
+    expect(next.subscription?.planId).toBe("p3");
     expect(next.auth?.phone).toBe("989222222222");
     expect(next.meta.dataOwner).toBe("989222222222");
     expect(next.settings.onboarded).toBe(true); // device stays onboarded
@@ -82,7 +82,7 @@ describe("loginAs — account isolation", () => {
     const sub = { planId: "p1", startedAt: 5000, expiresAt: 6000 };
     const next = loginAs(signedOut, "989222222222", sub, 5000);
     expect(next.subscription).toEqual(sub);
-    expect(next.habits).toEqual([]);
+    expect(next.habits).toHaveLength(1);
   });
 
   it("first login ever adopts existing data (migration path)", () => {
@@ -97,11 +97,11 @@ describe("loginAs — account isolation", () => {
     expect(next.meta.dataOwner).toBe("989333333333");
   });
 
-  it("empty server answer keeps the local subscription for the SAME owner only", () => {
+  it("an empty server answer never erases the subscription already stored in this vault", () => {
     const sameOwner = loginAs({ ...seededDb(), auth: null }, "989111111111", null);
     expect(sameOwner.subscription?.planId).toBe("p3");
     const switched = loginAs({ ...seededDb(), auth: null }, "989222222222", null);
-    expect(switched.subscription).toBeNull();
+    expect(switched.subscription?.planId).toBe("p3");
   });
 });
 

@@ -22,6 +22,8 @@ export interface Settings {
 }
 
 export interface Auth {
+  /** Stable server id used only to select this account's opaque local vault. */
+  userId?: string;
   phone: string;
   verifiedAt: number;
 }

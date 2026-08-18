@@ -9,6 +9,7 @@ import { defaultDb, type Category, type Db, type Feedback, type Habit, type Habi
 import { db as idb, primeSeq, type RecordRow } from "./dexie";
 import { loadLocal, mergeSettings, type LocalState } from "./local";
 import { migrateLegacyBlob } from "./migrate";
+import { activateStoredVault } from "./vault";
 
 /** Live rows only, in insertion order.
  *
@@ -97,6 +98,7 @@ async function seedIfEmpty(): Promise<void> {
 }
 
 export async function hydrate(now = Date.now()): Promise<HydrateResult> {
+  await activateStoredVault();
   const migrated = await migrateLegacyBlob(now);
   const local = loadLocal();
   await seedIfEmpty();
