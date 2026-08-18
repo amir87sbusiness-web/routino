@@ -31,7 +31,7 @@ export interface AuthedUser {
 }
 
 /** Hono generics: what handlers may read from context. */
-export type AppEnv = { Variables: { user?: AuthedUser } };
+export type AppEnv = { Variables: { user?: AuthedUser; requestId?: string } };
 
 /** Body parse that never throws: malformed JSON becomes `{}`, which zod then
  * rejects as a clean 400 instead of a 500. */

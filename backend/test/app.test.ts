@@ -27,6 +27,29 @@ describe("health", () => {
   });
 });
 
+describe("request IDs", () => {
+  it("preserves a valid caller ID on the response", async () => {
+    const requestId = "123e4567-e89b-42d3-a456-426614174000";
+    const res = await h.app.inject({
+      method: "GET",
+      url: "/health",
+      headers: { "x-request-id": requestId },
+    });
+    expect(res.headers["x-request-id"]).toBe(requestId);
+  });
+
+  it("replaces missing or unsafe IDs with UUIDs", async () => {
+    const res = await h.app.inject({
+      method: "GET",
+      url: "/v1/nope",
+      headers: { "x-request-id": "phone-or-secret" },
+    });
+    expect(res.headers["x-request-id"]).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+  });
+});
+
 describe("GET /v1/plans", () => {
   it("returns the active plans in the client's Plan shape, priced in Toman", async () => {
     const res = await h.app.inject({ method: "GET", url: "/v1/plans" });

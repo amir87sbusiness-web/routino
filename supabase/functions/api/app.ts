@@ -27,6 +27,7 @@ import { paymentRoutes } from "./routes/payments.ts";
 import { planRoutes } from "./routes/plans.ts";
 import { subscriptionRoutes } from "./routes/subscriptions.ts";
 import { syncRoutes } from "./routes/sync.ts";
+import { requestIdFor } from "./shared/lib/request-id.ts";
 
 const secretEquals = (a: string, b: string): boolean => {
   const ab = Buffer.from(a);
@@ -37,6 +38,26 @@ const secretEquals = (a: string, b: string): boolean => {
 
 export function buildApp(deps: Deps) {
   const app = new Hono<AppEnv>().basePath("/api");
+
+  app.use("*", async (c, next) => {
+    const requestId = requestIdFor(c.req.header("x-request-id"));
+    const startedAt = performance.now();
+    c.set("requestId", requestId);
+    c.header("x-request-id", requestId);
+    await next();
+
+    const durationMs = Math.round(performance.now() - startedAt);
+    const details = {
+      requestId,
+      method: c.req.method,
+      route: c.req.path,
+      status: c.res.status,
+      durationMs,
+    };
+    if (c.res.status >= 500) console.error("request completed", details);
+    else if (durationMs >= 1_000) console.warn("slow request", details);
+    else if (Math.random() < 0.01) console.info("request sample", details);
+  });
 
   // CORS first, so even a rejected request gets a well-formed preflight answer.
   const allowed = deps.env.CORS_ORIGINS.split(",").map((s) => s.trim());
@@ -116,7 +137,12 @@ export function buildApp(deps: Deps) {
     }
     // Anything unrecognised is a bug. Log it with the stack, but never leak the
     // internals to the client.
-    console.error("unhandled error", err);
+    console.error("unhandled error", {
+      requestId: c.get("requestId"),
+      method: c.req.method,
+      route: c.req.path,
+      error: err instanceof Error ? { name: err.name, message: err.message } : { name: "Unknown" },
+    });
     return c.json({ error: "internal", message: "Internal server error" }, 500);
   });
 
