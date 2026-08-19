@@ -18,7 +18,7 @@ describe("POST /v1/auth/otp/request", () => {
     expect(res.status).toBe(200);
     expect((await res.json()).ok).toBe(true);
     expect(h.sms.last()!.phone).toBe("989123334444"); // normalized canonical form
-    expect(h.sms.last()!.code).toMatch(/^\d{6}$/);
+    expect(h.sms.last()!.code).toMatch(/^\d{4}$/);
   });
 
   it("rejects an invalid phone", async () => {

@@ -30,12 +30,12 @@ const LIMITS = {
   globalPerDay: 2000,
 } as const;
 
-/** 6 digits, from a CSPRNG. `Math.random()` is predictable and would make codes
+/** 4 digits, from a CSPRNG. `Math.random()` is predictable and would make codes
  * guessable from a few samples. */
-export const generateCode = (): string => String(randomInt(100_000, 1_000_000));
+export const generateCode = (): string => String(randomInt(1_000, 10_000));
 
 /** Peppered so a database dump alone cannot be brute-forced back to codes — a
- * 6-digit space is exhaustible in milliseconds without one. */
+ * short code is still protected by the pepper, expiry and attempt limits. */
 const hashCode = (code: string, env: Env): string =>
   createHash("sha256").update(`${code}${env.OTP_PEPPER}`).digest("hex");
 

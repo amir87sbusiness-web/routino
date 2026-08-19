@@ -7,8 +7,6 @@
  *    آی‌دی‌های تلگرام/اینستاگرام را بدون @ بنویس.
  */
 export const LEGAL_INFO = {
-  /** ایمیل پشتیبانی */
-  email: "amir.templates@gmail.com",
   /** آی‌دی تلگرام پشتیبانی — بدون @ (لینک: https://t.me/…) */
   telegram: "routino_support",
   /** آی‌دی اینستاگرام — بدون @ (لینک: https://instagram.com/…) */

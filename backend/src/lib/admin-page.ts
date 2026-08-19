@@ -15,38 +15,47 @@ export const ADMIN_PAGE = `<!doctype html>
 <meta name="robots" content="noindex, nofollow">
 <title>روتینو — پنل مدیریت</title>
 <style>
-  :root{--bg:#f6f5f2;--card:#fff;--line:#e7e5e4;--txt:#1c1917;--mut:#78716c;--brand:#f97316;--ok:#16a34a;--bad:#dc2626}
+  :root{--bg:#f7f7f5;--card:#fff;--line:#e8e7e3;--txt:#292524;--mut:#78716c;--brand:#f97316;--brand-soft:#fff7ed;--ok:#16a34a;--bad:#dc2626;--shadow:0 16px 40px rgba(41,37,36,.07)}
   *{box-sizing:border-box}
-  body{margin:0;font-family:Vazirmatn,Tahoma,sans-serif;background:var(--bg);color:var(--txt);font-size:14px}
-  header{display:flex;align-items:center;gap:12px;padding:14px 20px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
-  header h1{font-size:16px;margin:0;flex:1}
-  main{max-width:1080px;margin:0 auto;padding:20px}
-  nav{display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap}
-  nav button{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:8px 18px;font:inherit;cursor:pointer}
-  nav button.on{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:700}
-  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:20px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
-  .card .v{font-size:22px;font-weight:900;margin-top:4px}
+  body{margin:0;font-family:Vazirmatn,Tahoma,sans-serif;background:radial-gradient(circle at 100% 0,#fff7ed 0,transparent 32rem),var(--bg);color:var(--txt);font-size:14px;line-height:1.6}
+  header{display:flex;align-items:center;gap:13px;padding:16px max(20px,calc((100vw - 1180px)/2));background:rgba(255,255,255,.9);border-bottom:1px solid var(--line);box-shadow:0 6px 20px rgba(41,37,36,.04);position:sticky;top:0;z-index:5;backdrop-filter:blur(14px)}
+  header:before{content:'R';display:grid;place-items:center;width:38px;height:38px;border-radius:13px;background:linear-gradient(135deg,#fb923c,var(--brand));color:#fff;font-weight:900;font-size:20px;box-shadow:0 8px 18px rgba(249,115,22,.25)}
+  header h1{font-size:16px;margin:0;flex:1;font-weight:900;line-height:1.25}
+  header h1:after{content:'مدیریت کاربران، اشتراک و پرداخت';display:block;color:var(--mut);font-size:10px;font-weight:500;margin-top:2px}
+  main{max-width:1180px;margin:0 auto;padding:28px 20px 48px}
+  nav{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:20px;padding:6px;background:rgba(255,255,255,.72);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow)}
+  nav button{border:0;background:transparent;color:var(--mut);border-radius:13px;padding:10px 14px;font:inherit;cursor:pointer;transition:.18s ease}
+  nav button:hover{background:var(--brand-soft);color:var(--brand)}
+  nav button.on{background:var(--brand);color:#fff;font-weight:800;box-shadow:0 8px 18px rgba(249,115,22,.22)}
+  section{animation:rise .22s ease both}
+  @keyframes rise{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:var(--shadow)}
+  .card .v{font-size:26px;font-weight:900;margin-top:5px;letter-spacing:-.03em}
   .card .k{color:var(--mut);font-size:12px}
-  table{width:100%;border-collapse:collapse;background:var(--card);border:1px solid var(--line);border-radius:12px;overflow:hidden}
-  th,td{padding:9px 10px;text-align:right;border-bottom:1px solid var(--line);font-size:12.5px;white-space:nowrap}
-  th{background:#fafaf9;color:var(--mut);font-weight:600}
-  .wrap{overflow-x:auto;border-radius:12px}
-  .pill{border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700}
-  .pill.ok{background:#dcfce7;color:#166534}.pill.bad{background:#fee2e2;color:#991b1b}
-  .pill.mut{background:#f1f5f9;color:#475569}
-  .row{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
-  input,select{font:inherit;border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--card)}
-  button.act{font:inherit;border:0;border-radius:10px;padding:8px 14px;background:var(--brand);color:#fff;cursor:pointer;font-weight:700}
+  #tab-users,#tab-payments,#tab-discounts{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:18px;box-shadow:var(--shadow)}
+  table{width:100%;border-collapse:separate;border-spacing:0;background:var(--card);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  th,td{padding:11px 12px;text-align:right;border-bottom:1px solid var(--line);font-size:12.5px;white-space:nowrap}
+  tr:last-child td{border-bottom:0} th{background:#fafaf9;color:var(--mut);font-weight:700}
+  tbody tr:hover{background:#fffaf5}
+  .wrap{overflow-x:auto;border-radius:14px}
+  .pill{border-radius:999px;padding:3px 10px;font-size:11px;font-weight:800}
+  .pill.ok{background:#dcfce7;color:#166534}.pill.bad{background:#fee2e2;color:#991b1b}.pill.mut{background:#f1f5f9;color:#475569}
+  .row{display:flex;gap:9px;margin-bottom:15px;flex-wrap:wrap;align-items:center}
+  input,select{font:inherit;border:1px solid var(--line);border-radius:12px;padding:9px 12px;background:#fff;min-height:40px;outline:0;transition:.18s}
+  input:focus,select:focus{border-color:#fb923c;box-shadow:0 0 0 3px rgba(249,115,22,.12)}
+  button.act{font:inherit;border:0;border-radius:12px;padding:9px 15px;background:var(--brand);color:#fff;cursor:pointer;font-weight:800;min-height:40px;transition:.18s}
+  button.act:hover{filter:brightness(.96);transform:translateY(-1px)}
   button.ghost{background:transparent;border:1px solid var(--line);color:var(--txt)}
-  button.mini{font-size:11px;padding:4px 10px;border-radius:8px}
-  #login{max-width:340px;margin:80px auto;text-align:center}
-  #login input{width:100%;margin-bottom:10px;text-align:center}
+  button.mini{font-size:11px;padding:5px 10px;border-radius:9px;min-height:30px}
+  #login{max-width:390px;margin:12vh auto;padding:30px 24px;text-align:center;background:var(--card);border:1px solid var(--line);border-radius:24px;box-shadow:var(--shadow)}
+  #login h2{margin:0 0 6px;font-size:22px} #login input{width:100%;margin:14px 0 10px;text-align:center}
+  #login .act{width:100%}
   .err{color:var(--bad);font-size:12px;min-height:18px}
-  dialog{border:0;border-radius:16px;padding:20px;max-width:640px;width:calc(100% - 40px);font-family:inherit}
-  dialog::backdrop{background:rgba(0,0,0,.4)}
-  h3{margin:4px 0 12px}
-  .muted{color:var(--mut);font-size:12px}
+  dialog{border:1px solid var(--line);border-radius:20px;padding:22px;max-width:680px;width:calc(100% - 40px);font-family:inherit;box-shadow:0 24px 80px rgba(0,0,0,.2)}
+  dialog::backdrop{background:rgba(28,25,23,.42);backdrop-filter:blur(3px)}
+  h3{margin:4px 0 12px}.muted{color:var(--mut);font-size:12px}
+  @media(max-width:640px){main{padding:18px 12px 36px}nav{grid-template-columns:repeat(2,1fr)}#tab-users,#tab-payments,#tab-discounts{padding:13px;border-radius:16px}.row>*{flex:1 1 140px}}
 </style>
 </head>
 <body>

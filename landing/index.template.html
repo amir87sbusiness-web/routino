@@ -375,7 +375,7 @@
         border-radius: 30px; display: grid; place-items: center;
         background: radial-gradient(120% 120% at 30% 20%, #332b25, #14100e);
         border: 1px solid var(--edge-2);
-        box-shadow: var(--emboss), 0 14px 32px rgba(0, 0, 0, 0.45), 0 0 40px rgba(var(--brand-rgb), 0.12);
+        box-shadow: var(--emboss), 0 14px 32px rgba(0, 0, 0, 0.45);
       }
       .medal-lg .ic { width: clamp(38px, 4.6vw, 46px); aspect-ratio: 1; color: var(--brand); }
 
@@ -583,8 +583,8 @@
           <span>روتینو</span>
         </a>
         <div class="top-acts">
-          <a class="btn line sm" href="/app/">ورود</a>
-          <a class="btn sm" href="/app/">شروع کن</a>
+          <a class="btn line sm" href="#download">ورود</a>
+          <a class="btn sm" href="#download">شروع کن</a>
         </div>
       </div>
     </header>
@@ -599,7 +599,7 @@
               با <b>روتینو</b> عادت‌هات رو بساز، کارهای روزت رو مرتب کن و
               پیشرفتت رو ببین. ساده، شمسی و همیشه در دسترس.
             </p>
-            <a class="btn wide" href="/app/">شروع با روتینو<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
+            <a class="btn wide" href="#download">شروع با روتینو<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
           </div>
 
           <!-- ۳ ── گوشیِ سرصفحه: پنج صفحه‌ی واقعیِ برنامه، نه ماکِتِ کشیده‌شده.
@@ -769,15 +769,15 @@
         </div>
       </section>
 
-      <!-- ۷ ── گرفتنِ برنامه: وب + اندرویدِ غیرفعال. -->
-      <section class="get wrap" id="get">
+      <!-- ۷ ── گرفتنِ برنامه: دو مسیر روشن برای وب و اندروید. -->
+      <section class="get wrap" id="download">
         <div class="badges">
-          <a class="btn" href="/app/">
-            <svg class="ic" aria-hidden="true"><use href="#i-globe" /></svg>باز کردن برنامه
+          <a class="btn" href="/app/?install=1">
+            <svg class="ic" aria-hidden="true"><use href="#i-globe" /></svg>نسخه وب برای آیفون و دسکتاپ
           </a>
 <!--ANDROID-DOWNLOAD-->
         </div>
-        <p class="hint">نسخه وب همین حالا آماده استفاده است؛ لینک اندروید بعد از بارگذاری فایل فعال می‌شه.</p>
+        <p class="hint">برای آیفون و دسکتاپ، نسخه وب را نصب کن؛ برای اندروید فایل برنامه را دریافت کن.</p>
       </section>
 
       <!-- ۸ ── بنرِ پایانی: با hover کمی بالا می‌رود و سایه‌اش پررنگ‌تر می‌شود. -->
@@ -785,7 +785,7 @@
         <div class="box">
           <div class="say">
             <h2>آماده‌ای اولین عادتت رو بسازی؟</h2>
-            <a class="btn" href="/app/">شروع با روتینو<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
+            <a class="btn" href="#download">شروع با روتینو<svg class="ic" aria-hidden="true"><use href="#i-arrow" /></svg></a>
           </div>
         </div>
       </section>
