@@ -48,7 +48,7 @@ const schema = z.object({
   ACCESS_TTL_SECONDS: z.coerce.number().default(3600),
   REFRESH_TTL_DAYS: z.coerce.number().default(180),
 
-  /** Mixed into the OTP hash so a DB leak alone can't reverse 6-digit codes. */
+  /** Mixed into the OTP hash so a DB leak alone can't reverse OTP codes. */
   OTP_PEPPER: z.string().min(16).default("dev-only-otp-pepper-change-me"),
   OTP_TTL_SECONDS: z.coerce.number().default(120),
   OTP_MAX_ATTEMPTS: z.coerce.number().default(5),
@@ -74,6 +74,9 @@ const schema = z.object({
   PSP_PROVIDERS: z.string().default(""),
   /** Zibal's sandbox merchant is the literal string "zibal". */
   ZIBAL_MERCHANT: z.string().default("zibal"),
+  /** Optional fixed-egress relay for Zibal. Empty keeps direct dev/test mode. */
+  ZIBAL_RELAY_URL: z.string().trim().default(""),
+  ZIBAL_RELAY_SECRET: z.string().default(""),
 
   /**
    * Explicit, deliberate permission to run TEST providers in production —
@@ -190,6 +193,23 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     if (psps.includes("fake")) throw new Error("the 'fake' gateway is not allowed in production");
     if (psps.includes("zarinpal") && parsed.data.ZARINPAL_MERCHANT.startsWith("dev-only")) {
       throw new Error("ZARINPAL_MERCHANT is required when zarinpal is an active gateway");
+    }
+    const hasRelayUrl = Boolean(parsed.data.ZIBAL_RELAY_URL);
+    const hasRelaySecret = Boolean(parsed.data.ZIBAL_RELAY_SECRET);
+    if (hasRelayUrl !== hasRelaySecret) {
+      throw new Error("ZIBAL_RELAY_URL and ZIBAL_RELAY_SECRET must be set together");
+    }
+    if (hasRelayUrl) {
+      let relayUrl: URL;
+      try {
+        relayUrl = new URL(parsed.data.ZIBAL_RELAY_URL);
+      } catch {
+        throw new Error("ZIBAL_RELAY_URL must be a valid HTTPS URL");
+      }
+      if (relayUrl.protocol !== "https:") throw new Error("ZIBAL_RELAY_URL must use HTTPS");
+      if (parsed.data.ZIBAL_RELAY_SECRET.length < 32) {
+        throw new Error("ZIBAL_RELAY_SECRET must be at least 32 characters");
+      }
     }
     // Zibal's sandbox is not a distinct host or a distinct flag — it is just the
     // merchant id left at its default. So the ONLY thing standing between "we

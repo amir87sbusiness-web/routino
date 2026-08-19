@@ -30,13 +30,13 @@ async function signIn(phone = "09123334444") {
 }
 
 describe("POST /v1/auth/otp/request", () => {
-  it("sends a 6-digit code to the canonical number", async () => {
+  it("sends a 4-digit code to the canonical number", async () => {
     const res = await request("09123334444");
     expect(res.statusCode).toBe(200);
     expect(h.sms.sent).toHaveLength(1);
     // Normalised before hitting the provider AND the database.
     expect(h.sms.last()!.phone).toBe("989123334444");
-    expect(h.sms.last()!.code).toMatch(/^\d{6}$/);
+    expect(h.sms.last()!.code).toMatch(/^\d{4}$/);
   });
 
   it("accepts every form of the same number as one account", async () => {
@@ -130,7 +130,7 @@ describe("POST /v1/auth/otp/verify", () => {
     // Regression: the counter was written as `attempts = row.attempts + 1` after
     // a separate SELECT. Requests arriving together all read the same value and
     // all spent the same slot, turning "5 guesses" into "5 × however many you
-    // send at once" against a 6-digit code with a 120-second life.
+    // send at once" against a 4-digit code with a 120-second life.
     await request("09123334444");
     const code = h.sms.last()!.code;
 

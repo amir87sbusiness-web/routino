@@ -88,7 +88,7 @@ function validate(list, which) {
   });
 }
 
-/** ایمیل/تلگرام/اینستاگرام از `legal-info.ts` — با regex، نه import، تا این
+/** تلگرام/اینستاگرام از `legal-info.ts` — با regex، نه import، تا این
  * اسکریپت با node خالی اجرا شود و بیلد Cloudflare به ابزار تایپ‌اسکریپت نیاز
  * نداشته باشد. اگر شکل آن فایل عوض شد، اینجا با خطای صریح می‌ایستد. */
 function readLegalInfo() {
@@ -99,7 +99,6 @@ function readLegalInfo() {
     return m[1];
   };
   return {
-    email: pick("email"),
     telegram: pick("telegram"),
     instagram: pick("instagram"),
     lastUpdatedFa: pick("lastUpdatedFa"),
@@ -285,8 +284,7 @@ async function main() {
     `\n      </section>\n\n` +
     `      <section id="contact" class="contact">\n` +
     `        <h2>تماس با ما و پشتیبانی</h2>\n` +
-    `        <p>ایمیل: <a class="lnk" href="mailto:${esc(info.email)}">${esc(info.email)}</a></p>\n` +
-    `        <p>تلگرام: <a class="lnk" href="https://t.me/${esc(info.telegram)}" target="_blank" rel="noreferrer">@${esc(info.telegram)}</a></p>\n` +
+     `        <p>تلگرام: <a class="lnk" href="https://t.me/${esc(info.telegram)}" target="_blank" rel="noreferrer">@${esc(info.telegram)}</a></p>\n` +
     `        <p>اینستاگرام: <a class="lnk" href="https://instagram.com/${esc(info.instagram)}" target="_blank" rel="noreferrer">@${esc(info.instagram)}</a></p>\n` +
     `      </section>`;
 

@@ -89,6 +89,30 @@ describe("production env guards", () => {
     expect(() => loadEnv({ ...prod, ZIBAL_MERCHANT: "real-merchant-id" })).not.toThrow();
   });
 
+  it("requires complete HTTPS relay settings when Zibal uses fixed egress", () => {
+    const live = { ...prod, ZIBAL_MERCHANT: "real-merchant-id" };
+    expect(() => loadEnv({ ...live, ZIBAL_RELAY_URL: "https://relay.routino.me" })).toThrow(
+      /ZIBAL_RELAY_URL.*ZIBAL_RELAY_SECRET/i,
+    );
+    expect(() => loadEnv({ ...live, ZIBAL_RELAY_SECRET: "r".repeat(32) })).toThrow(
+      /ZIBAL_RELAY_URL.*ZIBAL_RELAY_SECRET/i,
+    );
+    expect(() =>
+      loadEnv({
+        ...live,
+        ZIBAL_RELAY_URL: "http://relay.routino.me",
+        ZIBAL_RELAY_SECRET: "r".repeat(32),
+      }),
+    ).toThrow(/HTTPS/i);
+    expect(() =>
+      loadEnv({
+        ...live,
+        ZIBAL_RELAY_URL: "https://relay.routino.me",
+        ZIBAL_RELAY_SECRET: "r".repeat(32),
+      }),
+    ).not.toThrow();
+  });
+
   it("defaults access tokens to one hour because every protected call rechecks the device row", () => {
     expect(loadEnv({ NODE_ENV: "test" }).ACCESS_TTL_SECONDS).toBe(3600);
   });

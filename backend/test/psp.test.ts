@@ -12,6 +12,7 @@ import type { PspName, PspProvider, PspRequestInput } from "../src/providers/psp
 import { ZIBAL_RESULT, ZIBAL_STATUS } from "../src/providers/psp/index.js";
 import { createRouter } from "../src/providers/psp/router.js";
 import { zarinpalPsp } from "../src/providers/psp/zarinpal.js";
+import { zibalPsp } from "../src/providers/psp/zibal.js";
 
 const INPUT: PspRequestInput = {
   amountRial: 1_490_000,
@@ -38,7 +39,12 @@ function stub(
         : { ok: true, ref: `${name}-ref`, result: ZIBAL_RESULT.OK };
     },
     async verify(ref: string) {
-      return { result: ZIBAL_RESULT.OK, status: ZIBAL_STATUS.PAID_VERIFIED, amount: 0, refNumber: `${name}:${ref}` };
+      return {
+        result: ZIBAL_RESULT.OK,
+        status: ZIBAL_STATUS.PAID_VERIFIED,
+        amount: 0,
+        refNumber: `${name}:${ref}`,
+      };
     },
     startUrl(ref: string) {
       return `https://${name}/start/${ref}`;
@@ -134,7 +140,10 @@ describe("zarinpal adapter", () => {
 
   it("requests in Rial with an explicit IRR currency and returns the authority as ref", async () => {
     const cap: { body?: any } = {};
-    mockFetch({ data: { code: 100, authority: "A00000000000000000000000000abcdef123" }, errors: [] }, cap);
+    mockFetch(
+      { data: { code: 100, authority: "A00000000000000000000000000abcdef123" }, errors: [] },
+      cap,
+    );
     const res = await zarinpalPsp("merchant-x").request(INPUT);
 
     expect(res.ok).toBe(true);
@@ -153,7 +162,10 @@ describe("zarinpal adapter", () => {
 
   it("maps a verified payment to the canonical paid-and-verified codes", async () => {
     const cap: { body?: any } = {};
-    mockFetch({ data: { code: 100, ref_id: 998877, card_pan: "603799******1234" }, errors: [] }, cap);
+    mockFetch(
+      { data: { code: 100, ref_id: 998877, card_pan: "603799******1234" }, errors: [] },
+      cap,
+    );
     const v = await zarinpalPsp("m").verify("A000", 1_490_000);
 
     expect(v.result).toBe(ZIBAL_RESULT.OK);
@@ -182,5 +194,121 @@ describe("zarinpal adapter", () => {
 
   it("builds the StartPay URL from the authority", () => {
     expect(zarinpalPsp("m").startUrl("A000")).toBe("https://payment.zarinpal.com/pg/StartPay/A000");
+  });
+});
+
+describe("zibal fixed-egress relay adapter", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  const relaySecret = "relay-secret-with-at-least-32-bytes";
+  const timestamp = 1_787_098_000_000;
+  const nonce = "123e4567-e89b-42d3-a456-426614174010";
+
+  async function expectedSignature(path: string, body: string): Promise<string> {
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(relaySecret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+    const signed = await crypto.subtle.sign(
+      "HMAC",
+      key,
+      new TextEncoder().encode(`${timestamp}\n${nonce}\n${path}\n${body}`),
+    );
+    return Array.from(new Uint8Array(signed), (byte) => byte.toString(16).padStart(2, "0")).join(
+      "",
+    );
+  }
+
+  it("sends a signed request through the relay instead of calling Zibal directly", async () => {
+    const captured: { url?: string; body?: string; headers?: Headers } = {};
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        captured.url = url;
+        captured.body = String(init.body);
+        captured.headers = new Headers(init.headers);
+        return Response.json({ result: 100, trackId: 4242 });
+      }),
+    );
+    const provider = zibalPsp("merchant-live", {
+      url: "https://relay.routino.me/",
+      secret: relaySecret,
+      now: () => timestamp,
+      nonce: () => nonce,
+    });
+
+    const result = await provider.request(INPUT);
+
+    expect(result).toMatchObject({ ok: true, ref: "4242", result: 100 });
+    expect(captured.url).toBe("https://relay.routino.me/v1/request");
+    expect(captured.headers?.get("x-routino-timestamp")).toBe(String(timestamp));
+    expect(captured.headers?.get("x-routino-nonce")).toBe(nonce);
+    expect(captured.headers?.get("x-routino-signature")).toBe(
+      await expectedSignature("/v1/request", captured.body!),
+    );
+  });
+
+  it("routes verify through the same signed relay and keeps Start URL direct", async () => {
+    const captured: { url?: string; body?: string; headers?: Headers } = {};
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init: RequestInit) => {
+        captured.url = url;
+        captured.body = String(init.body);
+        captured.headers = new Headers(init.headers);
+        return Response.json({ result: 100, amount: 1_490_000, status: 1, refNumber: 99 });
+      }),
+    );
+    const provider = zibalPsp("merchant-live", {
+      url: "https://relay.routino.me",
+      secret: relaySecret,
+      now: () => timestamp,
+      nonce: () => nonce,
+    });
+
+    const result = await provider.verify("4242", 1_490_000);
+
+    expect(result).toMatchObject({ result: 100, status: 1, refNumber: "99" });
+    expect(captured.url).toBe("https://relay.routino.me/v1/verify");
+    expect(captured.headers?.get("x-routino-signature")).toBe(
+      await expectedSignature("/v1/verify", captured.body!),
+    );
+    expect(provider.startUrl("4242")).toBe("https://gateway.zibal.ir/start/4242");
+  });
+
+  it("keeps direct mode for local development when no relay is configured", async () => {
+    let url = "";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string) => {
+        url = input;
+        return Response.json({ result: 100, trackId: 7 });
+      }),
+    );
+
+    const result = await zibalPsp("zibal").request(INPUT);
+
+    expect(result.ok).toBe(true);
+    expect(url).toBe("https://gateway.zibal.ir/v1/request");
+  });
+
+  it("identifies Zibal's IP allowlist rejection without hiding its safe message", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json({ result: 115, message: "IP is not registered in panel" })),
+    );
+
+    const result = await zibalPsp("merchant-live").request(INPUT);
+
+    expect(ZIBAL_RESULT.IP_NOT_ALLOWED).toBe(115);
+    expect(result).toEqual({
+      ok: false,
+      ref: undefined,
+      result: ZIBAL_RESULT.IP_NOT_ALLOWED,
+      message: "IP is not registered in panel",
+    });
   });
 });

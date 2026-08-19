@@ -89,7 +89,7 @@ describe("the code always belongs to the number that asked for it", () => {
     const real = h.sms.last()!.code;
     const wrong = real === "000000" ? "111111" : "000000";
 
-    // 6 digits is only a million possibilities; without an attempt cap a
+    // 4 digits is only ten thousand possibilities; without an attempt cap a
     // determined script would walk it.
     for (let i = 0; i < 5; i++) {
       expect((await verify(phone, wrong)).statusCode).toBeGreaterThanOrEqual(400);

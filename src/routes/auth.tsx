@@ -300,8 +300,8 @@ function AuthPage() {
             <Input
               dir="ltr"
               inputMode="numeric"
-              maxLength={6}
-              placeholder="······"
+              maxLength={4}
+              placeholder="····"
               value={code}
               // Convert Persian digits rather than stripping them: `\d` matches
               // ASCII only, so a plain strip would delete a code typed on a

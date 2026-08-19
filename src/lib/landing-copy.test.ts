@@ -18,6 +18,18 @@ describe("public landing copy", () => {
   it("leaves one build-time slot for the Android download action", () => {
     expect(template.match(/<!--ANDROID-DOWNLOAD-->/g)).toHaveLength(1);
   });
+
+  it("routes every primary start action to the download section, never into the web app", () => {
+    expect(template).toContain('id="download"');
+    expect(template.match(/href="#download"/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(template).toContain("نسخه وب برای آیفون و دسکتاپ");
+    const beforeDownload = template.slice(0, template.indexOf('id="download"'));
+    expect(beforeDownload).not.toContain('href="/app/"');
+  });
+
+  it("does not expose the removed email contact", () => {
+    expect(template).not.toContain("mailto:");
+  });
 });
 
 describe("Android download markup", () => {

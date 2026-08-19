@@ -44,28 +44,22 @@ Android lint و امضای APK پاس شده‌اند؛ نتیجهٔ کامل د
 
 **زیرساخت وب کامل دیپلوی شده و بالاست**، ولی هنوز در **حالت تست** برای پیامک و پرداخت:
 
-| تکه                        | آدرس / مقدار                                  | وضعیت                                                            |
-| -------------------------- | --------------------------------------------- | ---------------------------------------------------------------- |
-| بک‌اند (Supabase Edge)     | `api.routino.me/health` → `{ok:true}`         | ✅ بالا                                                          |
-| دیتابیس                    | `api.routino.me/health/ready` → `db:up`       | ✅ وصل                                                           |
-| Cloudflare Worker          | `api.routino.me`                              | ✅ کار می‌کند                                                    |
-| سایت اصلی (CF Pages)       | `routino.me` → HTTP 200                       | ✅ بالا                                                          |
-| پلن‌ها (از DB)             | `/v1/plans` → m1=۵۹k، m3=۱۴۹k، m12=۴۴۹k تومان | ✅ seed شده                                                      |
-| `NODE_ENV` / `DB_DRIVER`   | `production` / `postgres`                     | ✅ درست                                                          |
-| **`SMS_PROVIDER`**         | **`console`**                                 | ❌ **پیامک تستی — کاربر واقعی کد ورود نمی‌گیرد**                 |
-| **`ZIBAL_MERCHANT`**       | **`zibal`** (سندباکس)                         | ❌ **پول واقعی جابه‌جا نمی‌شود**                                 |
-| **`ALLOW_TEST_PROVIDERS`** | **باید `true` باشد**                          | ⚠️ **تا وقتی دو ردیف بالا تستی‌اند، بدون این تابع بالا نمی‌آید** |
+| تکه                        | آدرس / مقدار                                  | وضعیت                                           |
+| -------------------------- | --------------------------------------------- | ----------------------------------------------- |
+| بک‌اند (Supabase Edge)     | `api.routino.me/health` → `{ok:true}`         | ✅ بالا                                         |
+| دیتابیس                    | `api.routino.me/health/ready` → `db:up`       | ✅ وصل                                          |
+| Cloudflare Worker          | `api.routino.me`                              | ✅ کار می‌کند                                   |
+| سایت اصلی (CF Pages)       | `routino.me` → HTTP 200                       | ✅ بالا                                         |
+| پلن‌ها (از DB)             | `/v1/plans` → m1=۵۹k، m3=۱۴۹k، m12=۴۴۹k تومان | ✅ seed شده                                     |
+| `NODE_ENV` / `DB_DRIVER`   | `production` / `postgres`                     | ✅ درست                                         |
+| **`SMS_PROVIDER`**         | **`kavenegar`**                               | ✅ provider واقعی در لاگ Edge                   |
+| **`ZIBAL_MERCHANT`**       | مرچنت واقعی (secret)                          | ✅ تنظیم شده؛ مقدار در repo یا لاگ چاپ نمی‌شود  |
+| **رلهٔ ثابت-IP زیبال**     | هنوز باید روی میزبان IPv4 ثابت منتشر شود      | ❌ خطای زندهٔ فعلی `115` تا ثبت IP رله در زیبال |
+| **`ALLOW_TEST_PROVIDERS`** | تنظیم نشده                                    | ✅ محافظ production فعال                        |
 
 > 🛑 **قبل از دیپلوی بعدی حتماً بخوان.**
 > از این به بعد اگر `NODE_ENV=production` باشد، تابع با `ZIBAL_MERCHANT=zibal` (سندباکس) یا `SMS_PROVIDER=console` **بالا نمی‌آید** — مگر با اجازه‌ی صریح. چون سندباکس زیبال از بیرون هیچ تفاوتی ندارد: کاربر درگاه واقعی می‌بیند، «موفق» می‌گیرد، اشتراک واقعی هم می‌گیرد، و پول به حسابت نمی‌رسد.
-> وضعیت فعلی (سندباکس عمدی) یعنی **اول این را بزن، بعد دیپلوی کن**:
->
-> ```bash
-> supabase secrets set ALLOW_TEST_PROVIDERS=true --project-ref axychfrteevhfdhgvfuv
-> ```
->
-> و روزی که مرچنت واقعی + کاوه‌نگار وصل شد، این را **پاک کن** (`supabase secrets unset ALLOW_TEST_PROVIDERS`) تا محافظ برگردد.
-> هر بالا آمدن تابع، هرچه تستی باشد را با `[!] TEST MODE — …` در لاگ چاپ می‌کند.
+> وضعیت فعلی دیگر سندباکس نیست و `ALLOW_TEST_PROVIDERS` هم تنظیم نشده است. بلاکر واقعی پرداخت، پاسخ `115` زیبال است: تماس باید از رلهٔ دارای IPv4 ثابت عبور کند و همان IP در پنل زیبال ثبت شود. هر بالا آمدن تابع، اگر چیزی تستی باشد، همچنان با `[!] TEST MODE — …` در لاگ چاپ می‌شود.
 
 - **پروژه‌ی Supabase:** نام `routino` · ref `axychfrteevhfdhgvfuv` · org `qgvjcextnciiezisegdt` · region eu-north-1.
   حسابِ مالکِ روتینو **جدا** از حسابی است که پروژه‌ی «sheetra» را دارد — برای مدیریت باید با حساب درست `supabase login` کرد.
@@ -73,9 +67,9 @@ Android lint و امضای APK پاس شده‌اند؛ نتیجهٔ کامل د
 
 </details>
 
-### دستورهای دقیقِ دو کار بیرونی
+### دستورهای دقیق سرویس‌های بیرونی
 
-هر دو: کاربر یک secret را ست می‌کند → سپس redeploy. **قالب کاوه‌نگار و مرچنت زیبال هر دو بررسی انسانیِ چندروزه دارند — زودتر شروع شوند.** (Claude نباید کلید/مرچنت را خودش وارد کند؛ کاربر `secrets set` را می‌زند، Claude فقط redeploy + تست.)
+secretها از طریق CLI یا داشبورد تنظیم می‌شوند و بعد تابع redeploy می‌شود. مقدار واقعی secret نباید در repo، لاگ یا گفتگو کپی شود.
 
 **۱) پیامک واقعی (بلاکر اصلی ورود):**
 
@@ -92,11 +86,17 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
 **۲) درگاه واقعی زیبال (قبل از پایان ۷ روز رایگانِ کاربرها):**
 
 ```bash
-supabase secrets set ZIBAL_MERCHANT=<کد-پذیرنده-واقعی> --project-ref axychfrteevhfdhgvfuv
+supabase secrets set \
+  ZIBAL_MERCHANT=<کد-پذیرنده-واقعی> \
+  ZIBAL_RELAY_URL=https://zibal-relay.routino.me \
+  ZIBAL_RELAY_SECRET=<همان-secret-رله> \
+  --project-ref axychfrteevhfdhgvfuv
 # و حالا که هم پیامک هم درگاه واقعی شد، محافظ را برگردان:
 supabase secrets unset ALLOW_TEST_PROVIDERS --project-ref axychfrteevhfdhgvfuv
 npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhgvfuv
 ```
+
+قبل از این دستور، `payment-relay/` را روی میزبان دارای IPv4 ثابت اجرا کن، همان IPv4 خروجی را در تنظیمات درگاه روتینو داخل زیبال ثبت کن و `/health` رله را بگیر. Cloudflare Worker و Supabase Edge معمولی IP خروجی ثابت ندارند و نباید IPهای فعلی یا رنج عمومی آن‌ها را در زیبال ثبت کرد. رله در production با merchant آزمایشی `zibal` عمداً بالا نمی‌آید، دیتابیس/cron/polling ندارد و فقط هنگام `request` یا `verify` پرداخت مصرف ایجاد می‌کند.
 
 بعد از دیپلوی، لاگ تابع **نباید** هیچ خط `[!] TEST MODE` داشته باشد. اگر داشت، یعنی یکی از دو سرویس هنوز تستی است.
 
@@ -115,9 +115,9 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
                                   │  + x-proxy-secret  + x-client-ip
                                   ▼
                     Supabase Edge Function «api» (Deno + Hono)
-                                  │
-                                  ▼
-                    Supabase Postgres (transaction pooler :6543)
+                         │                 │ فقط request/verify زیبال
+                         ▼                 ▼
+       Supabase Postgres (pooler :6543)   رلهٔ IPv4 ثابت ──► زیبال
 ```
 
 - **Worker چرا؟** کاربر ایرانی به لبه‌ی Cloudflare می‌رسد؛ آدرس خام
@@ -186,6 +186,8 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
    | `OWNER_PHONE` / `OWNER_PASSWORD` / `OWNER_USERNAME` | اختیاری — بوت‌استرپ حساب صاحب اپ برای ورود با رمز از همان بوت اول (بخش «ورود با رمز عبور» بالا)                                       |
    | `SMS_PROVIDER`                                      | فعلاً `console` (کد ورود در لاگ تابع) → بعداً `kavenegar` + `KAVENEGAR_API_KEY` (+ `KAVENEGAR_TEMPLATE` اگر نام قالب ≠ `routino-otp`) |
    | `PSP_PROVIDER`                                      | فعلاً `zibal` با `ZIBAL_MERCHANT=zibal` (سندباکس) → بعداً مرچنت واقعی / `PSP_PROVIDERS=zarinpal,zibal`                                |
+   | `ZIBAL_RELAY_URL`                                   | آدرس HTTPS سرویس `payment-relay/` روی میزبان دارای IPv4 ثابت                                                                          |
+   | `ZIBAL_RELAY_SECRET`                                | secret حداقل ۳۲ کاراکتری؛ عین مقدار `RELAY_SECRET` روی رله                                                                            |
 
    > وضعیت فعلیِ همین secretها و دستورهای دقیقِ «واقعی‌کردن» در بخش [«📍 وضعیت فعلی لانچ»](#-وضعیت-فعلی-لانچ-به‌روز-۳-مرداد-۱۴۰۵--2026-07-25) بالای همین فایل است.
 

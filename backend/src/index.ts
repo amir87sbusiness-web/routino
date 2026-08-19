@@ -61,7 +61,12 @@ const sms: SmsProvider =
 const makePsp = (name: ReturnType<typeof pspProviderNames>[number]): PspProvider => {
   switch (name) {
     case "zibal":
-      return zibalPsp(env.ZIBAL_MERCHANT);
+      return zibalPsp(
+        env.ZIBAL_MERCHANT,
+        env.ZIBAL_RELAY_URL
+          ? { url: env.ZIBAL_RELAY_URL, secret: env.ZIBAL_RELAY_SECRET }
+          : undefined,
+      );
     case "zarinpal":
       return zarinpalPsp(env.ZARINPAL_MERCHANT);
     case "fake":

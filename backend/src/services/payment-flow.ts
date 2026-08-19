@@ -199,6 +199,7 @@ export async function checkoutPayment(
       paymentId: payment.id,
       provider: res.provider,
       result: res.result,
+      message: res.message?.replace(/[\r\n\t]+/g, " ").slice(0, 160),
     });
     throw badRequest("psp_failed", "Payment gateway rejected the request. Try again.");
   }
