@@ -27,6 +27,7 @@ export const Route = createFileRoute("/auth")({
 const SKIP_SMS = false;
 
 type Method = "password" | "otp";
+type OtpIntent = "signup" | "password_reset";
 
 function AuthPage() {
   const ctx = useAppMaybe();
@@ -40,6 +41,8 @@ function AuthPage() {
   const [phone, setPhone] = useState("");
   const [step, setStep] = useState<"phone" | "otp">("phone");
   const [code, setCode] = useState("");
+  const [otpIntent, setOtpIntent] = useState<OtpIntent>("signup");
+  const [newPassword, setNewPassword] = useState("");
   // shared
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -76,6 +79,11 @@ function AuthPage() {
         return t("ارسال پیامک ناموفق بود. دوباره تلاش کن.", "Could not send the code. Try again.");
       case "bad_code":
         return t("کد اشتباهه یا منقضی شده.", "The code is wrong or has expired.");
+      case "weak_password":
+        return t(
+          "رمز باید حداقل ۸ کاراکتر و شامل حرف و عدد باشد.",
+          "Password must be 8+ characters and include a letter and a number.",
+        );
       case "blocked":
         return t("این حساب مسدود شده.", "This account is blocked.");
       case "device_security_locked":
@@ -188,10 +196,18 @@ function AuthPage() {
       setStep("phone");
       return;
     }
+    if (code.length !== 4) {
+      setError(t("کد ۴ رقمی را کامل وارد کن.", "Enter the complete 4-digit code."));
+      return;
+    }
+    if (!newPassword) {
+      setError(t("رمز عبور جدید را وارد کن.", "Enter a new password."));
+      return;
+    }
     setError("");
     setBusy(true);
     try {
-      const res = await verifyOtp(canonical, code);
+      const res = await verifyOtp(canonical, code, { intent: otpIntent, newPassword });
       await completeLogin(res.user, res.entitlement);
     } catch (err) {
       setError(explain(err));
@@ -200,11 +216,21 @@ function AuthPage() {
     }
   };
 
-  const switchTo = (m: Method) => {
-    setMethod(m);
+  const switchToPassword = () => {
+    setMethod("password");
     setError("");
     setStep("phone");
     setCode("");
+    setNewPassword("");
+  };
+
+  const startOtpFlow = (intent: OtpIntent) => {
+    setMethod("otp");
+    setOtpIntent(intent);
+    setError("");
+    setStep("phone");
+    setCode("");
+    setNewPassword("");
   };
 
   return (
@@ -222,8 +248,12 @@ function AuthPage() {
                   "Sign in with your phone or username and password",
                 )
               : t(
-                  "با شماره موبایل و کد پیامکی وارد شو",
-                  "Sign in with your phone number and SMS code",
+                  otpIntent === "signup"
+                    ? "با شماره موبایل و کد پیامکی ثبت‌نام کن"
+                    : "با کد پیامکی، مالکیت شماره را تأیید و رمزت را تغییر بده",
+                  otpIntent === "signup"
+                    ? "Create an account with your phone number and SMS code"
+                    : "Verify your phone number by SMS and reset your password",
                 )}
           </p>
         </div>
@@ -251,16 +281,18 @@ function AuthPage() {
             <Button onClick={() => void doPasswordLogin()} disabled={busy}>
               {busy ? t("در حال ورود…", "Signing in…") : t("ورود", "Sign in")}
             </Button>
-            <button
-              type="button"
-              onClick={() => switchTo("otp")}
-              className="mt-1 text-center text-xs font-medium text-primary hover:underline"
-            >
-              {t(
-                "بار اولته یا رمزت رو فراموش کردی؟ ورود با کد پیامکی",
-                "First time or forgot your password? Use an SMS code",
-              )}
-            </button>
+            <div className="mt-1 grid grid-cols-2 gap-2">
+              <Button variant="outline" onClick={() => startOtpFlow("signup")} disabled={busy}>
+                {t("ثبت‌نام", "Sign up")}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => startOtpFlow("password_reset")}
+                disabled={busy}
+              >
+                {t("فراموشی رمز عبور", "Forgot password")}
+              </Button>
+            </div>
           </div>
         ) : step === "phone" ? (
           <div className="flex flex-col gap-3">
@@ -283,7 +315,7 @@ function AuthPage() {
             </Button>
             <button
               type="button"
-              onClick={() => switchTo("password")}
+              onClick={switchToPassword}
               className="mt-1 text-center text-xs font-medium text-primary hover:underline"
             >
               {t("ورود با رمز عبور", "Sign in with a password")}
@@ -300,19 +332,39 @@ function AuthPage() {
             <Input
               dir="ltr"
               inputMode="numeric"
-              maxLength={6}
-              placeholder="······"
+              aria-label={t("کد پیامکی", "SMS code")}
+              maxLength={4}
+              placeholder="····"
               value={code}
               // Convert Persian digits rather than stripping them: `\d` matches
               // ASCII only, so a plain strip would delete a code typed on a
               // Persian keyboard and leave an empty field.
-              onChange={(e) => setCode(toAsciiDigits(e.target.value).replace(/\D/g, ""))}
+              onChange={(e) =>
+                setCode(toAsciiDigits(e.target.value).replace(/\D/g, "").slice(0, 4))
+              }
               onKeyDown={(e) => e.key === "Enter" && void verify()}
               className="text-center text-xl tracking-[0.5em]"
             />
+            <Input
+              dir="ltr"
+              type="password"
+              aria-label={t("رمز عبور جدید", "New password")}
+              placeholder={t("رمز عبور جدید", "New password")}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && void verify()}
+              className="text-center text-base"
+            />
             {error && <p className="text-center text-xs text-destructive">{error}</p>}
-            <Button onClick={() => void verify()} disabled={busy || code.length < 4}>
-              {busy ? t("در حال بررسی…", "Checking…") : t("تأیید و ورود", "Verify & sign in")}
+            <Button
+              onClick={() => void verify()}
+              disabled={busy || code.length !== 4 || !newPassword}
+            >
+              {busy
+                ? t("در حال بررسی…", "Checking…")
+                : otpIntent === "signup"
+                  ? t("تکمیل ثبت‌نام", "Complete sign up")
+                  : t("تغییر رمز عبور", "Change password")}
             </Button>
             <Button
               variant="ghost"

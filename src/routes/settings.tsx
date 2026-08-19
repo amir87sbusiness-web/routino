@@ -12,9 +12,7 @@ import {
   EyeOff,
   FileText,
   Globe,
-  HardDrive,
   KeyRound,
-  Laptop,
   Lock,
   LogOut,
   MessageSquare,
@@ -43,7 +41,6 @@ import {
 } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
 import { fetchAccount, logout, setPassword, setUsername, type AccountInfo } from "@/lib/api/auth";
-import { fetchDevices, revokeDevice, type DeviceOverview } from "@/lib/api/devices";
 import {
   backupSummary,
   copyBackupToClipboard,
@@ -60,11 +57,6 @@ import { toLocalPhone } from "@/lib/phone";
 import { CATEGORY_COLOR_CHOICES } from "@/lib/presets";
 import { applyDemoContent } from "@/lib/seed-demo";
 import { uid } from "@/lib/store";
-import {
-  readStorageHealth,
-  requestPersistentStorage,
-  type StorageHealth,
-} from "@/lib/storage-health";
 import { wipeContent } from "@/lib/wipe";
 import { useAppMaybe } from "@/state/app";
 
@@ -112,19 +104,6 @@ function SettingsPage() {
   const [pendingImport, setPendingImport] = useState<Backup | null>(null);
   const [wipeOpen, setWipeOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
-  const [devices, setDevices] = useState<DeviceOverview | null>(null);
-  const [devicesBusy, setDevicesBusy] = useState(false);
-  const [storageHealth, setStorageHealth] = useState<StorageHealth | null>(null);
-
-  useEffect(() => {
-    setDevicesBusy(true);
-    void fetchDevices()
-      .then(setDevices)
-      .catch(() => undefined)
-      .finally(() => setDevicesBusy(false));
-    void readStorageHealth().then(setStorageHealth);
-  }, []);
-
   if (!ctx?.db) return null;
   const { db, update, t, lang, cal } = ctx;
 
@@ -224,20 +203,6 @@ function SettingsPage() {
     }
     update((d) => ({ ...d, settings: { ...d.settings, notificationsEnabled: true } }));
   };
-
-  const loadDevices = async () => {
-    setDevicesBusy(true);
-    try {
-      setDevices(await fetchDevices());
-    } catch {
-      // Settings stays useful offline; the last local data remains available.
-    } finally {
-      setDevicesBusy(false);
-    }
-  };
-
-  const bytes = (value: number | null) =>
-    value === null ? "—" : `${(value / 1024 / 1024).toFixed(value >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
 
   const addCategory = () => {
     if (!catName.trim()) return;
@@ -653,103 +618,6 @@ function SettingsPage() {
           {/* ═══ پایان TEST-ONLY ═══ */}
         </Card>
       )}
-
-      <Card className="flex flex-col gap-3">
-        <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-          <HardDrive className="h-4 w-4 text-primary" aria-hidden="true" />
-          {t("امنیت نگهداری روی این دستگاه", "On-device storage safety")}
-        </div>
-        <p className="text-xs leading-6 text-muted-foreground">
-          {t(
-            "عادت‌ها، گزارش‌ها، کارها و ژورنال فقط در این مرورگر ذخیره می‌شوند. پاک‌کردن دادهٔ سایت یا حالت ناشناس می‌تواند آن‌ها را از بین ببرد؛ Export را مرتب نگه دار.",
-            "Habits, logs, tasks and journal stay only in this browser. Clearing site data or private browsing can remove them, so keep regular exports.",
-          )}
-        </p>
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-          <span>
-            {t("فضای مصرف‌شده", "Used")}: {bytes(storageHealth?.usageBytes ?? null)}
-          </span>
-          <span>
-            {storageHealth?.persisted
-              ? t("حفاظت مرورگر فعال است", "Browser protection is active")
-              : t("حفاظت مرورگر تأیید نشده", "Browser protection is not confirmed")}
-          </span>
-        </div>
-        {!storageHealth?.persisted && (
-          <Button
-            variant="secondary"
-            onClick={() => void requestPersistentStorage().then(setStorageHealth)}
-          >
-            {t("درخواست نگهداری پایدار", "Request persistent storage")}
-          </Button>
-        )}
-      </Card>
-
-      <Card className="flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2 text-sm font-bold text-foreground">
-            <Laptop className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-            {t("دستگاه‌های حساب", "Account devices")}
-          </div>
-          <button
-            type="button"
-            disabled={devicesBusy}
-            onClick={() => void loadDevices()}
-            className="shrink-0 rounded-lg px-2 py-1 text-xs font-bold text-primary hover:bg-primary-soft disabled:opacity-50"
-          >
-            {devicesBusy ? t("در حال بررسی…", "Checking…") : t("تازه‌سازی", "Refresh")}
-          </button>
-        </div>
-        <p className="text-xs leading-6 text-muted-foreground">
-          {devices
-            ? t(
-                `حداکثر ${faNum(devices.maxActiveDevices, lang)} دستگاه فعال؛ ${faNum(devices.switchCount30d, lang)} جابه‌جایی در ۱۵ روز اخیر.`,
-                `Up to ${devices.maxActiveDevices} active devices; ${devices.switchCount30d} replacements in the last 15 days.`,
-              )
-            : t(
-                "برای دیدن دستگاه‌ها یک اتصال کوتاه اینترنت لازم است.",
-                "A brief internet connection is needed to show devices.",
-              )}
-        </p>
-        {devices?.devices.map((device) => (
-          <div
-            key={device.id}
-            className="flex min-w-0 items-center gap-3 border-t border-border pt-3"
-          >
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-bold text-foreground">
-                {device.name ||
-                  [device.browser, device.os].filter(Boolean).join(" · ") ||
-                  t("دستگاه", "Device")}
-              </p>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                {device.current
-                  ? t("همین دستگاه", "This device")
-                  : device.active
-                    ? t("فعال", "Active")
-                    : t("نشست پایان‌یافته", "Session ended")}
-              </p>
-            </div>
-            {device.active && !device.current && (
-              <Button
-                variant="secondary"
-                className="shrink-0 px-3 py-2 text-xs"
-                onClick={async () => {
-                  try {
-                    await revokeDevice(device.id);
-                    await loadDevices();
-                    toast.success(t("نشست آن دستگاه پایان یافت", "That device was signed out"));
-                  } catch {
-                    toast.error(t("پایان‌دادن نشست ناموفق بود", "Could not sign out that device"));
-                  }
-                }}
-              >
-                {t("پایان نشست", "Sign out")}
-              </Button>
-            )}
-          </div>
-        ))}
-      </Card>
 
       {/* danger zone: sign out + erase everything, together in one red box */}
       <Card className="flex flex-col gap-3 border-destructive/40 bg-destructive/5">

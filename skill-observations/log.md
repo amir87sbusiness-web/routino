@@ -106,3 +106,18 @@
 **Suggested improvement:** Treat an OTP-size change as a cross-boundary security policy change: test the generator and exact UI control, calculate and cap attempts for the smaller space, preserve a brief in-flight compatibility path, update provider-facing assumptions and test account-recovery session revocation.
 
 **Principle:** A shorter credential is safe only when its entropy, rate limits, recovery authority and every user-facing representation change together.
+
+### Observation 8: Focused checks need an explicit nested-worktree boundary
+
+**Status:** OPEN
+**Date:** 2026-08-19
+**Session context:** Running focused landing and UI verification in a repository that contains a nested worktree.
+**Skill:** verification-before-completion
+**Type:** open-source
+**Phase/Area:** Test and lint command selection
+
+**Issue:** Passing source paths to package scripts that already include a broad root caused test and lint discovery to include a nested worktree, producing unrelated failures and obscuring the requested files' result.
+
+**Suggested improvement:** For focused checks, verify the package script's fixed arguments first. If it always scans the repository, invoke the underlying tool with explicit paths or configure an exclusion for nested worktrees; report broad-scan failures separately.
+
+**Principle:** A command that accepts a path is not necessarily scoped to that path when its wrapper already supplies a broad discovery root.

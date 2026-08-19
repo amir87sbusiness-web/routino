@@ -26,8 +26,8 @@
 
 | # | فرانت (کی صدا می‌زنه) | تابع فرانت (`src/lib/api/`) | آدرس API | بک‌اند (کی جواب می‌ده) |
 |---|---|---|---|---|
-| ۱ | `routes/auth.tsx` — دکمه «ارسال کد» | `auth.ts` ← `requestOtp` | `POST /v1/auth/otp/request` | `backend/src/routes/auth.ts` |
-| ۲ | `routes/auth.tsx` — دکمه «تایید و ورود» | `auth.ts` ← `verifyOtp` | `POST /v1/auth/otp/verify` | `backend/src/routes/auth.ts` |
+| ۱ | `routes/auth.tsx` — ثبت‌نام یا «فراموشی رمز عبور» | `auth.ts` ← `requestOtp` | `POST /v1/auth/otp/request` | `backend/src/routes/auth.ts` |
+| ۲ | `routes/auth.tsx` — تایید کد ۴ رقمی و ثبت رمز | `auth.ts` ← `verifyOtp` | `POST /v1/auth/otp/verify` | `backend/src/routes/auth.ts` |
 | ۳ | خودکار — وقتی توکن رو به انقضاست یا ۴۰۱ خورد | `auth.ts` ← `refreshTokens` | `POST /v1/auth/token/refresh` | `backend/src/routes/auth.ts` |
 | ۲ب | `routes/auth.tsx` — دکمه «ورود» (پیش‌فرض) | `auth.ts` ← `passwordLogin` | `POST /v1/auth/password/login` | `backend/src/routes/auth.ts` |
 | ۲ج | `routes/settings.tsx` — کارت «نام کاربری و رمز عبور» | `auth.ts` ← `fetchAccount`/`setUsername`/`setPassword` | `GET /v1/auth/account` · `POST /v1/auth/username` · `POST /v1/auth/password` | `backend/src/routes/auth.ts` |
@@ -77,7 +77,7 @@
 | `bad_code` | `routes/auth.ts` | `auth.tsx` | «کد اشتباهه یا منقضی شده» |
 | `bad_credentials` | `routes/auth.ts` (ورود با رمز) | `auth.tsx` ← `explain()` | «شماره/نام‌کاربری یا رمز عبور اشتباهه» — عمداً برای هر سه حالتِ «حساب نیست/رمز ندارد/رمز غلط» یکسان (ضد شناسایی کاربر) |
 | `invalid_username` / `username_taken` | `routes/auth.ts` (تنظیم نام کاربری) | `settings.tsx` ← `explain()` | «نام کاربری نامعتبر» / «قبلاً گرفته شده» |
-| `weak_password` / `wrong_password` | `routes/auth.ts` (تنظیم/تغییر رمز) + `services/admin.ts` | `settings.tsx` ← `explain()` | «رمز ضعیف است» / «رمز عبور فعلی اشتباهه» |
+| `weak_password` / `wrong_password` | `routes/auth.ts` (ثبت‌نام/تغییر رمز) + `services/admin.ts` | `auth.tsx` و `settings.tsx` ← `explain()` | «رمز ضعیف است» / «رمز عبور فعلی اشتباهه» |
 | `blocked` | `routes/auth.ts` / `plugins/auth.ts` | `auth.tsx` | «این حساب مسدود شده» |
 | `psp_failed` | `routes/payments.ts` | `subscribe.tsx` | «درگاه پرداخت در دسترس نیست» |
 | `not_signed_in` | خود فرانت (`api/auth.ts` وقتی توکن نیست) | `subscribe.tsx` | کارت «ورود با شماره موبایل» |
@@ -150,9 +150,9 @@ subscribe.tsx (فرانت)
 ## ۴. سه سناریوی کامل از اول تا آخر (برای فهم عمقی)
 
 ### 🔑 سناریو «ورود»
-1. کاربر شماره می‌زنه → `auth.tsx` ← `normalizePhone` (فرانت `phone.ts`) → `POST /auth/otp/request`
+1. کاربر «ثبت‌نام» یا «فراموشی رمز عبور» را می‌زند، شماره می‌نویسد → `auth.tsx` ← `normalizePhone` (فرانت `phone.ts`) → `POST /auth/otp/request`
 2. بک: `normalizePhone` (بک `phone.ts` — همون جواب!) → سقف‌ها (`services/otp.ts`) → ساخت کد → پیامک (`providers/sms/*`؛ در توسعه: چاپ در ترمینال بک)
-3. کاربر کد رو می‌زنه → `POST /auth/otp/verify` → بک: چک کد → کاربر جدید؟ ساخت حساب + تریال ۷ روزه → توکن‌ها + entitlement
+3. کاربر کد ۴ رقمی و رمز جدید را می‌زند → `POST /auth/otp/verify` با `intent` → بک: چک کد → ثبت‌نامِ حساب تازه یا تغییر رمز (و بستن نشست‌های دیگر در بازیابی) → حساب تازه + تریال ۷ روزه → توکن‌ها + entitlement
 4. فرانت: توکن‌ها به localStorage (`routino:auth:v1`) → اگه اشتراک قدیمی محلی هست: `POST /subscriptions/import` (یک‌باره) → `db.auth` و `db.subscription` پر می‌شن → گِیت باز → صفحه اصلی
 
 ### 💳 سناریو «خرید»

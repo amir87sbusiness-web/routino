@@ -64,6 +64,17 @@ const adminSetPw = (phone: string, password: string) =>
     payload: { phone, password },
   });
 
+const otpVerify = (
+  phone: string,
+  code: string,
+  body: { intent?: "signup" | "password_reset"; newPassword?: string } = {},
+) =>
+  h.app.inject({
+    method: "POST",
+    url: "/v1/auth/otp/verify",
+    payload: { phone, code, ...body },
+  });
+
 describe("setting a password then signing in with it", () => {
   it("lets an OTP user set a password and sign in with phone + password", async () => {
     const { access } = await otpSignIn("09123334444");
@@ -134,6 +145,69 @@ describe("setting a password then signing in with it", () => {
   });
 });
 
+describe("OTP registration and recovery", () => {
+  it("sets a password for a new registration without replacing an existing password", async () => {
+    await h.app.inject({
+      method: "POST",
+      url: "/v1/auth/otp/request",
+      payload: { phone: "09123334444" },
+    });
+    expect(
+      (
+        await otpVerify("09123334444", h.sms.last()!.code, {
+          intent: "signup",
+          newPassword: "Amir@1387",
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect((await login("09123334444", "Amir@1387")).statusCode).toBe(200);
+
+    await h.raw(`update otp_codes set created_at = now() - interval '2 minutes'`);
+    await h.app.inject({
+      method: "POST",
+      url: "/v1/auth/otp/request",
+      payload: { phone: "09123334444" },
+    });
+    expect(
+      (
+        await otpVerify("09123334444", h.sms.last()!.code, {
+          intent: "signup",
+          newPassword: "Naghmeh@1405",
+        })
+      ).statusCode,
+    ).toBe(200);
+    expect((await login("09123334444", "Amir@1387")).statusCode).toBe(200);
+    expect((await login("09123334444", "Naghmeh@1405")).statusCode).toBe(401);
+  });
+
+  it("rejects a weak password reset after SMS verification", async () => {
+    await h.app.inject({
+      method: "POST",
+      url: "/v1/auth/otp/request",
+      payload: { phone: "09123334444" },
+    });
+    const res = await otpVerify("09123334444", h.sms.last()!.code, {
+      intent: "password_reset",
+      newPassword: "short",
+    });
+    expect(res.statusCode).toBe(400);
+    expect((res.json() as { error: string }).error).toBe("weak_password");
+  });
+
+  it("does not replace an existing password during an ordinary SMS sign-in", async () => {
+    const { access } = await otpSignIn("09123334444");
+    await setPw(access, "Amir@1387");
+    await h.raw(`update otp_codes set created_at = now() - interval '2 minutes'`);
+    await h.app.inject({
+      method: "POST",
+      url: "/v1/auth/otp/request",
+      payload: { phone: "09123334444" },
+    });
+    expect((await otpVerify("09123334444", h.sms.last()!.code)).statusCode).toBe(200);
+    expect((await login("09123334444", "Amir@1387")).statusCode).toBe(200);
+  });
+});
+
 describe("username", () => {
   it("can be set and used to sign in", async () => {
     const { access } = await otpSignIn("09123334444");
@@ -172,7 +246,14 @@ describe("username", () => {
     // messaging users as apparent staff is a real risk precisely because those
     // users are about to send money through the app.
     const { access } = await otpSignIn("09123334444");
-    for (const name of ["adm1n", "supp0rt", "r00t", "routino_support", "official.team", "admin.routino"]) {
+    for (const name of [
+      "adm1n",
+      "supp0rt",
+      "r00t",
+      "routino_support",
+      "official.team",
+      "admin.routino",
+    ]) {
       const res = await setName(access, name);
       expect(res.statusCode, name).toBe(400);
       expect((res.json() as { error: string }).error, name).toBe("username_reserved");
@@ -233,7 +314,11 @@ describe("admin set-password", () => {
     // Support presses this button precisely when a user reports someone got
     // into their account. Refresh tokens live 180 days and rotate silently, so
     // if they survive the reset the intruder simply keeps refreshing.
-    await h.app.inject({ method: "POST", url: "/v1/auth/otp/request", payload: { phone: "09138982893" } });
+    await h.app.inject({
+      method: "POST",
+      url: "/v1/auth/otp/request",
+      payload: { phone: "09138982893" },
+    });
     const intruder = (
       await h.app.inject({
         method: "POST",
@@ -306,7 +391,11 @@ describe("changing a password evicts other sessions", () => {
     // account. Refresh tokens live 180 days and rotate silently, so if they
     // survive the change the intruder simply keeps refreshing and the new
     // password protects nothing.
-    await h.app.inject({ method: "POST", url: "/v1/auth/otp/request", payload: { phone: "09123334444" } });
+    await h.app.inject({
+      method: "POST",
+      url: "/v1/auth/otp/request",
+      payload: { phone: "09123334444" },
+    });
     const victim = (
       await h.app.inject({
         method: "POST",

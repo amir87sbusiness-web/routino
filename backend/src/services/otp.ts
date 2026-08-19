@@ -30,12 +30,12 @@ const LIMITS = {
   globalPerDay: 2000,
 } as const;
 
-/** 6 digits, from a CSPRNG. `Math.random()` is predictable and would make codes
+/** 4 digits, from a CSPRNG. `Math.random()` is predictable and would make codes
  * guessable from a few samples. */
-export const generateCode = (): string => String(randomInt(100_000, 1_000_000));
+export const generateCode = (): string => String(randomInt(1_000, 10_000));
 
 /** Peppered so a database dump alone cannot be brute-forced back to codes — a
- * 6-digit space is exhaustible in milliseconds without one. */
+ * 4-digit space is exhaustible in milliseconds without one. */
 const hashCode = (code: string, env: Env): string =>
   createHash("sha256").update(`${code}${env.OTP_PEPPER}`).digest("hex");
 
@@ -256,12 +256,12 @@ export async function verifyCode(
   // a free guess. Doing it as a single conditional UPDATE means the cap is
   // enforced by Postgres rather than by a read-then-write in JS: the old
   // `attempts: row.attempts + 1` let N concurrent requests all read the same
-  // value and all spend the same slot, turning "5 guesses" into "5 × however
+  // value and all spend the same slot, turning "3 guesses" into "3 × however
   // many requests you send at once".
   const claimed = await db
     .update(otpCodes)
     .set({ attempts: sql`${otpCodes.attempts} + 1` })
-    .where(and(eq(otpCodes.id, row.id), lt(otpCodes.attempts, env.OTP_MAX_ATTEMPTS)))
+    .where(and(eq(otpCodes.id, row.id), lt(otpCodes.attempts, Math.min(env.OTP_MAX_ATTEMPTS, 3))))
     .returning();
   if (!claimed.length) return { ok: false, reason: "too_many" };
 

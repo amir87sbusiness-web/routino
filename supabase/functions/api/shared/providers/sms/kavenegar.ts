@@ -38,7 +38,7 @@ interface KavenegarResponse {
  *
  * Template constraints that bite: it must be approved in Kavenegar's panel
  * (human review, days of lead time — start it early), and the token may not
- * contain spaces and must be short. A 6-digit code fits.
+ * contain spaces and must be short. A 4-digit code fits.
  */
 export function kavenegarSms(apiKey: string, template: string): SmsProvider {
   return {

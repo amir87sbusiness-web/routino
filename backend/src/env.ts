@@ -48,10 +48,10 @@ const schema = z.object({
   ACCESS_TTL_SECONDS: z.coerce.number().default(3600),
   REFRESH_TTL_DAYS: z.coerce.number().default(180),
 
-  /** Mixed into the OTP hash so a DB leak alone can't reverse 6-digit codes. */
+  /** Mixed into the OTP hash so a DB leak alone can't reverse 4-digit codes. */
   OTP_PEPPER: z.string().min(16).default("dev-only-otp-pepper-change-me"),
   OTP_TTL_SECONDS: z.coerce.number().default(120),
-  OTP_MAX_ATTEMPTS: z.coerce.number().default(5),
+  OTP_MAX_ATTEMPTS: z.coerce.number().default(3),
 
   SMS_PROVIDER: z.enum(["console", "kavenegar"]).default("console"),
   KAVENEGAR_API_KEY: z.string().optional(),

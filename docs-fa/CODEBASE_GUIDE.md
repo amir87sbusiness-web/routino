@@ -160,9 +160,9 @@ routino1.0/
 | [timer.tsx](../src/routes/timer.tsx) | **تایمر**: پومودورو (پیش‌فرض ۲۵/۵ و ۴ دور)، تایمر آزاد، کرونومتر، اتصال به عادت زمانی، تاریخچه جلسات | زمان‌های پیش‌فرض (`POMODORO_PRESETS`، `FREE_PRESETS`)، تعداد دورهای قابل انتخاب (`CYCLE_CHOICES`)، سقف تاریخچه (۲۰۰) |
 | [journal.tsx](../src/routes/journal.tsx) | **ژورنال**: ایموجی حس، نمره ۱-۱۰، متن، تاریخچه ۱۴ روز | تعداد روزهای تاریخچه، متن placeholder |
 | [analytics.tsx](../src/routes/analytics.tsx) | **آنالیز**: این‌هفته/هفته‌قبل، نمودار کلی، شبکه تقویمی هر عادت، لیست کارهای انجام‌شده/نشده | بازه‌های نمودار (`RANGES`) |
-| [settings.tsx](../src/routes/settings.tsx) | **تنظیمات**: حساب، زبان/تم، نوتیف، Export/Import، سلامت storage و دستگاه‌های حساب | Export همیشه؛ Import فقط پولی |
+| [settings.tsx](../src/routes/settings.tsx) | **تنظیمات**: حساب، زبان/تم، نوتیف و Export/Import | Export همیشه؛ Import فقط پولی |
 | [onboarding.tsx](../src/routes/onboarding.tsx) | **خوش‌آمدگویی**: ۳ اسلاید معرفی + تنظیمات اولیه | متن و ایموجی اسلایدها (آرایه `slides`) |
-| [auth.tsx](../src/routes/auth.tsx) | **ورود**: پیش‌فرض **رمز عبور** (شماره موبایل یا نام کاربری + رمز)؛ لینک «ورود با کد پیامکی» به‌عنوان جایگزین (بار اول/فراموشی رمز). اشتراک قدیمی محلی رو هم به سرور منتقل می‌کنه | ⚠️ `SKIP_SMS` (بخش ۷)، متن خطاها، ترتیب دو روش ورود |
+| [auth.tsx](../src/routes/auth.tsx) | **ورود**: پیش‌فرض **رمز عبور** (شماره موبایل یا نام کاربری + رمز)؛ دو دکمهٔ «ثبت‌نام» و «فراموشی رمز عبور» مسیر کد ۴ رقمی + ثبت رمز را باز می‌کنند. اشتراک قدیمی محلی رو هم به سرور منتقل می‌کنه | ⚠️ `SKIP_SMS` (بخش ۷)، متن خطاها، ترتیب دو روش ورود |
 | [subscribe.tsx](../src/routes/subscribe.tsx) | **دیوار اشتراک**: لیست پلن‌ها (از سرور، با نسخه آفلاین پشتیبان)، کد تخفیف، دکمه پرداخت | ⚠️ `TEST_GRANT_BUTTON` (بخش ۷)، متن‌های صفحه خرید |
 | [pay.result.tsx](../src/routes/pay.result.tsx) | **نتیجه پرداخت**: بعد از برگشت از درگاه، وضعیت رو از سرور می‌پرسه (تا ۱ دقیقه تلاش می‌کنه) | متن‌های موفق/لغو/ناموفق |
 
@@ -200,12 +200,12 @@ routino1.0/
 
 | فایل | آدرس‌ها | نقش |
 |---|---|---|
-| [auth.ts](../backend/src/routes/auth.ts) | `/v1/auth/otp/request` `/verify` · **`/password/login`** · **`/account` (GET)** · **`/username`** · **`/password`** · `/token/refresh` `/logout` | ورود با پیامک **و ورود با رمز** (شماره/نام‌کاربری). تنظیم نام کاربری و رمز از تنظیمات (نیازمند توکن). هش رمز = scrypt در [services/password.ts](../backend/src/services/password.ts)؛ سقف تلاش‌ها در [services/login-throttle.ts](../backend/src/services/login-throttle.ts). **کاربر جدید = ۷ روز رایگان** (`TRIAL_DAYS`) |
+| [auth.ts](../backend/src/routes/auth.ts) | `/v1/auth/otp/request` `/verify` · **`/password/login`** · **`/account` (GET)** · **`/username`** · **`/password`** · `/token/refresh` `/logout` | ورود با رمز و مسیر OTP برای ثبت‌نام/بازیابی رمز (کد ۴ رقمی؛ بازیابی نشست‌های دیگر را می‌بندد). تنظیم نام کاربری و رمز از تنظیمات (نیازمند توکن). هش رمز = scrypt در [services/password.ts](../backend/src/services/password.ts)؛ سقف تلاش‌ها در [services/login-throttle.ts](../backend/src/services/login-throttle.ts). **کاربر جدید = ۷ روز رایگان** (`TRIAL_DAYS`) |
 | [payments.ts](../backend/src/routes/payments.ts) | `/v1/payments/quote` `/checkout` `/callback` `/:id` | 💰 **مسیر پول** — قیمت فقط سمت سرور حساب می‌شه، مبلغ تاییدشده درگاه با مبلغ ما مقایسه می‌شه، گرنت دوباره ساختاراً غیرممکنه (`applied_at`). صفحه HTML نتیجه پرداخت هم همین‌جاست (`sendResultPage`) |
 | [subscriptions.ts](../backend/src/routes/subscriptions.ts) | `/v1/subscriptions/me` `/import` `/grants` | وضعیت اشتراک + انتقال یک‌باره اشتراک قدیمی محلی (محدود به `IMPORT_MAX_DAYS`=۴۰۰ روز، فقط یک بار) |
 | [plans.ts](../backend/src/routes/plans.ts) | `/v1/plans` | لیست عمومی پلن‌ها (از جدول `plans` دیتابیس) |
 | [admin.ts](../backend/src/routes/admin.ts) | `/v1/admin/*` | API ادمین: آمار، جستجوی کاربر، بلاک، هدیه‌دادن اشتراک، لیست پرداخت‌ها، ساخت/ویرایش کد تخفیف. با هدر `x-admin-token` |
-| [admin-panel.ts](../backend/src/routes/admin-panel.ts) | `/admin` | 🖥️ **پنل ادمین** — یک صفحه HTML کامل (بدون فریم‌ورک). ظاهر و متن پنل همین‌جاست |
+| [admin-panel.ts](../backend/src/routes/admin-panel.ts) | `/admin` | 🖥️ **پنل ادمین** — مسیر کوتاهِ صفحهٔ HTML (بدون فریم‌ورک)؛ ظاهر و متن در [lib/admin-page.ts](../backend/src/lib/admin-page.ts) است |
 | [dev-gateway.ts](../backend/src/routes/dev-gateway.ts) | `/v1/dev/gateway` | درگاه پرداخت تقلبی برای تست (فقط وقتی `PSP_PROVIDER=fake`) |
 | [health.ts](../backend/src/routes/health.ts) | `/health` `/health/ready` | چک سلامت سرور |
 
@@ -215,7 +215,7 @@ routino1.0/
 |---|---|---|
 | [entitlement.ts](../backend/src/services/entitlement.ts) | «کی تا کِی اجازه استفاده داره»: جدول `grants` = دفترکل همه تمدیدها (هیچ‌وقت پاک نمی‌شه)، جدول `entitlements` = جواب فعلی. تمدید روی اشتراک فعال جمع می‌شه (ماه تقویمی واقعی) | جواب سوال «پول دادم ولی فعال نشد» همیشه از جدول grants درمیاد |
 | [pricing.ts](../backend/src/services/pricing.ts) | محاسبه قیمت نهایی + اعتبارسنجی کد تخفیف (منقضی/ظرفیت/تک‌کاربره/قبلاً استفاده‌شده). تبدیل تومان→ریال (×۱۰) فقط همین‌جاست | |
-| [otp.ts](../backend/src/services/otp.ts) | کدهای پیامکی: ۶ رقمی، ۲ دقیقه اعتبار، ۵ بار تلاش. **سقف‌های ارسال** (`LIMITS`): هر شماره ۱/دقیقه، ۵/ساعت، ۱۰/روز؛ هر IP ۲۰/ساعت؛ کل سیستم ۲۰۰۰/روز | سقف‌ها رو اینجا عوض کن — اینا جلوی خالی‌شدن شارژ پیامکت رو می‌گیرن |
+| [otp.ts](../backend/src/services/otp.ts) | کدهای پیامکی: ۴ رقمی، ۲ دقیقه اعتبار، ۳ بار تلاش. **سقف‌های ارسال** (`LIMITS`): هر شماره ۱/دقیقه، ۵/ساعت، ۱۰/روز؛ هر IP ۲۰/ساعت؛ کل سیستم ۲۰۰۰/روز | سقف‌ها رو اینجا عوض کن — اینا جلوی خالی‌شدن شارژ پیامکت رو می‌گیرن |
 | [tokens.ts](../backend/src/services/tokens.ts) | توکن ورود: access (پیش‌فرض ۱ ساعت) + refresh (۱۸۰ روز، با هر بار استفاده عوض می‌شود) + پنجرهٔ امنیت دستگاه ۱۵ روز | مدت‌ها در env.ts و `DEVICE_SWITCH_WINDOW_MS` |
 
 ### سرویس‌های بیرونی (`backend/src/providers/`)
@@ -335,7 +335,7 @@ npm run dev            # سرور روی :3000 — بدون نصب هیچی (PGl
 npm test               # تست‌های بک‌اند
 ```
 
-- در حالت توسعه، کد پیامکی ورود **در ترمینالِ بک‌اند** چاپ می‌شه (`[sms:console] OTP for ... -> 123456`).
+- در حالت توسعه، کد پیامکی ورود **در ترمینالِ بک‌اند** چاپ می‌شه (`[sms:console] OTP for ... -> 1234`).
 - پرداخت تستی: درگاه فیک صفحه «پرداخت موفق/انصراف» نشون می‌ده.
 - پنل ادمین: `http://localhost:3000/admin` — توکن پیش‌فرض dev: `dev-only-admin-token`.
 - استقرار روی سرور واقعی (مسیر فعلی) + **وضعیت فعلی لانچ** (چی بالاست، چی هنوز تستیه): [DEPLOY-SUPABASE-EDGE.md](DEPLOY-SUPABASE-EDGE.md) · راه‌اندازی موبایل: [MOBILE_SETUP.md](MOBILE_SETUP.md)

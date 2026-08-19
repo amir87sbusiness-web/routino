@@ -11,9 +11,14 @@ afterAll(async () => {
   await h?.close();
 });
 
-const request = (phone: string) => h.app.inject({ method: "POST", url: "/v1/auth/otp/request", payload: { phone } });
+const request = (phone: string) =>
+  h.app.inject({ method: "POST", url: "/v1/auth/otp/request", payload: { phone } });
 const verify = (phone: string, code: string, deviceName?: string) =>
-  h.app.inject({ method: "POST", url: "/v1/auth/otp/verify", payload: { phone, code, deviceName } });
+  h.app.inject({
+    method: "POST",
+    url: "/v1/auth/otp/verify",
+    payload: { phone, code, deviceName },
+  });
 
 /** Full sign-in, returning the tokens. */
 async function signIn(phone = "09123334444") {
@@ -30,13 +35,13 @@ async function signIn(phone = "09123334444") {
 }
 
 describe("POST /v1/auth/otp/request", () => {
-  it("sends a 6-digit code to the canonical number", async () => {
+  it("sends a 4-digit code to the canonical number", async () => {
     const res = await request("09123334444");
     expect(res.statusCode).toBe(200);
     expect(h.sms.sent).toHaveLength(1);
     // Normalised before hitting the provider AND the database.
     expect(h.sms.last()!.phone).toBe("989123334444");
-    expect(h.sms.last()!.code).toMatch(/^\d{6}$/);
+    expect(h.sms.last()!.code).toMatch(/^\d{4}$/);
   });
 
   it("accepts every form of the same number as one account", async () => {
@@ -72,7 +77,9 @@ describe("POST /v1/auth/otp/request", () => {
     // 5/hour. Backdate each row so the per-minute rule doesn't mask this.
     for (let i = 0; i < 5; i++) {
       await request("09123334444");
-      await h.raw(`update otp_codes set created_at = now() - interval '2 minutes' where consumed_at is null`);
+      await h.raw(
+        `update otp_codes set created_at = now() - interval '2 minutes' where consumed_at is null`,
+      );
     }
     const res = await request("09123334444");
     expect(res.statusCode).toBe(429);
@@ -97,7 +104,9 @@ describe("POST /v1/auth/otp/verify", () => {
     // The old client wrote the trial locally, so clearing storage re-granted it
     // forever. The server must only ever grant it once.
     const first = await signIn();
-    await h.raw(`update otp_codes set consumed_at = null, created_at = now() - interval '2 minutes'`);
+    await h.raw(
+      `update otp_codes set consumed_at = null, created_at = now() - interval '2 minutes'`,
+    );
     const second = await signIn();
 
     expect(second.isNew).toBe(false);
@@ -117,10 +126,10 @@ describe("POST /v1/auth/otp/verify", () => {
     expect((await verify("09123334444", code)).statusCode).toBe(401);
   });
 
-  it("locks out after 5 wrong attempts", async () => {
+  it("locks out after 3 wrong attempts", async () => {
     await request("09123334444");
     const code = h.sms.last()!.code;
-    for (let i = 0; i < 5; i++) await verify("09123334444", "000000");
+    for (let i = 0; i < 3; i++) await verify("09123334444", "0000");
     // Even the RIGHT code is refused once the budget is spent.
     const res = await verify("09123334444", code);
     expect(res.statusCode).toBe(429);
@@ -129,17 +138,17 @@ describe("POST /v1/auth/otp/verify", () => {
   it("spends attempts atomically, so a burst cannot buy extra guesses", async () => {
     // Regression: the counter was written as `attempts = row.attempts + 1` after
     // a separate SELECT. Requests arriving together all read the same value and
-    // all spent the same slot, turning "5 guesses" into "5 × however many you
-    // send at once" against a 6-digit code with a 120-second life.
+    // all spent the same slot, turning "3 guesses" into "3 × however many you
+    // send at once" against a 4-digit code with a 120-second life.
     await request("09123334444");
     const code = h.sms.last()!.code;
 
-    const res = await Promise.all(Array.from({ length: 30 }, () => verify("09123334444", "000000")));
+    const res = await Promise.all(Array.from({ length: 30 }, () => verify("09123334444", "0000")));
     const evaluated = res.filter((r) => r.statusCode === 401).length;
-    expect(evaluated).toBeLessThanOrEqual(5);
+    expect(evaluated).toBeLessThanOrEqual(3);
 
     const [row] = await h.query<{ attempts: number }>(`select attempts from otp_codes limit 1`);
-    expect(row!.attempts).toBe(5);
+    expect(row!.attempts).toBe(3);
     expect((await verify("09123334444", code)).statusCode).toBe(429);
   });
 
@@ -164,13 +173,52 @@ describe("POST /v1/auth/otp/verify", () => {
 
   it("signs in the same account regardless of how the number is typed", async () => {
     await signIn("09123334444");
-    await h.raw(`update otp_codes set consumed_at = null, created_at = now() - interval '2 minutes'`);
+    await h.raw(
+      `update otp_codes set consumed_at = null, created_at = now() - interval '2 minutes'`,
+    );
     await request("+989123334444");
     const res = await verify("+989123334444", h.sms.last()!.code);
     expect((res.json() as { isNew: boolean }).isNew).toBe(false);
 
     const rows = await h.query<{ n: number }>(`select count(*)::int as n from users`);
     expect(rows[0]!.n).toBe(1); // one human, one account
+  });
+
+  it("keeps the recovery device but revokes the other device sessions", async () => {
+    const victim = await signIn("09123334444");
+    await h.raw(`update users set max_active_devices = 2`);
+    await h.raw(`update otp_codes set created_at = now() - interval '2 minutes'`);
+    const other = await signIn("09123334444");
+    await h.raw(`update otp_codes set created_at = now() - interval '2 minutes'`);
+    await request("09123334444");
+
+    const reset = await h.app.inject({
+      method: "POST",
+      url: "/v1/auth/otp/verify",
+      payload: {
+        phone: "09123334444",
+        code: h.sms.last()!.code,
+        intent: "password_reset",
+        newPassword: "Naghmeh@1405",
+        deviceName: "recovery-device",
+      },
+    });
+    expect(reset.statusCode).toBe(200);
+    const recovered = reset.json() as { refresh: string };
+
+    const otherRefresh = await h.app.inject({
+      method: "POST",
+      url: "/v1/auth/token/refresh",
+      payload: { refresh: other.refresh },
+    });
+    expect(otherRefresh.statusCode).toBe(401);
+    const recoveryRefresh = await h.app.inject({
+      method: "POST",
+      url: "/v1/auth/token/refresh",
+      payload: { refresh: recovered.refresh },
+    });
+    expect(recoveryRefresh.statusCode).toBe(200);
+    expect(victim.refresh).toBeTruthy();
   });
 });
 
@@ -186,7 +234,9 @@ describe("tokens", () => {
   });
 
   it("rejects a missing or malformed token", async () => {
-    expect((await h.app.inject({ method: "GET", url: "/v1/subscriptions/me" })).statusCode).toBe(401);
+    expect((await h.app.inject({ method: "GET", url: "/v1/subscriptions/me" })).statusCode).toBe(
+      401,
+    );
     const res = await h.app.inject({
       method: "GET",
       url: "/v1/subscriptions/me",
@@ -197,29 +247,51 @@ describe("tokens", () => {
 
   it("rotates the refresh token and kills the old one", async () => {
     const { refresh } = await signIn();
-    const res = await h.app.inject({ method: "POST", url: "/v1/auth/token/refresh", payload: { refresh } });
+    const res = await h.app.inject({
+      method: "POST",
+      url: "/v1/auth/token/refresh",
+      payload: { refresh },
+    });
     expect(res.statusCode).toBe(200);
     const next = res.json() as { access: string; refresh: string };
     expect(next.refresh).not.toBe(refresh);
 
     // The old token is dead the moment a new one is issued.
-    const replay = await h.app.inject({ method: "POST", url: "/v1/auth/token/refresh", payload: { refresh } });
+    const replay = await h.app.inject({
+      method: "POST",
+      url: "/v1/auth/token/refresh",
+      payload: { refresh },
+    });
     expect(replay.statusCode).toBe(401);
   });
 
   it("gives each device its own refresh token", async () => {
     const a = await signIn();
-    await h.raw(`update otp_codes set consumed_at = null, created_at = now() - interval '2 minutes'`);
+    await h.raw(
+      `update otp_codes set consumed_at = null, created_at = now() - interval '2 minutes'`,
+    );
     const b = await signIn();
     expect(a.refresh).not.toBe(b.refresh);
 
     // Signing out one device must not sign out the other.
     await h.app.inject({ method: "POST", url: "/v1/auth/logout", payload: { refresh: a.refresh } });
     expect(
-      (await h.app.inject({ method: "POST", url: "/v1/auth/token/refresh", payload: { refresh: a.refresh } })).statusCode,
+      (
+        await h.app.inject({
+          method: "POST",
+          url: "/v1/auth/token/refresh",
+          payload: { refresh: a.refresh },
+        })
+      ).statusCode,
     ).toBe(401);
     expect(
-      (await h.app.inject({ method: "POST", url: "/v1/auth/token/refresh", payload: { refresh: b.refresh } })).statusCode,
+      (
+        await h.app.inject({
+          method: "POST",
+          url: "/v1/auth/token/refresh",
+          payload: { refresh: b.refresh },
+        })
+      ).statusCode,
     ).toBe(200);
   });
 

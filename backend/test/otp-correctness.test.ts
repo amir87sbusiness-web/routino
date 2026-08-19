@@ -26,14 +26,13 @@ const verify = (phone: string, code: string) =>
   h.app.inject({ method: "POST", url: "/v1/auth/otp/verify", payload: { phone, code } });
 
 describe("the code always belongs to the number that asked for it", () => {
-  it("sends each of 10 simultaneous sign-ups its own distinct code", async () => {
+  it("sends each of 10 simultaneous sign-ups a four-digit code for its own number", async () => {
     const phones = Array.from({ length: 10 }, (_, i) => `0913999${String(i).padStart(4, "0")}`);
     await Promise.all(phones.map(requestCode));
 
     // One message per number, and no number received someone else's code.
     expect(h.sms.sent).toHaveLength(10);
-    const codes = h.sms.sent.map((m) => m.code);
-    expect(new Set(codes).size).toBe(10);
+    for (const { code } of h.sms.sent) expect(code).toMatch(/^\d{4}$/);
 
     // Every message went to the number that asked, in canonical form.
     for (const p of phones) {
@@ -87,11 +86,11 @@ describe("the code always belongs to the number that asked for it", () => {
     const phone = "09139000005";
     await requestCode(phone);
     const real = h.sms.last()!.code;
-    const wrong = real === "000000" ? "111111" : "000000";
+    const wrong = real === "0000" ? "1111" : "0000";
 
-    // 6 digits is only a million possibilities; without an attempt cap a
+    // 4 digits is only 9,000 possibilities; without an attempt cap a
     // determined script would walk it.
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 3; i++) {
       expect((await verify(phone, wrong)).statusCode).toBeGreaterThanOrEqual(400);
     }
 

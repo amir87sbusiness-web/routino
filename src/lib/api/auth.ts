@@ -127,15 +127,26 @@ export interface VerifyResult {
   isNew: boolean;
 }
 
+export interface VerifyOtpOptions {
+  intent?: "signup" | "password_reset";
+  newPassword?: string;
+  device?: DeviceDescriptor;
+}
+
 export async function verifyOtp(
   phone: string,
   code: string,
-  device?: DeviceDescriptor,
+  options: VerifyOtpOptions = {},
 ): Promise<VerifyResult> {
-  const descriptor = device ?? (await getOrCreateDeviceDescriptor());
+  const descriptor = options.device ?? (await getOrCreateDeviceDescriptor());
   const res = await apiRequest<VerifyResult>("/auth/otp/verify", {
     method: "POST",
-    body: { phone, code, device: descriptor },
+    body: {
+      phone,
+      code,
+      device: descriptor,
+      ...(options.intent ? { intent: options.intent, newPassword: options.newPassword } : {}),
+    },
   });
   saveTokens(withExpiry(res, undefined, Date.now()));
   return res;

@@ -18,7 +18,7 @@ describe("POST /v1/auth/otp/request", () => {
     expect(res.status).toBe(200);
     expect((await res.json()).ok).toBe(true);
     expect(h.sms.last()!.phone).toBe("989123334444"); // normalized canonical form
-    expect(h.sms.last()!.code).toMatch(/^\d{6}$/);
+    expect(h.sms.last()!.code).toMatch(/^\d{4}$/);
   });
 
   it("rejects an invalid phone", async () => {
@@ -76,6 +76,52 @@ describe("POST /v1/auth/otp/verify", () => {
     await signIn(h); // same phone, new device
     const grants = await h.query(`select id from grants where source = 'trial'`);
     expect(grants).toHaveLength(1);
+  });
+
+  it("resets the password and keeps only the SMS-verified device signed in", async () => {
+    const victim = await signIn(h);
+    await h.raw(`update users set max_active_devices = 3`);
+    await h.raw(`delete from otp_codes`);
+
+    await h.call("POST", "/v1/auth/otp/request", { body: { phone: victim.user.phone } });
+    const otherResponse = await h.call("POST", "/v1/auth/otp/verify", {
+      body: {
+        phone: victim.user.phone,
+        code: h.sms.last()!.code,
+        device: {
+          installationKey: "edge-other-device",
+          name: "Other browser",
+          platform: "web",
+        },
+      },
+    });
+    expect(otherResponse.status).toBe(200);
+    const other = (await otherResponse.json()) as { refresh: string };
+
+    await h.raw(`delete from otp_codes`);
+    await h.call("POST", "/v1/auth/otp/request", { body: { phone: victim.user.phone } });
+    const resetResponse = await h.call("POST", "/v1/auth/otp/verify", {
+      body: {
+        phone: victim.user.phone,
+        code: h.sms.last()!.code,
+        intent: "password_reset",
+        newPassword: "Naghmeh@1405",
+        device: {
+          installationKey: "edge-recovery-device",
+          name: "Recovery browser",
+          platform: "web",
+        },
+      },
+    });
+    expect(resetResponse.status).toBe(200);
+    const recovered = (await resetResponse.json()) as { refresh: string };
+
+    expect(
+      (await h.call("POST", "/v1/auth/token/refresh", { body: { refresh: other.refresh } })).status,
+    ).toBe(401);
+    expect(
+      (await h.call("POST", "/v1/auth/token/refresh", { body: { refresh: recovered.refresh } })).status,
+    ).toBe(200);
   });
 });
 

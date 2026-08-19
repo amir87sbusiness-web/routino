@@ -68,7 +68,7 @@ rounded cards, clear success/destructive states and restrained motion.
 
 ## Contact removal
 
-- Remove `amir.templates@gmail.com`, its `mailto:` link and the email label
+- Remove the former public support email, its mail link and its email label
   from the in-app legal/contact component.
 - Remove the email property and its landing-page build-time extraction and
   rendering. The legal page keeps Telegram and Instagram contact methods.

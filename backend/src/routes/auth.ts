@@ -43,6 +43,8 @@ const requestBody = z.object({ phone: z.string().min(1).max(32) });
 const verifyBody = z.object({
   phone: z.string().min(1).max(32),
   code: z.string().min(4).max(8),
+  intent: z.enum(["signup", "password_reset"]).optional(),
+  newPassword: z.string().min(1).max(128).optional(),
   deviceName: z.string().max(64).optional(),
   device: deviceDescriptorBody.optional(),
 });
@@ -144,9 +146,23 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
    * client, where anyone could re-grant it forever.
    */
   app.post("/auth/otp/verify", async (req) => {
-    const { phone: raw, code, deviceName, device } = verifyBody.parse(req.body);
+    const {
+      phone: raw,
+      code,
+      intent,
+      newPassword,
+      deviceName,
+      device,
+    } = verifyBody.parse(req.body);
     const phone = normalizePhone(raw);
     if (!phone) throw badRequest("invalid_phone", "Enter a valid Iranian mobile number");
+
+    if (intent && (!newPassword || !validatePassword(newPassword).ok)) {
+      throw badRequest(
+        "weak_password",
+        "Password must be 8+ chars with at least one letter and one digit",
+      );
+    }
 
     const t = now();
     const result = await verifyCode(db, env, phone, code, t);
@@ -169,7 +185,17 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       await grantInterval(db, user.id, { planId: "trial", days: TRIAL_DAYS, source: "trial" }, t);
     }
 
+    if (intent === "password_reset" || (intent === "signup" && isNew)) {
+      await db
+        .update(users)
+        .set({ passwordHash: await hashPassword(newPassword!) })
+        .where(eq(users.id, user.id));
+    }
+
     const tokens = await issueForDevice(db, env, user.id, deviceDescriptor(device, deviceName), t);
+    if (intent === "password_reset") {
+      await revokeOtherDevices(db, user.id, tokens.deviceId, t);
+    }
     const entitlement = await readEntitlement(db, user.id, t);
 
     return {

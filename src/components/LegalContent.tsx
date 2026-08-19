@@ -49,18 +49,12 @@ export function LegalContent() {
         <div className="flex flex-col gap-3">{renderSections(PRIVACY)}</div>
       </div>
 
-      {/* اطلاعات تماس — لازمِ اینماد */}
+      {/* راه‌های تماس عمومی */}
       <div className="rounded-2xl border border-border p-3">
         <h3 className="mb-2 text-sm font-black text-foreground">
           {t("تماس با ما و پشتیبانی", "Contact & support")}
         </h3>
         <div className="flex flex-col gap-1.5 text-[12px] leading-6 text-muted-foreground">
-          <p dir="ltr" className="text-start">
-            {t("ایمیل: ", "Email: ")}
-            <a href={`mailto:${LEGAL_INFO.email}`} className="font-medium text-primary">
-              {LEGAL_INFO.email}
-            </a>
-          </p>
           <p dir="ltr" className="text-start">
             {t("تلگرام: ", "Telegram: ")}
             <a

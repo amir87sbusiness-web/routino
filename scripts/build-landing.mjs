@@ -14,7 +14,16 @@
  * متنِ حقوقی از `src/lib/legal-text.json` می‌آید — همان ماژولی که اپ هم از آن
  * می‌خواند. یک منبع، دو مصرف‌کننده، بدون هیچ وابستگی تایپ‌اسکریپتی در بیلد.
  */
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import sharp from "sharp";
@@ -28,7 +37,11 @@ const SITE = "https://routino.me";
 /** HTML-escape. متن از ما می‌آید نه از کاربر، ولی یک `<` بی‌جا نباید صفحه را
  * خراب کند. کد اینماد عمداً از این مسیر رد نمی‌شود (باید عیناً درج شود). */
 const esc = (s) =>
-  String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 
 /**
  * The APK is uploaded outside this repository. Until its final HTTPS URL is
@@ -88,7 +101,7 @@ function validate(list, which) {
   });
 }
 
-/** ایمیل/تلگرام/اینستاگرام از `legal-info.ts` — با regex، نه import، تا این
+/** تلگرام/اینستاگرام از `legal-info.ts` — با regex، نه import، تا این
  * اسکریپت با node خالی اجرا شود و بیلد Cloudflare به ابزار تایپ‌اسکریپت نیاز
  * نداشته باشد. اگر شکل آن فایل عوض شد، اینجا با خطای صریح می‌ایستد. */
 function readLegalInfo() {
@@ -99,7 +112,6 @@ function readLegalInfo() {
     return m[1];
   };
   return {
-    email: pick("email"),
     telegram: pick("telegram"),
     instagram: pick("instagram"),
     lastUpdatedFa: pick("lastUpdatedFa"),
@@ -168,7 +180,9 @@ function copyLogo() {
 function copyShots(htmlPages) {
   const src = join(ROOT, "landing", "shots");
   if (!existsSync(src))
-    throw new Error("landing/shots نیست — اول `node scripts/shoot-landing.mjs` را با dev server بالا اجرا کن");
+    throw new Error(
+      "landing/shots نیست — اول `node scripts/shoot-landing.mjs` را با dev server بالا اجرا کن",
+    );
   const available = readdirSync(src).filter((f) => f.endsWith(".webp"));
   if (!available.length) throw new Error("landing/shots خالی است");
 
@@ -205,7 +219,8 @@ function copyShots(htmlPages) {
  */
 async function makeOgImage() {
   const src = join(ROOT, "landing", "shots", "desktop-dark.webp");
-  if (!existsSync(src)) throw new Error("shots/desktop-dark.webp نیست — عکسِ پیش‌نمایش از همان ساخته می‌شود");
+  if (!existsSync(src))
+    throw new Error("shots/desktop-dark.webp نیست — عکسِ پیش‌نمایش از همان ساخته می‌شود");
   const out = join(OUT_DIR, "og.jpg");
   await sharp(src)
     .resize(1200, 630, { fit: "contain", background: "#0e0a08" })
@@ -227,7 +242,9 @@ async function makeOgImage() {
 function writeSeoFiles() {
   writeFileSync(
     join(OUT_DIR, "robots.txt"),
-    ["User-agent: *", "Allow: /", "Disallow: /app/", "", `Sitemap: ${SITE}/sitemap.xml`, ""].join("\n"),
+    ["User-agent: *", "Allow: /", "Disallow: /app/", "", `Sitemap: ${SITE}/sitemap.xml`, ""].join(
+      "\n",
+    ),
   );
 
   const today = new Date().toISOString().slice(0, 10);
@@ -285,7 +302,6 @@ async function main() {
     `\n      </section>\n\n` +
     `      <section id="contact" class="contact">\n` +
     `        <h2>تماس با ما و پشتیبانی</h2>\n` +
-    `        <p>ایمیل: <a class="lnk" href="mailto:${esc(info.email)}">${esc(info.email)}</a></p>\n` +
     `        <p>تلگرام: <a class="lnk" href="https://t.me/${esc(info.telegram)}" target="_blank" rel="noreferrer">@${esc(info.telegram)}</a></p>\n` +
     `        <p>اینستاگرام: <a class="lnk" href="https://instagram.com/${esc(info.instagram)}" target="_blank" rel="noreferrer">@${esc(info.instagram)}</a></p>\n` +
     `      </section>`;
