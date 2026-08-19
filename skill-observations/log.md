@@ -91,3 +91,18 @@
 **Suggested improvement:** Payment launch checks should record the PSP result/message safely, verify whether every outbound dependency requires a fixed source IP, and test the actual production egress path before approving checkout. Treat ingress proxying, CDN security, and outbound identity as separate architecture decisions.
 
 **Principle:** An edge front door can protect inbound traffic without giving server-to-server calls a stable outbound identity.
+
+### Observation 7: Shorter OTPs need a complete security-contract update
+
+**Status:** OPEN
+**Date:** 2026-08-19
+**Session context:** Changing a phone sign-in code from six digits to four digits while adding password recovery.
+**Skill:** test-driven-development / systematic-debugging
+**Type:** open-source
+**Phase/Area:** Authentication policy
+
+**Issue:** The visible input length, generator, verification-attempt budget, recovery workflow, provider-template assumption and product documentation can drift when an OTP length changes. Updating only a placeholder would leave either a confusing flow or a materially weaker brute-force boundary.
+
+**Suggested improvement:** Treat an OTP-size change as a cross-boundary security policy change: test the generator and exact UI control, calculate and cap attempts for the smaller space, preserve a brief in-flight compatibility path, update provider-facing assumptions and test account-recovery session revocation.
+
+**Principle:** A shorter credential is safe only when its entropy, rate limits, recovery authority and every user-facing representation change together.
