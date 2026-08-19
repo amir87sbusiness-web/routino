@@ -16,22 +16,28 @@ afterAll(async () => {
 const ADMIN = "dev-only-admin-token";
 
 /** OTP sign-in, returning the tokens. */
-async function otpSignIn(phone = "09123334444") {
+const device = (installationKey: string) => ({
+  installationKey,
+  name: installationKey,
+  platform: "web",
+});
+
+async function otpSignIn(phone = "09123334444", installationKey = "otp-device") {
   await h.app.inject({ method: "POST", url: "/v1/auth/otp/request", payload: { phone } });
   const code = h.sms.last()!.code;
   const res = await h.app.inject({
     method: "POST",
     url: "/v1/auth/otp/verify",
-    payload: { phone, code },
+    payload: { phone, code, device: device(installationKey) },
   });
   return res.json() as { access: string; user: { id: string; phone: string } };
 }
 
-const login = (identifier: string, password: string) =>
+const login = (identifier: string, password: string, installationKey = "password-device") =>
   h.app.inject({
     method: "POST",
     url: "/v1/auth/password/login",
-    payload: { identifier, password },
+    payload: { identifier, password, device: device(installationKey) },
   });
 
 const setPw = (access: string, newPassword: string, currentPassword?: string) =>
@@ -305,13 +311,20 @@ describe("changing a password evicts other sessions", () => {
       await h.app.inject({
         method: "POST",
         url: "/v1/auth/otp/verify",
-        payload: { phone: "09123334444", code: h.sms.last()!.code },
+        payload: {
+          phone: "09123334444",
+          code: h.sms.last()!.code,
+          device: device("victim-device"),
+        },
       })
     ).json() as { access: string; refresh: string };
     expect((await setPw(victim.access, "Amir@1387")).statusCode).toBe(200);
+    await h.raw(`update users set max_active_devices = 2`);
 
     // The intruder signs in with the leaked password on their own device.
-    const intruder = (await login("09123334444", "Amir@1387")).json() as { refresh: string };
+    const intruder = (await login("09123334444", "Amir@1387", "intruder-device")).json() as {
+      refresh: string;
+    };
     expect(intruder.refresh).toBeTruthy();
 
     // The victim changes the password from the device they are holding.

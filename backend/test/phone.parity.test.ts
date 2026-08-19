@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import * as client from "../../src/lib/phone.js";
 import * as server from "../src/lib/phone.js";
@@ -45,6 +46,12 @@ const VECTORS = [
 ];
 
 describe("phone parity: client vs server", () => {
+  it("keeps both source files byte-identical", () => {
+    const clientSource = readFileSync(new URL("../../src/lib/phone.ts", import.meta.url));
+    const serverSource = readFileSync(new URL("../src/lib/phone.ts", import.meta.url));
+    expect(serverSource.equals(clientSource)).toBe(true);
+  });
+
   it("normalizePhone agrees on every vector", () => {
     for (const v of VECTORS) {
       expect(server.normalizePhone(v), `normalizePhone(${JSON.stringify(v)})`).toBe(client.normalizePhone(v));

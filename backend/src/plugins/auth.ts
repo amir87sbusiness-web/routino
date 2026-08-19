@@ -1,9 +1,9 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
-import { users } from "../db/schema.js";
+import { devices, users } from "../db/schema.js";
 import { verifyAccessToken } from "../services/tokens.js";
-import { forbidden, unauthorized } from "./errors.js";
+import { forbidden, locked, unauthorized } from "./errors.js";
 
 export interface AuthedUser {
   id: string;
@@ -37,6 +37,31 @@ export const authPlugin = fp(async (app) => {
 
     if (!row) throw unauthorized("unknown_user", "User no longer exists");
     if (row.blocked) throw forbidden("blocked", "Account is blocked");
+    if (row.securityLockedAt) {
+      throw locked(
+        "device_security_locked",
+        "For account security, sign-in is temporarily locked. Contact support.",
+        { support: "routino_support" },
+      );
+    }
+
+    const [device] = await app.deps.db
+      .select()
+      .from(devices)
+      .where(and(eq(devices.id, claims.did), eq(devices.userId, row.id)))
+      .limit(1);
+    if (!device) throw unauthorized("device_revoked", "This device session no longer exists");
+    if (device.revokedAt) {
+      throw unauthorized(
+        device.revocationReason === "replaced" ? "device_replaced" : "device_revoked",
+        "This device session is no longer active",
+      );
+    }
+
+    const t = new Date(app.deps.now());
+    if (!device.lastSeenAt || t.getTime() - device.lastSeenAt.getTime() >= 5 * 60_000) {
+      await app.deps.db.update(devices).set({ lastSeenAt: t }).where(eq(devices.id, device.id));
+    }
 
     req.user = { id: row.id, phone: row.phone, deviceId: claims.did };
   });

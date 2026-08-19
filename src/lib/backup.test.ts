@@ -46,10 +46,12 @@ function seed(): Db {
 }
 
 describe("buildBackup", () => {
-  it("round-trips the whole db through JSON without loss", () => {
+  it("round-trips portable content through JSON without loss", () => {
     const db = seed();
     const restored = JSON.parse(JSON.stringify(buildBackup(db))).db as Db;
-    expect(restored).toEqual(db);
+    expect(restored.habits).toEqual(db.habits);
+    expect(restored.logs).toEqual(db.logs);
+    expect(restored.journal).toEqual(db.journal);
   });
 
   it("preserves the data a user would actually mourn", () => {
@@ -59,7 +61,10 @@ describe("buildBackup", () => {
     expect(restored.habits[0].name).toBe("مطالعه");
     expect(restored.logs["h1|2026-07-15"].value).toBe(30);
     expect(restored.journal["2026-07-15"].text).toBe("روز خوبی بود");
-    expect(restored.auth?.phone).toBe("989123334444");
+    expect(restored.auth).toBeNull();
+    expect(restored.subscription).toBeNull();
+    expect(restored.notifications).toEqual([]);
+    expect(restored.meta.dataOwner).toBeNull();
   });
 
   it("is tagged so a future importer can recognise it", () => {

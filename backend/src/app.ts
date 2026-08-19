@@ -10,7 +10,7 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import compress from "@fastify/compress";
 import rateLimit from "@fastify/rate-limit";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, { LogController, type FastifyInstance } from "fastify";
 import type { Database } from "./db/client.js";
 import type { Env } from "./env.js";
 import type { SmsProvider } from "./providers/sms/index.js";
@@ -21,11 +21,13 @@ import { adminRoutes } from "./routes/admin.js";
 import { adminPanelRoutes } from "./routes/admin-panel.js";
 import { authRoutes } from "./routes/auth.js";
 import { devGatewayRoutes } from "./routes/dev-gateway.js";
+import { deviceRoutes } from "./routes/devices.js";
 import { healthRoutes } from "./routes/health.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { planRoutes } from "./routes/plans.js";
 import { subscriptionRoutes } from "./routes/subscriptions.js";
 import { syncRoutes } from "./routes/sync.js";
+import { requestIdFor } from "./lib/request-id.js";
 
 export interface Deps {
   db: Database;
@@ -49,6 +51,8 @@ export type App = FastifyInstance;
 export async function buildApp(deps: Omit<Deps, "now"> & { now?: () => number }): Promise<App> {
   const app = Fastify({
     logger: deps.env.NODE_ENV === "test" ? false : { level: "info" },
+    logController: new LogController({ disableRequestLogging: true }),
+    genReqId: (req) => requestIdFor(req.headers["x-request-id"]),
     // Only honour x-forwarded-for behind our own proxy. Trusting it from the
     // open internet would let anyone spoof their IP past the OTP rate limits.
     trustProxy: deps.env.TRUST_PROXY,
@@ -60,6 +64,24 @@ export async function buildApp(deps: Omit<Deps, "now"> & { now?: () => number })
   });
 
   app.decorate("deps", { now: () => Date.now(), ...deps } satisfies Deps);
+
+  app.addHook("onRequest", async (req, reply) => {
+    void reply.header("x-request-id", req.id);
+  });
+
+  app.addHook("onResponse", async (req, reply) => {
+    if (deps.env.NODE_ENV === "test") return;
+    const details = {
+      requestId: req.id,
+      method: req.method,
+      route: req.routeOptions.url,
+      status: reply.statusCode,
+      durationMs: Math.round(reply.elapsedTime),
+    };
+    if (reply.statusCode >= 500) req.log.error(details, "request completed");
+    else if (reply.elapsedTime >= 1_000) req.log.warn(details, "slow request");
+    else if (Math.random() < 0.01) req.log.info(details, "request sample");
+  });
 
   // A blunt per-IP ceiling. The precise limits that matter (SMS spend, login
   // guessing, admin tokens) are enforced in Postgres by the services, because
@@ -101,6 +123,7 @@ export async function buildApp(deps: Omit<Deps, "now"> & { now?: () => number })
   await app.register(healthRoutes);
   await app.register(planRoutes, { prefix: "/v1" });
   await app.register(authRoutes, { prefix: "/v1" });
+  await app.register(deviceRoutes, { prefix: "/v1" });
   await app.register(subscriptionRoutes, { prefix: "/v1" });
   await app.register(syncRoutes, { prefix: "/v1" });
   await app.register(paymentRoutes, { prefix: "/v1" });

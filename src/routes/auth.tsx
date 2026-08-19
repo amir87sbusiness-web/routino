@@ -45,7 +45,7 @@ function AuthPage() {
   const [busy, setBusy] = useState(false);
 
   if (!ctx?.db) return null;
-  const { db, update, t, lang } = ctx;
+  const { db, update, switchAccount, t, lang } = ctx;
 
   /** Turns an ApiError into something a Persian-speaking human can act on. */
   const explain = (err: unknown): string => {
@@ -78,6 +78,11 @@ function AuthPage() {
         return t("کد اشتباهه یا منقضی شده.", "The code is wrong or has expired.");
       case "blocked":
         return t("این حساب مسدود شده.", "This account is blocked.");
+      case "device_security_locked":
+        return t(
+          "برای محافظت از حسابت، ورود موقتاً قفل شده. به @routino_support پیام بده.",
+          "For your account security, sign-in is temporarily locked. Message @routino_support.",
+        );
     }
     // A gateway failure returns no JSON body, so `err.message` falls back to the
     // bare status line and the user was shown the literal text "HTTP 502" — in
@@ -92,7 +97,9 @@ function AuthPage() {
     }
     // Any other unmapped status: the server's own message is English and written
     // for a developer, so prefer the generic line unless it is clearly absent.
-    return err.message || t("یه مشکلی پیش اومد. دوباره تلاش کن.", "Something went wrong. Try again.");
+    return (
+      err.message || t("یه مشکلی پیش اومد. دوباره تلاش کن.", "Something went wrong. Try again.")
+    );
   };
 
   /**
@@ -104,8 +111,12 @@ function AuthPage() {
    * a failure here must not block the sign-in). `loginAs` applies account
    * isolation — a different phone wipes the previous owner's content.
    */
-  const completeLogin = async (canonical: string, serverEntitlement: ServerEntitlement) => {
+  const completeLogin = async (
+    user: { id: string; phone: string },
+    serverEntitlement: ServerEntitlement,
+  ) => {
     let entitlement = serverEntitlement;
+    const canonical = user.phone;
     const ownLocalData = db.meta.dataOwner === null || db.meta.dataOwner === canonical;
     const local = ownLocalData ? db.subscription : null;
     if (local && local.expiresAt > Date.now()) {
@@ -123,7 +134,7 @@ function AuthPage() {
     }
     const now = Date.now();
     const subscription = entitlementToSubscription(entitlement, now);
-    update((d) => loginAs(d, canonical, subscription, now));
+    await switchAccount(user, subscription);
     navigate({ to: "/" });
   };
 
@@ -137,12 +148,8 @@ function AuthPage() {
     setError("");
     setBusy(true);
     try {
-      const res = await passwordLogin(
-        identifier.trim(),
-        password,
-        navigator.userAgent.slice(0, 64),
-      );
-      await completeLogin(res.user.phone, res.entitlement);
+      const res = await passwordLogin(identifier.trim(), password);
+      await completeLogin(res.user, res.entitlement);
     } catch (err) {
       setError(explain(err));
     } finally {
@@ -184,8 +191,8 @@ function AuthPage() {
     setError("");
     setBusy(true);
     try {
-      const res = await verifyOtp(canonical, code, navigator.userAgent.slice(0, 64));
-      await completeLogin(res.user.phone, res.entitlement);
+      const res = await verifyOtp(canonical, code);
+      await completeLogin(res.user, res.entitlement);
     } catch (err) {
       setError(explain(err));
     } finally {

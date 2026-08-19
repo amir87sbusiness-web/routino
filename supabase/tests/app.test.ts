@@ -1,6 +1,6 @@
 /** App-level behaviour of the edge function: health, CORS, the proxy-secret
  * gate (the edge analogue of TRUST_PROXY), and error shapes. */
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeHarness, type Harness } from "./helpers/harness.ts";
 
 let h: Harness;
@@ -24,6 +24,37 @@ describe("health", () => {
     const res = await h.call("GET", "/health/ready");
     expect(res.status).toBe(200);
     expect((await res.json()).db).toBe("up");
+  });
+});
+
+describe("request IDs", () => {
+  it("preserves a valid caller ID on the response", async () => {
+    const requestId = "123e4567-e89b-42d3-a456-426614174000";
+    const res = await h.call("GET", "/health", { headers: { "x-request-id": requestId } });
+    expect(res.headers.get("x-request-id")).toBe(requestId);
+  });
+
+  it("replaces unsafe IDs and includes the safe ID in unhandled-error logs", async () => {
+    const broken = await makeHarness();
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    try {
+      await broken.raw("drop table plans");
+      const res = await broken.call("GET", "/v1/plans", {
+        headers: { "x-request-id": "phone-or-secret" },
+      });
+      const requestId = res.headers.get("x-request-id");
+      expect(res.status).toBe(500);
+      expect(requestId).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+      expect(error).toHaveBeenCalledWith(
+        "unhandled error",
+        expect.objectContaining({ requestId, method: "GET", route: "/api/v1/plans" }),
+      );
+    } finally {
+      error.mockRestore();
+      await broken.close();
+    }
   });
 });
 

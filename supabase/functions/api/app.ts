@@ -21,11 +21,13 @@ import { adminRoutes } from "./routes/admin.ts";
 import { adminPanelRoutes } from "./routes/admin-panel.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { devGatewayRoutes } from "./routes/dev-gateway.ts";
+import { deviceRoutes } from "./routes/devices.ts";
 import { healthRoutes } from "./routes/health.ts";
 import { paymentRoutes } from "./routes/payments.ts";
 import { planRoutes } from "./routes/plans.ts";
 import { subscriptionRoutes } from "./routes/subscriptions.ts";
 import { syncRoutes } from "./routes/sync.ts";
+import { requestIdFor } from "./shared/lib/request-id.ts";
 
 const secretEquals = (a: string, b: string): boolean => {
   const ab = Buffer.from(a);
@@ -36,6 +38,28 @@ const secretEquals = (a: string, b: string): boolean => {
 
 export function buildApp(deps: Deps) {
   const app = new Hono<AppEnv>().basePath("/api");
+
+  app.use("*", async (c, next) => {
+    const requestId = requestIdFor(c.req.header("x-request-id"));
+    const startedAt = performance.now();
+    c.set("requestId", requestId);
+    c.header("x-request-id", requestId);
+    await next();
+
+    const durationMs = Math.round(performance.now() - startedAt);
+    const details = {
+      requestId,
+      method: c.req.method,
+      route: c.req.path,
+      status: c.res.status,
+      durationMs,
+    };
+    if (c.res.status >= 500) console.error("request completed", details);
+    else if (durationMs >= 1_000) console.warn("slow request", details);
+    else if (deps.env.NODE_ENV !== "test" && Math.random() < 0.01) {
+      console.info("request sample", details);
+    }
+  });
 
   // CORS first, so even a rejected request gets a well-formed preflight answer.
   const allowed = deps.env.CORS_ORIGINS.split(",").map((s) => s.trim());
@@ -100,7 +124,7 @@ export function buildApp(deps: Deps) {
       const retryAfter = (err as HttpError & { retryAfter?: number }).retryAfter;
       if (retryAfter) c.header("Retry-After", String(retryAfter));
       return c.json(
-        { error: err.code, message: err.message },
+        { error: err.code, message: err.message, ...(err.details ?? {}) },
         err.statusCode as ContentfulStatusCode,
       );
     }
@@ -115,7 +139,12 @@ export function buildApp(deps: Deps) {
     }
     // Anything unrecognised is a bug. Log it with the stack, but never leak the
     // internals to the client.
-    console.error("unhandled error", err);
+    console.error("unhandled error", {
+      requestId: c.get("requestId"),
+      method: c.req.method,
+      route: c.req.path,
+      error: err instanceof Error ? { name: err.name, message: err.message } : { name: "Unknown" },
+    });
     return c.json({ error: "internal", message: "Internal server error" }, 500);
   });
 
@@ -124,6 +153,7 @@ export function buildApp(deps: Deps) {
   app.route("/", healthRoutes(deps));
   app.route("/v1", planRoutes(deps));
   app.route("/v1", authRoutes(deps));
+  app.route("/v1", deviceRoutes(deps));
   app.route("/v1", subscriptionRoutes(deps));
   app.route("/v1", syncRoutes(deps));
   app.route("/v1", paymentRoutes(deps));

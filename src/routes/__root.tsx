@@ -1,12 +1,9 @@
-import {
-  Outlet,
-  Link,
-  createRootRoute,
-  useRouter,
-} from "@tanstack/react-router";
+import { Outlet, Link, createRootRoute, useRouter } from "@tanstack/react-router";
+import { useEffect } from "react";
 import { Toaster } from "sonner";
 import { UpdateWatcher } from "../components/pwa";
 import { AppProvider } from "../state/app";
+import { recordDiagnostic } from "../lib/diagnostics";
 import "../styles.css";
 
 function NotFoundComponent() {
@@ -33,6 +30,10 @@ function NotFoundComponent() {
 
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
+
+  useEffect(() => {
+    recordDiagnostic({ name: "ui_error", meta: { source: "react" } });
+  }, [error]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -73,6 +74,18 @@ export const Route = createRootRoute({
 });
 
 function RootComponent() {
+  useEffect(() => {
+    const onError = () => recordDiagnostic({ name: "unhandled_error", meta: { source: "window" } });
+    const onRejection = () =>
+      recordDiagnostic({ name: "unhandled_rejection", meta: { source: "promise" } });
+    window.addEventListener("error", onError);
+    window.addEventListener("unhandledrejection", onRejection);
+    return () => {
+      window.removeEventListener("error", onError);
+      window.removeEventListener("unhandledrejection", onRejection);
+    };
+  }, []);
+
   return (
     <AppProvider>
       {/* این Outlet محل قرارگیری صفحات فرزند است */}

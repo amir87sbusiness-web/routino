@@ -12,6 +12,7 @@
  * anyone out — offline has to be indistinguishable from online.
  */
 import { apiRequest, ApiError } from "./client";
+import { getOrCreateDeviceDescriptor, type DeviceDescriptor } from "../device-identity";
 
 const TOKEN_KEY = "routino:auth:v1";
 
@@ -21,6 +22,10 @@ export interface Tokens {
   deviceId: string;
   /** Epoch ms when `access` expires, so we can refresh proactively. */
   accessExpiresAt: number;
+  /** Last successful authenticated server response. Drives the 15-day offline lease. */
+  lastServerConfirmedAt: number;
+  /** Last successful subscription read; absent on sessions created by older builds. */
+  lastEntitlementCheckedAt?: number;
 }
 
 export interface ServerEntitlement {
@@ -30,14 +35,34 @@ export interface ServerEntitlement {
   issuedAt: string;
 }
 
-/** Access tokens are ~15 min; refresh a little early to avoid a guaranteed 401. */
+/** Refresh a little early to avoid a guaranteed 401 at the boundary. */
 const REFRESH_SKEW_MS = 60_000;
-const ASSUMED_ACCESS_TTL_MS = 15 * 60_000;
+const FALLBACK_ACCESS_TTL_MS = 60 * 60_000;
+
+export function accessExpiryAt(access: string, now = Date.now()): number {
+  try {
+    const segment = access.split(".")[1];
+    if (!segment) throw new TypeError("Missing JWT payload");
+    const base64 = segment.replaceAll("-", "+").replaceAll("_", "/");
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+    const payload = JSON.parse(atob(padded)) as { exp?: unknown };
+    if (typeof payload.exp === "number" && Number.isFinite(payload.exp)) return payload.exp * 1000;
+  } catch {
+    // Old/corrupt tokens still get one server attempt; a 401 triggers refresh.
+  }
+  return now + FALLBACK_ACCESS_TTL_MS;
+}
 
 export function loadTokens(): Tokens | null {
   try {
     const raw = localStorage.getItem(TOKEN_KEY);
-    return raw ? (JSON.parse(raw) as Tokens) : null;
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Tokens;
+    if (!parsed.lastServerConfirmedAt) {
+      parsed.lastServerConfirmedAt = Date.now();
+      saveTokens(parsed);
+    }
+    return parsed;
   } catch {
     return null;
   }
@@ -61,12 +86,31 @@ export function clearTokens(): void {
 
 /** Picks only the token fields: callers pass whole API responses, and the store
  * must not accumulate a stale copy of `entitlement`/`user` alongside them. */
-const withExpiry = (t: { access: string; refresh: string; deviceId: string }): Tokens => ({
-  access: t.access,
-  refresh: t.refresh,
-  deviceId: t.deviceId,
-  accessExpiresAt: Date.now() + ASSUMED_ACCESS_TTL_MS,
-});
+const withExpiry = (
+  t: { access: string; refresh: string; deviceId: string },
+  previous?: Pick<Tokens, "lastEntitlementCheckedAt">,
+  entitlementCheckedAt?: number,
+): Tokens => {
+  const now = Date.now();
+  return {
+    access: t.access,
+    refresh: t.refresh,
+    deviceId: t.deviceId,
+    accessExpiresAt: accessExpiryAt(t.access, now),
+    lastServerConfirmedAt: now,
+    lastEntitlementCheckedAt: entitlementCheckedAt ?? previous?.lastEntitlementCheckedAt,
+  };
+};
+
+export function markServerConfirmed(now = Date.now()): void {
+  const tokens = loadTokens();
+  if (tokens) saveTokens({ ...tokens, lastServerConfirmedAt: now });
+}
+
+export function markEntitlementChecked(now = Date.now()): void {
+  const tokens = loadTokens();
+  if (tokens) saveTokens({ ...tokens, lastEntitlementCheckedAt: now });
+}
 
 /* ---------------- endpoints ---------------- */
 
@@ -86,13 +130,14 @@ export interface VerifyResult {
 export async function verifyOtp(
   phone: string,
   code: string,
-  deviceName?: string,
+  device?: DeviceDescriptor,
 ): Promise<VerifyResult> {
+  const descriptor = device ?? (await getOrCreateDeviceDescriptor());
   const res = await apiRequest<VerifyResult>("/auth/otp/verify", {
     method: "POST",
-    body: { phone, code, deviceName },
+    body: { phone, code, device: descriptor },
   });
-  saveTokens(withExpiry(res));
+  saveTokens(withExpiry(res, undefined, Date.now()));
   return res;
 }
 
@@ -102,13 +147,14 @@ export async function verifyOtp(
 export async function passwordLogin(
   identifier: string,
   password: string,
-  deviceName?: string,
+  device?: DeviceDescriptor,
 ): Promise<VerifyResult> {
+  const descriptor = device ?? (await getOrCreateDeviceDescriptor());
   const res = await apiRequest<VerifyResult>("/auth/password/login", {
     method: "POST",
-    body: { identifier, password, deviceName },
+    body: { identifier, password, device: descriptor },
   });
-  saveTokens(withExpiry(res));
+  saveTokens(withExpiry(res, undefined, Date.now()));
   return res;
 }
 
@@ -149,7 +195,9 @@ export async function importSubscription(sub: {
 }
 
 export async function fetchEntitlement(): Promise<{ entitlement: ServerEntitlement }> {
-  return authedRequest("/subscriptions/me");
+  const result = await authedRequest<{ entitlement: ServerEntitlement }>("/subscriptions/me");
+  markEntitlementChecked();
+  return result;
 }
 
 export async function logout(): Promise<void> {
@@ -183,7 +231,7 @@ async function refreshTokens(): Promise<Tokens | null> {
           body: { refresh: current.refresh },
         },
       );
-      const next = withExpiry(res);
+      const next = withExpiry(res, current);
       saveTokens(next);
       return next;
     } catch (err) {
@@ -212,11 +260,17 @@ export async function authedRequest<T>(
   }
 
   try {
-    return await apiRequest<T>(path, { ...opts, token: tokens.access });
+    const result = await apiRequest<T>(path, { ...opts, token: tokens.access });
+    markServerConfirmed();
+    return result;
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {
       const next = await refreshTokens();
-      if (next) return apiRequest<T>(path, { ...opts, token: next.access });
+      if (next) {
+        const result = await apiRequest<T>(path, { ...opts, token: next.access });
+        markServerConfirmed();
+        return result;
+      }
     }
     throw err;
   }

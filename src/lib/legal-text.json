@@ -2,10 +2,7 @@
   "enamadSeal": "<a referrerpolicy='origin' target='_blank' href='https://trustseal.enamad.ir/?id=7120907&Code=c94FiiaLDfaEUSRS1kltZQdAz8yRaQGr'><img referrerpolicy='origin' src='https://trustseal.enamad.ir/logo.aspx?id=7120907&Code=c94FiiaLDfaEUSRS1kltZQdAz8yRaQGr' alt='' style='cursor:pointer' code='c94FiiaLDfaEUSRS1kltZQdAz8yRaQGr'></a>",
   "terms": [
     {
-      "title": [
-        "۱. پذیرش قوانین",
-        "1. Acceptance of terms"
-      ],
+      "title": ["۱. پذیرش قوانین", "1. Acceptance of terms"],
       "paras": [
         [
           "با نصب یا استفاده از اپلیکیشن روتینو، شما این قوانین و مقررات را به‌طور کامل می‌پذیرید. اگر با بخشی از این قوانین موافق نیستید، لطفاً از سرویس استفاده نکنید.",
@@ -14,10 +11,7 @@
       ]
     },
     {
-      "title": [
-        "۲. معرفی سرویس",
-        "2. The service"
-      ],
+      "title": ["۲. معرفی سرویس", "2. The service"],
       "paras": [
         [
           "روتینو یک اپلیکیشن عادت‌ساز و مدیریت کارهای روزانه است که امکاناتی مانند ثبت عادت‌ها، کارها، ژورنال، تایمر و آنالیز پیشرفت را ارائه می‌دهد.",
@@ -26,22 +20,20 @@
       ]
     },
     {
-      "title": [
-        "۳. حساب کاربری",
-        "3. Your account"
-      ],
+      "title": ["۳. حساب کاربری", "3. Your account"],
       "paras": [
         [
           "ورود به حساب از طریق شماره موبایل یا نام کاربری و رمز عبور، یا کد یک‌بارمصرفِ پیامکی انجام می‌شود. مسئولیت حفظ رمز عبور و دسترسی به شماره موبایل و جلوگیری از استفاده‌ی دیگران از حساب، بر عهده‌ی شماست.",
           "Sign-in is via your mobile number or username with a password, or a one-time SMS code. You are responsible for keeping your password, keeping access to your number, and preventing others from using your account."
+        ],
+        [
+          "هر حساب به‌طور پیش‌فرض برای یک دستگاه فعال است؛ مدیر سرویس می‌تواند این سقف را برای هر حساب تغییر دهد. ورود دستگاه تازه در صورت پر بودن ظرفیت، نشست قدیمی‌تر را برای امنیت حساب پایان می‌دهد. حداکثر سه جابه‌جایی دستگاه در هر بازهٔ ۱۵روزه مجاز است و جابه‌جایی چهارم حساب را تا بررسی پشتیبانی قفل می‌کند. هر ورود دستگاه در اعلان‌های حساب ثبت می‌شود.",
+          "Each account allows one active device by default; the service administrator may change this limit per account. When the limit is full, signing in on a new device ends the older session for account security. Up to three device replacements are allowed in any rolling 15-day period; a fourth locks the account pending support review. Each device sign-in is recorded in account notifications."
         ]
       ]
     },
     {
-      "title": [
-        "۴. اشتراک و پرداخت",
-        "4. Subscription & payment"
-      ],
+      "title": ["۴. اشتراک و پرداخت", "4. Subscription & payment"],
       "paras": [
         [
           "بخشی از امکانات روتینو نیازمند اشتراک پولی است. قیمت پلن‌ها در خودِ اپ نمایش داده می‌شود و پرداخت از طریق درگاه بانکی معتبر انجام می‌گیرد. اشتراک پس از پرداخت موفق فعال می‌شود.",
@@ -54,10 +46,7 @@
       ]
     },
     {
-      "title": [
-        "۵. استرداد وجه",
-        "5. Refunds"
-      ],
+      "title": ["۵. استرداد وجه", "5. Refunds"],
       "paras": [
         [
           "اگر در فرایند پرداخت مبلغی از حساب شما کسر شود اما اشتراک فعال نگردد، مبلغ طبق روال درگاه بانکی به‌صورت خودکار بازمی‌گردد؛ در غیر این صورت با پشتیبانی تماس بگیرید تا موضوع پیگیری شود.",
@@ -66,34 +55,25 @@
       ]
     },
     {
-      "title": [
-        "۶. مسئولیت‌های کاربر",
-        "6. User responsibilities"
-      ],
+      "title": ["۶. مسئولیت‌های کاربر", "6. User responsibilities"],
       "paras": [
         [
-          "استفاده از روتینو باید قانونی و مطابق مقررات باشد. سوءاستفاده، تلاش برای اخلال در سرویس، یا دسترسی غیرمجاز مجاز نیست.",
-          "Use of Routino must be lawful. Abuse, attempts to disrupt the service, or unauthorized access are not permitted."
+          "استفاده از روتینو باید قانونی و مطابق مقررات باشد. حساب و اشتراک برای استفاده طبق سقف دستگاه تعیین‌شده است. تلاش برای اخلال در سرویس یا دسترسی غیرمجاز مجاز نیست. اگر ورود ناشناسی دیدید، فوراً به @routino_support پیام دهید.",
+          "Use of Routino must be lawful and within the device limit assigned to the account. Attempts to disrupt the service or gain unauthorized access are not permitted. If you see an unfamiliar sign-in, message @routino_support immediately."
         ]
       ]
     },
     {
-      "title": [
-        "۷. محدودیت مسئولیت",
-        "7. Limitation of liability"
-      ],
+      "title": ["۷. محدودیت مسئولیت", "7. Limitation of liability"],
       "paras": [
         [
-          "سرویس «همان‌گونه که هست» ارائه می‌شود. تلاش ما بر ارائه‌ی سرویسی پایدار است و یک نسخه از اطلاعات شما روی سرور نگهداری می‌شود، اما مسئولیتی در قبال از دست رفتن اطلاعات، قطعی سرویس یا خسارات ناشی از آن نداریم.",
-          "The service is provided “as is”. We aim to keep it reliable and a copy of your data is kept on the server, but we accept no liability for data loss, service interruption, or any damages arising from them."
+          "سرویس «همان‌گونه که هست» ارائه می‌شود. محتوای شخصی برنامه فقط روی دستگاه شماست و نسخه‌ای از آن روی سرور روتینو نگهداری نمی‌شود. پاک‌کردن دادهٔ مرورگر، استفاده از حالت ناشناس، حذف برنامه یا خرابی دستگاه می‌تواند اطلاعات را از بین ببرد؛ Export همیشه فعال است و مسئولیت نگهداری فایل پشتیبان با کاربر است.",
+          "The service is provided “as is”. Personal app content exists only on your device and Routino keeps no server copy. Clearing browser data, private browsing, uninstalling the app, or device failure may remove it. Export is always available, and you are responsible for keeping backup files safe."
         ]
       ]
     },
     {
-      "title": [
-        "۸. مالکیت فکری",
-        "8. Intellectual property"
-      ],
+      "title": ["۸. مالکیت فکری", "8. Intellectual property"],
       "paras": [
         [
           "کلیه‌ی حقوق مربوط به نام، طراحی و کدِ روتینو متعلق به مالک آن است و بدون اجازه‌ی کتبی قابل کپی یا استفاده‌ی تجاری نیست.",
@@ -102,10 +82,7 @@
       ]
     },
     {
-      "title": [
-        "۹. تغییر قوانین",
-        "9. Changes to these terms"
-      ],
+      "title": ["۹. تغییر قوانین", "9. Changes to these terms"],
       "paras": [
         [
           "این قوانین ممکن است در آینده به‌روزرسانی شوند. نسخه‌ی جدید از همین بخش در دسترس خواهد بود و تاریخ آخرین به‌روزرسانی بالای همین بخش درج می‌شود.",
@@ -116,10 +93,7 @@
   ],
   "privacy": [
     {
-      "title": [
-        "۱. کلیات",
-        "1. Overview"
-      ],
+      "title": ["۱. کلیات", "1. Overview"],
       "paras": [
         [
           "حفظ حریم خصوصی شما برای ما مهم است. این بخش توضیح می‌دهد چه اطلاعاتی جمع‌آوری می‌شود، کجا نگهداری می‌شود و چگونه استفاده می‌شود.",
@@ -128,18 +102,19 @@
       ]
     },
     {
-      "title": [
-        "۲. اطلاعاتی که جمع‌آوری می‌کنیم",
-        "2. Information we collect"
-      ],
+      "title": ["۲. اطلاعاتی که جمع‌آوری می‌کنیم", "2. Information we collect"],
       "paras": [
         [
           "شماره موبایل: تنها برای ورود و احراز هویت (ارسال کد یک‌بارمصرف) استفاده می‌شود.",
           "Mobile number: used only for sign-in and authentication (sending the one-time code)."
         ],
         [
-          "محتوای برنامه: عادت‌ها، کارها، ژورنال و تنظیمات شما — برای اینکه روی همه‌ی دستگاه‌هایتان یکسان باشد و با گم‌شدن گوشی از بین نرود — روی سرور ما هم نگهداری می‌شود. این اطلاعات به حساب شما گره خورده و فقط با ورود به همان حساب در دسترس است.",
-          "App content: your habits, tasks, journal, and settings are also stored on our server — so they stay identical across your devices and survive a lost phone. This data is tied to your account and is only accessible by signing in to it."
+          "محتوای برنامه: عادت‌ها، ثبت‌ها، کارها، ژورنال، تایمر، آنالیز و تنظیمات شخصی فقط در حافظهٔ محلی همان دستگاه نگهداری می‌شوند و به سرور روتینو ارسال نمی‌شوند.",
+          "App content: habits, logs, tasks, journal, timer history, analytics data, and personal settings are stored only in that device's local storage and are not sent to Routino's server."
+        ],
+        [
+          "اطلاعات حساب و امنیت: سرور شماره موبایل، نام کاربری و هش رمز (در صورت تنظیم)، اطلاعات عمومی نصب/مرورگر و نشست دستگاه، رویدادهای امنیتی جابه‌جایی، وضعیت اشتراک و سوابق لازم پرداخت را نگهداری می‌کند. IP یا VPN برای ساخت هویت دستگاه استفاده نمی‌شود.",
+          "Account and security data: the server stores your mobile number, username and password hash (if set), general installation/browser and device-session details, device-replacement security events, subscription status, and necessary payment records. IP address or VPN state is not used to create device identity."
         ],
         [
           "اطلاعات پرداخت: پرداخت‌ها از طریق درگاه بانکی انجام می‌شود. ما اطلاعات کارت بانکی شما (شماره کارت، رمز و…) را دریافت، مشاهده یا ذخیره نمی‌کنیم؛ این اطلاعات مستقیماً توسط درگاه بانکی مدیریت می‌شود.",
@@ -148,22 +123,16 @@
       ]
     },
     {
-      "title": [
-        "۳. کار کردن بدون اینترنت",
-        "3. Working offline"
-      ],
+      "title": ["۳. کار کردن بدون اینترنت", "3. Working offline"],
       "paras": [
         [
-          "یک نسخه از اطلاعات شما همیشه روی خود دستگاه نگهداری می‌شود، بنابراین برنامه بدون اینترنت هم کامل کار می‌کند. هر تغییری که آفلاین بدهید، دفعه‌ی بعد که به اینترنت وصل شوید همگام می‌شود.",
-          "A copy of your data is always kept on the device itself, so the app works fully offline. Anything you change offline is synced the next time you are online."
+          "اطلاعات شخصی روی خود دستگاه نگهداری می‌شود و امکانات اصلی بدون اینترنت کار می‌کنند. برای تأیید امنیت نشست، دستگاه باید دست‌کم هر ۱۵ روز یک‌بار به سرور متصل شود. این بررسی هیچ محتوای شخصی را ارسال نمی‌کند و در صورت نیاز به اتصال، اطلاعات محلی پاک نمی‌شود.",
+          "Personal data is kept on-device and core features work offline. For session security, the device must contact the server at least once every 15 days. This check sends no personal app content, and local data is not deleted if reconnection is required."
         ]
       ]
     },
     {
-      "title": [
-        "۴. نحوه‌ی استفاده از اطلاعات",
-        "4. How we use information"
-      ],
+      "title": ["۴. نحوه‌ی استفاده از اطلاعات", "4. How we use information"],
       "paras": [
         [
           "از شماره موبایل فقط برای احراز هویت، فعال‌سازی اشتراک و پشتیبانی استفاده می‌شود. ما اطلاعات شما را نمی‌فروشیم و برای تبلیغات در اختیار دیگران قرار نمی‌دهیم.",
@@ -172,10 +141,7 @@
       ]
     },
     {
-      "title": [
-        "۵. اشتراک‌گذاری با سرویس‌های شخص ثالث",
-        "5. Third-party services"
-      ],
+      "title": ["۵. اشتراک‌گذاری با سرویس‌های شخص ثالث", "5. Third-party services"],
       "paras": [
         [
           "برای ارسال کد ورود از یک سرویس پیامکی، و برای دریافت پرداخت از یک درگاه بانکی معتبر استفاده می‌کنیم. فقط اطلاعات لازم برای همان کار (مثل شماره موبایل برای ارسال پیامک) در اختیارشان قرار می‌گیرد.",
@@ -184,26 +150,20 @@
       ]
     },
     {
-      "title": [
-        "۶. امنیت",
-        "6. Security"
-      ],
+      "title": ["۶. امنیت", "6. Security"],
       "paras": [
         [
-          "کدهای ورود به‌صورت رمزنگاری‌شده نگهداری می‌شوند و پس از مدت کوتاهی منقضی می‌شوند. با این حال، هیچ سیستمی صددرصد ایمن نیست و ما در حد توان معقول از اطلاعات محافظت می‌کنیم.",
-          "Login codes are stored encrypted and expire after a short time. However, no system is 100% secure; we protect your information with reasonable care."
+          "کدهای ورود به‌صورت هش‌شده نگهداری و پس از مدت کوتاهی منقضی می‌شوند. نشست دستگاه قابل ابطال فوری پس از اتصال است و جابه‌جایی‌های پرتکرار برای بررسی امنیتی قفل می‌شوند. با این حال هیچ سیستمی صددرصد ایمن نیست.",
+          "Login codes are stored as hashes and expire quickly. Device sessions can be revoked immediately once connected, and repeated replacements trigger a security lock. No system, however, is 100% secure."
         ]
       ]
     },
     {
-      "title": [
-        "۷. حقوق شما",
-        "7. Your rights"
-      ],
+      "title": ["۷. حقوق شما", "7. Your rights"],
       "paras": [
         [
-          "شما می‌توانید حذف حساب و تمام اطلاعات مرتبط با شماره‌ی خود — شامل نسخه‌ی ذخیره‌شده روی سرور — را از طریق تماس با پشتیبانی درخواست کنید.",
-          "You can request deletion of your account and all data associated with your number — including the copy stored on our server — by contacting support."
+          "Export اطلاعات شخصی همیشه فعال است. Import فقط با اشتراک پولی فعال و در دورهٔ آزمایشی یا پلن رایگان غیرفعال است. می‌توانید حذف اطلاعات حسابِ نگهداری‌شده روی سرور را از پشتیبانی درخواست کنید؛ محتوای محلی فقط با اقدام صریح خودتان از دستگاه حذف می‌شود.",
+          "Personal-data export is always available. Import requires an active paid subscription and is disabled during trial or free access. You may ask support to delete server-held account data; local content is removed only by your explicit action on the device."
         ]
       ]
     }

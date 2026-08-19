@@ -2,16 +2,16 @@
 // (با Capacitor) و چه برای انتشار وب/دسکتاپ (مثلاً بعداً با Electron یا هر
 // هاست استاتیک ساده). فقط پوشه‌ی خروجی متفاوت است تا با پیکربندی Capacitor
 // (که www/ را انتظار دارد) تداخل نکند.
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-import tailwindcss from '@tailwindcss/vite';
-import { TanStackRouterVite } from '@tanstack/router-plugin/vite';
-import { VitePWA } from 'vite-plugin-pwa';
-import { fileURLToPath, URL } from 'url';
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
+import { VitePWA } from "vite-plugin-pwa";
+import { fileURLToPath, URL } from "url";
 
 // BUILD_TARGET=mobile npm run build → خروجی در www/ (برای Capacitor)
 // در غیر این صورت (وب/دسکتاپ) → خروجی در dist/
-const isMobile = process.env.BUILD_TARGET === 'mobile';
+const isMobile = process.env.BUILD_TARGET === "mobile";
 
 // وب: اپ زیر مسیر /app سرو می‌شود و ریشه‌ی دامنه (routino.me) صفحه‌ی معرفی است
 // که `scripts/build-landing.mjs` می‌سازد. پس خروجی وب داخل dist/app می‌نشیند و
@@ -21,8 +21,8 @@ const isMobile = process.env.BUILD_TARGET === 'mobile';
 // بماند و خروجی در www/. هر جای دیگری که مسیر لازم دارد از
 // `import.meta.env.BASE_URL` می‌خواند، نه از یک رشته‌ی ثابت — تا هر دو حالت
 // خودبه‌خود درست باشند.
-const outDir = isMobile ? 'www' : 'dist/app';
-const base = isMobile ? '/' : '/app/';
+const outDir = isMobile ? "www" : "dist/app";
+const base = isMobile ? "/" : "/app/";
 
 export default defineConfig({
   base,
@@ -47,11 +47,11 @@ export default defineConfig({
       // 'prompt' نه 'autoUpdate': با autoUpdate یک تب باز، وسط کار چانک‌های
       // جاوااسکریپت را زیر پای اپِ در حال اجرا عوض می‌کند و خطای chunk-load
       // می‌دهد. اینجا از کاربر می‌پرسیم.
-      registerType: 'prompt',
+      registerType: "prompt",
       injectRegister: null, // ثبت را خودمان در client.tsx انجام می‌دهیم
 
       manifest: false, // مانیفست دستی در public/ نگه‌داری می‌شود
-      includeAssets: ['favicon.svg', 'icons/*.png'],
+      includeAssets: ["favicon.svg", "icons/*.png"],
 
       workbox: {
         // روتینگ سمت کلاینت: باز کردن مستقیم /habits در حالت آفلاین باید
@@ -67,13 +67,17 @@ export default defineConfig({
         // و cursor را جلو می‌برد — یعنی گم‌شدن بی‌صدا و دائمی دیتا. داستان
         // آفلاینِ این اپ خودِ دیتابیس محلی است، نه کش شبکه.
         // ---------------------------------------------------------------
-        navigateFallbackDenylist: [/^\/v1\//],
+        navigateFallbackDenylist: [
+          /^\/v1(?:\/|$)/,
+          /^\/admin(?:\/|$)/,
+          /^\/payments\/callback(?:\/|$)/,
+        ],
         runtimeCaching: [],
 
         // woff2 در globPatterns پیش‌فرض ورک‌باکس **نیست**
         // ({js,css,html,ico,png,svg}). وزیرمتن woff2 است و بدون این، متن فارسی
         // در حالت آفلاین با فونت سیستمی و RTL خراب رندر می‌شود.
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest,woff2}'],
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest,woff2}"],
 
         // باندل ~۵۹۰KB است؛ سقف پیش‌فرض ۲MB است ولی صریح بودنش بهتر از
         // «چرا فایل اصلی کش نشد؟» است.
@@ -92,7 +96,7 @@ export default defineConfig({
   resolve: {
     alias: {
       // این خط آدرس‌دهی دقیق و بدون باگ در ویندوز/مک/لینوکس را تضمین می‌کند
-      "@": fileURLToPath(new URL('./src', import.meta.url)),
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
   build: {
@@ -103,8 +107,8 @@ export default defineConfig({
     // در توسعه‌ی وب، API را same-origin پروکسی می‌کنیم تا CORS اصلاً درگیر نشود.
     // بیلد موبایل این را ندارد و با VITE_API_URL به آدرس کامل سرور می‌زند.
     proxy: {
-      '/v1': {
-        target: process.env.VITE_API_TARGET ?? 'http://localhost:3000',
+      "/v1": {
+        target: process.env.VITE_API_TARGET ?? "http://localhost:3000",
         changeOrigin: true,
       },
     },
@@ -112,8 +116,8 @@ export default defineConfig({
   preview: {
     port: 4173,
     proxy: {
-      '/v1': {
-        target: process.env.VITE_API_TARGET ?? 'http://localhost:3000',
+      "/v1": {
+        target: process.env.VITE_API_TARGET ?? "http://localhost:3000",
         changeOrigin: true,
       },
     },

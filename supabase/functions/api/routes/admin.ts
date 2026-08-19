@@ -19,6 +19,7 @@ import {
   adminListUsers,
   adminOverview,
   adminSetBlocked,
+  adminSetDevicePolicy,
   adminSetPassword,
   adminUpdateDiscount,
   adminUserDetail,
@@ -42,6 +43,13 @@ const grantBody = z.object({
 });
 
 const blockBody = z.object({ blocked: z.boolean() });
+const devicePolicyBody = z
+  .object({
+    maxActiveDevices: z.number().int().min(1).max(10).optional(),
+    resetSwitchCount: z.boolean().optional(),
+    unlock: z.boolean().optional(),
+  })
+  .refine((body) => Object.values(body).some((value) => value !== undefined), "empty patch");
 
 const setPasswordBody = z.object({
   phone: z.string().min(1).max(32),
@@ -124,6 +132,13 @@ export function adminRoutes(deps: Deps) {
     return c.json(res);
   });
 
+  r.post("/admin/users/:id/device-policy", async (c) => {
+    const body = devicePolicyBody.parse(await readJson(c));
+    const result = await adminSetDevicePolicy(db, c.req.param("id"), body, now());
+    console.info("admin device policy update", { userId: c.req.param("id"), ...body });
+    return c.json(result);
+  });
+
   r.post("/admin/users/:id/grant", async (c) => {
     const body = grantBody.parse(await readJson(c));
     const res = await adminGrant(db, c.req.param("id"), body, now());
@@ -139,7 +154,7 @@ export function adminRoutes(deps: Deps) {
   r.post("/admin/users/set-password", async (c) => {
     const body = setPasswordBody.parse(await readJson(c));
     const res = await adminSetPassword(db, body, now());
-    console.info("admin set password", { phone: res.phone, created: res.created });
+    console.info("admin set password", { created: res.created });
     return c.json(res);
   });
 

@@ -16,6 +16,7 @@
 
 مسیر فیزیکی اتصال:
 - **وب (توسعه):** فرانت آدرس `/v1/...` رو صدا می‌زنه ← وایت (`vite.config.ts` بخش `proxy`) می‌فرستدش به `http://localhost:3000`
+- **وب (production):** همان `/v1/...` ← Pages Function در `functions/v1/[[path]].js` ← `https://api.routino.me/v1/...`. این مسیر same-origin است و به CORS وابسته نیست.
 - **موبایل:** WebView آدرس کامل می‌خواد ← متغیر `VITE_API_URL` موقع `build:mobile` + موتور HTTP نیتیو Capacitor (بدون CORS)
 - **مرورگر → سرور مستقیم:** فقط صفحه‌ی callback پرداخت و پنل `/admin`
 
@@ -31,7 +32,8 @@
 | ۲ب | `routes/auth.tsx` — دکمه «ورود» (پیش‌فرض) | `auth.ts` ← `passwordLogin` | `POST /v1/auth/password/login` | `backend/src/routes/auth.ts` |
 | ۲ج | `routes/settings.tsx` — کارت «نام کاربری و رمز عبور» | `auth.ts` ← `fetchAccount`/`setUsername`/`setPassword` | `GET /v1/auth/account` · `POST /v1/auth/username` · `POST /v1/auth/password` | `backend/src/routes/auth.ts` |
 | ۴ | `routes/settings.tsx` — دکمه «خروج» | `auth.ts` ← `logout` | `POST /v1/auth/logout` | `backend/src/routes/auth.ts` |
-| ۵ | `state/app.tsx` — یک بار در هر اجرا | `auth.ts` ← `fetchEntitlement` | `GET /v1/subscriptions/me` | `backend/src/routes/subscriptions.ts` |
+| ۵ | `state/app.tsx` — هر ۶ ساعت؛ در سه روز پایانی هر ۱ ساعت | `auth.ts` ← `fetchEntitlement` | `GET /v1/subscriptions/me` | `backend/src/routes/subscriptions.ts`؛ پرداخت callback‌گم‌شده را هم ترمیم می‌کند |
+| ۵الف | `state/app.tsx` — boot/online/foreground و هر دقیقهٔ visible | `devices.ts` ← `pingDevice` | `GET /v1/devices/ping` | فقط اعتبار کاربر/دستگاه؛ پاسخ کوچک `{ok:true}` |
 | ۵ب | (فقط پنل ادمین/دیباگ) | — | `GET /v1/subscriptions/grants` | `backend/src/routes/subscriptions.ts` — دفترکل تمدیدهای یک کاربر |
 | ۶ | `routes/auth.tsx` — بعد از ورود، اگه اشتراک قدیمی محلی باشه | `auth.ts` ← `importSubscription` | `POST /v1/subscriptions/import` | `backend/src/routes/subscriptions.ts` |
 | ۷ | `routes/subscribe.tsx` — موقع باز شدن صفحه | `payments.ts` ← `fetchPlans` | `GET /v1/plans` | `backend/src/routes/plans.ts` |
@@ -124,32 +126,23 @@ subscribe.tsx (فرانت)
 ### 🔐 قرارداد ۷: عمر توکن‌ها
 | طرف | کجا | مقدار |
 |---|---|---|
-| بک (مرجع) | env ← `ACCESS_TTL_SECONDS` | ۹۰۰ ثانیه (۱۵ دقیقه) |
-| فرانت (فرض) | `src/lib/api/auth.ts` ← `ASSUMED_ACCESS_TTL_MS` | ۱۵ دقیقه (۱ دقیقه زودتر تمدید می‌کنه) |
+| بک (مرجع) | env ← `ACCESS_TTL_SECONDS` | ۳۶۰۰ ثانیه (۱ ساعت) |
+| فرانت | `src/lib/api/auth.ts` | زمان واقعی `exp` را از JWT می‌خواند و ۱ دقیقه زودتر تمدید می‌کند |
 
-فرانت عمر واقعی رو از سرور نمی‌گیره — «فرض» می‌کنه. اگه `ACCESS_TTL_SECONDS` رو **کمتر** از ۱۵ دقیقه کنی، فرانت دیر تمدید می‌کنه (یه ۴۰۱ اضافه می‌خوره که خودش جبران می‌کنه، ولی کنده). بهتره این دو رو با هم عوض کنی.
+اگر توکن قدیمی/خراب `exp` نداشته باشد، فرانت فقط به‌عنوان fallback یک ساعت فرض می‌کند. هر درخواست خصوصی همچنان وضعیت کاربر و دستگاه را از سرور می‌سنجد؛ در نتیجه revoke منتظر انقضای JWT نمی‌ماند.
 
-### 🔄 قرارداد ۸: سینک — ✅ فعاله
+### 🔒 قرارداد ۸: دیتای شخصی فقط لوکال — ✅ سیاست لانچ
 
-| طرف | کجا | چی |
-|---|---|---|
-| فرانت | `src/lib/db/dexie.ts` ← `SYNCED_TABLES` + پرچم `dirty` روی هر رکورد | صف چیزهایی که باید به سرور بره |
-| فرانت | `src/lib/sync/engine.ts` + `merge.ts` | موتور سینک و حل تضاد |
-| بک | `POST /v1/sync/push` و `GET /v1/sync/pull?cursor=N` | نقطهٔ تماس |
-| بک | `backend/src/services/sync.ts` | منطق واقعی (مشترک با ادج) |
-| بک | `backend/src/db/schema.ts` ← جدول `records` + `SYNC_KINDS` + شمارندهٔ `users.seq` | جای فرود همون رکوردها |
-
-**سه تا لیست باید هم‌نام بمونن:** `SYNCED_TABLES` (فرانت)، `SYNCABLE_TABLES` در `src/lib/sync/merge.ts`، و `SYNC_KINDS` (بک).
-
-⚠️ **`feedback` عمداً فقط در `SYNCED_TABLES` هست** (نظرسنجی فقط ارسال می‌شه، هیچ‌وقت برنمی‌گرده). برای همین در `SYNCABLE_TABLES` **نیست** — اگه اضافه‌اش کنی، سرور اون رکوردها رو با `bad_kind` رد می‌کنه و **کل push شکست می‌خوره**، یعنی سینک برای همه‌چیز از کار می‌افته.
-
-اگه جدول سینک‌شوندهٔ جدیدی اضافه کردی: هر سه لیست + قید `records_kind_valid` در schema.
-
-**تنظیمات:** فقط `SYNCED_SETTING_KEYS` (زبان، تقویم، رنگ برند، onboarded، ساعت ژورنال) سینک می‌شن. `theme` و `notificationsEnabled` مخصوص دستگاهن و در `acceptsRemote` (فایل `merge.ts`) **رد می‌شن** — نه صرفاً ارسال نمی‌شن. دلیل دومی مهمه: کشیدنِ `notificationsEnabled: true` از لپ‌تاپ، روی گوشی یه پنجرهٔ اجازهٔ ناخواسته باز می‌کنه که لپ‌تاپ اصلاً نمی‌تونه از طرفش بده.
+- عادت، لاگ، کار، ژورنال، تایمر، آنالیز، دسته و تنظیمات شخصی فقط در IndexedDB همان مرورگر/WebView می‌مانند.
+- `state/app.tsx` دیگر موتور sync را اجرا نمی‌کند. مسیرهای قدیمی `POST /v1/sync/push` و `GET /v1/sync/pull` در محیط واقعی همیشه `410 sync_disabled` می‌دهند. روشن‌کردن `LEGACY_PERSONAL_SYNC_ENABLED` در production باعث می‌شود سرور اصلاً بالا نیاید.
+- جدول `records` فقط برای مهاجرت/پاک‌سازی نصب‌های قدیمی در schema مانده و نباید رکورد تازه بگیرد.
+- هر حساب روی این مرورگر یک vault جدا دارد (`src/lib/db/vault.ts`)؛ A→B→A هیچ دیتایی را حذف یا قاطی نمی‌کند.
+- Export همیشه فعال است. Import در `src/lib/import-policy.ts` فقط برای اشتراک پولی فعال است و هم قبل از file picker و هم قبل از commit دوباره چک می‌شود.
+- سرور فقط داده‌های حساب/ورود، دستگاه و رویداد امنیتی، اشتراک و پرداخت را نگه می‌دارد؛ محتوای شخصی اپ را نه.
 
 ### 🎁 قرارداد ۹: دوره آزمایشی و گِیت اشتراک
 - تریال ۷ روزه رو **فقط سرور** می‌ده (`TRIAL_DAYS` در `backend/src/routes/auth.ts`، موقع اولین ورود) — کلاینت دیگه حق نداره خودش تریال بسازه.
-- ولی گِیت اپ (`subscriptionActive` در `src/lib/logic.ts`) از **کپی محلی** (`db.subscription`) می‌خونه، نه مستقیم از سرور — که آفلاین هم کار کنه. سرور فقط اول هر اجرا این کپی رو تازه می‌کنه.
+- ولی گِیت اپ (`subscriptionActive` در `src/lib/logic.ts`) از **کپی محلی** (`db.subscription`) می‌خونه، نه مستقیم از سرور — که آفلاین هم کار کنه. refresh کامل سرور در حالت عادی هر ۶ ساعت و در سه روز پایانی اشتراک هر ۱ ساعت انجام می‌شود؛ ping امنیت دستگاه جدا و سبک است.
 - نتیجه: دکمه‌ی تستی فرانت (`TEST_GRANT_BUTTON`) فقط همین کپی محلی رو پر می‌کنه — سرور خبردار نمی‌شه و خرید واقعی باهاش تست نمی‌شه. (`TEST_LOGIN_BUTTON` دیگه وجود نداره.)
 
 ---
@@ -172,7 +165,7 @@ subscribe.tsx (فرانت)
 ### 📅 سناریو «یه روز عادی بدون اینترنت»
 1. اپ باز می‌شه → `hydrate` از IndexedDB (سرور لازم نیست)
 2. `state/app.tsx` می‌خواد entitlement تازه کنه → آفلاین → بی‌صدا رد می‌شه → کپی محلی معتبر می‌مونه
-3. کاربر عادت تیک می‌زنه/ژورنال می‌نویسه → همه‌چی محلی ذخیره می‌شه (`dirty=1` برای سینک آینده)
+3. کاربر عادت تیک می‌زنه/ژورنال می‌نویسه → همه‌چی فقط در vault محلی همان حساب ذخیره می‌شه
 4. هیچ فرقی با آنلاین حس نمی‌شه — این خاصیت ساختاریه، نه شانسی
 
 ---
@@ -184,9 +177,9 @@ subscribe.tsx (فرانت)
 | `src/lib/phone.ts` | `backend/src/lib/phone.ts` + تست parity |
 | قیمت/پلن در دیتابیس سرور | `PLANS` در `src/lib/presets.ts` |
 | کد خطای جدید در بک | `explain()` در `auth.tsx` / `explainReason()` در `subscribe.tsx` |
-| `ACCESS_TTL_SECONDS` (بک) | `ASSUMED_ACCESS_TTL_MS` در `src/lib/api/auth.ts` |
+| `ACCESS_TTL_SECONDS` (بک) | تست `src/lib/api/auth-expiry.test.ts` برای parse کردن `exp` و fallback |
 | دیپ‌لینک `routino://` | `APP_DEEP_LINK` (env بک) + `src/client.tsx` + `AndroidManifest.xml` |
-| آدرس سرور | `VITE_API_URL` (بیلد موبایل) + `CORS_ORIGINS` + `PUBLIC_API_URL` + `PUBLIC_WEB_URL` |
+| آدرس سرور | `VITE_API_URL` (بیلد موبایل) + `functions/v1/[[path]].js` (وب) + `CORS_ORIGINS` + `PUBLIC_API_URL` + `PUBLIC_WEB_URL` |
 | `androidScheme` در capacitor.config.ts | `CORS_ORIGINS` بک |
 | جدول سینک‌شونده جدید | `SYNCED_TABLES` (فرانت) + `SYNC_KINDS` و قید `records_kind_valid` (بک) |
 | شکل جواب entitlement | `entitlementToSubscription` در `src/lib/api/auth.ts` |

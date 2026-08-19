@@ -43,7 +43,9 @@ const schema = z.object({
   ADMIN_TOKEN: z.string().min(12).default("dev-only-admin-token"),
 
   JWT_SECRET: z.string().min(32).default("dev-only-secret-change-me-in-production-32+"),
-  ACCESS_TTL_SECONDS: z.coerce.number().default(900), // 15 min; a blocked user keeps access until this expires
+  // Every protected request rechecks the user and device rows, so revocation is
+  // immediate even with a longer JWT. One hour avoids needless refresh calls.
+  ACCESS_TTL_SECONDS: z.coerce.number().default(3600),
   REFRESH_TTL_DAYS: z.coerce.number().default(180),
 
   /** Mixed into the OTP hash so a DB leak alone can't reverse 6-digit codes. */
@@ -108,6 +110,13 @@ const schema = z.object({
   /** Bound the damage from the inherently-untrusted subscription import. */
   IMPORT_MAX_DAYS: z.coerce.number().default(400),
 
+  /** Temporary test/dev escape hatch for exercising the retired sync engine.
+   * Production is forbidden from enabling it: personal records are local-only. */
+  LEGACY_PERSONAL_SYNC_ENABLED: z
+    .string()
+    .default("false")
+    .transform((v) => v === "true" || v === "1"),
+
   /**
    * Optional owner bootstrap. When OWNER_PHONE and OWNER_PASSWORD are both set,
    * the server ensures that account exists with that password on boot (see
@@ -160,6 +169,8 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     throw new Error(`Invalid environment:\n${issues}`);
   }
   if (parsed.data.NODE_ENV === "production") {
+    if (parsed.data.LEGACY_PERSONAL_SYNC_ENABLED)
+      throw new Error("LEGACY_PERSONAL_SYNC_ENABLED is forbidden in production");
     if (parsed.data.JWT_SECRET.startsWith("dev-only"))
       throw new Error("JWT_SECRET must be set in production");
     if (parsed.data.OTP_PEPPER.startsWith("dev-only"))
@@ -185,7 +196,11 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     // are taking real money" and "we are giving subscriptions away" is this
     // check. ZarinPal has had the equivalent guard since day one; Zibal did not,
     // which made forgetting one environment variable a silent revenue hole.
-    if (psps.includes("zibal") && parsed.data.ZIBAL_MERCHANT === "zibal" && !parsed.data.ALLOW_TEST_PROVIDERS) {
+    if (
+      psps.includes("zibal") &&
+      parsed.data.ZIBAL_MERCHANT === "zibal" &&
+      !parsed.data.ALLOW_TEST_PROVIDERS
+    ) {
       throw new Error(
         "ZIBAL_MERCHANT is still the sandbox merchant 'zibal' — no real money would be collected. " +
           "Set the real merchant id, or set ALLOW_TEST_PROVIDERS=true to stay in sandbox on purpose.",
@@ -208,7 +223,9 @@ export function testProviderWarnings(env: Env): string[] {
   const out: string[] = [];
   if (pspProviderNames(env).includes("fake")) out.push("PAYMENTS: fake gateway — no real money.");
   if (pspProviderNames(env).includes("zibal") && env.ZIBAL_MERCHANT === "zibal")
-    out.push("PAYMENTS: Zibal SANDBOX merchant — subscriptions are granted, no real money is collected.");
+    out.push(
+      "PAYMENTS: Zibal SANDBOX merchant — subscriptions are granted, no real money is collected.",
+    );
   if (env.SMS_PROVIDER === "console")
     out.push("SMS: console mode — login codes are printed to this log, not sent to anyone.");
   return out;

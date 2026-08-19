@@ -38,32 +38,54 @@ import {
   verifyPassword,
 } from "../shared/services/password.ts";
 import {
-  enforceDeviceLimit,
   issueForDevice,
   revokeOtherDevices,
   revokeRefresh,
   rotateRefresh,
 } from "../shared/services/tokens.ts";
+import type { DeviceDescriptor } from "../shared/services/tokens.ts";
 
 const TRIAL_DAYS = 7;
+const deviceDescriptorBody = z.object({
+  installationKey: z.string().min(8).max(256),
+  name: z.string().min(1).max(64),
+  platform: z.enum(["web", "pwa", "android", "ios"]),
+  browser: z.string().max(32).optional(),
+  os: z.string().max(32).optional(),
+});
 
 const requestBody = z.object({ phone: z.string().min(1).max(32) });
 const verifyBody = z.object({
   phone: z.string().min(1).max(32),
   code: z.string().min(4).max(8),
   deviceName: z.string().max(64).optional(),
+  device: deviceDescriptorBody.optional(),
 });
 const refreshBody = z.object({ refresh: z.string().min(16).max(256) });
 const passwordLoginBody = z.object({
   identifier: z.string().min(1).max(64),
   password: z.string().min(1).max(128),
   deviceName: z.string().max(64).optional(),
+  device: deviceDescriptorBody.optional(),
 });
 const setUsernameBody = z.object({ username: z.string().min(1).max(64) });
 const setPasswordBody = z.object({
   newPassword: z.string().min(1).max(128),
   currentPassword: z.string().max(128).optional(),
 });
+
+function deviceDescriptor(
+  device: DeviceDescriptor | undefined,
+  legacyName: string | undefined,
+): DeviceDescriptor {
+  if (device) return device;
+  const name = legacyName?.trim() || "Web browser";
+  return {
+    installationKey: `legacy:${name}`,
+    name,
+    platform: "web",
+  };
+}
 
 export function authRoutes(deps: Deps) {
   const { db, env, sms } = deps;
@@ -121,7 +143,7 @@ export function authRoutes(deps: Deps) {
    * The 7-day trial is granted HERE, server-side.
    */
   r.post("/auth/otp/verify", async (c) => {
-    const { phone: raw, code, deviceName } = verifyBody.parse(await readJson(c));
+    const { phone: raw, code, deviceName, device } = verifyBody.parse(await readJson(c));
     const phone = normalizePhone(raw);
     if (!phone) throw badRequest("invalid_phone", "Enter a valid Iranian mobile number");
 
@@ -146,8 +168,7 @@ export function authRoutes(deps: Deps) {
       await grantInterval(db, user.id, { planId: "trial", days: TRIAL_DAYS, source: "trial" }, t);
     }
 
-    const tokens = await issueForDevice(db, env, user.id, deviceName ?? null, t);
-    await enforceDeviceLimit(db, user.id, tokens.deviceId, t);
+    const tokens = await issueForDevice(db, env, user.id, deviceDescriptor(device, deviceName), t);
     const entitlement = await readEntitlement(db, user.id, t);
 
     return c.json({
@@ -168,7 +189,9 @@ export function authRoutes(deps: Deps) {
    * missing account still pays a hash-verify cost, so it cannot enumerate users.
    */
   r.post("/auth/password/login", async (c) => {
-    const { identifier, password, deviceName } = passwordLoginBody.parse(await readJson(c));
+    const { identifier, password, deviceName, device } = passwordLoginBody.parse(
+      await readJson(c),
+    );
     const t = now();
     const ip = clientIp(c, env);
 
@@ -198,8 +221,7 @@ export function authRoutes(deps: Deps) {
     if (user.blocked) throw unauthorized("blocked", "Account is blocked");
 
     await clearLoginFailures(db, key);
-    const tokens = await issueForDevice(db, env, user.id, deviceName ?? null, t);
-    await enforceDeviceLimit(db, user.id, tokens.deviceId, t);
+    const tokens = await issueForDevice(db, env, user.id, deviceDescriptor(device, deviceName), t);
     const entitlement = await readEntitlement(db, user.id, t);
 
     return c.json({

@@ -5,8 +5,14 @@
  * access keeps the reminder scheduler simple. The bulk data lives in IndexedDB.
  */
 import type { AppNotification, Auth, Db, Settings, Subscription, ThemeMode } from "../store";
+import { getActiveVaultId, LEGACY_VAULT_ID } from "./vault";
 
 const LOCAL_KEY = "routino:local:v1";
+
+function localKey(): string {
+  const vaultId = getActiveVaultId();
+  return vaultId === LEGACY_VAULT_ID ? LOCAL_KEY : `routino:local:v2:${vaultId}`;
+}
 
 /** Settings fields that belong to the account and follow the user across devices.
  * `onboarded` is here on purpose — it's what lets a second device skip onboarding. */
@@ -62,7 +68,7 @@ export function defaultLocal(): LocalState {
 
 export function loadLocal(): LocalState {
   try {
-    const raw = localStorage.getItem(LOCAL_KEY);
+    const raw = localStorage.getItem(localKey());
     if (!raw) return defaultLocal();
     const parsed = JSON.parse(raw) as Partial<LocalState>;
     const fresh = defaultLocal();
@@ -74,7 +80,7 @@ export function loadLocal(): LocalState {
 
 export function saveLocal(state: LocalState): void {
   try {
-    localStorage.setItem(LOCAL_KEY, JSON.stringify(state));
+    localStorage.setItem(localKey(), JSON.stringify(state));
   } catch {
     // Storage full/unavailable — best effort, same as before.
   }

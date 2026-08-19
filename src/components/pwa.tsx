@@ -24,11 +24,12 @@ const DISMISS_KEY = "routino:install-dismissed";
  */
 export function UpdateWatcher() {
   const ctx = useAppMaybe();
-  const t = ctx?.t ?? ((fa: string) => fa);
 
   useEffect(() => {
+    const t = ctx?.t ?? ((fa: string) => fa);
     onNewVersion(() => {
       toast(t("نسخه‌ی جدید روتینو آماده‌ست", "A new version of Routino is ready"), {
+        id: "routino-update-ready",
         duration: Infinity,
         action: {
           label: t("بروزرسانی", "Update"),
@@ -36,7 +37,7 @@ export function UpdateWatcher() {
         },
       });
     });
-  }, [t]);
+  }, [ctx?.t]);
 
   return null;
 }
@@ -96,20 +97,33 @@ export function InstallBanner() {
           <Download className="h-4 w-4" />
         </div>
         <div className="flex-1">
-          <p className="text-xs font-bold text-foreground">{t("روتینو رو نصب کن", "Install Routino")}</p>
+          <p className="text-xs font-bold text-foreground">
+            {t("روتینو رو نصب کن", "Install Routino")}
+          </p>
           <p className="text-[10px] text-muted-foreground">
-            {t("سریع‌تر باز می‌شه و بدون اینترنت هم کار می‌کنه", "Opens faster and works without internet")}
+            {t(
+              "سریع‌تر باز می‌شه و بدون اینترنت هم کار می‌کنه",
+              "Opens faster and works without internet",
+            )}
           </p>
         </div>
         <Button className="px-3 py-1.5 text-xs" onClick={() => void install()}>
           {t("نصب", "Install")}
         </Button>
-        <button onClick={dismiss} aria-label="dismiss" className="text-muted-foreground hover:text-foreground">
+        <button
+          onClick={dismiss}
+          aria-label="dismiss"
+          className="text-muted-foreground hover:text-foreground"
+        >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      <Modal open={iosHelp} onClose={() => setIosHelp(false)} title={t("نصب روی آیفون", "Install on iPhone")}>
+      <Modal
+        open={iosHelp}
+        onClose={() => setIosHelp(false)}
+        title={t("نصب روی آیفون", "Install on iPhone")}
+      >
         <div className="flex flex-col gap-3 text-sm text-foreground">
           <p className="text-xs text-muted-foreground">
             {t(
@@ -120,7 +134,10 @@ export function InstallBanner() {
           <div className="flex items-center gap-3 rounded-xl bg-muted p-3">
             <Share className="h-5 w-5 shrink-0 text-primary" />
             <p className="text-xs">
-              {t("۱. دکمه‌ی «هم‌رسانی» پایین سافاری رو بزن", "1. Tap the Share button at the bottom of Safari")}
+              {t(
+                "۱. دکمه‌ی «هم‌رسانی» پایین سافاری رو بزن",
+                "1. Tap the Share button at the bottom of Safari",
+              )}
             </p>
           </div>
           <div className="flex items-center gap-3 rounded-xl bg-muted p-3">

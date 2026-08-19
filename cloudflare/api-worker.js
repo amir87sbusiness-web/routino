@@ -14,9 +14,10 @@
  *    `x-routino-html`; here — on OUR domain — we restore `text/html` and drop
  *    the sandbox CSP.
  *
- * Deploy: from git. Cloudflare Workers Builds watches `main` and redeploys this
- * file on every push, using `cloudflare/wrangler.toml` — so DO NOT edit this
- * Worker in the dashboard, or the next push will silently overwrite the edit.
+ * Deploy from the repository with
+ * `npx wrangler deploy --config cloudflare/wrangler.toml`. The config targets
+ * the existing `routino-api` service that owns api.routino.me; a different name
+ * creates a second Worker and leaves production unchanged.
  *
  * One-time dashboard setup (already done, listed for when it has to be redone):
  *  1. Worker → Settings → Build → connect the repo, Root directory = `cloudflare`
@@ -42,6 +43,17 @@ const ORIGIN = "https://axychfrteevhfdhgvfuv.supabase.co/functions/v1/api";
 const CACHEABLE = new Set(["/v1/plans"]);
 /** A price edited in the admin panel goes live at most this late. */
 const CACHE_SECONDS = 300;
+const ALLOWED_ORIGINS = new Set([
+  "https://routino.me",
+  "https://www.routino.me",
+  "capacitor://localhost",
+  "https://localhost",
+  "http://localhost:5173",
+  "http://localhost:5180",
+]);
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+/** One promise per public cache key, scoped to this Worker isolate. */
+const IN_FLIGHT = new Map();
 
 /**
  * Cache key for a cacheable path.
@@ -61,90 +73,150 @@ const cacheKey = (url, request) =>
     { method: "GET" },
   );
 
+const requestIdFor = (request) => {
+  const inbound = request.headers.get("x-request-id") ?? "";
+  return UUID_V4.test(inbound) ? inbound : crypto.randomUUID();
+};
+
+const stamped = (response, requestId, cacheState, requestOrigin = "") => {
+  const headers = new Headers(response.headers);
+  headers.set("x-request-id", requestId);
+  headers.set("x-routino-cache", cacheState);
+  headers.set("access-control-expose-headers", "x-request-id, retry-after, x-routino-cache");
+  if (ALLOWED_ORIGINS.has(requestOrigin)) {
+    headers.set("access-control-allow-origin", requestOrigin);
+    headers.set("access-control-allow-credentials", "true");
+    headers.append("vary", "Origin");
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+};
+
+async function fetchOrigin(request, env, ctx, url, key, requestId) {
+  const target = ORIGIN + url.pathname + url.search;
+  const headers = new Headers(request.headers);
+  headers.set("x-proxy-secret", env.PROXY_SECRET ?? "");
+  headers.set("x-client-ip", request.headers.get("cf-connecting-ip") ?? "");
+  headers.set("x-request-id", requestId);
+
+  const resp = await fetch(target, {
+    method: request.method,
+    headers,
+    body: request.body,
+    redirect: "manual",
+  });
+
+  // Repair HTML pages the Supabase gateway downgraded to text/plain + sandbox.
+  if (resp.headers.get("x-routino-html") === "1") {
+    const h = new Headers(resp.headers);
+    h.set("content-type", "text/html; charset=utf-8");
+    h.delete("content-security-policy");
+    h.set("x-content-type-options", "nosniff");
+    if (url.pathname.startsWith("/admin")) {
+      h.set(
+        "content-security-policy",
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
+          "img-src 'self' data:; connect-src 'self'; form-action 'self'; " +
+          "frame-ancestors 'none'; base-uri 'none'; object-src 'none'",
+      );
+    }
+    h.delete("x-routino-html");
+    return new Response(resp.body, {
+      status: resp.status,
+      statusText: resp.statusText,
+      headers: h,
+    });
+  }
+
+  // Only a 200 is worth keeping: never pin a temporary upstream failure.
+  if (key && resp.status === 200) {
+    const body = await resp.text();
+    const h = new Headers(resp.headers);
+    h.delete("content-encoding");
+    h.delete("content-length");
+    h.delete("set-cookie");
+    // Request IDs belong to callers, not shared cache entries.
+    h.delete("x-request-id");
+    h.set("cache-control", `public, max-age=${CACHE_SECONDS}`);
+    const cached = new Response(body, { status: 200, headers: h });
+    ctx.waitUntil(caches.default.put(key, cached.clone()).catch(() => {}));
+    return cached;
+  }
+
+  return resp;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const target = ORIGIN + url.pathname + url.search;
+    const requestId = requestIdFor(request);
+    const requestOrigin = request.headers.get("origin") ?? "";
+
+    // A liveness answer does not need a function invocation or a database read.
+    // `/health/ready` deliberately continues upstream for a real readiness check.
+    if (request.method === "GET" && url.pathname === "/health") {
+      return stamped(
+        new Response(JSON.stringify({ ok: true, edge: "cloudflare" }), {
+          status: 200,
+          headers: {
+            "content-type": "application/json; charset=utf-8",
+            "cache-control": "no-store",
+          },
+        }),
+        requestId,
+        "LOCAL",
+        requestOrigin,
+      );
+    }
+
+    // Preflights are protocol work: keep them at Cloudflare and never spend a
+    // Supabase invocation just to repeat the same allow-list response.
+    if (request.method === "OPTIONS") {
+      if (!ALLOWED_ORIGINS.has(requestOrigin)) {
+        return stamped(new Response(null, { status: 403 }), requestId, "LOCAL", requestOrigin);
+      }
+      return stamped(
+        new Response(null, {
+          status: 204,
+          headers: {
+            "access-control-allow-origin": requestOrigin,
+            "access-control-allow-credentials": "true",
+            "access-control-allow-methods": "GET, POST, OPTIONS",
+            "access-control-allow-headers": "authorization, content-type, x-admin-token",
+            "access-control-max-age": "86400",
+            vary: "Origin",
+          },
+        }),
+        requestId,
+        "LOCAL",
+        requestOrigin,
+      );
+    }
 
     const cacheable = request.method === "GET" && CACHEABLE.has(url.pathname);
     const key = cacheable ? cacheKey(url, request) : null;
     if (key) {
       const hit = await caches.default.match(key);
-      if (hit) return hit;
+      if (hit) return stamped(hit, requestId, "HIT", requestOrigin);
     }
 
-    const headers = new Headers(request.headers);
-    headers.set("x-proxy-secret", env.PROXY_SECRET ?? "");
-    headers.set("x-client-ip", request.headers.get("cf-connecting-ip") ?? "");
-
-    const resp = await fetch(target, {
-      method: request.method,
-      headers,
-      body: request.body,
-      redirect: "manual",
-    });
-
-    // Repair HTML pages the Supabase gateway downgraded to text/plain + sandbox.
-    if (resp.headers.get("x-routino-html") === "1") {
-      const h = new Headers(resp.headers);
-      h.set("content-type", "text/html; charset=utf-8");
-      h.delete("content-security-policy");
-      // Only had to go because it pinned the browser to the wrong text/plain
-      // type; now that content-type is corrected above, it is safe and wanted.
-      h.set("x-content-type-options", "nosniff");
-      // The blanket delete above is what strips the gateway's sandbox CSP. For
-      // /admin we then put OUR own back: that page holds the admin token, so it
-      // is the one page here worth a CSP at all. 'unsafe-inline' is unavoidable
-      // (the panel's script is inline), but blocking every external origin
-      // still leaves an injected <script src> or an exfiltration beacon nowhere
-      // to go. Deliberately NOT applied to the payment result page: it
-      // navigates to the routino:// deep link to return to the Android app, and
-      // that flow is not worth risking for a defence-in-depth header.
-      if (new URL(request.url).pathname.startsWith("/admin")) {
-        h.set(
-          "content-security-policy",
-          "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
-            "img-src 'self' data:; connect-src 'self'; form-action 'self'; " +
-            "frame-ancestors 'none'; base-uri 'none'; object-src 'none'",
-        );
-      }
-      h.delete("x-routino-html");
-      return new Response(resp.body, {
-        status: resp.status,
-        statusText: resp.statusText,
-        headers: h,
-      });
+    if (key) {
+      const inFlightKey = key.url;
+      const existing = IN_FLIGHT.get(inFlightKey);
+      const pending =
+        existing ??
+        fetchOrigin(request, env, ctx, url, key, requestId).finally(() => {
+          IN_FLIGHT.delete(inFlightKey);
+        });
+      if (!existing) IN_FLIGHT.set(inFlightKey, pending);
+      const response = await pending;
+      return stamped(response.clone(), requestId, existing ? "COALESCED" : "MISS", requestOrigin);
     }
 
-    // Only a 200 is worth keeping: caching a 500 from a momentarily unhealthy
-    // function would pin the paywall to "no plans" for the next five minutes.
-    if (key && resp.status === 200) {
-      // Read the body out rather than forwarding the stream. Supabase answers
-      // with whatever encoding THIS caller asked for, and the runtime decodes on
-      // read — so storing the stream plus its `content-encoding` header would
-      // hand a later caller a body whose declared encoding is a lie. The payload
-      // is a few hundred bytes; Cloudflare re-compresses on the way out anyway.
-      const body = await resp.text();
-      const h = new Headers(resp.headers);
-      h.delete("content-encoding");
-      h.delete("content-length");
-      // Cloudflare refuses to cache a response carrying Set-Cookie, and
-      // Supabase's own edge stamps `__cf_bm` (bot management) on every answer —
-      // so without this the write is rejected and the cache silently never
-      // populates. Dropping it costs nothing: the cookie is scoped to
-      // `Domain=supabase.co`, which the browser (talking to api.routino.me)
-      // discards on arrival regardless.
-      h.delete("set-cookie");
-      h.set("cache-control", `public, max-age=${CACHE_SECONDS}`);
-      const cached = new Response(body, { status: 200, headers: h });
-      // put() consumes the body, so the caller gets a clone. waitUntil keeps the
-      // write off the response path — the first visitor should not pay for it.
-      // A refused write (the Cache API rejects some responses outright) must
-      // stay invisible: the answer is already correct, it just isn't stored.
-      ctx.waitUntil(caches.default.put(key, cached.clone()).catch(() => {}));
-      return cached;
-    }
-
-    return resp;
+    const response = await fetchOrigin(request, env, ctx, url, null, requestId);
+    return stamped(response, requestId, "BYPASS", requestOrigin);
   },
 };

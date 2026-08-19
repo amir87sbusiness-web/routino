@@ -11,6 +11,8 @@
  * Supabase origin.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 // @ts-expect-error — plain JS with no types; the shape is asserted below.
 import workerModule from "../../cloudflare/api-worker.js";
 
@@ -22,6 +24,14 @@ type Worker = { fetch(req: Request, env: any, ctx: any): Promise<Response> };
 const worker = workerModule as Worker;
 
 const SUPABASE = "https://axychfrteevhfdhgvfuv.supabase.co/functions/v1/api";
+
+describe("deployment contract", () => {
+  it("deploys the Worker that owns api.routino.me", () => {
+    const configPath = fileURLToPath(new URL("../../cloudflare/wrangler.toml", import.meta.url));
+    const config = readFileSync(configPath, "utf8");
+    expect(config).toMatch(/^name\s*=\s*"routino-api"\s*$/m);
+  });
+});
 
 /** Minimal stand-in for Cloudflare's `caches.default`, matching on URL+method. */
 function stubCache() {
@@ -86,6 +96,60 @@ afterEach(() => {
 const settle = () => Promise.all(pending);
 
 describe("proxying", () => {
+  it("answers exact /health locally without invoking Supabase", async () => {
+    const res = await get("/health");
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, edge: "cloudflare" });
+    expect(res.headers.get("x-request-id")).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(origin).not.toHaveBeenCalled();
+  });
+
+  it("preserves a valid request ID and replaces an invalid one", async () => {
+    origin.mockImplementation(() => Promise.resolve(new Response("{}", { status: 200 })));
+    const valid = "123e4567-e89b-42d3-a456-426614174000";
+    const preserved = await get("/v1/plans", { "x-request-id": valid });
+    expect(origin.mock.calls[0][1].headers.get("x-request-id")).toBe(valid);
+    expect(preserved.headers.get("x-request-id")).toBe(valid);
+
+    const generated = await get("/v1/subscriptions/me", { "x-request-id": "phone-or-secret" });
+    expect(origin.mock.calls[1][1].headers.get("x-request-id")).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(generated.headers.get("x-request-id")).not.toBe("phone-or-secret");
+  });
+
+  it("answers allowed preflights locally and rejects disallowed origins", async () => {
+    const allowed = await worker.fetch(
+      new Request("https://api.routino.me/v1/plans", {
+        method: "OPTIONS",
+        headers: {
+          origin: "https://routino.me",
+          "access-control-request-method": "GET",
+          "access-control-request-headers": "authorization,content-type",
+        },
+      }),
+      env,
+      ctx(),
+    );
+    expect(allowed.status).toBe(204);
+    expect(allowed.headers.get("access-control-allow-origin")).toBe("https://routino.me");
+    expect(allowed.headers.get("access-control-max-age")).toBe("86400");
+
+    const denied = await worker.fetch(
+      new Request("https://api.routino.me/v1/plans", {
+        method: "OPTIONS",
+        headers: { origin: "https://evil.example", "access-control-request-method": "GET" },
+      }),
+      env,
+      ctx(),
+    );
+    expect(denied.status).toBe(403);
+    expect(denied.headers.get("access-control-allow-origin")).toBeNull();
+    expect(origin).not.toHaveBeenCalled();
+  });
+
   it("maps the public path onto the function and stamps the proxy headers", async () => {
     origin.mockResolvedValue(new Response("{}", { status: 200 }));
 
@@ -150,6 +214,25 @@ describe("proxying", () => {
 });
 
 describe("edge cache for /v1/plans", () => {
+  it("coalesces concurrent misses into one Supabase request", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    origin.mockImplementation(async () => {
+      await gate;
+      return plansResponse();
+    });
+
+    const first = get("/v1/plans", { origin: "https://routino.me" });
+    const second = get("/v1/plans", { origin: "https://routino.me" });
+    await vi.waitFor(() => expect(origin).toHaveBeenCalled());
+    release();
+    const responses = await Promise.all([first, second]);
+    expect(responses.map((res) => res.status)).toEqual([200, 200]);
+    expect(origin).toHaveBeenCalledTimes(1);
+  });
+
   it("serves the second request without touching Supabase", async () => {
     origin.mockResolvedValue(plansResponse());
 
@@ -230,7 +313,7 @@ describe("edge cache for /v1/plans", () => {
     await settle();
 
     expect(cache.store.size).toBe(0);
-    expect(origin).toHaveBeenCalledTimes(4);
+    expect(origin).toHaveBeenCalledTimes(2);
   });
 
   it("still answers correctly when the cache write is refused", async () => {

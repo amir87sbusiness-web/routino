@@ -30,6 +30,7 @@ export const SHARED_FILES = [
   "lib/http-errors.ts",
   "lib/admin-page.ts",
   "lib/pay-result-page.ts",
+  "lib/request-id.ts",
   "services/otp.ts",
   "services/tokens.ts",
   "services/entitlement.ts",

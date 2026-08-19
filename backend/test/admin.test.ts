@@ -140,6 +140,53 @@ describe("admin endpoints", () => {
     expect(rows[0]!.note).toBe("support gesture");
   });
 
+  it("manages the per-user device limit and security lock", async () => {
+    const { user } = await signIn();
+    await h.raw(`
+      update users set security_locked_at = now(), security_lock_reason = 'device_switch_limit'
+      where id = '${user.id}';
+      insert into device_security_events (user_id, kind) values ('${user.id}', 'replacement');
+    `);
+
+    const changed = await h.app.inject({
+      method: "POST",
+      url: `/v1/admin/users/${user.id}/device-policy`,
+      headers: admin,
+      payload: { maxActiveDevices: 3, resetSwitchCount: true, unlock: true },
+    });
+    expect(changed.statusCode).toBe(200);
+    expect(changed.json()).toMatchObject({
+      ok: true,
+      maxActiveDevices: 3,
+      securityLocked: false,
+      switchCount30d: 0,
+    });
+
+    const rows = await h.query<{
+      max_active_devices: number;
+      security_locked_at: string | null;
+      device_switch_reset_at: string | null;
+    }>(
+      `select max_active_devices, security_locked_at, device_switch_reset_at from users where id = '${user.id}'`,
+    );
+    expect(rows[0]!.max_active_devices).toBe(3);
+    expect(rows[0]!.security_locked_at).toBeNull();
+    expect(rows[0]!.device_switch_reset_at).not.toBeNull();
+  });
+
+  it("rejects device limits outside 1 through 10", async () => {
+    const { user } = await signIn();
+    for (const maxActiveDevices of [0, 11]) {
+      const response = await h.app.inject({
+        method: "POST",
+        url: `/v1/admin/users/${user.id}/device-policy`,
+        headers: admin,
+        payload: { maxActiveDevices },
+      });
+      expect(response.statusCode).toBe(400);
+    }
+  });
+
   it("creates, lists and deactivates discounts", async () => {
     const created = await h.app.inject({
       method: "POST",

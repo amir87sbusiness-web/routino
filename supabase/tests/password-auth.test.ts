@@ -99,6 +99,7 @@ describe("edge: changing a password evicts other sessions", () => {
         body: { newPassword: "Amir@1387" },
       })).status,
     ).toBe(200);
+    await h.raw(`update users set max_active_devices = 2 where id = '${victim.user.id}'`);
 
     // Intruder signs in with the leaked password on their own device.
     const intruder = (await login("09123334444", "Amir@1387")).clone();

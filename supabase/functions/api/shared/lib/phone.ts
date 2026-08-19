@@ -1,15 +1,12 @@
 // AUTO-GENERATED from backend/src — do not edit. Run `node scripts/sync-edge-shared.mjs`.
 /**
- * Iranian mobile number canonicalisation — server copy.
+ * Iranian mobile number canonicalisation.
  *
- * MUST stay behaviourally identical to `src/lib/phone.ts` on the client.
- * `users.phone` is unique, so any divergence FORKS AN ACCOUNT: the same human
- * signs in from two devices, normalises to two different strings, gets two
- * `users` rows, and their synced data splits in half with no error anywhere.
- *
- * `backend/test/phone.parity.test.ts` imports both implementations and compares
- * them over a shared vector list. If you change one, that test fails — change
- * both. (These converge into a shared package once the backend stabilises.)
+ * This is the key behind `users.phone unique` on the server, so the client and
+ * the server MUST agree byte-for-byte — a mismatch silently creates two accounts
+ * for one person and splits their synced data. When the backend lands, this file
+ * moves to a shared package imported by both; until then keep any server copy
+ * identical.
  */
 
 const PERSIAN_ZERO = 0x06f0; // ۰..۹
@@ -41,9 +38,12 @@ export function normalizePhone(input: string): string | null {
   const d = toAsciiDigits(input).replace(/\D/g, "");
 
   let national: string | null = null;
-  if (d.length === 10 && d.startsWith("9")) national = d; // 9123334444
-  else if (d.length === 11 && d.startsWith("09")) national = d.slice(1); // 09123334444
-  else if (d.length === 12 && d.startsWith("989")) national = d.slice(2); // 989123334444 / +98…
+  if (d.length === 10 && d.startsWith("9"))
+    national = d; // 9123334444
+  else if (d.length === 11 && d.startsWith("09"))
+    national = d.slice(1); // 09123334444
+  else if (d.length === 12 && d.startsWith("989"))
+    national = d.slice(2); // 989123334444 / +98…
   else if (d.length === 14 && d.startsWith("00989")) national = d.slice(4); // 00989123334444
 
   return national && /^9\d{9}$/.test(national) ? `98${national}` : null;

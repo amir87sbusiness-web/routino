@@ -26,6 +26,8 @@ android/.gradle/
 android/app/build/
 android/build/
 android/local.properties
+android/keystore.properties
+/output/
 
 # Editor directories and files
 .vscode/*
@@ -43,6 +45,8 @@ android/local.properties
 
 # Isolated Codex feature worktrees
 .worktrees/
+.playwright-cli/
+/tmp/
 
 # Written by `supabase link`: project ref and pooler URL for THIS machine.
 # Local connection state, not project source.
