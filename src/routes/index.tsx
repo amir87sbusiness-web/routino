@@ -97,7 +97,10 @@ function TodayPage() {
         >
           {t("کارها", "Tasks")}
         </SectionTitle>
-        <TodayTodosCard db={db} dateKey={dk} lang={lang} t={t} onUpdate={update} />
+        {/* بسته باز می‌شود: صفحه‌ی امروز مالِ عادت‌هاست و نوار کارها وقتی چند کار
+            داشته باشی کل صفحه را می‌گرفت. سرِ کارت شمارش «انجام‌شده/کل» را نشان
+            می‌دهد، پس بدون باز کردن هم می‌فهمی چیزی مانده یا نه. */}
+        <TodayTodosCard db={db} dateKey={dk} lang={lang} t={t} onUpdate={update} defaultOpen={false} />
       </section>
 
       {/* habits due */}

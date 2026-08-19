@@ -1,5 +1,5 @@
 /** Pure habit/analytics computations. */
-import { addDays, dayOfMonth, keyToDate, monthDays, todayKey, type Calendar } from "./dates";
+import { addDays, dayOfMonth, keyToDate, monthDays, todayKey, weekStartOf, type Calendar } from "./dates";
 import { logKey, type Db, type Habit, type HabitLog, type Subscription } from "./store";
 
 export function isDueOn(habit: Habit, dk: string, cal: Calendar): boolean {
@@ -163,12 +163,84 @@ export function avgOf(series: { percent: number | null }[]): number {
   return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
 }
 
-/** Compare this week vs previous week overall performance. */
-export function weekComparison(db: Db, cal: Calendar) {
-  const all = overallSeries(db, cal, 14);
-  const prev = avgOf(all.slice(0, 7));
-  const cur = avgOf(all.slice(7));
-  return { prev, cur, delta: cur - prev };
+/** Which two windows `weekComparison` ended up comparing, so the UI can label
+ * them honestly instead of always claiming "this week". */
+export type WeekScope = "week-to-date" | "last-week";
+
+export interface WeekComparison {
+  /** Average day-score of the current window (0-100). */
+  cur: number;
+  /** Average day-score of the window one week earlier (0-100). */
+  prev: number;
+  /** `cur - prev` in percentage POINTS: 50 → 60 is +10, not +20. */
+  delta: number;
+  /** How many days each side spans (1-7). Both sides always span the same. */
+  days: number;
+  scope: WeekScope;
+  /** False when either side had no due habit at all, which makes the delta
+   * meaningless rather than merely small. */
+  comparable: boolean;
+}
+
+/** Average of a plain number list, 0 when empty. */
+const avgNums = (vals: number[]) =>
+  vals.length === 0 ? 0 : Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
+
+/** Day-scores in `[start, start+days)` that actually have a score. */
+function windowScores(db: Db, cal: Calendar, start: string, days: number): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < days; i++) {
+    const s = dayScore(db, addDays(start, i), cal);
+    if (s !== null) out.push(s);
+  }
+  return out;
+}
+
+/**
+ * This week's performance against the same span of last week.
+ *
+ * Three things this gets right that the previous rolling-14-day version did not:
+ *
+ * 1. **Today is excluded from both sides.** It is still in progress — at 9am its
+ *    score is near zero — so counting it made the app announce "worse than last
+ *    week" every single morning no matter how the week was actually going. That
+ *    is the number that looked broken, and it was.
+ * 2. **Real calendar weeks**, starting Saturday in Jalali and Sunday in
+ *    Gregorian (`weekStartOf`). The cards say "this week"/"last week", so a
+ *    rolling window that straddled both was mislabelled.
+ * 3. **Equal spans.** Both sides cover the same number of days, so a Tuesday
+ *    comparison is 3 days against the matching 3 days, never 3 against 7.
+ *
+ * `comparable` is the fourth: `avgOf` returns 0 for an empty window, so a
+ * first-week user used to be told they were "80% better than last week" —
+ * measured against a week that never happened.
+ */
+export function weekComparison(db: Db, cal: Calendar, today = todayKey()): WeekComparison {
+  const thisWeekStart = weekStartOf(today, cal);
+
+  let elapsed = 0;
+  for (let d = thisWeekStart; d < today; d = addDays(d, 1)) elapsed++;
+
+  // On the first day of a week nothing has finished yet, so there is no
+  // week-to-date to show. Compare the two completed weeks behind us and let the
+  // UI relabel, rather than rendering an empty card one day in seven.
+  const scope: WeekScope = elapsed === 0 ? "last-week" : "week-to-date";
+  const days = elapsed === 0 ? 7 : elapsed;
+  const curStart = elapsed === 0 ? addDays(thisWeekStart, -7) : thisWeekStart;
+
+  const curScores = windowScores(db, cal, curStart, days);
+  const prevScores = windowScores(db, cal, addDays(curStart, -7), days);
+  const cur = avgNums(curScores);
+  const prev = avgNums(prevScores);
+
+  return {
+    cur,
+    prev,
+    delta: cur - prev,
+    days,
+    scope,
+    comparable: curScores.length > 0 && prevScores.length > 0,
+  };
 }
 
 export function subscriptionActive(db: Db, now = Date.now()): boolean {

@@ -49,18 +49,45 @@ function AnalyticsPage() {
       {/* week comparison */}
       <div className="grid grid-cols-2 gap-2">
         <Card className="py-3 text-center">
-          <p className="text-[10px] text-muted-foreground">{t("این هفته", "This week")}</p>
+          <p className="text-[10px] text-muted-foreground">
+            {wc.scope === "week-to-date" ? t("این هفته تا اینجا", "This week so far") : t("هفته گذشته", "Last week")}
+          </p>
           <p className="text-2xl font-black text-foreground">{faNum(wc.cur, lang)}٪</p>
         </Card>
         <Card className="py-3 text-center">
-          <p className="text-[10px] text-muted-foreground">{t("هفته قبل", "Last week")}</p>
+          <p className="text-[10px] text-muted-foreground">
+            {wc.scope === "week-to-date" ? t("هفته قبل، همین روزها", "Last week, same days") : t("هفته قبل‌تر", "The week before")}
+          </p>
           <p className="text-2xl font-black text-muted-foreground">{faNum(wc.prev, lang)}٪</p>
         </Card>
       </div>
-      <p className={`text-center text-xs font-medium ${wc.delta >= 0 ? "text-success" : "text-destructive"}`}>
-        {wc.delta >= 0
-          ? t(`📈 ${faNum(wc.delta, lang)}٪ بهتر از هفته قبل!`, `📈 ${wc.delta}% better than last week!`)
-          : t(`📉 ${faNum(Math.abs(wc.delta), lang)}٪ کمتر از هفته قبل`, `📉 ${Math.abs(wc.delta)}% below last week`)}
+      {/* هر دو طرف دقیقاً به اندازهٔ هم روز دارند و «امروز» در هیچ‌کدام نیست —
+          توضیحش پایین می‌آید تا عدد بی‌توضیح نماند. */}
+      {!wc.comparable ? (
+        <p className="text-center text-xs font-medium text-muted-foreground">
+          {t("هنوز برای مقایسه داده‌ی کافی نیست.", "Not enough data to compare yet.")}
+        </p>
+      ) : wc.delta === 0 ? (
+        <p className="text-center text-xs font-medium text-muted-foreground">
+          {t("دقیقاً هم‌اندازهٔ هفته قبل.", "Exactly level with last week.")}
+        </p>
+      ) : (
+        <p className={`text-center text-xs font-medium ${wc.delta > 0 ? "text-success" : "text-destructive"}`}>
+          {wc.delta > 0
+            ? t(`📈 ${faNum(wc.delta, lang)} درصد بهتر از هفته قبل!`, `📈 ${wc.delta} points better than last week!`)
+            : t(`📉 ${faNum(Math.abs(wc.delta), lang)} درصد کمتر از هفته قبل`, `📉 ${Math.abs(wc.delta)} points below last week`)}
+        </p>
+      )}
+      <p className="-mt-3 text-center text-[10px] text-muted-foreground">
+        {wc.scope === "week-to-date"
+          ? t(
+              `مقایسهٔ ${faNum(wc.days, lang)} روز کامل این هفته با همان ${faNum(wc.days, lang)} روز هفته قبل. امروز چون تمام نشده حساب نمی‌شود.`,
+              `${wc.days} finished day(s) this week vs the same ${wc.days} last week. Today isn't counted — it isn't over.`,
+            )
+          : t(
+              "امروز اولین روز هفته است، پس دو هفته‌ی کامل قبل با هم مقایسه شده‌اند.",
+              "Today is the first day of the week, so the two completed weeks before it are compared.",
+            )}
       </p>
 
       {/* overall trend */}
