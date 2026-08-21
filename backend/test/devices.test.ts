@@ -20,7 +20,13 @@ async function login(key: string) {
     payload: {
       phone: PHONE,
       code: h.sms.last()!.code,
-      device: { installationKey: key, name: key, platform: "web", browser: "Chrome", os: "Windows" },
+      device: {
+        installationKey: key,
+        name: key,
+        platform: "web",
+        browser: "Chrome",
+        os: "Windows",
+      },
     },
   });
   expect(response.statusCode).toBe(200);
@@ -53,7 +59,7 @@ describe("device APIs", () => {
     expect(response.json().error).toBe("device_revoked");
   });
 
-  it("lists safe presentation fields and identifies the current device", async () => {
+  it("lists safe presentation fields without retired device-policy counters", async () => {
     const current = await login("current-device-key");
     const response = await h.app.inject({
       method: "GET",
@@ -61,8 +67,12 @@ describe("device APIs", () => {
       headers: { authorization: `Bearer ${current.access}` },
     });
     expect(response.statusCode).toBe(200);
-    const body = response.json() as Record<string, unknown> & { devices: Record<string, unknown>[] };
-    expect(body).toMatchObject({ maxActiveDevices: 1, switchCount30d: 0, securityLocked: false });
+    const body = response.json() as Record<string, unknown> & {
+      devices: Record<string, unknown>[];
+    };
+    expect(body).not.toHaveProperty("maxActiveDevices");
+    expect(body).not.toHaveProperty("switchCount30d");
+    expect(body).not.toHaveProperty("securityLocked");
     expect(body.devices).toHaveLength(1);
     expect(body.devices[0]).toMatchObject({
       id: current.deviceId,

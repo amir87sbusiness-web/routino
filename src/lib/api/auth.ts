@@ -39,18 +39,39 @@ export interface ServerEntitlement {
 const REFRESH_SKEW_MS = 60_000;
 const FALLBACK_ACCESS_TTL_MS = 60 * 60_000;
 
-export function accessExpiryAt(access: string, now = Date.now()): number {
+function accessPayload(access: string): { exp?: unknown; sub?: unknown } | null {
   try {
     const segment = access.split(".")[1];
-    if (!segment) throw new TypeError("Missing JWT payload");
+    if (!segment) return null;
     const base64 = segment.replaceAll("-", "+").replaceAll("_", "/");
     const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
-    const payload = JSON.parse(atob(padded)) as { exp?: unknown };
-    if (typeof payload.exp === "number" && Number.isFinite(payload.exp)) return payload.exp * 1000;
+    return JSON.parse(atob(padded)) as { exp?: unknown; sub?: unknown };
   } catch {
-    // Old/corrupt tokens still get one server attempt; a 401 triggers refresh.
+    return null;
   }
+}
+
+export interface TrialStartResult {
+  entitlement: ServerEntitlement;
+  started: boolean;
+  reason?: "previous_grant" | "entitlement_exists";
+}
+
+export function accessExpiryAt(access: string, now = Date.now()): number {
+  const payload = accessPayload(access);
+  if (typeof payload?.exp === "number" && Number.isFinite(payload.exp)) return payload.exp * 1000;
+  // Old/corrupt tokens still get one server attempt; a 401 triggers refresh.
   return now + FALLBACK_ACCESS_TTL_MS;
+}
+
+export function accessSubject(access: string): string | null {
+  const subject = accessPayload(access)?.sub;
+  return typeof subject === "string" && subject ? subject : null;
+}
+
+export function sessionUserId(): string | null {
+  const tokens = loadTokens();
+  return tokens ? accessSubject(tokens.access) : null;
 }
 
 export function loadTokens(): Tokens | null {
@@ -196,19 +217,31 @@ export async function setPassword(
 }
 
 /** Imports a legacy local subscription. Bounded and single-use server-side. */
-export async function importSubscription(sub: {
-  planId: string;
-  expiresAt: number;
-  startedAt?: number;
-  trial?: boolean;
-}): Promise<{ entitlement: ServerEntitlement; imported: boolean }> {
-  return authedRequest("/subscriptions/import", { method: "POST", body: sub });
+export async function importSubscription(
+  sub: {
+    planId: string;
+    expiresAt: number;
+    startedAt?: number;
+    trial?: boolean;
+  },
+  expectedUserId: string,
+): Promise<{ entitlement: ServerEntitlement; imported: boolean }> {
+  return authedRequest("/subscriptions/import", {
+    method: "POST",
+    body: sub,
+    expectedUserId,
+  });
 }
 
 export async function fetchEntitlement(): Promise<{ entitlement: ServerEntitlement }> {
   const result = await authedRequest<{ entitlement: ServerEntitlement }>("/subscriptions/me");
   markEntitlementChecked();
   return result;
+}
+
+/** Starts the server-owned seven-day trial. The client never constructs dates. */
+export async function startTrial(): Promise<TrialStartResult> {
+  return authedRequest("/subscriptions/trial/start", { method: "POST" });
 }
 
 export async function logout(): Promise<void> {
@@ -261,24 +294,34 @@ async function refreshTokens(): Promise<Tokens | null> {
 /** A request that carries the access token, refreshing once if it has expired. */
 export async function authedRequest<T>(
   path: string,
-  opts: { method?: "GET" | "POST"; body?: unknown } = {},
+  opts: { method?: "GET" | "POST"; body?: unknown; expectedUserId?: string } = {},
 ): Promise<T> {
+  const { expectedUserId, ...requestOptions } = opts;
   let tokens = loadTokens();
   if (!tokens) throw new ApiError(401, "not_signed_in", "No session on this device");
 
+  const assertExpectedOwner = (access: string) => {
+    if (expectedUserId && accessSubject(access) !== expectedUserId) {
+      throw new ApiError(401, "session_changed", "The active account changed during this request");
+    }
+  };
+  assertExpectedOwner(tokens.access);
+
   if (Date.now() >= tokens.accessExpiresAt - REFRESH_SKEW_MS) {
     tokens = (await refreshTokens()) ?? tokens; // fall through and let the server decide
+    assertExpectedOwner(tokens.access);
   }
 
   try {
-    const result = await apiRequest<T>(path, { ...opts, token: tokens.access });
+    const result = await apiRequest<T>(path, { ...requestOptions, token: tokens.access });
     markServerConfirmed();
     return result;
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {
       const next = await refreshTokens();
       if (next) {
-        const result = await apiRequest<T>(path, { ...opts, token: next.access });
+        assertExpectedOwner(next.access);
+        const result = await apiRequest<T>(path, { ...requestOptions, token: next.access });
         markServerConfirmed();
         return result;
       }

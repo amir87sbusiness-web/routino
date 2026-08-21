@@ -4,7 +4,8 @@
  * Account isolation is implemented by separate IndexedDB vaults in
  * `db/vault.ts`. Login must never erase a vault: switching accounts selects a
  * different database, while this module is reserved for a user's explicit
- * “erase data on this device” action.
+ * synced-account content reset. The normal diff/persistence path turns removed
+ * records into tombstones so the reset propagates after the device is online.
  */
 import { DEFAULT_CATEGORIES } from "./presets";
 import { defaultDb, type Db, type Subscription } from "./store";
@@ -46,7 +47,7 @@ export function loginAs(
   return {
     ...db,
     auth: { userId, phone, verifiedAt: now },
-    subscription: serverSubscription ?? db.subscription,
+    subscription: serverSubscription === undefined ? db.subscription : serverSubscription,
     meta: { ...db.meta, dataOwner: phone },
   };
 }

@@ -27,8 +27,8 @@
           "Sign-in is via your mobile number or username with a password, or a one-time SMS code. You are responsible for keeping your password, keeping access to your number, and preventing others from using your account."
         ],
         [
-          "هر حساب به‌طور پیش‌فرض برای یک دستگاه فعال است؛ مدیر سرویس می‌تواند این سقف را برای هر حساب تغییر دهد. ورود دستگاه تازه در صورت پر بودن ظرفیت، نشست قدیمی‌تر را برای امنیت حساب پایان می‌دهد. حداکثر سه جابه‌جایی دستگاه در هر بازهٔ ۱۵روزه مجاز است و جابه‌جایی چهارم حساب را تا بررسی پشتیبانی قفل می‌کند. هر ورود دستگاه در اعلان‌های حساب ثبت می‌شود.",
-          "Each account allows one active device by default; the service administrator may change this limit per account. When the limit is full, signing in on a new device ends the older session for account security. Up to three device replacements are allowed in any rolling 15-day period; a fourth locks the account pending support review. Each device sign-in is recorded in account notifications."
+          "برای تعداد دستگاه‌های احراز‌شدهٔ یک حساب محدودیت محصولی وجود ندارد. هر نصب، نشست امنیتی جداگانه دارد و شما یا مدیر سرویس می‌توانید یک نشست مشخص را در صورت گم‌شدن دستگاه یا ورود ناشناس باطل کنید.",
+          "There is no product-level limit on authenticated devices for an account. Each installation has its own security session, and you or the service administrator can revoke an individual session if a device is lost or a sign-in is unfamiliar."
         ]
       ]
     },
@@ -40,8 +40,8 @@
           "Some features require a paid subscription. Plan prices are shown in the app and payment is made through a licensed bank gateway. The subscription activates after a successful payment."
         ],
         [
-          "کاربران جدید یک دوره‌ی آزمایشی رایگان دریافت می‌کنند. اشتراک به‌صورت خودکار تمدید نمی‌شود؛ برای ادامه‌ی استفاده باید آن را دستی تمدید کنید.",
-          "New users get a free trial period. Subscriptions do not auto-renew; to continue, you must renew manually."
+          "ساخت حساب به‌تنهایی دورهٔ آزمایشی را شروع نمی‌کند. هر حساب واجد شرایط فقط یک‌بار، پس از انتخاب یا ساخت اولین عادت و تأیید صریح شروع، دورهٔ آزمایشی ۷روزه می‌گیرد. اشتراک خودکار تمدید نمی‌شود؛ پس از پایان دسترسی، محتوای موجود فقط‌خواندنی می‌ماند و برای ثبت تغییر تازه باید اشتراک تهیه یا تمدید شود.",
+          "Creating an account does not start a trial. Each eligible account may receive one seven-day trial only after choosing or creating its first habit and explicitly confirming activation. Subscriptions do not auto-renew; after access expires, existing content remains readable, while new product changes require a purchase or renewal."
         ]
       ]
     },
@@ -58,8 +58,8 @@
       "title": ["۶. مسئولیت‌های کاربر", "6. User responsibilities"],
       "paras": [
         [
-          "استفاده از روتینو باید قانونی و مطابق مقررات باشد. حساب و اشتراک برای استفاده طبق سقف دستگاه تعیین‌شده است. تلاش برای اخلال در سرویس یا دسترسی غیرمجاز مجاز نیست. اگر ورود ناشناسی دیدید، فوراً به @routino_support پیام دهید.",
-          "Use of Routino must be lawful and within the device limit assigned to the account. Attempts to disrupt the service or gain unauthorized access are not permitted. If you see an unfamiliar sign-in, message @routino_support immediately."
+          "استفاده از روتینو باید قانونی و مطابق مقررات باشد. تلاش برای اخلال در سرویس یا دسترسی غیرمجاز مجاز نیست. اگر ورود ناشناسی دیدید، نشست آن دستگاه را باطل کنید و فوراً به @routino_support پیام دهید.",
+          "Use of Routino must be lawful. Attempts to disrupt the service or gain unauthorized access are not permitted. If you see an unfamiliar sign-in, revoke that device session and contact @routino_support immediately."
         ]
       ]
     },
@@ -67,8 +67,8 @@
       "title": ["۷. محدودیت مسئولیت", "7. Limitation of liability"],
       "paras": [
         [
-          "سرویس «همان‌گونه که هست» ارائه می‌شود. محتوای شخصی برنامه فقط روی دستگاه شماست و نسخه‌ای از آن روی سرور روتینو نگهداری نمی‌شود. پاک‌کردن دادهٔ مرورگر، استفاده از حالت ناشناس، حذف برنامه یا خرابی دستگاه می‌تواند اطلاعات را از بین ببرد؛ Export همیشه فعال است و مسئولیت نگهداری فایل پشتیبان با کاربر است.",
-          "The service is provided “as is”. Personal app content exists only on your device and Routino keeps no server copy. Clearing browser data, private browsing, uninstalling the app, or device failure may remove it. Export is always available, and you are responsible for keeping backup files safe."
+          "سرویس «همان‌گونه که هست» ارائه می‌شود. روتینو برای کار آفلاین یک نسخهٔ محلی نگه می‌دارد و محتوای حساب احراز‌شده را برای بازیابی و استفاده در چند دستگاه با بک‌اند روتینو همگام می‌کند. پاک‌کردن دادهٔ مرورگر، حالت ناشناس، حذف برنامه یا خرابی دستگاه می‌تواند نسخهٔ محلیِ همگام‌نشده را از بین ببرد؛ Export همیشه فعال است و نگهداری امن فایل پشتیبان بر عهدهٔ کاربر است.",
+          "The service is provided “as is”. Routino keeps a local copy for offline use and syncs authenticated account content with Routino's backend for recovery and multi-device use. Clearing browser data, private browsing, uninstalling the app, or device failure may remove local changes that have not yet synced. Export remains available, and you are responsible for keeping backup files safe."
         ]
       ]
     },
@@ -109,16 +109,20 @@
           "Mobile number: used only for sign-in and authentication (sending the one-time code)."
         ],
         [
-          "محتوای برنامه: عادت‌ها، ثبت‌ها، کارها، ژورنال، تایمر، آنالیز و تنظیمات شخصی فقط در حافظهٔ محلی همان دستگاه نگهداری می‌شوند و به سرور روتینو ارسال نمی‌شوند.",
-          "App content: habits, logs, tasks, journal, timer history, analytics data, and personal settings are stored only in that device's local storage and are not sent to Routino's server."
+          "محتوای برنامه: روتینو نسخه‌ای محلی از دسته‌ها، عادت‌ها، ثبت تکمیل، کارها، تاریخچهٔ تایمر، محتوای ژورنال و تنظیمات منتخب نگه می‌دارد تا اپ آفلاین کار کند. برای حساب احراز‌شده، همین انواعِ قابل‌همگام‌سازی به بک‌اند روتینو فرستاده می‌شوند تا بازیابی و استفاده در چند دستگاه ممکن باشد. آمار و مرور هفتگی از همین داده‌ها محلی محاسبه می‌شوند.",
+          "App content: Routino keeps a local copy of categories, habits, completion logs, tasks, timer history, journal content, and selected preferences so the app works offline. For an authenticated account, these syncable kinds are sent to Routino's backend for recovery and multi-device use. Analytics and Weekly Review are calculated locally from that content."
         ],
         [
-          "اطلاعات حساب و امنیت: سرور شماره موبایل، نام کاربری و هش رمز (در صورت تنظیم)، اطلاعات عمومی نصب/مرورگر و نشست دستگاه، رویدادهای امنیتی جابه‌جایی، وضعیت اشتراک و سوابق لازم پرداخت را نگهداری می‌کند. IP یا VPN برای ساخت هویت دستگاه استفاده نمی‌شود.",
-          "Account and security data: the server stores your mobile number, username and password hash (if set), general installation/browser and device-session details, device-replacement security events, subscription status, and necessary payment records. IP address or VPN state is not used to create device identity."
+          "ترجیحات مخصوص دستگاه: تم، ترجیح/مجوز اعلان، صدای تکمیل و بازخورد لمسی روی همان دستگاه می‌مانند و بین دستگاه‌ها همگام نمی‌شوند.",
+          "Device-local preferences: theme, notification preference/permission, completion sound, and haptic feedback remain on that device and are not synced across devices."
         ],
         [
-          "اطلاعات پرداخت: پرداخت‌ها از طریق درگاه بانکی انجام می‌شود. ما اطلاعات کارت بانکی شما (شماره کارت، رمز و…) را دریافت، مشاهده یا ذخیره نمی‌کنیم؛ این اطلاعات مستقیماً توسط درگاه بانکی مدیریت می‌شود.",
-          "Payment details: payments go through the bank gateway. We never receive, see, or store your card details (card number, PIN, etc.); these are handled directly by the gateway."
+          "اطلاعات حساب و امنیت: سرور شماره موبایل، نام کاربری و هش رمز (در صورت تنظیم)، اطلاعات عمومی نصب/مرورگر و نشست دستگاه، رویدادهای امنیتی، وضعیت اشتراک، دفتر گرنت‌ها و سوابق لازم پرداخت را نگهداری می‌کند. IP یا VPN برای ساخت هویت دستگاه استفاده نمی‌شود.",
+          "Account and security data: the server stores your mobile number, username and password hash (if set), general installation/browser and device-session details, security events, subscription status, grant history, and necessary payment records. IP address or VPN state is not used to create device identity."
+        ],
+        [
+          "اطلاعات پرداخت: ورود اطلاعات کامل کارت و رمز فقط در درگاه بانکی انجام می‌شود و روتینو آن‌ها را دریافت نمی‌کند. درگاه ممکن است برای تطبیق و پشتیبانی، شمارهٔ کارت ماسک‌شده، شناسهٔ پیگیری و نتیجهٔ تراکنش را برگرداند که همراه سابقهٔ لازم پرداخت نگهداری می‌شود.",
+          "Payment details: full card details and PIN are entered only at the bank gateway and are not received by Routino. For reconciliation and support, the gateway may return a masked card number, tracking reference, and transaction result, which are stored with the necessary payment record."
         ]
       ]
     },
@@ -126,8 +130,8 @@
       "title": ["۳. کار کردن بدون اینترنت", "3. Working offline"],
       "paras": [
         [
-          "اطلاعات شخصی روی خود دستگاه نگهداری می‌شود و امکانات اصلی بدون اینترنت کار می‌کنند. برای تأیید امنیت نشست، دستگاه باید دست‌کم هر ۱۵ روز یک‌بار به سرور متصل شود. این بررسی هیچ محتوای شخصی را ارسال نمی‌کند و در صورت نیاز به اتصال، اطلاعات محلی پاک نمی‌شود.",
-          "Personal data is kept on-device and core features work offline. For session security, the device must contact the server at least once every 15 days. This check sends no personal app content, and local data is not deleted if reconnection is required."
+          "یک نسخهٔ محلی از محتوای محصول روی دستگاه می‌ماند و امکانات اصلی و یادآورهای زمان‌بندی‌شدهٔ سیستم‌عامل بدون اینترنت کار می‌کنند. وقتی اینترنت برگردد، تغییرات قابل‌همگام‌سازی با حساب شما ردوبدل می‌شوند. بررسی امنیت نشست و همگام‌سازی دو کار جدا هستند و نیاز به اتصال، دادهٔ محلی را پاک نمی‌کند.",
+          "A local copy of product content remains on the device, and core features plus scheduled OS reminders work without internet. When connectivity returns, syncable changes are exchanged with your account. Session-security checks and content sync are separate, and requiring reconnection does not delete local data."
         ]
       ]
     },
@@ -153,8 +157,8 @@
       "title": ["۶. امنیت", "6. Security"],
       "paras": [
         [
-          "کدهای ورود به‌صورت هش‌شده نگهداری و پس از مدت کوتاهی منقضی می‌شوند. نشست دستگاه قابل ابطال فوری پس از اتصال است و جابه‌جایی‌های پرتکرار برای بررسی امنیتی قفل می‌شوند. با این حال هیچ سیستمی صددرصد ایمن نیست.",
-          "Login codes are stored as hashes and expire quickly. Device sessions can be revoked immediately once connected, and repeated replacements trigger a security lock. No system, however, is 100% secure."
+          "کدهای ورود به‌صورت هش‌شده نگهداری و پس از مدت کوتاهی منقضی می‌شوند. توکن تمدید هنگام استفاده چرخش می‌کند، تغییر رمز نشست‌های دیگر را می‌بندد و هر نشست دستگاه قابل ابطال است. با این حال هیچ سیستمی صددرصد ایمن نیست و روتینو رمزنگاری سرتاسریِ محتوای همگام‌شده را ادعا نمی‌کند.",
+          "Login codes are stored as hashes and expire quickly. Refresh tokens rotate on use, password changes revoke other sessions, and each device session can be revoked. No system is 100% secure, and Routino does not claim end-to-end encryption for synced content."
         ]
       ]
     },
@@ -162,8 +166,8 @@
       "title": ["۷. حقوق شما", "7. Your rights"],
       "paras": [
         [
-          "Export اطلاعات شخصی همیشه فعال است. Import فقط با اشتراک پولی فعال و در دورهٔ آزمایشی یا پلن رایگان غیرفعال است. می‌توانید حذف اطلاعات حسابِ نگهداری‌شده روی سرور را از پشتیبانی درخواست کنید؛ محتوای محلی فقط با اقدام صریح خودتان از دستگاه حذف می‌شود.",
-          "Personal-data export is always available. Import requires an active paid subscription and is disabled during trial or free access. You may ask support to delete server-held account data; local content is removed only by your explicit action on the device."
+          "Export محتوای محصول همیشه فعال است. Import فقط با اشتراک پولی فعال است. گزینهٔ «پاک‌کردن همهٔ داده‌ها» محتوای محصول را در حساب همگام‌شده و دستگاه‌های متصل reset می‌کند، اما حساب احراز هویت، اشتراک، گرنت‌ها، پرداخت‌ها و سوابقی که نگهداری آن‌ها لازم است باقی می‌مانند؛ این گزینه حذف حساب نیست. برای درخواست حذف حساب و دادهٔ سروریِ قابل‌حذف با پشتیبانی تماس بگیرید.",
+          "Product-content export is always available. Import requires an active paid subscription. “Erase all data” resets product content across the synced account and connected devices, while the authentication account, subscription, grants, payments, and records that must be retained remain; it is not account deletion. Contact support to request deletion of the account and server data that can lawfully be removed."
         ]
       ]
     }

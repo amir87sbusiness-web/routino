@@ -16,12 +16,12 @@ afterAll(async () => {
 const DAY = 86_400_000;
 
 describe("GET /v1/subscriptions/me", () => {
-  it("returns the trial entitlement after first sign-in", async () => {
+  it("returns none after first sign-in", async () => {
     const { access } = await signIn(h);
     const res = await h.call("GET", "/v1/subscriptions/me", { headers: auth(access) });
     const { entitlement } = await res.json();
-    expect(entitlement.status).toBe("active");
-    expect(entitlement.planId).toBe("trial");
+    expect(entitlement.status).toBe("none");
+    expect(entitlement.planId).toBeNull();
   });
 
   it("repairs a paid checkout when the gateway callback was lost", async () => {
@@ -40,7 +40,7 @@ describe("GET /v1/subscriptions/me", () => {
 });
 
 describe("POST /v1/subscriptions/import", () => {
-  it("raises expiry to the claimed date (no stacking on the trial)", async () => {
+  it("raises expiry to the claimed date without adding local time", async () => {
     const { access } = await signIn(h);
     const claimed = Date.now() + 30 * DAY;
 
@@ -51,7 +51,6 @@ describe("POST /v1/subscriptions/import", () => {
     const body = await res.json();
     expect(body.imported).toBe(true);
     expect(body.capped).toBe(false);
-    // max(current, claimed), not trial + 30 days.
     expect(Math.abs(Date.parse(body.entitlement.expiresAt) - claimed)).toBeLessThan(1000);
   });
 
@@ -118,7 +117,33 @@ describe("GET /v1/subscriptions/grants", () => {
     const { access } = await signIn(h);
     const res = await h.call("GET", "/v1/subscriptions/grants", { headers: auth(access) });
     const { grants } = await res.json();
-    expect(grants).toHaveLength(1);
-    expect(grants[0].source).toBe("trial");
+    expect(grants).toHaveLength(0);
+  });
+});
+
+describe("POST /v1/subscriptions/trial/start", () => {
+  it("requires auth", async () => {
+    expect((await h.call("POST", "/v1/subscriptions/trial/start")).status).toBe(401);
+  });
+
+  it("starts once and cannot be stacked by concurrent requests", async () => {
+    const firstDevice = await signIn(h, "09123334444", "edge-trial-device-a");
+    await h.raw(`delete from otp_codes`);
+    const secondDevice = await signIn(h, "09123334444", "edge-trial-device-b");
+    const responses = await Promise.all(
+      [firstDevice.access, secondDevice.access, firstDevice.access, secondDevice.access].map(
+        (access) => h.call("POST", "/v1/subscriptions/trial/start", { headers: auth(access) }),
+      ),
+    );
+    const bodies = await Promise.all(responses.map((response) => response.json()));
+    expect(bodies.filter((body) => body.started)).toHaveLength(1);
+    expect(new Set(bodies.map((body) => body.entitlement.expiresAt)).size).toBe(1);
+    expect((Date.parse(bodies[0].entitlement.expiresAt) - Date.now()) / DAY).toBeCloseTo(7, 1);
+    expect(
+      await h.query(`select id from grants where user_id = '${firstDevice.user.id}'`),
+    ).toHaveLength(1);
+    expect(
+      await h.query(`select id from devices where user_id = '${firstDevice.user.id}'`),
+    ).toHaveLength(2);
   });
 });

@@ -15,9 +15,6 @@ export interface AccountDevice {
 }
 
 export interface DeviceOverview {
-  maxActiveDevices: number;
-  switchCount30d: number;
-  securityLocked: boolean;
   devices: AccountDevice[];
 }
 

@@ -91,7 +91,8 @@ export function demoScript() {
 }
 
 /** حالتِ «وارد شده با اشتراک فعال»، تا نه صفحه‌ی ورود بیاید نه دیوارِ پرداخت. */
-export const signedInFor = (theme) => `(() => {
+export const signedInFor = (theme) =>
+  `(() => {
   const now = Date.now();
   localStorage.setItem("routino:local:v1", JSON.stringify({
     auth:{phone:"989121234567",verifiedAt:now},

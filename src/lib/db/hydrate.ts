@@ -5,7 +5,18 @@
  * every consumer (`logic.ts`, all the routes) is unaware storage changed at all.
  */
 import { DEFAULT_CATEGORIES } from "../presets";
-import { defaultDb, type Category, type Db, type Feedback, type Habit, type HabitLog, type JournalEntry, type Settings, type Task, type TimerSession } from "../store";
+import {
+  defaultDb,
+  type Category,
+  type Db,
+  type Feedback,
+  type Habit,
+  type HabitLog,
+  type JournalEntry,
+  type Settings,
+  type Task,
+  type TimerSession,
+} from "../store";
 import { db as idb, primeSeq, type RecordRow } from "./dexie";
 import { loadLocal, mergeSettings, type LocalState } from "./local";
 import { migrateLegacyBlob } from "./migrate";
@@ -103,16 +114,17 @@ export async function hydrate(now = Date.now()): Promise<HydrateResult> {
   const local = loadLocal();
   await seedIfEmpty();
 
-  const [categories, habits, logs, tasks, timerSessions, journal, settingRows, feedback] = await Promise.all([
-    idb.categories.toArray(),
-    idb.habits.toArray(),
-    idb.logs.toArray(),
-    idb.tasks.toArray(),
-    idb.timerSessions.toArray(),
-    idb.journal.toArray(),
-    idb.settings.toArray(),
-    idb.feedback.toArray(),
-  ]);
+  const [categories, habits, logs, tasks, timerSessions, journal, settingRows, feedback] =
+    await Promise.all([
+      idb.categories.toArray(),
+      idb.habits.toArray(),
+      idb.logs.toArray(),
+      idb.tasks.toArray(),
+      idb.timerSessions.toArray(),
+      idb.journal.toArray(),
+      idb.settings.toArray(),
+      idb.feedback.toArray(),
+    ]);
 
   // Continue the ordering sequence rather than restarting it, so records added
   // this session sort after everything already stored.

@@ -28,7 +28,8 @@ function seed(): Db {
   return { ...base, habits: [habit("h1"), habit("h2")], logs };
 }
 
-const find = (cs: Change[], table: string, key: string) => cs.find((c) => c.table === table && c.key === key);
+const find = (cs: Change[], table: string, key: string) =>
+  cs.find((c) => c.table === table && c.key === key);
 const forTable = (cs: Change[], table: string) => cs.filter((c) => c.table === table);
 
 describe("diffDb", () => {
@@ -47,7 +48,10 @@ describe("diffDb", () => {
 
   it("emits one change for a single-field edit", () => {
     const db = seed();
-    const next: Db = { ...db, habits: db.habits.map((h) => (h.id === "h1" ? { ...h, name: "renamed" } : h)) };
+    const next: Db = {
+      ...db,
+      habits: db.habits.map((h) => (h.id === "h1" ? { ...h, name: "renamed" } : h)),
+    };
     const changes = diffDb(db, next);
     expect(changes).toHaveLength(1);
     expect(changes[0]).toMatchObject({ table: "habits", key: "h1", deleted: false });
@@ -81,10 +85,18 @@ describe("diffDb", () => {
   });
 
   it("emits an added journal entry and a tombstone for a removed one", () => {
-    const db: Db = { ...seed(), journal: { "2026-07-01": { dateKey: "2026-07-01", text: "a", score: null, mood: null, updatedAt: 1 } } };
+    const db: Db = {
+      ...seed(),
+      journal: {
+        "2026-07-01": { dateKey: "2026-07-01", text: "a", score: null, mood: null, updatedAt: 1 },
+      },
+    };
     const added: Db = {
       ...db,
-      journal: { ...db.journal, "2026-07-02": { dateKey: "2026-07-02", text: "b", score: null, mood: null, updatedAt: 2 } },
+      journal: {
+        ...db.journal,
+        "2026-07-02": { dateKey: "2026-07-02", text: "b", score: null, mood: null, updatedAt: 2 },
+      },
     };
     expect(diffDb(db, added)).toEqual([
       { table: "journal", key: "2026-07-02", data: added.journal["2026-07-02"], deleted: false },
@@ -99,21 +111,33 @@ describe("diffDb", () => {
       const db = seed();
       const next: Db = { ...db, settings: { ...db.settings, lang: "en" } };
       const changes = diffDb(db, next);
-      expect(changes).toEqual([{ table: "settings", key: "lang", data: { value: "en" }, deleted: false }]);
+      expect(changes).toEqual([
+        { table: "settings", key: "lang", data: { value: "en" }, deleted: false },
+      ]);
     });
 
     it("ignores device-local fields", () => {
-      // theme and notificationsEnabled belong to the device; syncing them would
-      // fight the user across contexts and fire unprompted permission dialogs.
+      // Device preferences must never follow an account onto another device.
       const db = seed();
-      const next: Db = { ...db, settings: { ...db.settings, theme: "dark", notificationsEnabled: false } };
+      const next: Db = {
+        ...db,
+        settings: {
+          ...db.settings,
+          theme: "dark",
+          notificationsEnabled: false,
+          completionSoundEnabled: false,
+          hapticsEnabled: false,
+        },
+      };
       expect(diffDb(db, next)).toEqual([]);
     });
 
     it("syncs onboarded so a second device skips onboarding", () => {
       const db = seed();
       const next: Db = { ...db, settings: { ...db.settings, onboarded: true } };
-      expect(diffDb(db, next)).toEqual([{ table: "settings", key: "onboarded", data: { value: true }, deleted: false }]);
+      expect(diffDb(db, next)).toEqual([
+        { table: "settings", key: "onboarded", data: { value: true }, deleted: false },
+      ]);
     });
 
     it("emits journalReminder when cleared to null", () => {
@@ -141,7 +165,12 @@ describe("diffDb", () => {
       ...db,
       auth: { phone: "989123334444", verifiedAt: 1 },
       notifications: [{ id: "n1", title: "t", body: "b", at: 1, read: false }],
-      meta: { ...db.meta, sessions: db.meta.sessions + 1, firedReminders: ["x"], celebrated: ["y"] },
+      meta: {
+        ...db.meta,
+        sessions: db.meta.sessions + 1,
+        firedReminders: ["x"],
+        celebrated: ["y"],
+      },
     };
     expect(diffDb(db, next)).toEqual([]);
   });

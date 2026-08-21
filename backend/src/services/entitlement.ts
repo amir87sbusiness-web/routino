@@ -12,7 +12,7 @@
  * it instantly.
  */
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
-import { rowsOf, type Database } from "../db/client.js";
+import { rowsOf, type Database, type DatabaseExecutor } from "../db/client.js";
 import { entitlements, grants } from "../db/schema.js";
 
 export interface Entitlement {
@@ -29,8 +29,16 @@ const SETTLED_SOURCES = ["payment", "migration"] as const;
 
 export type GrantSource = "trial" | "payment" | "migration" | "admin";
 
-export async function readEntitlement(db: Database, userId: string, now: Date): Promise<Entitlement> {
-  const [row] = await db.select().from(entitlements).where(eq(entitlements.userId, userId)).limit(1);
+export async function readEntitlement(
+  db: DatabaseExecutor,
+  userId: string,
+  now: Date,
+): Promise<Entitlement> {
+  const [row] = await db
+    .select()
+    .from(entitlements)
+    .where(eq(entitlements.userId, userId))
+    .limit(1);
   if (!row) return { status: "none", planId: null, expiresAt: null, issuedAt: now.toISOString() };
   return {
     status: row.expiresAt > now ? "active" : "expired",
@@ -49,7 +57,7 @@ export async function readEntitlement(db: Database, userId: string, now: Date): 
  * arithmetic delivered.
  */
 export async function grantInterval(
-  db: Database,
+  db: DatabaseExecutor,
   userId: string,
   opts: {
     planId: string;
@@ -99,7 +107,8 @@ export async function grantInterval(
   const row = rowsOf<{ before: Date | string | null; after: Date | string }>(result)[0];
   if (row?.after == null) throw new Error("failed to compute expiry");
   const expiresAt = row.after instanceof Date ? row.after : new Date(row.after);
-  const before = row.before == null ? null : row.before instanceof Date ? row.before : new Date(row.before);
+  const before =
+    row.before == null ? null : row.before instanceof Date ? row.before : new Date(row.before);
 
   await db.insert(grants).values({
     userId,
@@ -116,12 +125,76 @@ export async function grantInterval(
   return readEntitlement(db, userId, now);
 }
 
+export type TrialStartReason = "previous_grant" | "entitlement_exists";
+
+export interface TrialStartResult {
+  entitlement: Entitlement;
+  started: boolean;
+  reason?: TrialStartReason;
+}
+
+/**
+ * Starts the account's only trial when it has no access history of any kind.
+ *
+ * The user row exists before every authenticated call and is the stable lock
+ * shared by all devices and server instances. Once locked, both the immutable
+ * ledger and the materialized answer are checked in the same transaction. This
+ * second check deliberately rejects an orphan entitlement too: missing audit
+ * history must never become a reason to mint more access.
+ */
+export async function startTrialOnce(
+  db: Database,
+  userId: string,
+  now: Date,
+): Promise<TrialStartResult> {
+  return db.transaction(async (tx) => {
+    const locked = rowsOf<{ id: string }>(
+      await tx.execute(sql`select id from users where id = ${userId} for update`),
+    );
+    if (!locked.length) throw new Error("trial user no longer exists");
+
+    const [previousGrant] = await tx
+      .select({ id: grants.id })
+      .from(grants)
+      .where(eq(grants.userId, userId))
+      .limit(1);
+    if (previousGrant) {
+      return {
+        entitlement: await readEntitlement(tx, userId, now),
+        started: false,
+        reason: "previous_grant" as const,
+      };
+    }
+
+    const [materialized] = await tx
+      .select({ userId: entitlements.userId })
+      .from(entitlements)
+      .where(eq(entitlements.userId, userId))
+      .limit(1);
+    if (materialized) {
+      return {
+        entitlement: await readEntitlement(tx, userId, now),
+        started: false,
+        reason: "entitlement_exists" as const,
+      };
+    }
+
+    const entitlement = await grantInterval(
+      tx,
+      userId,
+      { planId: "trial", days: 7, source: "trial" },
+      now,
+    );
+    return { entitlement, started: true };
+  });
+}
+
 /**
  * Raises expiry to at least `claimed`, never lowering it and never stacking.
  *
  * This is the shape the legacy-subscription import needs: a user with 30 days
- * left on their old local subscription should end up with 30 days, not 30 days
- * plus the 7-day trial they were just given.
+ * left on an old local subscription should end up with 30 days, never a claim
+ * stacked onto any entitlement that already exists.
  */
 export async function ensureExpiresAt(
   db: Database,
@@ -154,7 +227,8 @@ export async function ensureExpiresAt(
            (select expires_at from upserted) as after
   `);
   const row = rowsOf<{ before: Date | string | null; after: Date | string }>(result)[0];
-  const before = row?.before == null ? null : row.before instanceof Date ? row.before : new Date(row.before);
+  const before =
+    row?.before == null ? null : row.before instanceof Date ? row.before : new Date(row.before);
 
   if (before && before >= opts.claimed) {
     // Already at least as good — the upsert changed nothing, so record nothing.

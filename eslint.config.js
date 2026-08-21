@@ -8,7 +8,9 @@ import tseslint from "typescript-eslint";
 export default tseslint.config(
   // supabase/functions/api/shared is GENERATED (sync-edge-shared.mjs) — linting
   // it would reformat the copies and break the edge-parity test.
-  { ignores: ["dist", "www", "ios", "android", "supabase/functions/api/shared"] },
+  {
+    ignores: [".worktrees", "dist", "www", "ios", "android", "supabase/functions/api/shared"],
+  },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],

@@ -11,12 +11,12 @@ afterAll(async () => {
   await h?.close();
 });
 
-async function signIn(phone = "09123334444") {
+async function signIn(phone = "09123334444", deviceName?: string) {
   await h.app.inject({ method: "POST", url: "/v1/auth/otp/request", payload: { phone } });
   const res = await h.app.inject({
     method: "POST",
     url: "/v1/auth/otp/verify",
-    payload: { phone, code: h.sms.last()!.code },
+    payload: { phone, code: h.sms.last()!.code, deviceName },
   });
   return res.json() as { access: string; user: { id: string }; entitlement: { expiresAt: string } };
 }
@@ -29,11 +29,22 @@ const importSub = (access: string, body: Record<string, unknown>) =>
     payload: body,
   });
 
+const startTrial = (access: string) =>
+  h.app.inject({
+    method: "POST",
+    url: "/v1/subscriptions/trial/start",
+    headers: { authorization: `Bearer ${access}` },
+  });
+
 const DAY = 86_400_000;
 
 describe("POST /v1/subscriptions/import", () => {
   it("requires auth", async () => {
-    const res = await h.app.inject({ method: "POST", url: "/v1/subscriptions/import", payload: { planId: "m1", expiresAt: Date.now() + DAY } });
+    const res = await h.app.inject({
+      method: "POST",
+      url: "/v1/subscriptions/import",
+      payload: { planId: "m1", expiresAt: Date.now() + DAY },
+    });
     expect(res.statusCode).toBe(401);
   });
 
@@ -46,14 +57,16 @@ describe("POST /v1/subscriptions/import", () => {
 
     const res = await importSub(access, { planId: "m3", expiresAt: claimed });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { imported: boolean; entitlement: { expiresAt: string; planId: string } };
+    const body = res.json() as {
+      imported: boolean;
+      entitlement: { expiresAt: string; planId: string };
+    };
     expect(body.imported).toBe(true);
     expect(Date.parse(body.entitlement.expiresAt)).toBe(claimed);
     expect(body.entitlement.planId).toBe("m3");
   });
 
-  it("raises expiry to the claim rather than stacking on the trial", async () => {
-    // 60 days claimed + a 7-day trial must be 60 days, not 67.
+  it("raises expiry to the claim without adding local time", async () => {
     const { access } = await signIn();
     const claimed = Date.now() + 60 * DAY;
     const body = (await importSub(access, { planId: "m3", expiresAt: claimed })).json() as {
@@ -63,7 +76,8 @@ describe("POST /v1/subscriptions/import", () => {
   });
 
   it("never lowers an entitlement that is already better", async () => {
-    const { access, entitlement } = await signIn(); // 7-day trial
+    const { access } = await signIn();
+    const entitlement = (await startTrial(access)).json().entitlement as { expiresAt: string };
     const claimed = Date.now() + 2 * DAY; // worse than the trial
     const body = (await importSub(access, { planId: "m1", expiresAt: claimed })).json() as {
       imported: boolean;
@@ -77,7 +91,11 @@ describe("POST /v1/subscriptions/import", () => {
     // validated, only bounded.
     const { access } = await signIn();
     const res = await importSub(access, { planId: "m12", expiresAt: Date.parse("2099-01-01") });
-    const body = res.json() as { imported: boolean; capped: boolean; entitlement: { expiresAt: string } };
+    const body = res.json() as {
+      imported: boolean;
+      capped: boolean;
+      entitlement: { expiresAt: string };
+    };
 
     expect(body.imported).toBe(true);
     expect(body.capped).toBe(true);
@@ -95,7 +113,11 @@ describe("POST /v1/subscriptions/import", () => {
     const res = await importSub(access, { planId: "m12", expiresAt: 9e15 });
     expect(res.statusCode).toBe(200);
 
-    const body = res.json() as { imported: boolean; capped: boolean; entitlement: { expiresAt: string } };
+    const body = res.json() as {
+      imported: boolean;
+      capped: boolean;
+      entitlement: { expiresAt: string };
+    };
     expect(body.imported).toBe(true);
     expect(body.capped).toBe(true);
     const grantedDays = (Date.parse(body.entitlement.expiresAt) - Date.now()) / DAY;
@@ -104,11 +126,15 @@ describe("POST /v1/subscriptions/import", () => {
 
   it("cannot be replayed for more time", async () => {
     const { access } = await signIn();
-    const first = (await importSub(access, { planId: "m3", expiresAt: Date.now() + 60 * DAY })).json() as {
+    const first = (
+      await importSub(access, { planId: "m3", expiresAt: Date.now() + 60 * DAY })
+    ).json() as {
       entitlement: { expiresAt: string };
     };
 
-    const second = (await importSub(access, { planId: "m12", expiresAt: Date.now() + 300 * DAY })).json() as {
+    const second = (
+      await importSub(access, { planId: "m12", expiresAt: Date.now() + 300 * DAY })
+    ).json() as {
       imported: boolean;
       reason: string;
       entitlement: { expiresAt: string };
@@ -122,7 +148,9 @@ describe("POST /v1/subscriptions/import", () => {
     const { access, user } = await signIn();
     await h.raw(`insert into grants (user_id, months, source) values ('${user.id}', 3, 'payment')`);
 
-    const res = (await importSub(access, { planId: "m12", expiresAt: Date.now() + 300 * DAY })).json() as {
+    const res = (
+      await importSub(access, { planId: "m12", expiresAt: Date.now() + 300 * DAY })
+    ).json() as {
       imported: boolean;
       reason: string;
     };
@@ -168,10 +196,57 @@ describe("GET /v1/subscriptions/me", () => {
       url: "/v1/subscriptions/me",
       headers: { authorization: `Bearer ${access}` },
     });
-    const body = res.json() as { entitlement: { status: string; planId: string; issuedAt: string } };
-    expect(body.entitlement.status).toBe("active");
-    expect(body.entitlement.planId).toBe("trial");
+    const body = res.json() as {
+      entitlement: { status: string; planId: string; issuedAt: string };
+    };
+    expect(body.entitlement.status).toBe("none");
+    expect(body.entitlement.planId).toBeNull();
     // issuedAt lets the client detect its own clock skew without trusting it.
     expect(Date.parse(body.entitlement.issuedAt)).toBeGreaterThan(0);
+  });
+});
+
+describe("POST /v1/subscriptions/trial/start", () => {
+  it("requires auth", async () => {
+    expect(
+      (await h.app.inject({ method: "POST", url: "/v1/subscriptions/trial/start" })).statusCode,
+    ).toBe(401);
+  });
+
+  it("starts once and returns the same expiry on retry", async () => {
+    const { access, user } = await signIn();
+    const first = (await startTrial(access)).json() as {
+      started: boolean;
+      entitlement: { status: string; planId: string; expiresAt: string };
+    };
+    const second = (await startTrial(access)).json() as typeof first & { reason: string };
+    expect(first.started).toBe(true);
+    expect(first.entitlement).toMatchObject({ status: "active", planId: "trial" });
+    expect((Date.parse(first.entitlement.expiresAt) - Date.now()) / DAY).toBeCloseTo(7, 1);
+    expect(second).toMatchObject({ started: false, reason: "previous_grant" });
+    expect(second.entitlement.expiresAt).toBe(first.entitlement.expiresAt);
+    expect(await h.query(`select id from grants where user_id = '${user.id}'`)).toHaveLength(1);
+  });
+
+  it("lets concurrent devices produce only one trial grant", async () => {
+    const firstDevice = await signIn("09123334444", "First device");
+    await h.raw(`delete from otp_codes`);
+    const secondDevice = await signIn("09123334444", "Second device");
+    const results = await Promise.all([
+      startTrial(firstDevice.access),
+      startTrial(secondDevice.access),
+    ]);
+    const bodies = results.map((response) => response.json()) as Array<{
+      started: boolean;
+      entitlement: { expiresAt: string };
+    }>;
+    expect(bodies.filter((body) => body.started)).toHaveLength(1);
+    expect(new Set(bodies.map((body) => body.entitlement.expiresAt)).size).toBe(1);
+    expect(
+      await h.query(`select id from grants where user_id = '${firstDevice.user.id}'`),
+    ).toHaveLength(1);
+    expect(
+      await h.query(`select id from devices where user_id = '${firstDevice.user.id}'`),
+    ).toHaveLength(2);
   });
 });

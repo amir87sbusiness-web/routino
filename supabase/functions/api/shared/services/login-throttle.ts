@@ -95,7 +95,11 @@ export async function checkAdminRate(
   return n >= ADMIN_LIMIT ? { ok: false, retryAfter: WINDOW_SECONDS } : { ok: true };
 }
 
-export async function recordAdminFailure(db: Database, ip: string | null, now: Date): Promise<void> {
+export async function recordAdminFailure(
+  db: Database,
+  ip: string | null,
+  now: Date,
+): Promise<void> {
   await recordLoginFailure(db, ip, adminAttemptKey(ip), now);
 }
 

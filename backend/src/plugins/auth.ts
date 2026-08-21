@@ -3,7 +3,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
 import { devices, users } from "../db/schema.js";
 import { verifyAccessToken } from "../services/tokens.js";
-import { forbidden, locked, unauthorized } from "./errors.js";
+import { forbidden, unauthorized } from "./errors.js";
 
 export interface AuthedUser {
   id: string;
@@ -30,21 +30,14 @@ declare module "fastify" {
 export const authPlugin = fp(async (app) => {
   app.decorate("authenticate", async (req: FastifyRequest) => {
     const header = req.headers.authorization;
-    if (!header?.startsWith("Bearer ")) throw unauthorized("missing_token", "Authorization header required");
+    if (!header?.startsWith("Bearer "))
+      throw unauthorized("missing_token", "Authorization header required");
 
     const claims = await verifyAccessToken(app.deps.env, header.slice(7));
     const [row] = await app.deps.db.select().from(users).where(eq(users.id, claims.sub)).limit(1);
 
     if (!row) throw unauthorized("unknown_user", "User no longer exists");
     if (row.blocked) throw forbidden("blocked", "Account is blocked");
-    if (row.securityLockedAt) {
-      throw locked(
-        "device_security_locked",
-        "For account security, sign-in is temporarily locked. Contact support.",
-        { support: "routino_support" },
-      );
-    }
-
     const [device] = await app.deps.db
       .select()
       .from(devices)

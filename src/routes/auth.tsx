@@ -4,8 +4,6 @@ import { Button, Input, Logo } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
 import {
   clearTokens,
-  entitlementToSubscription,
-  importSubscription,
   passwordLogin,
   requestOtp,
   verifyOtp,
@@ -13,7 +11,6 @@ import {
 } from "@/lib/api/auth";
 import { faNum } from "@/lib/dates";
 import { normalizePhone, toAsciiDigits, toLocalPhone } from "@/lib/phone";
-import { loginAs } from "@/lib/wipe";
 import { useAppMaybe } from "@/state/app";
 
 export const Route = createFileRoute("/auth")({
@@ -48,7 +45,7 @@ function AuthPage() {
   const [busy, setBusy] = useState(false);
 
   if (!ctx?.db) return null;
-  const { db, update, switchAccount, t, lang } = ctx;
+  const { db, signInLocal, switchAccount, t, lang } = ctx;
 
   /** Turns an ApiError into something a Persian-speaking human can act on. */
   const explain = (err: unknown): string => {
@@ -86,11 +83,6 @@ function AuthPage() {
         );
       case "blocked":
         return t("این حساب مسدود شده.", "This account is blocked.");
-      case "device_security_locked":
-        return t(
-          "برای محافظت از حسابت، ورود موقتاً قفل شده. به @routino_support پیام بده.",
-          "For your account security, sign-in is temporarily locked. Message @routino_support.",
-        );
     }
     // A gateway failure returns no JSON body, so `err.message` falls back to the
     // bare status line and the user was shown the literal text "HTTP 502" — in
@@ -114,35 +106,16 @@ function AuthPage() {
    * The post-login tail, shared by password and OTP sign-in.
    *
    * `canonical` is the SERVER's phone (`res.user.phone`), so signing in by
-   * username still isolates data by the right account. Rescues a subscription
-   * that only exists in this device's storage (bounded + single-use server-side;
-   * a failure here must not block the sign-in). `loginAs` applies account
-   * isolation — a different phone wipes the previous owner's content.
+   * username still isolates data by the right account. `switchAccount` selects
+   * and hydrates that account's vault before resolving its bounded legacy
+   * entitlement migration, so a different active account can never hide the
+   * target vault's local proof.
    */
   const completeLogin = async (
     user: { id: string; phone: string },
     serverEntitlement: ServerEntitlement,
   ) => {
-    let entitlement = serverEntitlement;
-    const canonical = user.phone;
-    const ownLocalData = db.meta.dataOwner === null || db.meta.dataOwner === canonical;
-    const local = ownLocalData ? db.subscription : null;
-    if (local && local.expiresAt > Date.now()) {
-      try {
-        const imported = await importSubscription({
-          planId: local.planId,
-          expiresAt: local.expiresAt,
-          startedAt: local.startedAt,
-          trial: local.trial,
-        });
-        entitlement = imported.entitlement;
-      } catch {
-        /* keep the sign-in; the next sync will reconcile */
-      }
-    }
-    const now = Date.now();
-    const subscription = entitlementToSubscription(entitlement, now);
-    await switchAccount(user, subscription);
+    await switchAccount(user, serverEntitlement);
     navigate({ to: "/" });
   };
 
@@ -174,7 +147,9 @@ function AuthPage() {
     setError("");
     if (SKIP_SMS) {
       if (db.meta.dataOwner && db.meta.dataOwner !== canonical) clearTokens();
-      update((d) => loginAs(d, canonical));
+      // Offline demo mode has no server answer. Preserve semantics are explicit
+      // here instead of relying on an omitted production argument.
+      signInLocal(canonical, db.subscription);
       navigate({ to: "/" });
       return;
     }

@@ -105,10 +105,9 @@ describe("raw SQL Date parameters are stringified before they reach the driver",
       const path = fileURLToPath(new URL(rel, import.meta.url));
       const source = readFileSync(path, "utf8");
       const problems = findUndefinedIsoNames(source);
-      expect(
-        problems,
-        `named *Iso but never calls .toISOString(): ${problems.join(", ")}`,
-      ).toEqual([]);
+      expect(problems, `named *Iso but never calls .toISOString(): ${problems.join(", ")}`).toEqual(
+        [],
+      );
     });
   }
 });

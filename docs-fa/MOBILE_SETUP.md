@@ -53,4 +53,10 @@ APK و فایل SHA-256 را روی فضای ابری HTTPS آپلود کن. س�
 
 ## نوتیفیکیشن
 
-یادآورهای عادت، کار، ژورنال و اشتراک روی اندروید با Local Notifications زمان‌بندی می‌شوند و به سرور پوش وابسته نیستند. کاربر باید در تنظیمات اپ اعلان‌ها را روشن و مجوز Android 13+ را تأیید کند. Push سراسری ادمین هنوز جزو این انتشار نیست و به FCM جداگانه نیاز دارد.
+یادآورهای عادت، کار، ژورنال و trial/اشتراک روی Android/iOS با Local Notifications زمان‌بندی می‌شوند و به اینترنت یا Supabase وابسته نیستند. نصب تازه با اعلان خاموش شروع می‌شود؛ Provider فقط permission را می‌خواند و dialog باز نمی‌کند. درخواست permission فقط بعد از اقدام صریح کاربر در Settings یا ساخت اولین reminder انجام می‌شود.
+
+planner حداکثر ۶۰ درخواست pending می‌سازد: روزانه و روزهای هفته از recurrence واقعی API v7 استفاده می‌کنند؛ زوج/فرد شمسی یا میلادی occurrenceهای تک‌بار و نزدیک را با `isDueOn` می‌سازند. reconciler فقط موارد `extra.routino=true` را جایگزین می‌کند، پس اعلان نامرتبط پاک نمی‌شود.
+
+در Android 12+ مجوز `SCHEDULE_EXACT_ALARM` در manifest ثبت است و برنامه با `checkExactNotificationSetting()` وضعیت را می‌خواند. اگر کاربر اجازه ندهد، خود plugin به alarm غیردقیق برمی‌گردد و Settings هشدار می‌دهد؛ `allowWhileIdle` برای reminderهای کاربر فعال است. receiver خود plugin مجوز boot و restore بعد از reboot را به merged manifest اضافه می‌کند.
+
+تأیید واقعی drift یک‌دقیقه‌ای، battery saver، kill و reboot فقط روی گوشی فیزیکی معتبر است؛ چک‌لیست `docs-fa/REMINDER-NATIVE-CHECKLIST.md` باید قبل از انتشار روی حداقل یک Android 12+ و ترجیحاً یک iPhone اجرا شود.

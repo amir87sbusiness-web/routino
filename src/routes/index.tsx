@@ -38,7 +38,11 @@ function TodayPage() {
   const due = dueHabitsOn(db, dk, cal);
   const hour = new Date().getHours();
   const greeting =
-    hour < 12 ? t("صبح بخیر ☀️", "Good morning ☀️") : hour < 18 ? t("ظهر بخیر 🌤", "Good afternoon 🌤") : t("عصر بخیر 🌙", "Good evening 🌙");
+    hour < 12
+      ? t("صبح بخیر ☀️", "Good morning ☀️")
+      : hour < 18
+        ? t("ظهر بخیر 🌤", "Good afternoon 🌤")
+        : t("عصر بخیر 🌙", "Good evening 🌙");
 
   const habitCount = (k: string) => dueHabitsOn(db, k, cal).length;
 
@@ -53,7 +57,14 @@ function TodayPage() {
         {score !== null && (
           <div className="relative flex h-20 w-20 shrink-0 items-center justify-center">
             <svg viewBox="0 0 36 36" className="h-20 w-20 -rotate-90">
-              <circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--secondary)" strokeWidth="3.2" />
+              <circle
+                cx="18"
+                cy="18"
+                r="15.5"
+                fill="none"
+                stroke="var(--secondary)"
+                strokeWidth="3.2"
+              />
               <circle
                 cx="18"
                 cy="18"
@@ -66,7 +77,9 @@ function TodayPage() {
                 className="transition-[stroke-dasharray] duration-1000 ease-out"
               />
             </svg>
-            <span className="absolute text-base font-black text-foreground">{faNum(score, lang)}٪</span>
+            <span className="absolute text-base font-black text-foreground">
+              {faNum(score, lang)}٪
+            </span>
           </div>
         )}
       </div>
@@ -81,7 +94,10 @@ function TodayPage() {
         percentFor={(k) => dayScore(db, k, cal)}
       />
       {!isToday && (
-        <button onClick={() => setDk(todayKey())} className="-mt-3 self-center text-[10px] font-medium text-primary">
+        <button
+          onClick={() => setDk(todayKey())}
+          className="-mt-3 self-center text-[10px] font-medium text-primary"
+        >
           {t("برو به امروز", "Go to today")}
         </button>
       )}
@@ -100,7 +116,14 @@ function TodayPage() {
         {/* بسته باز می‌شود: صفحه‌ی امروز مالِ عادت‌هاست و نوار کارها وقتی چند کار
             داشته باشی کل صفحه را می‌گرفت. سرِ کارت شمارش «انجام‌شده/کل» را نشان
             می‌دهد، پس بدون باز کردن هم می‌فهمی چیزی مانده یا نه. */}
-        <TodayTodosCard db={db} dateKey={dk} lang={lang} t={t} onUpdate={update} defaultOpen={false} />
+        <TodayTodosCard
+          db={db}
+          dateKey={dk}
+          lang={lang}
+          t={t}
+          onUpdate={update}
+          defaultOpen={false}
+        />
       </section>
 
       {/* habits due */}
@@ -108,15 +131,24 @@ function TodayPage() {
         <SectionTitle
           action={
             <Link to="/habits" className="flex items-center text-xs font-medium text-primary">
-              {t("مدیریت", "Manage")} <ChevronLeft className="h-3.5 w-3.5 rtl:rotate-0 ltr:rotate-180" />
+              {t("مدیریت", "Manage")}{" "}
+              <ChevronLeft className="h-3.5 w-3.5 rtl:rotate-0 ltr:rotate-180" />
             </Link>
           }
         >
-          {isToday ? t("عادت‌های امروز", "Today's habits") : t("عادت‌های این روز", "Habits for this day")}
+          {isToday
+            ? t("عادت‌های امروز", "Today's habits")
+            : t("عادت‌های این روز", "Habits for this day")}
         </SectionTitle>
         {due.length === 0 ? (
           <div className="card-surface">
-            <EmptyState emoji="🌱" text={t("هنوز عادتی نداری؛ از بخش عادت‌ها اضافه کن!", "No habits yet. Add one from Habits!")} />
+            <EmptyState
+              emoji="🌱"
+              text={t(
+                "هنوز عادتی نداری؛ از بخش عادت‌ها اضافه کن!",
+                "No habits yet. Add one from Habits!",
+              )}
+            />
             <div className="flex justify-center pb-4">
               <Link
                 to="/habits"
@@ -129,7 +161,16 @@ function TodayPage() {
         ) : (
           <div className="flex flex-col gap-2">
             {due.map((h) => (
-              <HabitRow key={h.id} db={db} habit={h} cal={cal} lang={lang} t={t} dk={dk} onUpdate={update} />
+              <HabitRow
+                key={h.id}
+                db={db}
+                habit={h}
+                cal={cal}
+                lang={lang}
+                t={t}
+                dk={dk}
+                onUpdate={update}
+              />
             ))}
           </div>
         )}

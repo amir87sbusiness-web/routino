@@ -16,7 +16,7 @@ import {
 import { users } from "../shared/db/schema.ts";
 import { badRequest, tooMany, unauthorized } from "../shared/lib/http-errors.ts";
 import { normalizePhone } from "../shared/lib/phone.ts";
-import { grantInterval, readEntitlement } from "../shared/services/entitlement.ts";
+import { readEntitlement } from "../shared/services/entitlement.ts";
 import {
   checkLoginRate,
   clearLoginFailures,
@@ -45,7 +45,6 @@ import {
 } from "../shared/services/tokens.ts";
 import type { DeviceDescriptor } from "../shared/services/tokens.ts";
 
-const TRIAL_DAYS = 7;
 const deviceDescriptorBody = z.object({
   installationKey: z.string().min(8).max(256),
   name: z.string().min(1).max(64),
@@ -142,7 +141,7 @@ export function authRoutes(deps: Deps) {
 
   /**
    * Verify an OTP and sign in. Creates the account on first use.
-   * The 7-day trial is granted HERE, server-side.
+   * Account creation authenticates only. Entitlement is activated separately.
    */
   r.post("/auth/otp/verify", async (c) => {
     const {
@@ -180,10 +179,6 @@ export function authRoutes(deps: Deps) {
     if (!user) throw new Error("failed to create user");
     if (user.blocked) throw unauthorized("blocked", "Account is blocked");
 
-    if (isNew) {
-      await grantInterval(db, user.id, { planId: "trial", days: TRIAL_DAYS, source: "trial" }, t);
-    }
-
     if (intent === "password_reset" || (intent === "signup" && isNew)) {
       await db
         .update(users)
@@ -215,9 +210,7 @@ export function authRoutes(deps: Deps) {
    * missing account still pays a hash-verify cost, so it cannot enumerate users.
    */
   r.post("/auth/password/login", async (c) => {
-    const { identifier, password, deviceName, device } = passwordLoginBody.parse(
-      await readJson(c),
-    );
+    const { identifier, password, deviceName, device } = passwordLoginBody.parse(await readJson(c));
     const t = now();
     const ip = clientIp(c, env);
 

@@ -121,3 +121,138 @@
 **Suggested improvement:** For focused checks, verify the package script's fixed arguments first. If it always scans the repository, invoke the underlying tool with explicit paths or configure an exclusion for nested worktrees; report broad-scan failures separately.
 
 **Principle:** A command that accepts a path is not necessarily scoped to that path when its wrapper already supplies a broad discovery root.
+
+### Observation 9: Bind background requests to an immutable account identity
+
+**Status:** OPEN
+**Date:** 2026-08-21
+**Session context:** Integrating a multi-account background sync lifecycle with mutable session storage.
+**Skill:** New skill candidate: owner-bound background work
+**Type:** open-source
+**Phase/Area:** Multi-account sync orchestration
+
+**Issue:** A multi-request background job can start for one account while shared token storage changes before a later request, allowing later pages or batches to run under a different identity even when local storage is correctly isolated.
+
+**Suggested improvement:** Bind each background job to the expected immutable account subject. Assert that subject immediately before transport and again after token refresh, and serialize account switching with any active job.
+
+**Principle:** Local tenant isolation is incomplete unless every asynchronous server operation is bound to the same immutable tenant identity for its entire lifetime.
+
+### Observation 10: Separate stored preference from effective OS capability
+
+**Status:** OPEN
+**Date:** 2026-08-21
+**Session context:** Replacing automatic notification prompts with explicit permission UX and background reconciliation.
+**Skill:** New skill candidate: permission-aware local features
+**Type:** open-source
+**Phase/Area:** Native permission state and settings UX
+
+**Issue:** Treating a persisted feature toggle as proof that an OS permission is available makes Settings lie after permission revocation, while overwriting the preference on denial prevents the feature from recovering automatically when permission becomes available again.
+
+**Suggested improvement:** Keep the user's persisted preference separate from the checked runtime permission. Display and execute the effective intersection, request permission only from an explicit action, and re-check capability on foreground without discarding intent.
+
+**Principle:** A stored preference expresses user intent; effective availability is that intent intersected with current platform capability.
+
+### Observation 11: One-time grants need dual-history checks under one durable lock
+
+**Status:** OPEN
+**Date:** 2026-08-21
+**Session context:** Moving a first-use trial from automatic signup to an explicit once-per-account activation endpoint.
+**Skill:** test-driven-development / systematic-debugging
+**Type:** open-source
+**Phase/Area:** Transactional eligibility and ledger integrity
+
+**Issue:** Checking only the append-only grant ledger can accidentally mint access when a materialized entitlement exists without its expected history, while checking both outside a transaction lets concurrent devices pass the same eligibility decision.
+
+**Suggested improvement:** For irreversible once-per-account benefits, lock a stable account row, inspect both immutable history and materialized current state, and write the benefit inside the same transaction. Test retries, concurrency, expired history, every prior source, and inconsistent materialization.
+
+**Principle:** A once-only benefit is safe only when every durable representation of prior access is checked and the decision plus grant are serialized by one database lock.
+
+### Observation 12: Migration bridges must distinguish transient from definitive failures
+
+**Status:** OPEN
+**Date:** 2026-08-21
+**Session context:** Bounding a one-time migration from local-only subscription state to authoritative server entitlements.
+**Skill:** test-driven-development / systematic-debugging
+**Type:** open-source
+**Phase/Area:** Legacy migration failure policy
+
+**Issue:** Treating every import exception as retryable can preserve obsolete local authority forever after a deterministic rejection, while treating every 4xx as final can discard valid access during temporary rate limiting or request-timeout responses.
+
+**Suggested improvement:** Classify offline, 5xx, 408, 425 and 429 as temporary; resolve non-retryable 4xx against the authoritative server result; and cover both branches with regression tests using server-issued time and immutable account ownership.
+
+**Principle:** A bounded migration remains bounded only when temporary failures retry and definitive outcomes permanently return authority to the new source of truth.
+
+### Observation 13: Server-authoritative activation must isolate post-commit device capabilities
+
+**Status:** OPEN
+**Date:** 2026-08-21
+**Session context:** Adding an explicit first-habit activation flow that starts a server-authoritative trial before configuring reminder permission.
+**Skill:** test-driven-development / systematic-debugging
+**Type:** open-source
+**Phase/Area:** Post-commit device capability handling
+
+**Issue:** An OS capability prompt can fail after an irreversible server grant; allowing that exception to escape turns a completed activation into a misleading client failure or retry path.
+
+**Suggested improvement:** Commit and cache the authoritative entitlement and domain state first, then make capability setup non-fatal with explicit denial and thrown-error regression tests.
+
+**Principle:** Irreversible server decisions must never be rolled back or misrepresented by follow-up device configuration.
+
+### Observation 14: Read-only bypasses must be capability-specific
+
+**Status:** OPEN
+**Date:** 2026-08-21
+**Session context:** Converting the default application updater into a paid-access product mutation gate while preserving account and device operations.
+**Skill:** test-driven-development / task-observer
+**Type:** open-source
+**Phase/Area:** Client mutation authorization
+
+**Issue:** A generic system or forced updater recreates an unauditable escape hatch, while routing every operation through the paid gate breaks login, logout, entitlement refresh, notification preferences and destructive account-content reset.
+
+**Suggested improvement:** Keep product mutation as the secure default and expose only narrow, named operations for each audited bypass. Exercise those capabilities under expired access in provider-level tests.
+
+**Principle:** Authorization boundaries remain auditable only when every bypass declares the specific capability it needs.
+
+### Observation 15: Calendar analytics tests must own their clock
+
+**Status:** OPEN
+**Date:** 2026-08-21
+**Session context:** Verifying read-only history and analytics with a test fixture whose day keys were fixed to an earlier date.
+**Skill:** systematic-debugging / test-driven-development
+**Type:** open-source
+**Phase/Area:** Deterministic time-based tests
+
+**Issue:** Tests can build logs around a fixed reference day while production helpers still call the real current date, causing an otherwise unchanged formula suite to fail as soon as wall time moves beyond the fixture.
+
+**Suggested improvement:** Freeze the test clock to the fixture's reference day whenever any function under test reads `Date.now()` or `todayKey()` implicitly, and restore real timers after the suite.
+
+**Principle:** A time-based test is deterministic only when its data and its clock share the same explicit reference.
+
+### Observation 16: Supplemental feedback must receive an accepted transition
+
+**Status:** OPEN
+**Date:** 2026-08-21
+**Session context:** Adding non-blocking completion sound and haptics to a local-first application with a read-only product gate.
+**Skill:** test-driven-development
+**Type:** open-source
+**Phase/Area:** Interaction side effects
+
+**Issue:** Observing persisted state globally cannot distinguish a local click from hydration or remote synchronization, while running feedback before the mutation gate accepts a write makes blocked actions appear successful.
+
+**Suggested improvement:** Model completion feedback as a pure transition decision that requires a direct source and an accepted mutation, then call the platform side effect only from the initiating interaction path.
+
+**Principle:** Supplemental interaction effects need the same source and authorization context as the mutation they acknowledge.
+
+### Observation 17: Launch evidence must identify the version it verifies
+
+**Status:** OPEN
+**Date:** 2026-08-21
+**Session context:** Reconciling a living launch-readiness document with healthy production endpoints while launch changes still existed only in the working tree.
+**Skill:** task-observer / verification-before-completion
+**Type:** open-source
+**Phase/Area:** Release verification and operational documentation
+
+**Issue:** A live health check can prove that the currently deployed service is reachable without proving that pending schema, backend, or frontend changes are deployed. Mixing those facts turns evidence for an old release into an accidental readiness claim for a new one.
+
+**Suggested improvement:** Record live service health, local suite results, deployment state, SQL application state, and physical-device validation as separate evidence classes with explicit dates and versions. Never let one substitute for another.
+
+**Principle:** Release evidence is meaningful only when it names both what was verified and which version received that verification.

@@ -1,11 +1,11 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import { RouterProvider, createRouter } from '@tanstack/react-router';
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { RouterProvider, createRouter } from "@tanstack/react-router";
 // وارد کردن درخت مسیرها که توسط TanStack تولید شده است
-import { routeTree } from './routeTree.gen';
+import { routeTree } from "./routeTree.gen";
 // وارد کردن استایل‌های اصلی (Tailwind)
-import './styles.css';
-import { initPwa } from './lib/pwa';
+import "./styles.css";
+import { initPwa } from "./lib/pwa";
 
 // ایجاد یک نمونه از روتر
 //
@@ -13,11 +13,11 @@ import { initPwa } from './lib/pwa';
 // ریشه‌ی routino.me صفحه‌ی معرفی است) و روی بیلد موبایل `/`. با خواندن از
 // BASE_URL هر دو حالت بدون شرط‌گذاری درست می‌شوند. اسلشِ آخر حذف می‌شود چون
 // روتر مسیرها را با `/` شروع می‌کند و `/app//habits` تولید نشود.
-const basepath = import.meta.env.BASE_URL.replace(/\/$/, '');
+const basepath = import.meta.env.BASE_URL.replace(/\/$/, "");
 const router = createRouter({ routeTree, basepath });
 
 // ثبت تایپ‌ها برای جلوگیری از خطاهای تایپ‌اسکریپت
-declare module '@tanstack/react-router' {
+declare module "@tanstack/react-router" {
   interface Register {
     router: typeof router;
   }
@@ -29,25 +29,25 @@ initPwa();
 // دیپ‌لینک بازگشت از درگاه پرداخت (فقط نیتیو):
 // صفحه‌ی callback سرور کاربر را به routino://pay/result?paymentId=… می‌فرستد.
 void (async () => {
-  const { Capacitor } = await import('@capacitor/core');
+  const { Capacitor } = await import("@capacitor/core");
   if (!Capacitor.isNativePlatform()) return;
-  const { App: CapApp } = await import('@capacitor/app');
-  CapApp.addListener('appUrlOpen', ({ url }) => {
+  const { App: CapApp } = await import("@capacitor/app");
+  CapApp.addListener("appUrlOpen", ({ url }) => {
     const m = url.match(/pay\/result\??(.*)$/);
     if (!m) return;
-    const params = new URLSearchParams(m[1] ?? '');
+    const params = new URLSearchParams(m[1] ?? "");
     void router.navigate({
-      to: '/pay/result',
+      to: "/pay/result",
       search: {
-        paymentId: params.get('paymentId') ?? undefined,
-        status: params.get('status') ?? undefined,
+        paymentId: params.get("paymentId") ?? undefined,
+        status: params.get("status") ?? undefined,
       },
     });
   });
 })();
 
 // رندر کردن اپلیکیشن در تگ root
-const rootElement = document.getElementById('root')!;
+const rootElement = document.getElementById("root")!;
 if (!rootElement.innerHTML) {
   const root = ReactDOM.createRoot(rootElement);
   root.render(

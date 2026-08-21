@@ -19,6 +19,9 @@ export interface Settings {
   onboarded: boolean;
   journalReminder: string | null; // "HH:MM"
   notificationsEnabled: boolean;
+  /** Device-local completion preferences; never emitted to sync. */
+  completionSoundEnabled: boolean;
+  hapticsEnabled: boolean;
 }
 
 export interface Auth {
@@ -179,6 +182,9 @@ export interface Db {
     tampered: boolean;
     celebrated: string[]; // `${habitId}|${monthKey}|${milestone}`
     firedReminders: string[]; // `${kind}|${id}|${dateKey}|${HH:MM}`
+    /** Device/vault-local bridge for the one-time legacy subscription import.
+     * Once true, every server entitlement including `none` is authoritative. */
+    legacyEntitlementMigrationResolved: boolean;
     /** Phone that owns the data on this device. Survives sign-out so the SAME
      * account logging back in finds everything; a DIFFERENT phone signing in
      * triggers a content wipe (see lib/wipe.ts) so accounts never mix. */
@@ -202,7 +208,9 @@ export function defaultDb(categories: Category[]): Db {
       brandColor: "",
       onboarded: false,
       journalReminder: "22:00",
-      notificationsEnabled: true,
+      notificationsEnabled: false,
+      completionSoundEnabled: true,
+      hapticsEnabled: true,
     },
     auth: null,
     subscription: null,
@@ -221,6 +229,7 @@ export function defaultDb(categories: Category[]): Db {
       tampered: false,
       celebrated: [],
       firedReminders: [],
+      legacyEntitlementMigrationResolved: false,
       dataOwner: null,
     },
   };

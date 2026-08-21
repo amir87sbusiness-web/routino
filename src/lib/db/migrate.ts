@@ -42,12 +42,30 @@ let seqCursor = 0;
  * timestamp at all (logs, tasks) fall back to `now`; they are keyed per-day, so
  * a real conflict needs the same habit on the same date.
  */
-function rowsOf<T>(items: readonly T[], key: (x: T) => string, at: (x: T) => number): RecordRow<T>[] {
-  return items.map((x) => ({ key: key(x), data: x, updatedAt: at(x), deleted: 0, dirty: 1, seq: ++seqCursor }));
+function rowsOf<T>(
+  items: readonly T[],
+  key: (x: T) => string,
+  at: (x: T) => number,
+): RecordRow<T>[] {
+  return items.map((x) => ({
+    key: key(x),
+    data: x,
+    updatedAt: at(x),
+    deleted: 0,
+    dirty: 1,
+    seq: ++seqCursor,
+  }));
 }
 
 function rowsOfRecord<T>(rec: Record<string, T>, at: (x: T) => number): RecordRow<T>[] {
-  return Object.entries(rec).map(([key, data]) => ({ key, data, updatedAt: at(data), deleted: 0, dirty: 1, seq: ++seqCursor }));
+  return Object.entries(rec).map(([key, data]) => ({
+    key,
+    data,
+    updatedAt: at(data),
+    deleted: 0,
+    dirty: 1,
+    seq: ++seqCursor,
+  }));
 }
 
 /**
@@ -74,11 +92,41 @@ export async function migrateLegacyBlob(now = Date.now()): Promise<boolean> {
     // they have fixed ids across devices, so an untouched default must never win
     // LWW against another device's edited copy. Custom categories have no
     // timestamp, so they take `now`.
-    await idb.categories.bulkPut(rowsOf(legacy.categories ?? [], (c) => c.id, (c) => (c.isDefault ? 0 : now)));
-    await idb.habits.bulkPut(rowsOf(legacy.habits ?? [], (h) => h.id, (h) => h.createdAt));
-    await idb.tasks.bulkPut(rowsOf(legacy.tasks ?? [], (t) => t.id, () => now));
-    await idb.timerSessions.bulkPut(rowsOf(legacy.timerSessions ?? [], (s) => s.id, (s) => s.endedAt));
-    await idb.feedback.bulkPut(rowsOf(legacy.feedback ?? [], (f) => f.id, (f) => f.at));
+    await idb.categories.bulkPut(
+      rowsOf(
+        legacy.categories ?? [],
+        (c) => c.id,
+        (c) => (c.isDefault ? 0 : now),
+      ),
+    );
+    await idb.habits.bulkPut(
+      rowsOf(
+        legacy.habits ?? [],
+        (h) => h.id,
+        (h) => h.createdAt,
+      ),
+    );
+    await idb.tasks.bulkPut(
+      rowsOf(
+        legacy.tasks ?? [],
+        (t) => t.id,
+        () => now,
+      ),
+    );
+    await idb.timerSessions.bulkPut(
+      rowsOf(
+        legacy.timerSessions ?? [],
+        (s) => s.id,
+        (s) => s.endedAt,
+      ),
+    );
+    await idb.feedback.bulkPut(
+      rowsOf(
+        legacy.feedback ?? [],
+        (f) => f.id,
+        (f) => f.at,
+      ),
+    );
     await idb.logs.bulkPut(rowsOfRecord(legacy.logs ?? {}, () => now));
     await idb.journal.bulkPut(rowsOfRecord(legacy.journal ?? {}, (j) => j.updatedAt));
 
@@ -109,7 +157,9 @@ export async function migrateLegacyBlob(now = Date.now()): Promise<boolean> {
     notifications: legacy.notifications ?? [],
     meta: legacy.meta,
     theme: legacy.settings?.theme ?? "light",
-    notificationsEnabled: legacy.settings?.notificationsEnabled ?? true,
+    notificationsEnabled: legacy.settings?.notificationsEnabled ?? false,
+    completionSoundEnabled: legacy.settings?.completionSoundEnabled ?? true,
+    hapticsEnabled: legacy.settings?.hapticsEnabled ?? true,
   };
   saveLocal(local);
 

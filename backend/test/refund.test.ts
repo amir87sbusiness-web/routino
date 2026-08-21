@@ -57,6 +57,15 @@ async function buyAMonth(access: string) {
   return paymentId;
 }
 
+async function startTrial(access: string) {
+  const res = await h.app.inject({
+    method: "POST",
+    url: "/v1/subscriptions/trial/start",
+    headers: auth(access),
+  });
+  expect(res.statusCode).toBe(200);
+}
+
 const daysLeft = async (userId: string) => {
   const rows = await h.query<{ expires_at: string | null }>(
     `select expires_at::text from entitlements where user_id = '${userId}'`,
@@ -84,6 +93,9 @@ describe("money that comes back", () => {
 
   it("lets the owner subtract the refunded month, leaving the rest intact", async () => {
     const { access, user } = await signIn("09137770002");
+    // This scenario intentionally verifies that a paid month stacks on, and a
+    // refund peels back to, the remaining explicitly activated trial.
+    await startTrial(access);
     await buyAMonth(access);
     const before = await daysLeft(user.id);
     expect(before).toBeGreaterThan(30);

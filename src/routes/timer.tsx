@@ -4,6 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { applyLog, CelebrationModal, useCelebration } from "@/components/habits";
 import { Button, Card, Chip, DurationPicker, formatDuration } from "@/components/ui";
+import {
+  shouldTriggerCompletionFeedback,
+  triggerCompletionFeedback,
+} from "@/lib/completion-feedback";
 import { faNum, todayKey } from "@/lib/dates";
 import { dueHabitsOn, getLog, isCompleted } from "@/lib/logic";
 import { uid, type TimerMode } from "@/lib/store";
@@ -92,41 +96,88 @@ function TimerPage() {
   };
 
   /** Commit accumulated focus minutes (rounded) to the linked habit/task. */
-  const commitFocusToLinked = (focusSeconds: number) => {
+  const commitFocusToLinked = (focusSeconds: number, feedbackEligible = false) => {
     const c = ctxRef.current;
     const link = linkedRef.current;
     if (!c?.db || !link || focusSeconds <= 0) return;
     const minutes = focusSeconds / 60;
     const dk = todayKey();
     if (link.kind === "task") {
-      c.update((d) => ({
+      const task = c.db.tasks.find((x) => x.id === link.id);
+      if (!task) return;
+      const nextValue =
+        task.type === "binary"
+          ? task.target
+          : task.unitKind === "time"
+            ? Math.round((task.value + minutes) * 100) / 100
+            : task.value + Math.round(minutes);
+      const afterCompleted = task.type === "binary" || task.done || nextValue >= task.target;
+      const mutationAccepted = c.update((d) => ({
         ...d,
         tasks: d.tasks.map((x) => {
           if (x.id !== link.id) return x;
           if (x.type === "binary") return { ...x, done: true, value: x.target };
-          const nextVal =
-            x.unitKind === "time" ? Math.round((x.value + minutes) * 100) / 100 : x.value + Math.round(minutes);
-          return { ...x, value: nextVal, done: nextVal >= x.target || x.done };
+          const value =
+            x.unitKind === "time"
+              ? Math.round((x.value + minutes) * 100) / 100
+              : x.value + Math.round(minutes);
+          return { ...x, value, done: value >= x.target || x.done };
         }),
       }));
-    } else {
-      if (!c.db.habits.some((h) => h.id === link.id)) return;
-      // Derive the patch inside the updater: `d` is the fresh db, whereas the
-      // captured `c.db` is a snapshot from before this callback fired.
-      c.update((d) => {
-        const habit = d.habits.find((h) => h.id === link.id);
-        if (!habit) return d;
-        const prevVal = getLog(d, habit.id, dk)?.value ?? 0;
-        let patch: Partial<{ value: number; done: boolean }>;
-        if (habit.type === "binary") {
-          patch = { done: true, value: 1 };
-        } else {
-          const nextVal =
-            habit.unitKind === "time" ? Math.round((prevVal + minutes) * 100) / 100 : prevVal + Math.round(minutes);
-          patch = { value: nextVal, done: nextVal >= habit.target };
-        }
-        return applyLog(d, habit, c.cal, patch, dk).db;
-      });
+      if (
+        feedbackEligible &&
+        shouldTriggerCompletionFeedback({
+          source: "user",
+          mutationAccepted,
+          beforeCompleted: task.done,
+          afterCompleted,
+        })
+      ) {
+        triggerCompletionFeedback(c.db.settings);
+      }
+      return;
+    }
+
+    const habit = c.db.habits.find((x) => x.id === link.id);
+    if (!habit) return;
+    const beforeCompleted = isCompleted(habit, getLog(c.db, habit.id, dk));
+    const previousValue = getLog(c.db, habit.id, dk)?.value ?? 0;
+    const nextValue =
+      habit.type === "binary"
+        ? 1
+        : habit.unitKind === "time"
+          ? Math.round((previousValue + minutes) * 100) / 100
+          : previousValue + Math.round(minutes);
+    const afterCompleted = habit.type === "binary" || beforeCompleted || nextValue >= habit.target;
+    const mutationAccepted = c.update((d) => {
+      const currentHabit = d.habits.find((x) => x.id === link.id);
+      if (!currentHabit) return d;
+      const prevVal = getLog(d, currentHabit.id, dk)?.value ?? 0;
+      const patch =
+        currentHabit.type === "binary"
+          ? { done: true, value: 1 }
+          : {
+              value:
+                currentHabit.unitKind === "time"
+                  ? Math.round((prevVal + minutes) * 100) / 100
+                  : prevVal + Math.round(minutes),
+              done:
+                currentHabit.unitKind === "time"
+                  ? Math.round((prevVal + minutes) * 100) / 100 >= currentHabit.target
+                  : prevVal + Math.round(minutes) >= currentHabit.target,
+            };
+      return applyLog(d, currentHabit, c.cal, patch, dk).db;
+    });
+    if (
+      feedbackEligible &&
+      shouldTriggerCompletionFeedback({
+        source: "user",
+        mutationAccepted,
+        beforeCompleted,
+        afterCompleted,
+      })
+    ) {
+      triggerCompletionFeedback(c.db.settings);
     }
   };
 
@@ -159,12 +210,12 @@ function TimerPage() {
   };
 
   /** Stop everything, optionally saving progress made so far. */
-  const finalizeSession = (save: boolean) => {
+  const finalizeSession = (save: boolean, feedbackEligible = false) => {
     setRunning(false);
     if (intervalRef.current) clearInterval(intervalRef.current);
     const focusSeconds = focusAccumRef.current;
     if (save && focusSeconds > 0) {
-      commitFocusToLinked(focusSeconds);
+      commitFocusToLinked(focusSeconds, feedbackEligible);
       logSession(focusSeconds, modeRef.current);
     }
     focusAccumRef.current = 0;
@@ -267,7 +318,8 @@ function TimerPage() {
     .filter((h) => h.type === "quantity" && h.unitKind === "time")
     .filter((h) => !isCompleted(h, getLog(db, h.id, dk)));
   const openTasks = db.tasks.filter(
-    (task) => task.dateKey === dk && !task.done && task.type === "quantity" && task.unitKind === "time",
+    (task) =>
+      task.dateKey === dk && !task.done && task.type === "quantity" && task.unitKind === "time",
   );
 
   /** Remaining minutes toward this linked item's time goal (target - already logged). */
@@ -304,7 +356,8 @@ function TimerPage() {
   const mm = String(Math.floor(displaySeconds / 60)).padStart(2, "0");
   const ss = String(displaySeconds % 60).padStart(2, "0");
 
-  const totalForRing = mode === "pomodoro" ? (onBreak ? pomoBreakMin : pomoFocusMin) * 60 : freeMinutes * 60;
+  const totalForRing =
+    mode === "pomodoro" ? (onBreak ? pomoBreakMin : pomoFocusMin) * 60 : freeMinutes * 60;
   const progress = mode === "stopwatch" ? 0 : totalForRing > 0 ? 1 - remaining / totalForRing : 0;
 
   const switchMode = (m: TimerMode) => {
@@ -332,7 +385,7 @@ function TimerPage() {
   };
 
   const stopAndSave = () => {
-    finalizeSession(true);
+    finalizeSession(true, true);
     setFinished(true);
     setPomoRound(1);
     pomoRoundRef.current = 1;
@@ -342,6 +395,7 @@ function TimerPage() {
   };
 
   const toggleRunning = () => {
+    if (!running && !ctxRef.current?.requestProductWrite()) return;
     if (!running) setFinished(false);
     setRunning((r) => !r);
   };
@@ -386,7 +440,9 @@ function TimerPage() {
         <button
           onClick={() => switchMode("pomodoro")}
           className={`flex flex-col items-center gap-1 rounded-2xl border px-2 py-3 text-xs font-bold transition-all ${
-            mode === "pomodoro" ? "border-primary bg-primary-soft text-primary" : "border-border text-muted-foreground"
+            mode === "pomodoro"
+              ? "border-primary bg-primary-soft text-primary"
+              : "border-border text-muted-foreground"
           }`}
         >
           <TimerIcon className="h-4 w-4" />
@@ -395,7 +451,9 @@ function TimerPage() {
         <button
           onClick={() => switchMode("free")}
           className={`flex flex-col items-center gap-1 rounded-2xl border px-2 py-3 text-xs font-bold transition-all ${
-            mode === "free" ? "border-primary bg-primary-soft text-primary" : "border-border text-muted-foreground"
+            mode === "free"
+              ? "border-primary bg-primary-soft text-primary"
+              : "border-border text-muted-foreground"
           }`}
         >
           <TimerIcon className="h-4 w-4" />
@@ -404,7 +462,9 @@ function TimerPage() {
         <button
           onClick={() => switchMode("stopwatch")}
           className={`flex flex-col items-center gap-1 rounded-2xl border px-2 py-3 text-xs font-bold transition-all ${
-            mode === "stopwatch" ? "border-primary bg-primary-soft text-primary" : "border-border text-muted-foreground"
+            mode === "stopwatch"
+              ? "border-primary bg-primary-soft text-primary"
+              : "border-border text-muted-foreground"
           }`}
         >
           <Square className="h-4 w-4" />
@@ -417,7 +477,8 @@ function TimerPage() {
           <div className="flex flex-wrap items-center justify-center gap-1.5">
             {onBreak && (
               <div className="flex items-center gap-1.5 rounded-full bg-secondary px-3 py-1 text-xs font-bold text-muted-foreground">
-                <Coffee className="h-3.5 w-3.5" aria-hidden="true" /> {t("زمان استراحت", "Break time")}
+                <Coffee className="h-3.5 w-3.5" aria-hidden="true" />{" "}
+                {t("زمان استراحت", "Break time")}
               </div>
             )}
             {pomoCycles > 1 && (
@@ -433,7 +494,14 @@ function TimerPage() {
         <div className="relative flex h-52 w-52 items-center justify-center">
           {mode !== "stopwatch" ? (
             <svg viewBox="0 0 100 100" className="h-52 w-52 -rotate-90">
-              <circle cx="50" cy="50" r="45" fill="none" stroke="var(--secondary)" strokeWidth="6" />
+              <circle
+                cx="50"
+                cy="50"
+                r="45"
+                fill="none"
+                stroke="var(--secondary)"
+                strokeWidth="6"
+              />
               {progress > 0 && (
                 <circle
                   cx="50"
@@ -449,13 +517,17 @@ function TimerPage() {
               )}
             </svg>
           ) : (
-            <div className={`h-52 w-52 rounded-full border-[6px] ${running ? "border-primary" : "border-secondary"} transition-colors`} />
+            <div
+              className={`h-52 w-52 rounded-full border-[6px] ${running ? "border-primary" : "border-secondary"} transition-colors`}
+            />
           )}
           <div className="absolute text-center" dir="ltr">
             <p className="text-5xl font-black tabular-nums text-foreground">
               {faNum(mm, lang)}:{faNum(ss, lang)}
             </p>
-            {finished && <p className="mt-1 text-xs font-bold text-success">{t("تمام شد! 🎉", "Done! 🎉")}</p>}
+            {finished && (
+              <p className="mt-1 text-xs font-bold text-success">{t("تمام شد! 🎉", "Done! 🎉")}</p>
+            )}
           </div>
         </div>
 
@@ -468,7 +540,11 @@ function TimerPage() {
             aria-label={running ? t("توقف موقت", "Pause") : t("شروع", "Start")}
             className="h-14 w-14 rounded-full p-0"
           >
-            {running ? <Pause className="h-6 w-6" aria-hidden="true" /> : <Play className="h-6 w-6" aria-hidden="true" />}
+            {running ? (
+              <Pause className="h-6 w-6" aria-hidden="true" />
+            ) : (
+              <Play className="h-6 w-6" aria-hidden="true" />
+            )}
           </Button>
           {mode === "stopwatch" && running && (
             <Button
@@ -525,7 +601,10 @@ function TimerPage() {
                     `${faNum(pomoCycles, lang)} دور ${faNum(pomoFocusMin, lang)} دقیقه‌ای، جمعاً ${faNum(pomoCycles * pomoFocusMin, lang)} دقیقه تمرکز. فقط زمان تمرکز حساب می‌شود.`,
                     `${pomoCycles} rounds of ${pomoFocusMin} min, ${pomoCycles * pomoFocusMin} min of focus in total. Only focus time counts.`,
                   )
-                : t("فقط زمان تمرکز حساب می‌شود، استراحت حساب نمی‌شود.", "Only focus time counts; breaks are excluded.")}
+                : t(
+                    "فقط زمان تمرکز حساب می‌شود، استراحت حساب نمی‌شود.",
+                    "Only focus time counts; breaks are excluded.",
+                  )}
             </p>
           </div>
         )}
@@ -603,7 +682,9 @@ function TimerPage() {
       {/* recent sessions */}
       {db.timerSessions.length > 0 && (
         <Card>
-          <p className="mb-2 text-sm font-bold text-foreground">{t("جلسات اخیر", "Recent sessions")}</p>
+          <p className="mb-2 text-sm font-bold text-foreground">
+            {t("جلسات اخیر", "Recent sessions")}
+          </p>
           <div className="flex flex-col gap-2">
             {db.timerSessions.slice(0, 6).map((s) => (
               <div key={s.id} className="flex items-center justify-between text-xs">
@@ -611,7 +692,9 @@ function TimerPage() {
                   {s.mode === "pomodoro" ? "🍅" : s.mode === "free" ? "⏱️" : "⏲️"}{" "}
                   {s.linkedLabel ?? t("بدون اتصال", "Unlinked")}
                 </span>
-                <span className="font-bold text-foreground">{formatDuration(s.focusSeconds / 60, lang)}</span>
+                <span className="font-bold text-foreground">
+                  {formatDuration(s.focusSeconds / 60, lang)}
+                </span>
               </div>
             ))}
           </div>

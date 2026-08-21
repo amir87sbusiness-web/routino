@@ -18,6 +18,7 @@ import { checkout, fetchPlans, fetchQuote, type ServerPlan } from "@/lib/api/pay
 import { faNum, formatDate, dateKey } from "@/lib/dates";
 import { subscriptionActive } from "@/lib/logic";
 import { PLANS } from "@/lib/presets";
+import { subscriptionProgress } from "@/lib/subscription-progress";
 import { useAppMaybe } from "@/state/app";
 
 export const Route = createFileRoute("/subscribe")({
@@ -65,7 +66,9 @@ function SubscribePage() {
         setOffline(false);
         // اگر پلنِ پیش‌فرض در فهرست واقعی سرور نبود، به یک پلن معتبر برگرد؛ وگرنه
         // دکمه‌ی پرداخت روی چیزی می‌ماند که سرور نمی‌شناسد و خرید با خطا رد می‌شود.
-        setSelected((cur) => (res.plans.some((p) => p.id === cur) ? cur : (res.plans[1] ?? res.plans[0]).id));
+        setSelected((cur) =>
+          res.plans.some((p) => p.id === cur) ? cur : (res.plans[1] ?? res.plans[0]).id,
+        );
       })
       .catch(() => {
         if (!cancelled) setOffline(true);
@@ -76,9 +79,10 @@ function SubscribePage() {
   }, []);
 
   if (!ctx?.db) return null;
-  const { db, update, t, lang, cal } = ctx;
+  const { db, update, applyEntitlement, t, lang, cal } = ctx;
 
   const active = subscriptionActive(db);
+  const progress = !active ? subscriptionProgress(db) : null;
 
   /** Display-only. The charged amount is recomputed server-side at checkout. */
   const priceOf = (planId: string) => {
@@ -126,7 +130,9 @@ function SubscribePage() {
       } else if (err instanceof ApiError && err.status === 401) {
         setNeedsLogin(true);
       } else {
-        setCodeError(t("بررسی کد ناموفق بود. دوباره تلاش کن.", "Could not check the code. Try again."));
+        setCodeError(
+          t("بررسی کد ناموفق بود. دوباره تلاش کن.", "Could not check the code. Try again."),
+        );
       }
     } finally {
       setChecking(false);
@@ -145,7 +151,7 @@ function SubscribePage() {
         // 100% discount: granted server-side without a gateway round-trip.
         const sub = entitlementToSubscription(res.entitlement);
         if (sub) {
-          update((d) => ({ ...d, subscription: sub, meta: { ...d.meta, tampered: false } }));
+          applyEntitlement(sub);
         }
         setFreeSuccess(true);
         setTimeout(() => navigate({ to: "/" }), 1500);
@@ -157,7 +163,9 @@ function SubscribePage() {
         window.location.href = res.paymentUrl;
         return;
       }
-      setPayError(t("شروع پرداخت ناموفق بود. دوباره تلاش کن.", "Could not start the payment. Try again."));
+      setPayError(
+        t("شروع پرداخت ناموفق بود. دوباره تلاش کن.", "Could not start the payment. Try again."),
+      );
     } catch (err) {
       if (err instanceof ApiError && err.offline) {
         setPayError(t("برای خرید به اینترنت نیاز داری.", "Buying needs an internet connection."));
@@ -165,9 +173,16 @@ function SubscribePage() {
         // Signed in locally but no server session (pre-backend account).
         setNeedsLogin(true);
       } else if (err instanceof ApiError && err.code === "rate_limited") {
-        setPayError(t("تلاش زیاد بود؛ کمی بعد دوباره امتحان کن.", "Too many attempts; try again soon."));
+        setPayError(
+          t("تلاش زیاد بود؛ کمی بعد دوباره امتحان کن.", "Too many attempts; try again soon."),
+        );
       } else if (err instanceof ApiError && err.code === "psp_failed") {
-        setPayError(t("درگاه پرداخت در دسترس نیست. چند دقیقه دیگر تلاش کن.", "The gateway is unavailable. Try again shortly."));
+        setPayError(
+          t(
+            "درگاه پرداخت در دسترس نیست. چند دقیقه دیگر تلاش کن.",
+            "The gateway is unavailable. Try again shortly.",
+          ),
+        );
       } else {
         setPayError(t("یه مشکلی پیش اومد. دوباره تلاش کن.", "Something went wrong. Try again."));
       }
@@ -180,7 +195,8 @@ function SubscribePage() {
   const testGrant = () => {
     const plan = plans.find((p) => p.id === selected) ?? plans[0];
     const now = Date.now();
-    const base = db.subscription && db.subscription.expiresAt > now ? db.subscription.expiresAt : now;
+    const base =
+      db.subscription && db.subscription.expiresAt > now ? db.subscription.expiresAt : now;
     update((d) => ({
       ...d,
       subscription: {
@@ -198,13 +214,15 @@ function SubscribePage() {
     <div className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-5 bg-background px-5 py-screen-safe">
       <div className="flex flex-col items-center gap-2 text-center">
         <Logo className="h-14 w-14" />
-        <h1 className="text-xl font-black text-foreground">{t("اشتراک روتینو", "Routino Subscription")}</h1>
+        <h1 className="text-xl font-black text-foreground">
+          {t("اشتراک روتینو", "Routino Subscription")}
+        </h1>
         {db.meta.tampered && (
           <div className="flex items-center gap-2 rounded-xl bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">
             <ShieldAlert className="h-4 w-4" />
             {t(
-              "تغییر ساعت دستگاه شناسایی شد؛ برای ادامه باید اشتراک را تمدید کنی.",
-              "Clock tampering detected; renew your subscription to continue.",
+              "ساعت دستگاه نیاز به بررسی آنلاین دارد؛ به اینترنت وصل شو تا وضعیت اشتراک دوباره تأیید شود.",
+              "Your device clock needs online verification. Connect to confirm your subscription status.",
             )}
           </div>
         )}
@@ -219,18 +237,65 @@ function SubscribePage() {
         ) : (
           <p className="text-xs text-muted-foreground">
             {t(
-              "برای استفاده از روتینو به اشتراک فعال نیاز داری.",
-              "You need an active subscription to use Routino.",
+              "اطلاعات قبلی‌ات قابل مشاهده است؛ اشتراک فعال امکان ثبت و تغییر دوباره را باز می‌کند.",
+              "Your existing data stays visible. An active subscription restores creating and editing.",
             )}
           </p>
         )}
         {offline && (
           <div className="flex items-center gap-2 rounded-xl bg-secondary px-3 py-2 text-[11px] font-medium text-muted-foreground">
             <WifiOff className="h-3.5 w-3.5" />
-            {t("سرور در دسترس نیست؛ برای خرید به اینترنت نیاز داری.", "Server unreachable; buying needs internet.")}
+            {t(
+              "سرور در دسترس نیست؛ برای خرید به اینترنت نیاز داری.",
+              "Server unreachable; buying needs internet.",
+            )}
           </div>
         )}
       </div>
+
+      {progress && (
+        <section className="rounded-2xl border border-border bg-card/60 px-4 py-4">
+          <h2 className="text-sm font-black text-foreground">
+            {progress.kind === "trial"
+              ? t("۷ روز با روتینو", "Your 7 days with Routino")
+              : t("ادامهٔ مسیرت با روتینو", "Keep your Routino journey going")}
+          </h2>
+          <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
+            {t(
+              "این اعداد از ثبت‌های واقعی خودت در همین بازه ساخته شده‌اند.",
+              "These numbers come from your real check-ins in this period.",
+            )}
+          </p>
+          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-border pt-3 text-xs">
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="text-muted-foreground">{t("ثبت موفق", "Check-ins")}</dt>
+              <dd className="font-black text-foreground">
+                {faNum(progress.completedCheckIns, lang)}
+              </dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-2">
+              <dt className="text-muted-foreground">{t("روز فعال", "Active days")}</dt>
+              <dd className="font-black text-foreground">{faNum(progress.activeDays, lang)}</dd>
+            </div>
+            {progress.completionRate !== null && (
+              <div className="col-span-2 flex items-baseline justify-between gap-2">
+                <dt className="text-muted-foreground">{t("نرخ انجام", "Completion rate")}</dt>
+                <dd className="font-black text-foreground">
+                  {faNum(progress.completionRate, lang)}٪
+                </dd>
+              </div>
+            )}
+            {progress.bestHabit && (
+              <div className="col-span-2 flex items-baseline justify-between gap-2">
+                <dt className="text-muted-foreground">{t("عادت برجسته", "Standout habit")}</dt>
+                <dd className="max-w-[55%] truncate font-bold text-foreground">
+                  {progress.bestHabit.name}
+                </dd>
+              </div>
+            )}
+          </dl>
+        </section>
+      )}
 
       <div className="flex flex-col gap-2.5">
         {plans.map((p) => {
@@ -245,7 +310,9 @@ function SubscribePage() {
               }`}
             >
               <div>
-                <p className="text-sm font-bold text-foreground">{lang === "fa" ? p.nameFa : p.nameEn}</p>
+                <p className="text-sm font-bold text-foreground">
+                  {lang === "fa" ? p.nameFa : p.nameEn}
+                </p>
                 <p className="text-[10px] text-muted-foreground">
                   {faNum(p.months, lang)} {t("ماه دسترسی کامل", "months full access")}
                 </p>

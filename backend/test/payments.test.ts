@@ -41,6 +41,16 @@ async function checkout(access: string, body: Record<string, unknown>) {
   return res;
 }
 
+async function startTrial(access: string) {
+  const res = await h.app.inject({
+    method: "POST",
+    url: "/v1/subscriptions/trial/start",
+    headers: auth(access),
+  });
+  expect(res.statusCode).toBe(200);
+  return res.json() as { entitlement: { expiresAt: string } };
+}
+
 /** Clicks "Pay"/"Cancel" on the fake gateway and follows the redirect into the
  * callback, exactly as a browser would. Returns the callback response. */
 async function settleAndCallback(trackId: number, outcome: "paid" | "canceled") {
@@ -56,7 +66,11 @@ async function settleAndCallback(trackId: number, outcome: "paid" | "canceled") 
 
 describe("POST /v1/payments/quote", () => {
   it("requires auth", async () => {
-    const res = await h.app.inject({ method: "POST", url: "/v1/payments/quote", payload: { planId: "m1" } });
+    const res = await h.app.inject({
+      method: "POST",
+      url: "/v1/payments/quote",
+      payload: { planId: "m1" },
+    });
     expect(res.statusCode).toBe(401);
   });
 
@@ -65,18 +79,27 @@ describe("POST /v1/payments/quote", () => {
     const { access } = await signIn();
 
     const plain = await h.app.inject({
-      method: "POST", url: "/v1/payments/quote", headers: auth(access), payload: { planId: "m3" },
+      method: "POST",
+      url: "/v1/payments/quote",
+      headers: auth(access),
+      payload: { planId: "m3" },
     });
     expect(plain.json().quote.finalToman).toBe(149000);
 
     const coded = await h.app.inject({
-      method: "POST", url: "/v1/payments/quote", headers: auth(access), payload: { planId: "m3", code: "off20" },
+      method: "POST",
+      url: "/v1/payments/quote",
+      headers: auth(access),
+      payload: { planId: "m3", code: "off20" },
     });
     expect(coded.json().quote.finalToman).toBe(119200);
     expect(coded.json().discount.valid).toBe(true);
 
     const bad = await h.app.inject({
-      method: "POST", url: "/v1/payments/quote", headers: auth(access), payload: { planId: "m3", code: "NOPE" },
+      method: "POST",
+      url: "/v1/payments/quote",
+      headers: auth(access),
+      payload: { planId: "m3", code: "NOPE" },
     });
     expect(bad.json().quote.finalToman).toBe(149000);
     expect(bad.json().discount.reason).toBe("unknown");
@@ -85,10 +108,16 @@ describe("POST /v1/payments/quote", () => {
 
 describe("checkout → gateway → callback", () => {
   it("completes a payment and grants the plan exactly once", async () => {
-    const { access, user, entitlement } = await signIn();
+    const { access, user } = await signIn();
+    const trial = await startTrial(access);
     const res = await checkout(access, { planId: "m3", platform: "web" });
     expect(res.statusCode).toBe(200);
-    const body = res.json() as { free: boolean; paymentId: string; trackId: number; paymentUrl: string };
+    const body = res.json() as {
+      free: boolean;
+      paymentId: string;
+      trackId: number;
+      paymentUrl: string;
+    };
     expect(body.free).toBe(false);
     expect(body.paymentUrl).toContain("/v1/dev/gateway?trackId=");
 
@@ -104,9 +133,13 @@ describe("checkout → gateway → callback", () => {
     expect(p!.ref_number).toContain("FAKE-");
 
     // 3 calendar months stacked on the trial's remaining days, not replacing them.
-    const status = await h.app.inject({ method: "GET", url: `/v1/payments/${body.paymentId}`, headers: auth(access) });
+    const status = await h.app.inject({
+      method: "GET",
+      url: `/v1/payments/${body.paymentId}`,
+      headers: auth(access),
+    });
     const after = Date.parse(status.json().entitlement.expiresAt);
-    const trialEnd = Date.parse(entitlement.expiresAt);
+    const trialEnd = Date.parse(trial.entitlement.expiresAt);
     expect(after).toBeGreaterThan(trialEnd + 85 * DAY);
 
     const grants = await h.query<{ source: string }>(
@@ -117,7 +150,10 @@ describe("checkout → gateway → callback", () => {
 
   it("is idempotent: a replayed callback cannot double-grant", async () => {
     const { access, user } = await signIn();
-    const body = (await checkout(access, { planId: "m1" })).json() as { trackId: number; paymentId: string };
+    const body = (await checkout(access, { planId: "m1" })).json() as {
+      trackId: number;
+      paymentId: string;
+    };
 
     const first = await settleAndCallback(body.trackId, "paid");
     expect(first.body).toContain("پرداخت موفق");
@@ -126,13 +162,18 @@ describe("checkout → gateway → callback", () => {
     const second = await h.app.inject({ method: "GET", url: replayUrl });
     expect(second.body).toContain("پرداخت موفق");
 
-    const grants = await h.query(`select id from grants where user_id = '${user.id}' and source = 'payment'`);
+    const grants = await h.query(
+      `select id from grants where user_id = '${user.id}' and source = 'payment'`,
+    );
     expect(grants).toHaveLength(1);
   });
 
   it("never trusts success=1 from the URL: unsettled payment stays ungranted", async () => {
     const { access, user } = await signIn();
-    const body = (await checkout(access, { planId: "m1" })).json() as { trackId: number; paymentId: string };
+    const body = (await checkout(access, { planId: "m1" })).json() as {
+      trackId: number;
+      paymentId: string;
+    };
 
     // Forged callback before the user actually paid at the gateway.
     const forged = await h.app.inject({
@@ -141,7 +182,9 @@ describe("checkout → gateway → callback", () => {
     });
     expect(forged.body).toContain("در حال بررسی"); // pending page, no grant
 
-    const grants = await h.query(`select id from grants where user_id = '${user.id}' and source = 'payment'`);
+    const grants = await h.query(
+      `select id from grants where user_id = '${user.id}' and source = 'payment'`,
+    );
     expect(grants).toHaveLength(0);
 
     // And the REAL payment still works afterwards — the forgery didn't poison it.
@@ -151,14 +194,21 @@ describe("checkout → gateway → callback", () => {
 
   it("cancel at the gateway marks the payment canceled and grants nothing", async () => {
     const { access, user } = await signIn();
-    const body = (await checkout(access, { planId: "m1" })).json() as { trackId: number; paymentId: string };
+    const body = (await checkout(access, { planId: "m1" })).json() as {
+      trackId: number;
+      paymentId: string;
+    };
 
     const cb = await settleAndCallback(body.trackId, "canceled");
     expect(cb.body).toContain("لغو");
 
-    const [p] = await h.query<{ status: string }>(`select status from payments where id = '${body.paymentId}'`);
+    const [p] = await h.query<{ status: string }>(
+      `select status from payments where id = '${body.paymentId}'`,
+    );
     expect(p!.status).toBe("canceled");
-    const grants = await h.query(`select id from grants where user_id = '${user.id}' and source = 'payment'`);
+    const grants = await h.query(
+      `select id from grants where user_id = '${user.id}' and source = 'payment'`,
+    );
     expect(grants).toHaveLength(0);
   });
 
@@ -169,13 +219,21 @@ describe("checkout → gateway → callback", () => {
     // payment: the victim paid, their own callback never landed, and the poll
     // refused to heal the row. Money moved, nothing granted.
     const { access, user } = await signIn();
-    const body = (await checkout(access, { planId: "m1" })).json() as { trackId: number; paymentId: string };
+    const body = (await checkout(access, { planId: "m1" })).json() as {
+      trackId: number;
+      paymentId: string;
+    };
 
     // No auth, no orderId, no Authority — just the guessed trackId.
-    const attack = await h.app.inject({ method: "GET", url: `/v1/payments/callback?trackId=${body.trackId}` });
+    const attack = await h.app.inject({
+      method: "GET",
+      url: `/v1/payments/callback?trackId=${body.trackId}`,
+    });
     expect(attack.statusCode).toBe(200);
 
-    const [p] = await h.query<{ status: string }>(`select status from payments where id = '${body.paymentId}'`);
+    const [p] = await h.query<{ status: string }>(
+      `select status from payments where id = '${body.paymentId}'`,
+    );
     expect(p!.status).toBe("redirected"); // untouched — the attacker proved nothing
 
     // And nothing about the payment leaks back: `paymentId` is the very token
@@ -185,10 +243,16 @@ describe("checkout → gateway → callback", () => {
     // The victim really pays, but their browser never makes it back. The poll
     // must still be able to heal it.
     h.psp._settle(body.trackId, "paid");
-    const poll = await h.app.inject({ method: "GET", url: `/v1/payments/${body.paymentId}`, headers: auth(access) });
+    const poll = await h.app.inject({
+      method: "GET",
+      url: `/v1/payments/${body.paymentId}`,
+      headers: auth(access),
+    });
     expect(poll.json().payment.status).toBe("paid");
 
-    const grants = await h.query(`select id from grants where user_id = '${user.id}' and source = 'payment'`);
+    const grants = await h.query(
+      `select id from grants where user_id = '${user.id}' and source = 'payment'`,
+    );
     expect(grants).toHaveLength(1);
   });
 
@@ -197,7 +261,10 @@ describe("checkout → gateway → callback", () => {
     // then threw a TypeError -> 500. Worse, the throw only happened once the
     // trackId matched a real row, so the 500 was itself an existence oracle.
     const { access } = await signIn();
-    const body = (await checkout(access, { planId: "m1" })).json() as { trackId: number; paymentId: string };
+    const body = (await checkout(access, { planId: "m1" })).json() as {
+      trackId: number;
+      paymentId: string;
+    };
 
     const dup = await h.app.inject({
       method: "GET",
@@ -205,7 +272,9 @@ describe("checkout → gateway → callback", () => {
     });
     expect(dup.statusCode).toBe(200);
 
-    const [p] = await h.query<{ status: string }>(`select status from payments where id = '${body.paymentId}'`);
+    const [p] = await h.query<{ status: string }>(
+      `select status from payments where id = '${body.paymentId}'`,
+    );
     expect(p!.status).toBe("redirected"); // proved nothing, so nothing was written
   });
 
@@ -216,8 +285,14 @@ describe("checkout → gateway → callback", () => {
     const { access } = await signIn();
     const body = (await checkout(access, { planId: "m1" })).json() as { trackId: number };
 
-    const real = await h.app.inject({ method: "GET", url: `/v1/payments/callback?trackId=${body.trackId}` });
-    const miss = await h.app.inject({ method: "GET", url: `/v1/payments/callback?trackId=987654321` });
+    const real = await h.app.inject({
+      method: "GET",
+      url: `/v1/payments/callback?trackId=${body.trackId}`,
+    });
+    const miss = await h.app.inject({
+      method: "GET",
+      url: `/v1/payments/callback?trackId=987654321`,
+    });
 
     expect(real.statusCode).toBe(miss.statusCode);
     expect(real.body).toBe(miss.body);
@@ -228,7 +303,10 @@ describe("checkout → gateway → callback", () => {
     // outcome, and the callback is public. Naming a trackId must not be enough
     // to read someone else's payment back.
     const { access } = await signIn();
-    const body = (await checkout(access, { planId: "m1" })).json() as { trackId: number; paymentId: string };
+    const body = (await checkout(access, { planId: "m1" })).json() as {
+      trackId: number;
+      paymentId: string;
+    };
     await settleAndCallback(body.trackId, "paid"); // genuine callback, carries orderId
 
     const [paid] = await h.query<{ ref_number: string }>(
@@ -245,7 +323,10 @@ describe("checkout → gateway → callback", () => {
 
   it("refuses to grant when the verified amount differs from what we charged", async () => {
     const { access, user } = await signIn();
-    const body = (await checkout(access, { planId: "m12" })).json() as { trackId: number; paymentId: string };
+    const body = (await checkout(access, { planId: "m12" })).json() as {
+      trackId: number;
+      paymentId: string;
+    };
 
     // Tamper: the gateway "saw" a different amount than our payment row.
     h.psp._txns.get(body.trackId)!.amountRial = 1_000_000;
@@ -258,7 +339,9 @@ describe("checkout → gateway → callback", () => {
     );
     expect(p!.status).toBe("verify_failed");
     expect(p!.applied_at).toBeNull();
-    const grants = await h.query(`select id from grants where user_id = '${user.id}' and source = 'payment'`);
+    const grants = await h.query(
+      `select id from grants where user_id = '${user.id}' and source = 'payment'`,
+    );
     expect(grants).toHaveLength(0);
   });
 
@@ -282,7 +365,9 @@ describe("discount redemption", () => {
     const { access, user } = await signIn();
 
     const body = (await checkout(access, { planId: "m3", code: "OFF20" })).json() as {
-      trackId: number; paymentId: string; amountToman: number;
+      trackId: number;
+      paymentId: string;
+      amountToman: number;
     };
     expect(body.amountToman).toBe(119200); // server-computed, discounted
 
@@ -296,12 +381,17 @@ describe("discount redemption", () => {
     );
     expect(redemptions).toHaveLength(1);
     expect(redemptions[0]!.code).toBe("OFF20");
-    const [d] = await h.query<{ used_count: number }>(`select used_count from discounts where code = 'OFF20'`);
+    const [d] = await h.query<{ used_count: number }>(
+      `select used_count from discounts where code = 'OFF20'`,
+    );
     expect(d!.used_count).toBe(1);
 
     // Same user, same code again → server refuses it in the quote.
     const again = await h.app.inject({
-      method: "POST", url: "/v1/payments/quote", headers: auth(access), payload: { planId: "m1", code: "OFF20" },
+      method: "POST",
+      url: "/v1/payments/quote",
+      headers: auth(access),
+      payload: { planId: "m1", code: "OFF20" },
     });
     expect(again.json().discount.reason).toBe("already_used");
   });
@@ -352,9 +442,15 @@ describe("grant durability", () => {
 
     // Poll again, the way the app does on return. This is where the retry used
     // to fire a second grantInterval.
-    await h.app.inject({ method: "GET", url: `/v1/payments/${body.paymentId}`, headers: auth(access) });
+    await h.app.inject({
+      method: "GET",
+      url: `/v1/payments/${body.paymentId}`,
+      headers: auth(access),
+    });
 
-    const grants = await h.query(`select id from grants where user_id = '${user.id}' and source = 'payment'`);
+    const grants = await h.query(
+      `select id from grants where user_id = '${user.id}' and source = 'payment'`,
+    );
     expect(grants).toHaveLength(1);
   });
 });
@@ -362,15 +458,24 @@ describe("grant durability", () => {
 describe("GET /v1/payments/:id", () => {
   it("self-heals a paid-but-never-called-back payment", async () => {
     const { access, user } = await signIn();
-    const body = (await checkout(access, { planId: "m1" })).json() as { trackId: number; paymentId: string };
+    const body = (await checkout(access, { planId: "m1" })).json() as {
+      trackId: number;
+      paymentId: string;
+    };
 
     // User paid, then the callback never reached us (closed tab, network).
     h.psp._settle(body.trackId, "paid");
 
-    const res = await h.app.inject({ method: "GET", url: `/v1/payments/${body.paymentId}`, headers: auth(access) });
+    const res = await h.app.inject({
+      method: "GET",
+      url: `/v1/payments/${body.paymentId}`,
+      headers: auth(access),
+    });
     expect(res.json().payment.status).toBe("paid");
     expect(res.json().entitlement.status).toBe("active");
-    const grants = await h.query(`select id from grants where user_id = '${user.id}' and source = 'payment'`);
+    const grants = await h.query(
+      `select id from grants where user_id = '${user.id}' and source = 'payment'`,
+    );
     expect(grants).toHaveLength(1);
   });
 
@@ -380,17 +485,26 @@ describe("GET /v1/payments/:id", () => {
     // The recovery branch only re-verified rows still marked `redirected`, so
     // the payment showed "paid" forever with no subscription behind it.
     const { access, user } = await signIn();
-    const body = (await checkout(access, { planId: "m1" })).json() as { trackId: number; paymentId: string };
+    const body = (await checkout(access, { planId: "m1" })).json() as {
+      trackId: number;
+      paymentId: string;
+    };
     h.psp._settle(body.trackId, "paid");
     await h.raw(
       `update payments set status = 'paid', applied_at = null, verified_at = now(), paid_at = now()
        where id = '${body.paymentId}'`,
     );
 
-    const res = await h.app.inject({ method: "GET", url: `/v1/payments/${body.paymentId}`, headers: auth(access) });
+    const res = await h.app.inject({
+      method: "GET",
+      url: `/v1/payments/${body.paymentId}`,
+      headers: auth(access),
+    });
     expect(res.json().payment.status).toBe("paid");
     expect(res.json().entitlement.status).toBe("active");
-    const grants = await h.query(`select id from grants where user_id = '${user.id}' and source = 'payment'`);
+    const grants = await h.query(
+      `select id from grants where user_id = '${user.id}' and source = 'payment'`,
+    );
     expect(grants).toHaveLength(1);
   });
 
@@ -399,13 +513,22 @@ describe("GET /v1/payments/:id", () => {
     // terminal. A mismatch is a fraud signal, and a cancel must not be revived.
     const { access, user } = await signIn();
     for (const status of ["canceled", "verify_failed"]) {
-      const body = (await checkout(access, { planId: "m1" })).json() as { trackId: number; paymentId: string };
+      const body = (await checkout(access, { planId: "m1" })).json() as {
+        trackId: number;
+        paymentId: string;
+      };
       h.psp._settle(body.trackId, "paid"); // gateway WOULD say paid if asked
       await h.raw(`update payments set status = '${status}' where id = '${body.paymentId}'`);
-      const res = await h.app.inject({ method: "GET", url: `/v1/payments/${body.paymentId}`, headers: auth(access) });
+      const res = await h.app.inject({
+        method: "GET",
+        url: `/v1/payments/${body.paymentId}`,
+        headers: auth(access),
+      });
       expect(res.json().payment.status).toBe(status);
     }
-    const grants = await h.query(`select id from grants where user_id = '${user.id}' and source = 'payment'`);
+    const grants = await h.query(
+      `select id from grants where user_id = '${user.id}' and source = 'payment'`,
+    );
     expect(grants).toHaveLength(0);
   });
 
@@ -414,7 +537,9 @@ describe("GET /v1/payments/:id", () => {
     const body = (await checkout(access, { planId: "m1" })).json() as { paymentId: string };
     const other = await signIn("09351112222");
     const res = await h.app.inject({
-      method: "GET", url: `/v1/payments/${body.paymentId}`, headers: auth(other.access),
+      method: "GET",
+      url: `/v1/payments/${body.paymentId}`,
+      headers: auth(other.access),
     });
     expect(res.statusCode).toBe(404);
   });

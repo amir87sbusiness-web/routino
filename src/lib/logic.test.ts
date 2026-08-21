@@ -8,7 +8,11 @@ import { defaultDb, type Db, type Subscription } from "./store";
 import { DEFAULT_CATEGORIES } from "./presets";
 
 const NOW = Date.parse("2026-07-30T12:00:00Z");
-const active: Subscription = { planId: "m1", startedAt: NOW - 86_400_000, expiresAt: NOW + 86_400_000 };
+const active: Subscription = {
+  planId: "m1",
+  startedAt: NOW - 86_400_000,
+  expiresAt: NOW + 86_400_000,
+};
 
 function dbWith(over: Partial<Omit<Db, "meta">> & { meta?: Partial<Db["meta"]> }): Db {
   const base = defaultDb(DEFAULT_CATEGORIES);
@@ -23,7 +27,9 @@ describe("subscriptionActive", () => {
   });
 
   it("refuses access when the device clock looks wound back", () => {
-    expect(subscriptionActive(dbWith({ subscription: active, meta: { tampered: true } }), NOW)).toBe(false);
+    expect(
+      subscriptionActive(dbWith({ subscription: active, meta: { tampered: true } }), NOW),
+    ).toBe(false);
   });
 });
 
@@ -33,7 +39,10 @@ describe("applyServerEntitlement", () => {
     // PAYMENT used to clear it. So a paying customer whose phone clock ran fast
     // and was then corrected backwards was locked out permanently — the server
     // could confirm their subscription and they still could not get in.
-    const locked = dbWith({ subscription: active, meta: { tampered: true, lastSeen: NOW + 3_600_000 } });
+    const locked = dbWith({
+      subscription: active,
+      meta: { tampered: true, lastSeen: NOW + 3_600_000 },
+    });
     expect(subscriptionActive(locked, NOW)).toBe(false);
 
     const healed = applyServerEntitlement(locked, active, NOW);
@@ -44,14 +53,22 @@ describe("applyServerEntitlement", () => {
   it("re-baselines lastSeen to the device clock, so the guard does not re-fire", () => {
     // Writing the SERVER's time here instead would re-raise the flag on the next
     // heartbeat whenever the two clocks disagree by more than the tolerance.
-    const locked = dbWith({ subscription: active, meta: { tampered: true, lastSeen: NOW + 3_600_000 } });
+    const locked = dbWith({
+      subscription: active,
+      meta: { tampered: true, lastSeen: NOW + 3_600_000 },
+    });
     const healed = applyServerEntitlement(locked, active, NOW);
     expect(healed.meta.lastSeen).toBe(NOW);
   });
 
-  it("ignores an empty server answer so an un-imported local plan survives", () => {
-    const legacy = dbWith({ subscription: active });
-    expect(applyServerEntitlement(legacy, null, NOW)).toBe(legacy);
-    expect(subscriptionActive(applyServerEntitlement(legacy, null, NOW), NOW)).toBe(true);
+  it("applies an authoritative empty answer and heals clock state", () => {
+    const cached = dbWith({
+      subscription: active,
+      meta: { tampered: true, lastSeen: NOW + 3_600_000 },
+    });
+    const cleared = applyServerEntitlement(cached, null, NOW);
+    expect(cleared.subscription).toBeNull();
+    expect(cleared.meta.tampered).toBe(false);
+    expect(cleared.meta.lastSeen).toBe(NOW);
   });
 });

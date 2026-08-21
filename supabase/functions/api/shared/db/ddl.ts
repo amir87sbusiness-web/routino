@@ -21,16 +21,24 @@ create table if not exists users (
   seq bigint not null default 0,
   gc_seq bigint not null default 0,
   blocked boolean not null default false,
+  -- Deprecated compatibility column only; no runtime device limit reads it.
   max_active_devices integer not null default 1 check (max_active_devices between 1 and 10),
   security_locked_at timestamptz,
   security_lock_reason text,
   device_switch_reset_at timestamptz,
   created_at timestamptz not null default now()
 );
+-- Keep old databases structurally compatible until a reviewed drop migration.
 alter table users add column if not exists max_active_devices integer not null default 1 check (max_active_devices between 1 and 10);
 alter table users add column if not exists security_locked_at timestamptz;
 alter table users add column if not exists security_lock_reason text;
 alter table users add column if not exists device_switch_reset_at timestamptz;
+-- Device switching no longer locks an account. Repair only rows created by the
+-- retired policy; other security investigations and blocked accounts stay untouched.
+update users
+set security_locked_at = null,
+    security_lock_reason = null
+where security_lock_reason = 'device_switch_limit';
 
 create table if not exists records (
   user_id uuid not null references users(id) on delete cascade,

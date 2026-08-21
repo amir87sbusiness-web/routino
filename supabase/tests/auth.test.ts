@@ -46,17 +46,14 @@ describe("POST /v1/auth/otp/request", () => {
 });
 
 describe("POST /v1/auth/otp/verify", () => {
-  it("creates the account on first use and grants the 7-day trial server-side", async () => {
+  it("creates the account on first use with no entitlement or grant", async () => {
     const out = await signIn(h);
     expect(out.isNew).toBe(true);
     expect(out.user.phone).toBe("989123334444");
-    expect(out.entitlement.status).toBe("active");
-    const days = (Date.parse(out.entitlement.expiresAt) - Date.now()) / 86_400_000;
-    expect(days).toBeGreaterThan(6.9);
-    expect(days).toBeLessThan(7.1);
+    expect(out.entitlement).toMatchObject({ status: "none", planId: null, expiresAt: null });
 
     const grants = await h.query<{ source: string }>(`select source from grants`);
-    expect(grants).toEqual([{ source: "trial" }]);
+    expect(grants).toEqual([]);
   });
 
   it("rejects a wrong code and burns attempts", async () => {
@@ -68,14 +65,14 @@ describe("POST /v1/auth/otp/verify", () => {
     expect((await bad.json()).error).toBe("bad_code");
   });
 
-  it("does not re-grant the trial on a second sign-in", async () => {
+  it("does not create a grant on a second sign-in", async () => {
     await signIn(h);
     // Clear the OTP ledger so the second request isn't per-minute rate-limited —
     // in reality the second sign-in happens days later.
     await h.raw(`delete from otp_codes`);
     await signIn(h); // same phone, new device
-    const grants = await h.query(`select id from grants where source = 'trial'`);
-    expect(grants).toHaveLength(1);
+    const grants = await h.query(`select id from grants`);
+    expect(grants).toHaveLength(0);
   });
 
   it("resets the password and keeps only the SMS-verified device signed in", async () => {
@@ -120,7 +117,8 @@ describe("POST /v1/auth/otp/verify", () => {
       (await h.call("POST", "/v1/auth/token/refresh", { body: { refresh: other.refresh } })).status,
     ).toBe(401);
     expect(
-      (await h.call("POST", "/v1/auth/token/refresh", { body: { refresh: recovered.refresh } })).status,
+      (await h.call("POST", "/v1/auth/token/refresh", { body: { refresh: recovered.refresh } }))
+        .status,
     ).toBe(200);
   });
 });

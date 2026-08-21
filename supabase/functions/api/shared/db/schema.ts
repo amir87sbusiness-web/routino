@@ -44,43 +44,41 @@ export const users = pgTable(
   "users",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-  /** Canonical `989xxxxxxxxx`. MUST be produced by the same normalizePhone as
-   * the client — a divergence forks one human into two accounts. */
-  phone: text("phone").notNull().unique(),
-  /** Optional login handle, stored lowercased. Lets a user sign in with a name
-   * instead of a phone number. NULL for accounts that never set one; Postgres
-   * allows many NULLs under a unique index. Always starts with a letter, so it
-   * can never be mistaken for a phone number at login. */
-  username: text("username").unique(),
-  /** scrypt hash (`scrypt$N$r$p$saltB64$hashB64`), or NULL for OTP-only accounts.
-   * The raw password is never stored, logged, or returned. */
-  passwordHash: text("password_hash"),
-  /**
-   * Per-user monotonic change counter. Incremented with
-   * `UPDATE users SET seq = seq + $n ... RETURNING seq`, which takes a row lock
-   * and thereby serialises this user's writes — guaranteeing seq order matches
-   * commit order. A plain SEQUENCE cannot: a slower txn can grab a lower seq and
-   * commit AFTER a reader has already advanced past it, hiding that row from
-   * that device forever.
-   */
-  seq: bigint("seq", { mode: "number" }).notNull().default(0),
-  /** Watermark for tombstone GC. A device whose cursor is below this may have
-   * missed a tombstone that has since been purged, so it must full-resync or it
-   * would resurrect deleted records. */
-  gcSeq: bigint("gc_seq", { mode: "number" }).notNull().default(0),
-  blocked: boolean("blocked").notNull().default(false),
-  maxActiveDevices: integer("max_active_devices").notNull().default(1),
-  securityLockedAt: timestamp("security_locked_at", { withTimezone: true }),
-  securityLockReason: text("security_lock_reason"),
-  deviceSwitchResetAt: timestamp("device_switch_reset_at", { withTimezone: true }),
+    /** Canonical `989xxxxxxxxx`. MUST be produced by the same normalizePhone as
+     * the client — a divergence forks one human into two accounts. */
+    phone: text("phone").notNull().unique(),
+    /** Optional login handle, stored lowercased. Lets a user sign in with a name
+     * instead of a phone number. NULL for accounts that never set one; Postgres
+     * allows many NULLs under a unique index. Always starts with a letter, so it
+     * can never be mistaken for a phone number at login. */
+    username: text("username").unique(),
+    /** scrypt hash (`scrypt$N$r$p$saltB64$hashB64`), or NULL for OTP-only accounts.
+     * The raw password is never stored, logged, or returned. */
+    passwordHash: text("password_hash"),
+    /**
+     * Per-user monotonic change counter. Incremented with
+     * `UPDATE users SET seq = seq + $n ... RETURNING seq`, which takes a row lock
+     * and thereby serialises this user's writes — guaranteeing seq order matches
+     * commit order. A plain SEQUENCE cannot: a slower txn can grab a lower seq and
+     * commit AFTER a reader has already advanced past it, hiding that row from
+     * that device forever.
+     */
+    seq: bigint("seq", { mode: "number" }).notNull().default(0),
+    /** Watermark for tombstone GC. A device whose cursor is below this may have
+     * missed a tombstone that has since been purged, so it must full-resync or it
+     * would resurrect deleted records. */
+    gcSeq: bigint("gc_seq", { mode: "number" }).notNull().default(0),
+    blocked: boolean("blocked").notNull().default(false),
+    /** Deprecated compatibility column from the retired device quota. No runtime
+     * path reads or enforces it; keep it mapped until a reviewed DB migration
+     * removes the physical production column. */
+    maxActiveDevices: integer("max_active_devices").notNull().default(1),
+    securityLockedAt: timestamp("security_locked_at", { withTimezone: true }),
+    securityLockReason: text("security_lock_reason"),
+    deviceSwitchResetAt: timestamp("device_switch_reset_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [
-    check(
-      "users_max_active_devices_valid",
-      sql`${t.maxActiveDevices} between 1 and 10`,
-    ),
-  ],
+  (t) => [check("users_max_active_devices_valid", sql`${t.maxActiveDevices} between 1 and 10`)],
 );
 
 export const records = pgTable(

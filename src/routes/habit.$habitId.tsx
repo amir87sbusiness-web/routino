@@ -5,7 +5,15 @@ import { AppShell } from "@/components/AppShell";
 import { Card, CatIcon, Chip, MiniBars, Progress } from "@/components/ui";
 import { buildChartBars } from "@/lib/chart";
 import { analyticsDayKeys, faNum, formatShortDate, monthTitle, todayKey } from "@/lib/dates";
-import { avgOf, cappedPercent, getLog, isDueOn, monthProgress, streak, successRate } from "@/lib/logic";
+import {
+  avgOf,
+  cappedPercent,
+  getLog,
+  isDueOn,
+  monthProgress,
+  streak,
+  successRate,
+} from "@/lib/logic";
 import { useAppMaybe } from "@/state/app";
 
 export const Route = createFileRoute("/habit/$habitId")({
@@ -54,7 +62,12 @@ function HabitDetailPage() {
   const dayKeys = analyticsDayKeys(range.id, cal, TODAY);
   const series = dayKeys.map((dk) => ({
     dateKey: dk,
-    percent: dk > TODAY ? null : isDueOn(habit, dk, cal) ? cappedPercent(habit, getLog(db, habit.id, dk)) : null,
+    percent:
+      dk > TODAY
+        ? null
+        : isDueOn(habit, dk, cal)
+          ? cappedPercent(habit, getLog(db, habit.id, dk))
+          : null,
   }));
   const { buckets, labels: barLabels, barUnit } = buildChartBars(series, range.id, cal, lang);
 
@@ -72,7 +85,9 @@ function HabitDetailPage() {
         </span>
         <div>
           <h1 className="text-base font-black text-foreground">{habit.name}</h1>
-          <p className="text-[10px] text-muted-foreground">{lang === "fa" ? cat?.nameFa : cat?.nameEn}</p>
+          <p className="text-[10px] text-muted-foreground">
+            {lang === "fa" ? cat?.nameFa : cat?.nameEn}
+          </p>
         </div>
       </div>
 
@@ -119,26 +134,35 @@ function HabitDetailPage() {
         </div>
         <MiniBars data={buckets} color={cat?.color} labels={barLabels} lang={lang} />
         <p className="mt-3 text-center text-[11px] text-muted-foreground">
-          {t("میانگین این بازه", "Range average")}: <b className="text-foreground">{faNum(avgOf(series), lang)}٪</b>
+          {t("میانگین این بازه", "Range average")}:{" "}
+          <b className="text-foreground">{faNum(avgOf(series), lang)}٪</b>
           {barUnit === "week" && t(` · هر ستون = ${faNum(7, lang)} روز`, " · each bar = 7 days")}
           {barUnit === "month" && t(" · هر ستون = ۱ ماه", " · each bar = 1 month")}
         </p>
       </Card>
 
       {/* recent notes */}
-      {Object.values(db.logs).filter((l) => l.habitId === habit.id && (l.note || l.mood)).length > 0 && (
+      {Object.values(db.logs).filter((l) => l.habitId === habit.id && (l.note || l.mood)).length >
+        0 && (
         <Card>
-          <p className="mb-2 text-sm font-bold text-foreground">{t("یادداشت‌های اخیر", "Recent notes")}</p>
+          <p className="mb-2 text-sm font-bold text-foreground">
+            {t("یادداشت‌های اخیر", "Recent notes")}
+          </p>
           <div className="flex flex-col gap-2">
             {Object.values(db.logs)
               .filter((l) => l.habitId === habit.id && (l.note || l.mood))
               .sort((a, b) => b.dateKey.localeCompare(a.dateKey))
               .slice(0, 10)
               .map((l) => (
-                <div key={l.dateKey} className="flex items-start gap-2 rounded-xl bg-secondary/60 p-2.5">
+                <div
+                  key={l.dateKey}
+                  className="flex items-start gap-2 rounded-xl bg-secondary/60 p-2.5"
+                >
                   <span className="text-base">{l.mood || "📝"}</span>
                   <div className="min-w-0 flex-1">
-                    <p className="text-[10px] text-muted-foreground">{formatShortDate(l.dateKey, cal, lang)}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {formatShortDate(l.dateKey, cal, lang)}
+                    </p>
                     {l.note && <p className="text-xs text-foreground">{l.note}</p>}
                   </div>
                 </div>

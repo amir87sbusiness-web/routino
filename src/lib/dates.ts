@@ -18,7 +18,6 @@ export function jalaliMonthLength(jy: number, jm: number) {
   return jalaaliMonthLength(jy, jm);
 }
 
-
 /** Local date key YYYY-MM-DD (always Gregorian). */
 export function dateKey(d: Date = new Date()): string {
   const y = d.getFullYear();
@@ -65,19 +64,57 @@ export function addMonths(key: string, n: number, cal: Calendar): string {
 }
 
 export const JALALI_MONTHS = [
-  "فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور",
-  "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند",
+  "فروردین",
+  "اردیبهشت",
+  "خرداد",
+  "تیر",
+  "مرداد",
+  "شهریور",
+  "مهر",
+  "آبان",
+  "آذر",
+  "دی",
+  "بهمن",
+  "اسفند",
 ];
 export const GREGORIAN_MONTHS_EN = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 export const GREGORIAN_MONTHS_FA = [
-  "ژانویه", "فوریه", "مارس", "آوریل", "مه", "ژوئن",
-  "ژوئیه", "اوت", "سپتامبر", "اکتبر", "نوامبر", "دسامبر",
+  "ژانویه",
+  "فوریه",
+  "مارس",
+  "آوریل",
+  "مه",
+  "ژوئن",
+  "ژوئیه",
+  "اوت",
+  "سپتامبر",
+  "اکتبر",
+  "نوامبر",
+  "دسامبر",
 ];
 export const WEEKDAYS_FA = ["یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه"];
-export const WEEKDAYS_EN = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+export const WEEKDAYS_EN = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
 /** Short weekday labels for tight spaces (day-picker chips etc).
  * Persian keeps a readable 1-word abbreviation instead of a mid-word character slice. */
 export const WEEKDAYS_FA_SHORT = ["یک", "دو", "سه", "چهار", "پنج", "جمعه", "شنبه"];
@@ -173,8 +210,34 @@ export function monthTitle(key: string, cal: Calendar, lang: Lang): string {
   return `${months[d.getMonth()]} ${faNum(d.getFullYear(), lang)}`;
 }
 
-const JALALI_MONTHS_SHORT = ["فرو", "ارد", "خرد", "تیر", "مرد", "شهر", "مهر", "آبا", "آذر", "دی", "بهم", "اسف"];
-const GREGORIAN_MONTHS_EN_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const JALALI_MONTHS_SHORT = [
+  "فرو",
+  "ارد",
+  "خرد",
+  "تیر",
+  "مرد",
+  "شهر",
+  "مهر",
+  "آبا",
+  "آذر",
+  "دی",
+  "بهم",
+  "اسف",
+];
+const GREGORIAN_MONTHS_EN_SHORT = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
 
 /**
  * Day keys for an analytics range, all ending at `today` (rolling windows, so
@@ -197,7 +260,12 @@ export function analyticsDayKeys(rangeId: string, cal: Calendar, today: string):
 
 /** One full month name per calendar month across the given bucket-start keys
  * (optionally only every 3rd month), for compact chart axes. */
-export function monthLabelsOnce(bucketStartKeys: string[], cal: Calendar, lang: Lang, everyThird: boolean): string[] {
+export function monthLabelsOnce(
+  bucketStartKeys: string[],
+  cal: Calendar,
+  lang: Lang,
+  everyThird: boolean,
+): string[] {
   let lastMonth = -1;
   return bucketStartKeys.map((k) => {
     const mn = monthNumber(k, cal);
@@ -232,5 +300,7 @@ export function monthShort(key: string, cal: Calendar, lang: Lang): string {
     const j = gregorianToJalali(d.getFullYear(), d.getMonth() + 1, d.getDate());
     return lang === "fa" ? JALALI_MONTHS_SHORT[j.jm - 1] : JALALI_MONTHS[j.jm - 1];
   }
-  return lang === "fa" ? GREGORIAN_MONTHS_FA[d.getMonth()] : GREGORIAN_MONTHS_EN_SHORT[d.getMonth()];
+  return lang === "fa"
+    ? GREGORIAN_MONTHS_FA[d.getMonth()]
+    : GREGORIAN_MONTHS_EN_SHORT[d.getMonth()];
 }

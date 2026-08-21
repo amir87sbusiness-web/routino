@@ -14,6 +14,6 @@ export default defineConfig({
     // The backend and the edge-function suite are separate projects with their
     // own runners (node env, PGlite). Without this, `npm test` here silently
     // runs those under jsdom too.
-    exclude: ["**/node_modules/**", "**/dist/**", "backend/**", "supabase/**"],
+    exclude: ["**/node_modules/**", "**/dist/**", ".worktrees/**", "backend/**", "supabase/**"],
   },
 });

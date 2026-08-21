@@ -54,13 +54,17 @@ describe("phone parity: client vs server", () => {
 
   it("normalizePhone agrees on every vector", () => {
     for (const v of VECTORS) {
-      expect(server.normalizePhone(v), `normalizePhone(${JSON.stringify(v)})`).toBe(client.normalizePhone(v));
+      expect(server.normalizePhone(v), `normalizePhone(${JSON.stringify(v)})`).toBe(
+        client.normalizePhone(v),
+      );
     }
   });
 
   it("toAsciiDigits agrees on every vector", () => {
     for (const v of VECTORS) {
-      expect(server.toAsciiDigits(v), `toAsciiDigits(${JSON.stringify(v)})`).toBe(client.toAsciiDigits(v));
+      expect(server.toAsciiDigits(v), `toAsciiDigits(${JSON.stringify(v)})`).toBe(
+        client.toAsciiDigits(v),
+      );
     }
   });
 

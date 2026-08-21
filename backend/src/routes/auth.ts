@@ -5,7 +5,7 @@ import { users } from "../db/schema.js";
 import { normalizePhone } from "../lib/phone.js";
 import { requireUser } from "../plugins/auth.js";
 import { badRequest, tooMany, unauthorized } from "../plugins/errors.js";
-import { readEntitlement, grantInterval } from "../services/entitlement.js";
+import { readEntitlement } from "../services/entitlement.js";
 import {
   checkLoginRate,
   clearLoginFailures,
@@ -28,8 +28,6 @@ import {
   rotateRefresh,
 } from "../services/tokens.js";
 import type { DeviceDescriptor } from "../services/tokens.js";
-
-const TRIAL_DAYS = 7;
 
 const deviceDescriptorBody = z.object({
   installationKey: z.string().min(8).max(256),
@@ -142,8 +140,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
   /**
    * Verify an OTP and sign in. Creates the account on first use.
    *
-   * The 7-day trial is granted HERE, server-side. It used to be written by the
-   * client, where anyone could re-grant it forever.
+   * Account creation authenticates only. Access starts later through the
+   * explicit, server-authoritative trial activation endpoint.
    */
   app.post("/auth/otp/verify", async (req) => {
     const {
@@ -180,10 +178,6 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     }
     if (!user) throw new Error("failed to create user");
     if (user.blocked) throw unauthorized("blocked", "Account is blocked");
-
-    if (isNew) {
-      await grantInterval(db, user.id, { planId: "trial", days: TRIAL_DAYS, source: "trial" }, t);
-    }
 
     if (intent === "password_reset" || (intent === "signup" && isNew)) {
       await db

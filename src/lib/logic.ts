@@ -1,5 +1,13 @@
 /** Pure habit/analytics computations. */
-import { addDays, dayOfMonth, keyToDate, monthDays, todayKey, weekStartOf, type Calendar } from "./dates";
+import {
+  addDays,
+  dayOfMonth,
+  keyToDate,
+  monthDays,
+  todayKey,
+  weekStartOf,
+  type Calendar,
+} from "./dates";
 import { logKey, type Db, type Habit, type HabitLog, type Subscription } from "./store";
 
 export function isDueOn(habit: Habit, dk: string, cal: Calendar): boolean {
@@ -50,8 +58,8 @@ export function dayScore(db: Db, dk: string, cal: Calendar): number | null {
 }
 
 /** Consecutive due-day completion streak ending today (or yesterday if today not yet done). */
-export function streak(db: Db, habit: Habit, cal: Calendar): number {
-  let dk = todayKey();
+export function streak(db: Db, habit: Habit, cal: Calendar, today = todayKey()): number {
+  let dk = today;
   let count = 0;
   // today counts only if completed; otherwise start from yesterday
   if (isDueOn(habit, dk, cal) && !isCompleted(habit, getLog(db, habit.id, dk))) {
@@ -75,7 +83,12 @@ export interface MonthProgress {
 }
 
 /** Progress toward the monthly goal within the current calendar month. */
-export function monthProgress(db: Db, habit: Habit, cal: Calendar, refKey = todayKey()): MonthProgress {
+export function monthProgress(
+  db: Db,
+  habit: Habit,
+  cal: Calendar,
+  refKey = todayKey(),
+): MonthProgress {
   const days = monthDays(refKey, cal);
   const dueDays = days.filter((d) => isDueOn(habit, d, cal));
   const goalDays = habit.monthlyGoal ?? dueDays.length;
@@ -109,7 +122,12 @@ export function earnedBadges(db: Db, cal: Calendar): EarnedBadge[] {
   for (const habit of db.habits) {
     for (const monthId of monthIds) {
       if (monthProgress(db, habit, cal, monthId).percent >= 100) {
-        out.push({ id: `${habit.id}|${monthId}`, habitId: habit.id, habitName: habit.name, monthId });
+        out.push({
+          id: `${habit.id}|${monthId}`,
+          habitId: habit.id,
+          habitName: habit.name,
+          monthId,
+        });
       }
     }
   }
@@ -182,6 +200,30 @@ export interface WeekComparison {
   comparable: boolean;
 }
 
+export interface WeeklyReviewHabit {
+  id: string;
+  name: string;
+  completed: number;
+  missed: number;
+  opportunities: number;
+  rate: number;
+}
+
+export interface WeeklyReview {
+  completionPercent: number;
+  previousPercent: number | null;
+  changePoints: number | null;
+  completedCheckIns: number;
+  activeDays: number;
+  days: number;
+  scope: WeekScope;
+  strongestDay: { dateKey: string; percent: number };
+  weakestDay: { dateKey: string; percent: number };
+  mostConsistentHabit: WeeklyReviewHabit | null;
+  mostMissedHabit: WeeklyReviewHabit | null;
+  consistencySignal: { id: string; name: string; streak: number } | null;
+}
+
 /** Average of a plain number list, 0 when empty. */
 const avgNums = (vals: number[]) =>
   vals.length === 0 ? 0 : Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
@@ -194,6 +236,18 @@ function windowScores(db: Db, cal: Calendar, start: string, days: number): numbe
     if (s !== null) out.push(s);
   }
   return out;
+}
+
+function weekWindow(
+  cal: Calendar,
+  today: string,
+): { scope: WeekScope; days: number; currentStart: string } {
+  const thisWeekStart = weekStartOf(today, cal);
+  let elapsed = 0;
+  for (let d = thisWeekStart; d < today; d = addDays(d, 1)) elapsed++;
+  return elapsed === 0
+    ? { scope: "last-week", days: 7, currentStart: addDays(thisWeekStart, -7) }
+    : { scope: "week-to-date", days: elapsed, currentStart: thisWeekStart };
 }
 
 /**
@@ -216,17 +270,7 @@ function windowScores(db: Db, cal: Calendar, start: string, days: number): numbe
  * measured against a week that never happened.
  */
 export function weekComparison(db: Db, cal: Calendar, today = todayKey()): WeekComparison {
-  const thisWeekStart = weekStartOf(today, cal);
-
-  let elapsed = 0;
-  for (let d = thisWeekStart; d < today; d = addDays(d, 1)) elapsed++;
-
-  // On the first day of a week nothing has finished yet, so there is no
-  // week-to-date to show. Compare the two completed weeks behind us and let the
-  // UI relabel, rather than rendering an empty card one day in seven.
-  const scope: WeekScope = elapsed === 0 ? "last-week" : "week-to-date";
-  const days = elapsed === 0 ? 7 : elapsed;
-  const curStart = elapsed === 0 ? addDays(thisWeekStart, -7) : thisWeekStart;
+  const { scope, days, currentStart: curStart } = weekWindow(cal, today);
 
   const curScores = windowScores(db, cal, curStart, days);
   const prevScores = windowScores(db, cal, addDays(curStart, -7), days);
@@ -240,6 +284,88 @@ export function weekComparison(db: Db, cal: Calendar, today = todayKey()): WeekC
     days,
     scope,
     comparable: curScores.length > 0 && prevScores.length > 0,
+  };
+}
+
+/** A concise review of the same completed span used by `weekComparison`.
+ * Returns null until at least two finished days had due habits. */
+export function weeklyReview(db: Db, cal: Calendar, today = todayKey()): WeeklyReview | null {
+  const comparison = weekComparison(db, cal, today);
+  const { currentStart } = weekWindow(cal, today);
+  const scoredDays: Array<{ dateKey: string; percent: number }> = [];
+  const perHabit = new Map<
+    string,
+    { id: string; name: string; completed: number; opportunities: number }
+  >();
+  let completedCheckIns = 0;
+  let activeDays = 0;
+
+  for (let i = 0; i < comparison.days; i++) {
+    const dateKey = addDays(currentStart, i);
+    const percent = dayScore(db, dateKey, cal);
+    if (percent === null) continue;
+    scoredDays.push({ dateKey, percent });
+    let completedToday = false;
+    for (const habit of dueHabitsOn(db, dateKey, cal)) {
+      const progress = perHabit.get(habit.id) ?? {
+        id: habit.id,
+        name: habit.name,
+        completed: 0,
+        opportunities: 0,
+      };
+      progress.opportunities += 1;
+      if (isCompleted(habit, getLog(db, habit.id, dateKey))) {
+        progress.completed += 1;
+        completedCheckIns += 1;
+        completedToday = true;
+      }
+      perHabit.set(habit.id, progress);
+    }
+    if (completedToday) activeDays += 1;
+  }
+
+  if (scoredDays.length < 2) return null;
+
+  const habitStats: WeeklyReviewHabit[] = [...perHabit.values()].map((habit) => ({
+    ...habit,
+    missed: habit.opportunities - habit.completed,
+    rate: Math.round((habit.completed / habit.opportunities) * 100),
+  }));
+  const mostConsistentHabit =
+    habitStats
+      .filter((habit) => habit.opportunities >= 2 && habit.completed >= 2)
+      .sort(
+        (a, b) => b.rate - a.rate || b.completed - a.completed || a.name.localeCompare(b.name),
+      )[0] ?? null;
+  const mostMissedHabit =
+    habitStats
+      .filter((habit) => habit.opportunities >= 2 && habit.missed > 0)
+      .sort((a, b) => b.missed - a.missed || a.rate - b.rate || a.name.localeCompare(b.name))[0] ??
+    null;
+  const consistencySignal =
+    db.habits
+      .filter((habit) => !habit.archived)
+      .map((habit) => ({ id: habit.id, name: habit.name, streak: streak(db, habit, cal, today) }))
+      .filter((habit) => habit.streak >= 2)
+      .sort((a, b) => b.streak - a.streak || a.name.localeCompare(b.name))[0] ?? null;
+  const strongestDay = scoredDays.reduce((best, day) => (day.percent > best.percent ? day : best));
+  const weakestDay = scoredDays.reduce((worst, day) =>
+    day.percent <= worst.percent ? day : worst,
+  );
+
+  return {
+    completionPercent: comparison.cur,
+    previousPercent: comparison.comparable ? comparison.prev : null,
+    changePoints: comparison.comparable ? comparison.delta : null,
+    completedCheckIns,
+    activeDays,
+    days: comparison.days,
+    scope: comparison.scope,
+    strongestDay,
+    weakestDay,
+    mostConsistentHabit,
+    mostMissedHabit,
+    consistencySignal,
   };
 }
 
@@ -266,15 +392,15 @@ export function subscriptionActive(db: Db, now = Date.now()): boolean {
  *    future value there — or writing the server's time into it when the two
  *    clocks disagree — would re-raise the flag on the very next tick.
  *
- * A null `sub` ("none" from the server) is NOT applied: a legacy local
- * subscription that has not been imported yet must survive an empty answer.
+ * Whether an unresolved legacy subscription should survive a `none` response
+ * is decided before this function. Once called, the server answer is explicit
+ * and authoritative, including null.
  */
 export function applyServerEntitlement(
   db: Db,
   sub: Subscription | null,
   deviceNow = Date.now(),
 ): Db {
-  if (!sub) return db;
   return {
     ...db,
     subscription: sub,

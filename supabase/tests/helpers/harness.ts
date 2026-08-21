@@ -70,7 +70,6 @@ export async function makeHarness(overrides: Record<string, string> = {}): Promi
   const env = loadEnv({
     ...process.env,
     NODE_ENV: "test",
-    LEGACY_PERSONAL_SYNC_ENABLED: "true",
     PROXY_SECRET: "",
     // Production-like origin list, so the CORS behaviour asserted here is the
     // one routino.me actually gets.
@@ -139,7 +138,11 @@ export async function makeHarness(overrides: Record<string, string> = {}): Promi
 }
 
 /** Signs a user in through the real OTP flow; returns tokens + entitlement. */
-export async function signIn(h: Harness, phone = "09123334444") {
+export async function signIn(
+  h: Harness,
+  phone = "09123334444",
+  installationKey = `edge-test-${phone}`,
+) {
   await h.call("POST", "/v1/auth/otp/request", { body: { phone } });
   const code = h.sms.last()!.code;
   const res = await h.call("POST", "/v1/auth/otp/verify", {
@@ -147,7 +150,7 @@ export async function signIn(h: Harness, phone = "09123334444") {
       phone,
       code,
       device: {
-        installationKey: `edge-test-${phone}`,
+        installationKey,
         name: "Edge test browser",
         platform: "web",
       },

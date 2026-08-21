@@ -38,17 +38,17 @@ const PHONE = { w: 402, h: 874, kind: "phone" };
 const DESK = { w: 1440, h: 900, kind: "desktop" };
 const SHOTS = [
   // تاریک — نسخه‌ی اصلی که در صفحه‌ی معرفی نشان داده می‌شود
-  { name: "today-dark",     path: "/app/",          theme: "dark",  ...PHONE },
-  { name: "habits-dark",    path: "/app/habits",    theme: "dark",  ...PHONE },
-  { name: "analytics-dark", path: "/app/analytics", theme: "dark",  ...PHONE },
-  { name: "timer-dark",     path: "/app/timer",     theme: "dark",  ...PHONE },
-  { name: "journal-dark",   path: "/app/journal",   theme: "dark",  ...PHONE },
-  { name: "desktop-dark",           path: "/app/",          theme: "dark", ...DESK },
+  { name: "today-dark", path: "/app/", theme: "dark", ...PHONE },
+  { name: "habits-dark", path: "/app/habits", theme: "dark", ...PHONE },
+  { name: "analytics-dark", path: "/app/analytics", theme: "dark", ...PHONE },
+  { name: "timer-dark", path: "/app/timer", theme: "dark", ...PHONE },
+  { name: "journal-dark", path: "/app/journal", theme: "dark", ...PHONE },
+  { name: "desktop-dark", path: "/app/", theme: "dark", ...DESK },
   { name: "desktop-analytics-dark", path: "/app/analytics", theme: "dark", ...DESK },
   // روشن — چند تا برای اینکه معلوم باشد هر دو تم هست
-  { name: "today",     path: "/app/",          theme: "light", ...PHONE },
+  { name: "today", path: "/app/", theme: "light", ...PHONE },
   { name: "analytics", path: "/app/analytics", theme: "light", ...PHONE },
-  { name: "desktop",   path: "/app/",          theme: "light", ...DESK },
+  { name: "desktop", path: "/app/", theme: "light", ...DESK },
 ];
 
 /**
@@ -108,4 +108,7 @@ async function main() {
   console.log("  total " + kb(written.reduce((a, [, n]) => a + n, 0)));
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

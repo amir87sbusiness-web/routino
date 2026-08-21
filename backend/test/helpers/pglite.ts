@@ -75,7 +75,6 @@ export async function makeHarness(overrides: Partial<NodeJS.ProcessEnv> = {}): P
   const env = loadEnv({
     ...process.env,
     NODE_ENV: "test",
-    LEGACY_PERSONAL_SYNC_ENABLED: "true",
     ...overrides,
   });
   const pglite = new PGlite();

@@ -9,6 +9,7 @@ import {
   hasSettledGrant,
   listGrants,
   readEntitlement,
+  startTrialOnce,
 } from "../shared/services/entitlement.ts";
 import { settleOpenPayments } from "../shared/services/payment-flow.ts";
 
@@ -34,6 +35,11 @@ export function subscriptionRoutes(deps: Deps) {
     const t = now();
     await settleOpenPayments(db, psp, user.id, t);
     return c.json({ entitlement: await readEntitlement(db, user.id, t) });
+  });
+
+  r.post("/subscriptions/trial/start", auth, async (c) => {
+    const user = requireUser(c);
+    return c.json(await startTrialOnce(db, user.id, now()));
   });
 
   /** Imports a legacy client-side subscription — trusted exactly once, bounded

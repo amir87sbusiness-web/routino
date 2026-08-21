@@ -24,9 +24,23 @@ function seededDb(): Db {
         createdAt: 1000,
       },
     ],
-    logs: { [logKey("h1", "2026-07-01")]: { habitId: "h1", dateKey: "2026-07-01", value: 1, done: true } },
-    tasks: [{ id: "t1", dateKey: "2026-07-01", title: "کار", type: "binary", target: 1, value: 1, done: true }],
-    journal: { "2026-07-01": { dateKey: "2026-07-01", text: "روز خوب", score: 8, mood: null, updatedAt: 1 } },
+    logs: {
+      [logKey("h1", "2026-07-01")]: { habitId: "h1", dateKey: "2026-07-01", value: 1, done: true },
+    },
+    tasks: [
+      {
+        id: "t1",
+        dateKey: "2026-07-01",
+        title: "کار",
+        type: "binary",
+        target: 1,
+        value: 1,
+        done: true,
+      },
+    ],
+    journal: {
+      "2026-07-01": { dateKey: "2026-07-01", text: "روز خوب", score: 8, mood: null, updatedAt: 1 },
+    },
     meta: { ...db.meta, dataOwner: "989111111111", celebrated: ["x"], firedReminders: ["y"] },
   };
 }
@@ -97,11 +111,16 @@ describe("loginAs — account isolation", () => {
     expect(next.meta.dataOwner).toBe("989333333333");
   });
 
-  it("an empty server answer never erases the subscription already stored in this vault", () => {
+  it("an explicit empty server answer clears the cached subscription", () => {
     const sameOwner = loginAs({ ...seededDb(), auth: null }, "989111111111", null);
-    expect(sameOwner.subscription?.planId).toBe("p3");
+    expect(sameOwner.subscription).toBeNull();
     const switched = loginAs({ ...seededDb(), auth: null }, "989222222222", null);
-    expect(switched.subscription?.planId).toBe("p3");
+    expect(switched.subscription).toBeNull();
+  });
+
+  it("preserves the cached subscription only when the argument is omitted", () => {
+    const next = loginAs({ ...seededDb(), auth: null }, "989111111111");
+    expect(next.subscription?.planId).toBe("p3");
   });
 });
 
@@ -130,7 +149,9 @@ describe("buildDemoContent", () => {
       expect(key).toBe(logKey(log.habitId, log.dateKey));
       const habit = byId.get(log.habitId);
       expect(habit).toBeDefined();
-      expect(new Date(log.dateKey + "T23:59:59").getTime()).toBeGreaterThanOrEqual(habit!.createdAt - 24 * 60 * 60 * 1000);
+      expect(new Date(log.dateKey + "T23:59:59").getTime()).toBeGreaterThanOrEqual(
+        habit!.createdAt - 24 * 60 * 60 * 1000,
+      );
     }
   });
 

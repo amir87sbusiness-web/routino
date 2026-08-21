@@ -19,7 +19,8 @@ export const devGatewayRoutes: FastifyPluginAsync = async (app) => {
   app.get("/dev/gateway", async (req, reply) => {
     const trackId = Number((req.query as { trackId?: string }).trackId);
     const txn = psp._txns.get(trackId);
-    if (!txn) return reply.status(404).type("text/html; charset=utf-8").send("<h1>تراکنش پیدا نشد</h1>");
+    if (!txn)
+      return reply.status(404).type("text/html; charset=utf-8").send("<h1>تراکنش پیدا نشد</h1>");
 
     const toman = Math.floor(txn.amountRial / 10).toLocaleString("en-US");
     const html = `<!doctype html>

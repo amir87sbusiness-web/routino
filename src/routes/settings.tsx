@@ -23,8 +23,10 @@ import {
   Tags,
   Trash2,
   Upload,
+  Vibrate,
+  Volume2,
 } from "lucide-react";
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { FeedbackModal } from "@/components/FeedbackModal";
@@ -52,7 +54,15 @@ import {
 import { isNative, shareBackupNative } from "@/lib/backup-native";
 import { dateKey, faNum, formatDate } from "@/lib/dates";
 import { canImportBackup } from "@/lib/import-policy";
-import { requestNativePermission } from "@/lib/native-notifications";
+import {
+  checkNativeExactAlarmSetting,
+  checkNativeNotificationPermission,
+  isNativeRuntime,
+  notificationDeliveryActive,
+  requestNativeExactAlarmSetting,
+  requestNotificationPermission,
+  type NativeExactAlarmState,
+} from "@/lib/native-notifications";
 import { toLocalPhone } from "@/lib/phone";
 import { CATEGORY_COLOR_CHOICES } from "@/lib/presets";
 import { applyDemoContent } from "@/lib/seed-demo";
@@ -87,6 +97,9 @@ const SHOW_DEMO_SEED = false;
 /** Export is permanently visible; Import is gated independently in logic. */
 const BACKUP_UI: boolean = true;
 
+type DisplayPermission =
+  "checking" | "unsupported" | "granted" | "denied" | "prompt" | "prompt-with-rationale";
+
 function SettingsPage() {
   const ctx = useAppMaybe();
   const navigate = useNavigate();
@@ -104,8 +117,40 @@ function SettingsPage() {
   const [pendingImport, setPendingImport] = useState<Backup | null>(null);
   const [wipeOpen, setWipeOpen] = useState(false);
   const [signOutOpen, setSignOutOpen] = useState(false);
+  const [displayPermission, setDisplayPermission] = useState<DisplayPermission>("checking");
+  const [exactAlarm, setExactAlarm] = useState<NativeExactAlarmState>("not-android");
+  const refreshNotificationStatus = useCallback(async () => {
+    const nativePermission = await checkNativeNotificationPermission();
+    if (nativePermission === "web") {
+      setDisplayPermission(
+        typeof Notification === "undefined"
+          ? "unsupported"
+          : Notification.permission === "default"
+            ? "prompt"
+            : Notification.permission,
+      );
+      setExactAlarm("not-android");
+      return;
+    }
+    setDisplayPermission(nativePermission);
+    setExactAlarm(await checkNativeExactAlarmSetting());
+  }, []);
+
+  useEffect(() => {
+    void refreshNotificationStatus();
+    const onForeground = () => {
+      if (document.visibilityState === "visible") void refreshNotificationStatus();
+    };
+    document.addEventListener("visibilitychange", onForeground);
+    window.addEventListener("focus", onForeground);
+    return () => {
+      document.removeEventListener("visibilitychange", onForeground);
+      window.removeEventListener("focus", onForeground);
+    };
+  }, [refreshNotificationStatus]);
+
   if (!ctx?.db) return null;
-  const { db, update, t, lang, cal } = ctx;
+  const { db, update, updatePreferences, resetSyncedContent, signOutLocal, t, lang, cal } = ctx;
 
   // Export the whole local DB to a file the user keeps.
   // Native: Android's WebView silently drops blob downloads (the click
@@ -156,13 +201,14 @@ function SettingsPage() {
       );
       return;
     }
-    update((d) => restoreDb(d, pendingImport));
+    const accepted = update((d) => restoreDb(d, pendingImport));
     setPendingImport(null);
+    if (!accepted) return;
     toast.success(t("اطلاعاتت بازگردانی شد", "Your data was restored"));
   };
 
   const confirmWipe = () => {
-    update(wipeContent);
+    resetSyncedContent();
     setWipeOpen(false);
     toast.success(t("همهٔ داده‌ها پاک شد", "All data was erased"));
   };
@@ -178,19 +224,34 @@ function SettingsPage() {
   const paidActive = canImportBackup(db);
   // رنگ دلخواه = رنگی که در لیست پیش‌فرض‌ها نیست.
   const isCustomBrand = !!s.brandColor && !BRAND_COLORS.includes(s.brandColor);
+  const notificationsActive = notificationDeliveryActive(s.notificationsEnabled, displayPermission);
 
   const requestNotifs = async () => {
-    if (s.notificationsEnabled) {
-      update((d) => ({ ...d, settings: { ...d.settings, notificationsEnabled: false } }));
+    if (notificationsActive) {
+      updatePreferences({ notificationsEnabled: false });
       return;
     }
-    let granted = await requestNativePermission();
-    if (typeof Notification !== "undefined") {
-      const permission =
-        Notification.permission === "default"
-          ? await Notification.requestPermission()
-          : Notification.permission;
-      granted = permission === "granted";
+    // Preserve user intent even if the OS currently denies delivery. The
+    // visible switch remains off until permission is actually available.
+    updatePreferences({ notificationsEnabled: true });
+    const granted = await requestNotificationPermission();
+    setDisplayPermission(granted ? "granted" : "denied");
+    if (isNativeRuntime()) {
+      if (granted) {
+        let exact = await checkNativeExactAlarmSetting();
+        if (exact !== "granted" && exact !== "not-android") {
+          exact = await requestNativeExactAlarmSetting();
+        }
+        setExactAlarm(exact);
+        if (exact !== "granted" && exact !== "not-android") {
+          toast.warning(
+            t(
+              "اعلان‌ها فعال‌اند، اما دقت دقیقه‌ای در تنظیمات گوشی بسته است.",
+              "Notifications are enabled, but minute-precise alarms are disabled in device settings.",
+            ),
+          );
+        }
+      }
     }
     if (!granted) {
       toast.error(
@@ -201,7 +262,7 @@ function SettingsPage() {
       );
       return;
     }
-    update((d) => ({ ...d, settings: { ...d.settings, notificationsEnabled: true } }));
+    updatePreferences({ notificationsEnabled: true });
   };
 
   const addCategory = () => {
@@ -254,7 +315,7 @@ function SettingsPage() {
             {(["fa", "en"] as const).map((l) => (
               <button
                 key={l}
-                onClick={() => update((d) => ({ ...d, settings: { ...d.settings, lang: l } }))}
+                onClick={() => updatePreferences({ lang: l })}
                 className={`rounded-xl border px-3 py-2 text-xs font-medium ${
                   s.lang === l
                     ? "border-primary bg-primary-soft text-primary"
@@ -275,7 +336,7 @@ function SettingsPage() {
             {(["jalali", "gregorian"] as const).map((c) => (
               <button
                 key={c}
-                onClick={() => update((d) => ({ ...d, settings: { ...d.settings, calendar: c } }))}
+                onClick={() => updatePreferences({ calendar: c })}
                 className={`rounded-xl border px-3 py-2 text-xs font-medium ${
                   s.calendar === c
                     ? "border-primary bg-primary-soft text-primary"
@@ -299,7 +360,7 @@ function SettingsPage() {
             {(["light", "dark"] as const).map((th) => (
               <button
                 key={th}
-                onClick={() => update((d) => ({ ...d, settings: { ...d.settings, theme: th } }))}
+                onClick={() => updatePreferences({ theme: th })}
                 className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium ${
                   s.theme === th
                     ? "border-primary bg-primary-soft text-primary"
@@ -325,9 +386,7 @@ function SettingsPage() {
             {BRAND_COLORS.map((c) => (
               <button
                 key={c || "default"}
-                onClick={() =>
-                  update((d) => ({ ...d, settings: { ...d.settings, brandColor: c } }))
-                }
+                onClick={() => updatePreferences({ brandColor: c })}
                 className={`flex h-8 w-8 items-center justify-center rounded-full text-[7px] font-bold text-white transition-transform ${
                   s.brandColor === c
                     ? "scale-110 ring-2 ring-foreground ring-offset-2 ring-offset-card"
@@ -429,24 +488,96 @@ function SettingsPage() {
           <button
             type="button"
             role="switch"
-            aria-checked={s.notificationsEnabled}
+            aria-checked={notificationsActive}
             aria-label={t("فعال‌سازی اعلان‌ها", "Enable notifications")}
             onClick={requestNotifs}
-            className={`relative h-6 w-11 rounded-full transition-colors ${s.notificationsEnabled ? "bg-primary" : "bg-secondary"}`}
+            className={`relative h-6 w-11 rounded-full transition-colors ${notificationsActive ? "bg-primary" : "bg-secondary"}`}
           >
             <span
               className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${
-                s.notificationsEnabled ? "start-5.5" : "start-0.5"
+                notificationsActive ? "start-5.5" : "start-0.5"
               }`}
             />
           </button>
         </div>
         <p className="mt-3 text-xs leading-6 text-muted-foreground">
           {t(
-            "یادآوری عادت‌ها، کارها، سه روز مانده به پایان اشتراک و روز پایان اشتراک. در وب، اعلان سیستمی به اجازهٔ مرورگر وابسته است؛ اعلان داخل روتینو از دست نمی‌رود.",
-            "Habit and task reminders, plus alerts three days before and on subscription expiry. On web, system alerts depend on browser permission; the in-app alert is still kept.",
+            "یادآوری عادت‌ها، کارها، ژورنال و پایان دوره آزمایشی/اشتراک. در وب، اعلان سیستمی به بازبودن قابلیت مرورگر وابسته است؛ اعلان داخل روتینو از دست نمی‌رود.",
+            "Habit, task, journal, trial and subscription reminders. Web system alerts depend on browser support; the in-app alert is still kept.",
           )}
         </p>
+        <div className="mt-4 space-y-3 border-t border-border pt-3">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <Volume2 className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+              <div>
+                <p className="text-xs font-bold text-foreground">
+                  {t("صدای تکمیل", "Completion sound")}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  {t(
+                    "صدای کوتاه فقط بعد از انجام موفق",
+                    "A short cue after a successful completion",
+                  )}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={s.completionSoundEnabled}
+              aria-label={t("فعال‌سازی صدای تکمیل", "Enable completion sound")}
+              onClick={() =>
+                updatePreferences({ completionSoundEnabled: !s.completionSoundEnabled })
+              }
+              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${s.completionSoundEnabled ? "bg-primary" : "bg-secondary"}`}
+            >
+              <span
+                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${s.completionSoundEnabled ? "start-5.5" : "start-0.5"}`}
+              />
+            </button>
+          </div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <Vibrate className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+              <div>
+                <p className="text-xs font-bold text-foreground">
+                  {t("بازخورد لمسی", "Haptic feedback")}
+                </p>
+                <p className="text-[10px] text-muted-foreground">
+                  {t("روی گوشی‌های سازگار", "On supported phones")}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={s.hapticsEnabled}
+              aria-label={t("فعال‌سازی بازخورد لمسی", "Enable haptic feedback")}
+              onClick={() => updatePreferences({ hapticsEnabled: !s.hapticsEnabled })}
+              className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${s.hapticsEnabled ? "bg-primary" : "bg-secondary"}`}
+            >
+              <span
+                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${s.hapticsEnabled ? "start-5.5" : "start-0.5"}`}
+              />
+            </button>
+          </div>
+        </div>
+        {notificationsActive && exactAlarm !== "not-android" && exactAlarm !== "granted" && (
+          <button
+            type="button"
+            className="mt-2 text-xs font-bold text-primary"
+            onClick={async () => {
+              const status = await requestNativeExactAlarmSetting();
+              setExactAlarm(status);
+            }}
+          >
+            {t(
+              "فعال‌کردن دقت دقیقه‌ای در تنظیمات گوشی",
+              "Enable minute-precise alarms in device settings",
+            )}
+          </button>
+        )}
         <div className="mt-3">
           <p className="mb-1.5 text-xs font-medium text-muted-foreground">
             {t("ساعت یادآوری ژورنال", "Journal reminder time")}
@@ -499,9 +630,15 @@ function SettingsPage() {
         <div className="flex flex-col gap-4">
           <TimePicker24
             value={s.journalReminder ?? "21:00"}
-            onChange={(v) =>
-              update((d) => ({ ...d, settings: { ...d.settings, journalReminder: v } }))
-            }
+            onChange={(v) => {
+              if (
+                !update((d) => ({
+                  ...d,
+                  settings: { ...d.settings, journalReminder: v },
+                }))
+              )
+                setJournalTimeOpen(false);
+            }}
             lang={lang}
             t={t}
           />
@@ -532,15 +669,13 @@ function SettingsPage() {
         <div className="flex flex-col items-center gap-5">
           <ColorWheel
             value={s.brandColor || "#F97316"}
-            onChange={(hex) =>
-              update((d) => ({ ...d, settings: { ...d.settings, brandColor: hex } }))
-            }
+            onChange={(hex) => updatePreferences({ brandColor: hex })}
           />
           <div className="flex w-full gap-2">
             <Button
               variant="secondary"
               className="flex-1"
-              onClick={() => update((d) => ({ ...d, settings: { ...d.settings, brandColor: "" } }))}
+              onClick={() => updatePreferences({ brandColor: "" })}
             >
               {t("پیش‌فرض", "Default")}
             </Button>
@@ -562,8 +697,8 @@ function SettingsPage() {
               </div>
               <p className="text-[11px] leading-5 text-muted-foreground">
                 {t(
-                  "اطلاعاتت فقط روی همین دستگاه ذخیره می‌شه. یک فایل پشتیبان بگیر و جای امن نگهش دار تا اگه اپ رو پاک کردی یا گوشی عوض کردی، اطلاعاتت نپره.",
-                  "Your data is stored only on this device. Export a backup file and keep it somewhere safe, so nothing is lost if you reinstall the app or switch devices.",
+                  "اطلاعاتت روی دستگاه و فضای ابری حسابت همگام می‌شود. برای داشتن یک نسخهٔ مستقل، فایل پشتیبان را هم در جای امن نگه دار.",
+                  "Your data syncs between this device and your account cloud. Keep an exported backup as an independent copy too.",
                 )}
               </p>
               <div className="grid grid-cols-2 gap-2">
@@ -636,11 +771,11 @@ function SettingsPage() {
 
         <div className="h-px bg-destructive/20" />
 
-        {/* erase everything on this device */}
+        {/* Explicit synced-account content reset; account and entitlement survive. */}
         <p className="text-[11px] leading-5 text-muted-foreground">
           {t(
-            "همهٔ عادت‌ها، ثبت‌ها، کارها، ژورنال و تاریخچهٔ تایمر از این دستگاه پاک می‌شه. حساب و اشتراکت می‌مونه. این کار به‌هیچ‌وجه قابل بازگشت نیست.",
-            "Erases every habit, log, task, journal entry and timer session from this device. Your account and subscription stay. This cannot be undone by anything.",
+            "همهٔ عادت‌ها، ثبت‌ها، کارها، ژورنال و تاریخچهٔ تایمر از حساب همگام‌شده پاک می‌شود و این حذف به دستگاه‌های دیگرت هم می‌رسد. خود حساب و اشتراک باقی می‌ماند.",
+            "Erases habits, logs, tasks, journal entries and timer history from your synced account and propagates the deletion to your other devices. Your account and subscription remain.",
           )}
         </p>
         <Button variant="destructive" onClick={() => setWipeOpen(true)}>
@@ -670,7 +805,7 @@ function SettingsPage() {
                 // Clears tokens locally first, then revokes the device server-side
                 // on a best-effort basis — signing out must work offline too.
                 void logout();
-                update((d) => ({ ...d, auth: null }));
+                signOutLocal();
                 navigate({ to: "/auth" });
               }}
             >
@@ -692,8 +827,8 @@ function SettingsPage() {
         <div className="flex flex-col gap-4">
           <p className="text-sm text-muted-foreground">
             {t(
-              `${faNum(db.habits.length, lang)} عادت، ${faNum(Object.keys(db.logs).length, lang)} ثبت و ${faNum(Object.keys(db.journal).length, lang)} روز ژورنال برای همیشه پاک می‌شن. مطمئنی؟`,
-              `${db.habits.length} habits, ${Object.keys(db.logs).length} logs and ${Object.keys(db.journal).length} journal days will be erased forever. Are you sure?`,
+              `${faNum(db.habits.length, lang)} عادت، ${faNum(Object.keys(db.logs).length, lang)} ثبت و ${faNum(Object.keys(db.journal).length, lang)} روز ژورنال از حساب همگام‌شده و همهٔ دستگاه‌ها برای همیشه پاک می‌شوند. این حذف، حذف حساب نیست. مطمئنی؟`,
+              `${db.habits.length} habits, ${Object.keys(db.logs).length} logs and ${Object.keys(db.journal).length} journal days will be erased permanently from the synced account and all devices. This does not delete the account. Continue?`,
             )}
           </p>
           <div className="flex gap-2">
@@ -717,8 +852,8 @@ function SettingsPage() {
           <div className="flex flex-col gap-4">
             <p className="text-sm text-muted-foreground">
               {t(
-                "این فایل جایگزین اطلاعات فعلی روی این دستگاه می‌شه و قابل بازگشت نیست. مطمئنی؟",
-                "This will replace the current data on this device and can't be undone. Continue?",
+                "این فایل جایگزین محتوای فعلی حساب همگام‌شده می‌شود و تغییر به دستگاه‌های دیگرت هم می‌رسد. ادامه می‌دهی؟",
+                "This file replaces the current synced-account content and the change reaches your other devices. Continue?",
               )}
             </p>
             <div className="rounded-xl border border-border p-3 text-[11px] leading-6 text-foreground">

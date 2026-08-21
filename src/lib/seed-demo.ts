@@ -11,7 +11,15 @@
  */
 import { addDays, todayKey } from "./dates";
 import { MOOD_EMOJIS } from "./presets";
-import { logKey, type Db, type Habit, type HabitLog, type JournalEntry, type Task, type TimerSession } from "./store";
+import {
+  logKey,
+  type Db,
+  type Habit,
+  type HabitLog,
+  type JournalEntry,
+  type Task,
+  type TimerSession,
+} from "./store";
 
 /** Mulberry32 — tiny deterministic PRNG. */
 function rng(seed: number): () => number {
@@ -44,14 +52,100 @@ interface DemoHabitSpec {
 }
 
 const SPECS: DemoHabitSpec[] = [
-  { name: "ورزش روزانه", categoryId: "sport", type: "quantity", target: 30, unitKind: "time", schedule: { kind: "daily" }, monthlyGoal: 22, reminderTime: "18:00", rate: 0.72, ageDays: DAYS },
-  { name: "مطالعه", categoryId: "study", type: "quantity", target: 20, unitKind: "time", schedule: { kind: "daily" }, monthlyGoal: null, reminderTime: "21:30", rate: 0.8, ageDays: DAYS },
-  { name: "نوشیدن آب", categoryId: "health", type: "quantity", target: 8, unit: "لیوان", unitKind: "count", schedule: { kind: "daily" }, monthlyGoal: null, reminderTime: null, rate: 0.85, ageDays: DAYS },
-  { name: "بیدار شدن قبل از ۷", categoryId: "morning", type: "binary", target: 1, schedule: { kind: "daily" }, monthlyGoal: 20, reminderTime: "06:45", rate: 0.6, ageDays: 300 },
-  { name: "مدیتیشن", categoryId: "growth", type: "quantity", target: 10, unitKind: "time", schedule: { kind: "odd" }, monthlyGoal: null, reminderTime: null, rate: 0.65, ageDays: 240 },
-  { name: "زبان انگلیسی", categoryId: "study", type: "quantity", target: 15, unitKind: "time", schedule: { kind: "weekdays", weekdays: [0, 1, 2, 3, 6] }, monthlyGoal: null, reminderTime: "20:00", rate: 0.7, ageDays: 200 },
-  { name: "پیاده‌روی", categoryId: "health", type: "binary", target: 1, schedule: { kind: "weekdays", weekdays: [1, 3, 5] }, monthlyGoal: null, reminderTime: null, rate: 0.75, ageDays: 150 },
-  { name: "بدون فست‌فود", categoryId: "limits", type: "binary", target: 1, schedule: { kind: "daily" }, monthlyGoal: 25, reminderTime: null, rate: 0.8, ageDays: 90 },
+  {
+    name: "ورزش روزانه",
+    categoryId: "sport",
+    type: "quantity",
+    target: 30,
+    unitKind: "time",
+    schedule: { kind: "daily" },
+    monthlyGoal: 22,
+    reminderTime: "18:00",
+    rate: 0.72,
+    ageDays: DAYS,
+  },
+  {
+    name: "مطالعه",
+    categoryId: "study",
+    type: "quantity",
+    target: 20,
+    unitKind: "time",
+    schedule: { kind: "daily" },
+    monthlyGoal: null,
+    reminderTime: "21:30",
+    rate: 0.8,
+    ageDays: DAYS,
+  },
+  {
+    name: "نوشیدن آب",
+    categoryId: "health",
+    type: "quantity",
+    target: 8,
+    unit: "لیوان",
+    unitKind: "count",
+    schedule: { kind: "daily" },
+    monthlyGoal: null,
+    reminderTime: null,
+    rate: 0.85,
+    ageDays: DAYS,
+  },
+  {
+    name: "بیدار شدن قبل از ۷",
+    categoryId: "morning",
+    type: "binary",
+    target: 1,
+    schedule: { kind: "daily" },
+    monthlyGoal: 20,
+    reminderTime: "06:45",
+    rate: 0.6,
+    ageDays: 300,
+  },
+  {
+    name: "مدیتیشن",
+    categoryId: "growth",
+    type: "quantity",
+    target: 10,
+    unitKind: "time",
+    schedule: { kind: "odd" },
+    monthlyGoal: null,
+    reminderTime: null,
+    rate: 0.65,
+    ageDays: 240,
+  },
+  {
+    name: "زبان انگلیسی",
+    categoryId: "study",
+    type: "quantity",
+    target: 15,
+    unitKind: "time",
+    schedule: { kind: "weekdays", weekdays: [0, 1, 2, 3, 6] },
+    monthlyGoal: null,
+    reminderTime: "20:00",
+    rate: 0.7,
+    ageDays: 200,
+  },
+  {
+    name: "پیاده‌روی",
+    categoryId: "health",
+    type: "binary",
+    target: 1,
+    schedule: { kind: "weekdays", weekdays: [1, 3, 5] },
+    monthlyGoal: null,
+    reminderTime: null,
+    rate: 0.75,
+    ageDays: 150,
+  },
+  {
+    name: "بدون فست‌فود",
+    categoryId: "limits",
+    type: "binary",
+    target: 1,
+    schedule: { kind: "daily" },
+    monthlyGoal: 25,
+    reminderTime: null,
+    rate: 0.8,
+    ageDays: 90,
+  },
 ];
 
 const TASK_TITLES = [
@@ -160,9 +254,35 @@ export function buildDemoContent(now = Date.now()): DemoContent {
   }
   // چند کار برای امروز (یکی با یادآور تا نوتیف قابل تست باشد)
   tasks.push(
-    { id: "demo-t-today1", dateKey: today, title: "خرید نان", type: "binary", target: 1, value: 0, done: false },
-    { id: "demo-t-today2", dateKey: today, title: "تماس با مامان", type: "binary", target: 1, value: 0, done: false, reminderAt: new Date(now + 60 * 60 * 1000).toISOString().slice(0, 16) },
-    { id: "demo-t-today3", dateKey: today, title: "۳۰ دقیقه تمیزکاری", type: "quantity", target: 30, value: 10, done: false, unitKind: "time" },
+    {
+      id: "demo-t-today1",
+      dateKey: today,
+      title: "خرید نان",
+      type: "binary",
+      target: 1,
+      value: 0,
+      done: false,
+    },
+    {
+      id: "demo-t-today2",
+      dateKey: today,
+      title: "تماس با مامان",
+      type: "binary",
+      target: 1,
+      value: 0,
+      done: false,
+      reminderAt: new Date(now + 60 * 60 * 1000).toISOString().slice(0, 16),
+    },
+    {
+      id: "demo-t-today3",
+      dateKey: today,
+      title: "۳۰ دقیقه تمیزکاری",
+      type: "quantity",
+      target: 30,
+      value: 10,
+      done: false,
+      unitKind: "time",
+    },
   );
 
   const timerSessions: TimerSession[] = [];
@@ -179,7 +299,11 @@ export function buildDemoContent(now = Date.now()): DemoContent {
       startedAt,
       endedAt: startedAt + focus * 1000,
       ...(habitIdx !== null
-        ? { linkedKind: "habit" as const, linkedId: `demo-h${habitIdx + 1}`, linkedLabel: SPECS[habitIdx].name }
+        ? {
+            linkedKind: "habit" as const,
+            linkedId: `demo-h${habitIdx + 1}`,
+            linkedLabel: SPECS[habitIdx].name,
+          }
         : {}),
     });
   }
@@ -204,5 +328,10 @@ export function buildDemoContent(now = Date.now()): DemoContent {
 /** Replaces the db's content with the demo dataset (account/settings untouched). */
 export function applyDemoContent(db: Db, now = Date.now()): Db {
   const demo = buildDemoContent(now);
-  return { ...db, ...demo, notifications: [], meta: { ...db.meta, celebrated: [], firedReminders: [] } };
+  return {
+    ...db,
+    ...demo,
+    notifications: [],
+    meta: { ...db.meta, celebrated: [], firedReminders: [] },
+  };
 }

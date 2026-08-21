@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { CalendarDays, Check, Plus, Settings2 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { addQuickTask, TaskRow } from "@/components/tasks";
 import {
@@ -16,7 +17,12 @@ import {
 } from "@/components/ui";
 import { WeekStrip } from "@/components/WeekStrip";
 import { addDays, faNum, formatDate, todayKey } from "@/lib/dates";
-import { scheduleTaskReminder } from "@/lib/native-notifications";
+import {
+  checkNativeExactAlarmSetting,
+  isNativeRuntime,
+  requestNativeExactAlarmSetting,
+  requestNotificationPermission,
+} from "@/lib/native-notifications";
 import { CATEGORY_COLOR_CHOICES } from "@/lib/presets";
 import { uid } from "@/lib/store";
 import { useAppMaybe } from "@/state/app";
@@ -47,7 +53,7 @@ function TasksPage() {
   const [icon, setIcon] = useState(TASK_DEFAULT_ICON);
 
   if (!ctx?.db) return null;
-  const { db, update, t, lang, cal } = ctx;
+  const { db, update, updatePreferences, t, lang, cal } = ctx;
 
   const todayK = todayKey();
   const tomorrowK = addDays(todayK, 1);
@@ -65,7 +71,8 @@ function TasksPage() {
 
   const submitQuick = () => {
     if (!quickTitle.trim()) return;
-    update((d) => addQuickTask(d, selectedDay, quickTitle).db);
+    const accepted = update((d) => addQuickTask(d, selectedDay, quickTitle).db);
+    if (!accepted) return;
     setQuickTitle("");
   };
 
@@ -75,7 +82,7 @@ function TasksPage() {
     const trimmedTitle = title.trim();
     // یادآوری برای همان روزِ کار، در ساعت انتخاب‌شده.
     const reminderAt = reminderOn ? `${selectedDay}T${reminderTime}` : null;
-    update((d) => ({
+    const accepted = update((d) => ({
       ...d,
       tasks: [
         ...d.tasks,
@@ -94,8 +101,32 @@ function TasksPage() {
         },
       ],
     }));
-    // schedule a native OS-level alarm too (no-op on web)
-    if (reminderAt) void scheduleTaskReminder(newId, trimmedTitle, reminderAt);
+    if (!accepted) {
+      setFormOpen(false);
+      return;
+    }
+    if (reminderAt && !db.settings.notificationsEnabled) {
+      updatePreferences({ notificationsEnabled: true });
+      void (async () => {
+        const granted = await requestNotificationPermission();
+        if (!granted) {
+          toast.error(
+            t(
+              "کار ذخیره شد، اما مجوز اعلان بسته است؛ یادآوری از تنظیمات فعال می‌شود.",
+              "Task saved, but notification permission is blocked; enable reminders in Settings.",
+            ),
+          );
+          return;
+        }
+        if (isNativeRuntime()) {
+          const exact = await checkNativeExactAlarmSetting();
+          if (exact !== "granted" && exact !== "not-android") {
+            await requestNativeExactAlarmSetting();
+          }
+        }
+        updatePreferences({ notificationsEnabled: true });
+      })();
+    }
     setTitle("");
     setNote("");
     setReminderOn(false);
@@ -142,7 +173,9 @@ function TasksPage() {
             <CalendarDays className="h-3 w-3" />
             {t("دلخواه", "Pick a date")}
           </Chip>
-          <span className="ms-auto text-xs text-muted-foreground">{formatDate(selectedDay, cal, lang)}</span>
+          <span className="ms-auto text-xs text-muted-foreground">
+            {formatDate(selectedDay, cal, lang)}
+          </span>
         </div>
         {datePickerOpen && (
           <div className="mt-2">
@@ -201,18 +234,27 @@ function TasksPage() {
           </div>
 
           {dayTasks.length === 0 ? (
-            <EmptyState emoji="📋" text={t("برای این روز کاری ثبت نشده.", "No tasks for this day.")} />
+            <EmptyState
+              emoji="📋"
+              text={t("برای این روز کاری ثبت نشده.", "No tasks for this day.")}
+            />
           ) : (
             dayTasks.map((task) => (
               <TaskRow
                 key={task.id}
                 task={task}
+                settings={db.settings}
                 lang={lang}
                 t={t}
                 onUpdate={(patch) =>
-                  update((d) => ({ ...d, tasks: d.tasks.map((x) => (x.id === task.id ? { ...x, ...patch } : x)) }))
+                  update((d) => ({
+                    ...d,
+                    tasks: d.tasks.map((x) => (x.id === task.id ? { ...x, ...patch } : x)),
+                  }))
                 }
-                onDelete={() => update((d) => ({ ...d, tasks: d.tasks.filter((x) => x.id !== task.id) }))}
+                onDelete={() =>
+                  update((d) => ({ ...d, tasks: d.tasks.filter((x) => x.id !== task.id) }))
+                }
               />
             ))
           )}
@@ -224,11 +266,17 @@ function TasksPage() {
       </p>
 
       {/* advanced task creation: icon, color, quantity/time goal, reminder */}
-      <Modal open={formOpen} onClose={() => setFormOpen(false)} title={t("کار جدید (پیشرفته)", "New task (advanced)")}>
+      <Modal
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        title={t("کار جدید (پیشرفته)", "New task (advanced)")}
+      >
         <div className="flex flex-col gap-3">
           {/* تاریخ کار: با زدن روی آن، تقویم باز می‌شود و روز دلخواه انتخاب می‌شود. */}
           <div>
-            <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("تاریخ کار", "Task date")}</p>
+            <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+              {t("تاریخ کار", "Task date")}
+            </p>
             <button
               type="button"
               onClick={() => setFormDateOpen((v) => !v)}
@@ -252,7 +300,11 @@ function TasksPage() {
             )}
           </div>
 
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("عنوان کار", "Task title")} />
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder={t("عنوان کار", "Task title")}
+          />
 
           <div>
             <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("آیکون", "Icon")}</p>
@@ -262,7 +314,9 @@ function TasksPage() {
                   key={iconKey}
                   onClick={() => setIcon(iconKey)}
                   className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-all ${
-                    icon === iconKey ? "border-primary bg-primary-soft text-primary" : "border-border text-muted-foreground"
+                    icon === iconKey
+                      ? "border-primary bg-primary-soft text-primary"
+                      : "border-border text-muted-foreground"
                   }`}
                 >
                   <CatIcon icon={iconKey} className="h-3.5 w-3.5" />
@@ -279,7 +333,9 @@ function TasksPage() {
                   key={c}
                   onClick={() => setColor(c)}
                   className={`h-7 w-7 rounded-full transition-transform ${
-                    color === c ? "scale-110 ring-2 ring-foreground ring-offset-2 ring-offset-card" : ""
+                    color === c
+                      ? "scale-110 ring-2 ring-foreground ring-offset-2 ring-offset-card"
+                      : ""
                   }`}
                   style={{ backgroundColor: c }}
                 />
@@ -287,7 +343,11 @@ function TasksPage() {
             </div>
           </div>
 
-          <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t("یادداشت (اختیاری)", "Note (optional)")} />
+          <Input
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            placeholder={t("یادداشت (اختیاری)", "Note (optional)")}
+          />
 
           {/* یادآوری: کلید روشن/خاموش؛ وقتی روشن است، انتخاب ساعت زیرش می‌آید. */}
           <div>

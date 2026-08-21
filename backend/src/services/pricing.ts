@@ -97,10 +97,12 @@ export async function checkDiscount(
   const [d] = await db.select().from(discounts).where(eq(discounts.code, code)).limit(1);
   if (!d) return { valid: false, percent: 0, code: null, reason: "unknown" };
   if (!d.active) return { valid: false, percent: 0, code: null, reason: "inactive" };
-  if (d.expiresAt && d.expiresAt <= now) return { valid: false, percent: 0, code: null, reason: "expired" };
+  if (d.expiresAt && d.expiresAt <= now)
+    return { valid: false, percent: 0, code: null, reason: "expired" };
   if (d.maxUses != null && (await slotsTaken(db, d.code, d.usedCount, userId, now)) >= d.maxUses)
     return { valid: false, percent: 0, code: null, reason: "exhausted" };
-  if (d.phone && d.phone !== userPhone) return { valid: false, percent: 0, code: null, reason: "other_user" };
+  if (d.phone && d.phone !== userPhone)
+    return { valid: false, percent: 0, code: null, reason: "other_user" };
 
   // One redemption per user, enforced by the redemptions PK at write time; this
   // is the friendly check that avoids a constraint violation at checkout.
@@ -126,7 +128,11 @@ export async function quote(
    * it to the gateway; everyone else treats zero as an error. */
   allowFree = false,
 ): Promise<Quote> {
-  const [plan] = await db.select().from(plans).where(and(eq(plans.id, planId), eq(plans.active, true))).limit(1);
+  const [plan] = await db
+    .select()
+    .from(plans)
+    .where(and(eq(plans.id, planId), eq(plans.active, true)))
+    .limit(1);
   if (!plan) throw notFound("unknown_plan", `No active plan '${planId}'`);
 
   const d = await checkDiscount(db, rawCode, userId, userPhone, now);
@@ -139,7 +145,8 @@ export async function quote(
 
   // Zibal rejects amounts <= 1000 Rial (result 105). A 100% discount would also
   // mean "free", which should never reach a payment gateway at all.
-  if (price <= 0 && !allowFree) throw badRequest("free_plan", "Discounted price is zero; grant directly instead of charging");
+  if (price <= 0 && !allowFree)
+    throw badRequest("free_plan", "Discounted price is zero; grant directly instead of charging");
   if (price < 0) price = 0;
 
   return {

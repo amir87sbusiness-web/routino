@@ -12,7 +12,15 @@ import type { schema } from "./schema.js";
 
 type S = typeof schema;
 
+type NodePgTransaction = Parameters<Parameters<NodePgDatabase<S>["transaction"]>[0]>[0];
+type PgliteTransaction = Parameters<Parameters<PgliteDatabase<S>["transaction"]>[0]>[0];
+
 export type Database = NodePgDatabase<S> | PgliteDatabase<S>;
+
+/** Query-builder surface shared by a root database and a transaction callback.
+ * Services that may participate in a larger atomic operation accept this type;
+ * services that open a transaction themselves still require `Database`. */
+export type DatabaseExecutor = Database | NodePgTransaction | PgliteTransaction;
 
 /**
  * Normalises the result of a raw `db.execute()`.

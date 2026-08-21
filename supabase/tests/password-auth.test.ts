@@ -75,7 +75,15 @@ describe("edge admin set-password", () => {
     });
     expect(res.status).toBe(200);
     expect((await res.json()).created).toBe(true);
-    expect((await login("09138982893", "Amir@1387")).status).toBe(200);
+    const signedIn = await login("09138982893", "Amir@1387");
+    expect(signedIn.status).toBe(200);
+    expect((await signedIn.json()).entitlement).toMatchObject({
+      status: "none",
+      planId: null,
+      expiresAt: null,
+    });
+    expect(await h.query(`select id from grants`)).toHaveLength(0);
+    expect(await h.query(`select user_id from entitlements`)).toHaveLength(0);
   });
 
   it("rejects a bad admin token", async () => {
@@ -94,10 +102,12 @@ describe("edge: changing a password evicts other sessions", () => {
     // this fix needs its own coverage here rather than relying on parity.
     const victim = await signIn(h, "09123334444");
     expect(
-      (await h.call("POST", "/v1/auth/password", {
-        headers: auth(victim.access),
-        body: { newPassword: "Amir@1387" },
-      })).status,
+      (
+        await h.call("POST", "/v1/auth/password", {
+          headers: auth(victim.access),
+          body: { newPassword: "Amir@1387" },
+        })
+      ).status,
     ).toBe(200);
     await h.raw(`update users set max_active_devices = 2 where id = '${victim.user.id}'`);
 
@@ -108,10 +118,12 @@ describe("edge: changing a password evicts other sessions", () => {
 
     // Victim changes the password from the device in their hand.
     expect(
-      (await h.call("POST", "/v1/auth/password", {
-        headers: auth(victim.access),
-        body: { newPassword: "Naghmeh@1405", currentPassword: "Amir@1387" },
-      })).status,
+      (
+        await h.call("POST", "/v1/auth/password", {
+          headers: auth(victim.access),
+          body: { newPassword: "Naghmeh@1405", currentPassword: "Amir@1387" },
+        })
+      ).status,
     ).toBe(200);
 
     // Intruder is out.

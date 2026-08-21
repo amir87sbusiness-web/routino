@@ -29,7 +29,7 @@ async function signIn(phone = "09123334444") {
     access: string;
     refresh: string;
     user: { id: string; phone: string };
-    entitlement: { status: string; planId: string | null; expiresAt: string };
+    entitlement: { status: string; planId: string | null; expiresAt: string | null };
     isNew: boolean;
   };
 }
@@ -88,29 +88,28 @@ describe("POST /v1/auth/otp/request", () => {
 });
 
 describe("POST /v1/auth/otp/verify", () => {
-  it("creates the account and grants a 7-day trial on first sign-in", async () => {
+  it("creates the account with no entitlement or automatic grant", async () => {
     const body = await signIn();
     expect(body.isNew).toBe(true);
     expect(body.user.phone).toBe("989123334444");
-    expect(body.entitlement.status).toBe("active");
-    expect(body.entitlement.planId).toBe("trial");
-
-    const days = (Date.parse(body.entitlement.expiresAt) - Date.now()) / 86_400_000;
-    expect(days).toBeGreaterThan(6.9);
-    expect(days).toBeLessThan(7.1);
+    expect(body.entitlement).toMatchObject({ status: "none", planId: null, expiresAt: null });
+    expect(await h.query(`select id from grants where user_id = '${body.user.id}'`)).toHaveLength(
+      0,
+    );
   });
 
-  it("does not re-grant the trial on a later sign-in", async () => {
-    // The old client wrote the trial locally, so clearing storage re-granted it
-    // forever. The server must only ever grant it once.
-    const first = await signIn();
+  it("does not create a grant on a later sign-in", async () => {
+    await signIn();
     await h.raw(
       `update otp_codes set consumed_at = null, created_at = now() - interval '2 minutes'`,
     );
     const second = await signIn();
 
     expect(second.isNew).toBe(false);
-    expect(second.entitlement.expiresAt).toBe(first.entitlement.expiresAt);
+    expect(second.entitlement.status).toBe("none");
+    expect(await h.query(`select id from grants where user_id = '${second.user.id}'`)).toHaveLength(
+      0,
+    );
   });
 
   it("rejects a wrong code", async () => {

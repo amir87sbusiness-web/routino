@@ -41,7 +41,7 @@ function PayResultPage() {
   const polls = useRef(0);
   const applied = useRef(false);
 
-  const update = ctx?.update;
+  const applyEntitlement = ctx?.applyEntitlement;
 
   useEffect(() => {
     if (!paymentId || !hasSession()) {
@@ -60,10 +60,10 @@ function PayResultPage() {
         const s = res.payment.status;
         if (s === "paid" || s === "canceled" || s === "failed" || s === "verify_failed") {
           // Cache the server's answer locally — this is what opens the gate.
-          if (s === "paid" && update && !applied.current) {
+          if (s === "paid" && applyEntitlement && !applied.current) {
             applied.current = true;
             const sub = entitlementToSubscription(res.entitlement);
-            if (sub) update((d) => ({ ...d, subscription: sub, meta: { ...d.meta, tampered: false } }));
+            if (sub) applyEntitlement(sub);
           }
           setState("done");
           return;
@@ -84,7 +84,7 @@ function PayResultPage() {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [paymentId, update]);
+  }, [applyEntitlement, paymentId]);
 
   const t = ctx?.t ?? ((fa: string) => fa);
   const lang = ctx?.lang ?? "fa";
@@ -187,7 +187,15 @@ function PayResultPage() {
   );
 }
 
-function ResultCard({ icon, title, detail }: { icon: React.ReactNode; title: string; detail: string }) {
+function ResultCard({
+  icon,
+  title,
+  detail,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  detail: string;
+}) {
   return (
     <div className="flex w-full flex-col items-center gap-3 rounded-3xl bg-card p-8 text-center shadow-sm">
       {icon}

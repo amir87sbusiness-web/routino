@@ -116,7 +116,9 @@ export function initPwa(): void {
     // A service worker registered by an earlier web visit to the same origin
     // would outlive an app update and serve a stale bundle from inside the
     // WebView. Actively remove any that exist.
-    void navigator.serviceWorker?.getRegistrations?.().then((regs) => regs.forEach((r) => void r.unregister()));
+    void navigator.serviceWorker
+      ?.getRegistrations?.()
+      .then((regs) => regs.forEach((r) => void r.unregister()));
     return;
   }
 

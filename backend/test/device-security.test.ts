@@ -16,7 +16,7 @@ afterAll(async () => {
 const descriptor = (installationKey: string) => ({
   installationKey,
   name: `Browser ${installationKey}`,
-  platform: "web",
+  platform: "web" as const,
   browser: "Chrome",
   os: "Windows",
 });
@@ -24,11 +24,10 @@ const descriptor = (installationKey: string) => ({
 async function login(installationKey: string) {
   await h.raw(`update otp_codes set consumed_at = null, created_at = now() - interval '2 minutes'`);
   await h.app.inject({ method: "POST", url: "/v1/auth/otp/request", payload: { phone: PHONE } });
-  const code = h.sms.last()!.code;
   return h.app.inject({
     method: "POST",
     url: "/v1/auth/otp/verify",
-    payload: { phone: PHONE, code, device: descriptor(installationKey) },
+    payload: { phone: PHONE, code: h.sms.last()!.code, device: descriptor(installationKey) },
   });
 }
 
@@ -38,13 +37,6 @@ async function successfulLogin(installationKey: string) {
   return response.json() as { access: string; refresh: string; deviceId: string };
 }
 
-async function eventCount(): Promise<number> {
-  const rows = await h.query<{ n: string }>(
-    `select count(*)::text as n from device_security_events where kind = 'replacement'`,
-  );
-  return Number(rows[0]!.n);
-}
-
 async function activeCount(): Promise<number> {
   const rows = await h.query<{ n: string }>(
     `select count(*)::text as n from devices where revoked_at is null`,
@@ -52,72 +44,65 @@ async function activeCount(): Promise<number> {
   return Number(rows[0]!.n);
 }
 
-describe("device security policy", () => {
-  it("defaults to one active device and revokes the previous session", async () => {
-    const first = await successfulLogin("phone-key");
-    await successfulLogin("laptop-key");
+describe("device session security", () => {
+  it("keeps every valid installation active when more devices sign in", async () => {
+    const sessions = [];
+    for (const key of ["device-a", "device-b", "device-c", "device-d"]) {
+      sessions.push(await successfulLogin(key));
+    }
 
-    expect(await activeCount()).toBe(1);
-    const oldRequest = await h.app.inject({
-      method: "GET",
-      url: "/v1/subscriptions/me",
-      headers: { authorization: `Bearer ${first.access}` },
-    });
-    expect(oldRequest.statusCode).toBe(401);
-    expect(oldRequest.json().error).toBe("device_replaced");
+    expect(await activeCount()).toBe(4);
+    for (const session of sessions) {
+      const response = await h.app.inject({
+        method: "GET",
+        url: "/v1/subscriptions/me",
+        headers: { authorization: `Bearer ${session.access}` },
+      });
+      expect(response.statusCode).toBe(200);
+    }
   });
 
-  it("does not count or duplicate a relogin from the same installation", async () => {
+  it("reuses one installation row while rotating that installation's refresh token", async () => {
     const first = await successfulLogin("stable-key");
     const second = await successfulLogin("stable-key");
 
     expect(second.deviceId).toBe(first.deviceId);
     expect(await activeCount()).toBe(1);
-    expect(await eventCount()).toBe(0);
+    expect(
+      (
+        await h.app.inject({
+          method: "POST",
+          url: "/v1/auth/token/refresh",
+          payload: { refresh: first.refresh },
+        })
+      ).statusCode,
+    ).toBe(401);
+    expect(
+      (
+        await h.app.inject({
+          method: "POST",
+          url: "/v1/auth/token/refresh",
+          payload: { refresh: second.refresh },
+        })
+      ).statusCode,
+    ).toBe(200);
   });
 
-  it("allows three replacements in a rolling 30-day window and locks the fourth", async () => {
-    await successfulLogin("device-a");
-    await successfulLogin("device-b");
-    await successfulLogin("device-c");
-    await successfulLogin("device-d");
-    expect(await eventCount()).toBe(3);
+  it("does not let a legacy device-switch lock disable valid sessions", async () => {
+    const first = await successfulLogin("phone-key");
+    await h.raw(`
+      update users set security_locked_at = now(), security_lock_reason = 'device_switch_limit';
+      insert into device_security_events (user_id, kind) values
+        ((select id from users where phone = '989123334444'), 'security_lock');
+    `);
 
-    const fourth = await login("device-e");
-    expect(fourth.statusCode).toBe(423);
-    expect(fourth.json()).toMatchObject({
-      error: "device_security_locked",
-      support: "routino_support",
+    const next = await login("laptop-key");
+    expect(next.statusCode).toBe(200);
+    const oldSession = await h.app.inject({
+      method: "GET",
+      url: "/v1/subscriptions/me",
+      headers: { authorization: `Bearer ${first.access}` },
     });
-    expect(await activeCount()).toBe(0);
-
-    const users = await h.query<{ security_locked_at: string | null }>(
-      `select security_locked_at from users`,
-    );
-    expect(users[0]!.security_locked_at).not.toBeNull();
-  });
-
-  it("does not count devices that fill an admin-granted free slot", async () => {
-    await successfulLogin("device-a");
-    await h.raw(`update users set max_active_devices = 2`);
-    await successfulLogin("device-b");
-    expect(await activeCount()).toBe(2);
-    expect(await eventCount()).toBe(0);
-
-    await successfulLogin("device-c");
-    expect(await activeCount()).toBe(2);
-    expect(await eventCount()).toBe(1);
-  });
-
-  it("ignores replacement events older than 15 days", async () => {
-    await successfulLogin("device-a");
-    await successfulLogin("device-b");
-    await successfulLogin("device-c");
-    await successfulLogin("device-d");
-    await h.raw(`update device_security_events set created_at = now() - interval '16 days'`);
-
-    const response = await login("device-e");
-    expect(response.statusCode).toBe(200);
-    expect(await activeCount()).toBe(1);
+    expect(oldSession.statusCode).toBe(200);
   });
 });

@@ -6,13 +6,15 @@ const templatePath = resolve(process.cwd(), "landing", "index.template.html");
 const template = readFileSync(templatePath, "utf8");
 
 describe("public landing copy", () => {
-  it("keeps the page concise and removes claims the local-only product cannot make", () => {
-    expect(template).not.toContain("بعد همگام می‌شه");
-    expect(template).not.toContain("همون اطلاعات روی گوشی و لپ‌تاپت باز می‌شه");
-    expect(template).not.toContain("گوشی و لپ‌تاپ");
+  it("describes verified local-first account sync without a local-only claim", () => {
+    expect(template).not.toContain("اطلاعاتت روی همین دستگاه می‌مونه");
+    expect(template).not.toContain("فقط روی همین دستگاه");
     expect(template).not.toContain("امسال رو");
     expect(template).toContain('هر روز، <span class="hl">یک قدم</span> جلوتر');
-    expect(template).toContain("اطلاعاتت روی همین دستگاه می‌مونه");
+    expect(template).toContain(
+      "نسخهٔ محلی همیشه در دسترسه و وقتی آنلاین بشی، اطلاعات حسابت بین دستگاه‌ها همگام می‌شه.",
+    );
+    expect(template).toContain("آفلاین و همگام");
   });
 
   it("leaves one build-time slot for the Android download action", () => {

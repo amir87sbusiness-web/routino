@@ -254,6 +254,12 @@ describe("sync", () => {
 
   it("carries the entitlement on the last page and only there", async () => {
     const { access } = await signIn("09120000013");
+    const activated = await h.app.inject({
+      method: "POST",
+      url: "/v1/subscriptions/trial/start",
+      headers: auth(access),
+    });
+    expect(activated.statusCode).toBe(200);
     await push(access, [habit("h1", "ورزش"), habit("h2", "مطالعه")]);
 
     // The app reads its paywall from this instead of calling

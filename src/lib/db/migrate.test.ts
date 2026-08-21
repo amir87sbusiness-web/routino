@@ -3,7 +3,7 @@ import { DEFAULT_CATEGORIES } from "../presets";
 import { defaultDb, logKey, type Db } from "../store";
 import { db as idb } from "./dexie";
 import { hydrate } from "./hydrate";
-import { loadLocal } from "./local";
+import { defaultLocal, loadLocal, saveLocal } from "./local";
 import { hasLegacyBlob, migrateLegacyBlob } from "./migrate";
 
 const LEGACY_KEY = "routino:v1";
@@ -15,7 +15,14 @@ function legacyBlob(): Db & { admin: unknown; badges: unknown } {
   const base = defaultDb(DEFAULT_CATEGORIES);
   return {
     ...base,
-    settings: { ...base.settings, lang: "en", calendar: "gregorian", theme: "dark", onboarded: true, notificationsEnabled: false },
+    settings: {
+      ...base.settings,
+      lang: "en",
+      calendar: "gregorian",
+      theme: "dark",
+      onboarded: true,
+      notificationsEnabled: false,
+    },
     auth: { phone: "989123334444", verifiedAt: 111 },
     subscription: { planId: "m3", startedAt: 1, expiresAt: 2, trial: true },
     habits: [
@@ -32,10 +39,30 @@ function legacyBlob(): Db & { admin: unknown; badges: unknown } {
         createdAt: 5,
       },
     ],
-    logs: { [logKey("h1", "2026-07-15")]: { habitId: "h1", dateKey: "2026-07-15", value: 30, done: true } },
-    tasks: [{ id: "t1", dateKey: "2026-07-15", title: "خرید", type: "binary", target: 1, value: 0, done: false }],
+    logs: {
+      [logKey("h1", "2026-07-15")]: { habitId: "h1", dateKey: "2026-07-15", value: 30, done: true },
+    },
+    tasks: [
+      {
+        id: "t1",
+        dateKey: "2026-07-15",
+        title: "خرید",
+        type: "binary",
+        target: 1,
+        value: 0,
+        done: false,
+      },
+    ],
     timerSessions: [{ id: "s1", mode: "free", focusSeconds: 60, startedAt: 1, endedAt: 2 }],
-    journal: { "2026-07-15": { dateKey: "2026-07-15", text: "روز خوبی بود", score: 8, mood: null, updatedAt: 9 } },
+    journal: {
+      "2026-07-15": {
+        dateKey: "2026-07-15",
+        text: "روز خوبی بود",
+        score: 8,
+        mood: null,
+        updatedAt: 9,
+      },
+    },
     notifications: [{ id: "n1", title: "t", body: "b", at: 1, read: false }],
     meta: { ...base.meta, sessions: 42, celebrated: ["h1|2026-07-01|70"], firedReminders: ["x"] },
     admin: { username: "admin", password: "admin123" },
@@ -67,7 +94,10 @@ describe("migrateLegacyBlob", () => {
 
     for (const table of idb.tables) {
       const rows = await table.toArray();
-      expect(rows.every((r) => r.dirty === 1), table.name).toBe(true);
+      expect(
+        rows.every((r) => r.dirty === 1),
+        table.name,
+      ).toBe(true);
     }
   });
 
@@ -94,8 +124,18 @@ describe("migrateLegacyBlob", () => {
     localStorage.setItem(LEGACY_KEY, JSON.stringify(legacyBlob()));
     await migrateLegacyBlob();
 
-    expect(loadLocal().subscription).toEqual({ planId: "m3", startedAt: 1, expiresAt: 2, trial: true });
-    expect((await hydrate()).db.subscription).toEqual({ planId: "m3", startedAt: 1, expiresAt: 2, trial: true });
+    expect(loadLocal().subscription).toEqual({
+      planId: "m3",
+      startedAt: 1,
+      expiresAt: 2,
+      trial: true,
+    });
+    expect((await hydrate()).db.subscription).toEqual({
+      planId: "m3",
+      startedAt: 1,
+      expiresAt: 2,
+      trial: true,
+    });
   });
 
   it("routes device-local fields to local storage, not IndexedDB", async () => {
@@ -108,12 +148,48 @@ describe("migrateLegacyBlob", () => {
     expect(local.meta.celebrated).toEqual(["h1|2026-07-01|70"]);
     expect(local.theme).toBe("dark");
     expect(local.notificationsEnabled).toBe(false);
+    expect(local.completionSoundEnabled).toBe(true);
+    expect(local.hapticsEnabled).toBe(true);
 
     // theme/notificationsEnabled must not have leaked into the synced settings.
     const keys = (await idb.settings.toArray()).map((r) => r.key);
     expect(keys).not.toContain("theme");
     expect(keys).not.toContain("notificationsEnabled");
     expect(keys.sort()).toEqual(["brandColor", "calendar", "journalReminder", "lang", "onboarded"]);
+  });
+
+  it("defaults a legacy blob with no notification preference to off", async () => {
+    const blob = legacyBlob();
+    delete (blob.settings as Partial<Db["settings"]>).notificationsEnabled;
+    localStorage.setItem(LEGACY_KEY, JSON.stringify(blob));
+
+    await migrateLegacyBlob();
+
+    expect(loadLocal().notificationsEnabled).toBe(false);
+  });
+
+  it("defaults new device feedback preferences on for an older local install", async () => {
+    const blob = legacyBlob();
+    delete (blob.settings as Partial<Db["settings"]>).completionSoundEnabled;
+    delete (blob.settings as Partial<Db["settings"]>).hapticsEnabled;
+    localStorage.setItem(LEGACY_KEY, JSON.stringify(blob));
+
+    await migrateLegacyBlob();
+
+    expect(loadLocal().completionSoundEnabled).toBe(true);
+    expect(loadLocal().hapticsEnabled).toBe(true);
+  });
+
+  it("keeps an existing user's explicit feedback choices", async () => {
+    const blob = legacyBlob();
+    blob.settings.completionSoundEnabled = false;
+    blob.settings.hapticsEnabled = false;
+    localStorage.setItem(LEGACY_KEY, JSON.stringify(blob));
+
+    await migrateLegacyBlob();
+
+    expect(loadLocal().completionSoundEnabled).toBe(false);
+    expect(loadLocal().hapticsEnabled).toBe(false);
   });
 
   it("stamps updatedAt from the entity's own timestamp, not the import time", async () => {
@@ -193,6 +269,8 @@ describe("hydrate after migration", () => {
     expect(db.settings.onboarded).toBe(true); // synced
     expect(db.settings.theme).toBe("dark"); // device-local
     expect(db.settings.notificationsEnabled).toBe(false); // device-local
+    expect(db.settings.completionSoundEnabled).toBe(true); // device-local
+    expect(db.settings.hapticsEnabled).toBe(true); // device-local
   });
 
   it("gives a fresh install seeded categories rather than an empty list", async () => {
@@ -200,6 +278,17 @@ describe("hydrate after migration", () => {
     expect(migrated).toBe(false);
     expect(db.categories).toEqual(DEFAULT_CATEGORIES);
     expect(db.habits).toEqual([]);
+    expect(db.settings.notificationsEnabled).toBe(false);
+    expect(db.settings.completionSoundEnabled).toBe(true);
+    expect(db.settings.hapticsEnabled).toBe(true);
+  });
+
+  it("retains an existing device preference that explicitly enabled notifications", async () => {
+    saveLocal({ ...defaultLocal(), notificationsEnabled: true });
+
+    const { db } = await hydrate();
+
+    expect(db.settings.notificationsEnabled).toBe(true);
   });
 
   it("drops the legacy admin credential instead of carrying it forward", async () => {
@@ -222,7 +311,13 @@ describe("a blob that predates some settings fields", () => {
     const base = defaultDb(DEFAULT_CATEGORIES);
     const old = {
       ...base,
-      settings: { lang: "en", calendar: "gregorian", theme: "dark", onboarded: true, notificationsEnabled: false },
+      settings: {
+        lang: "en",
+        calendar: "gregorian",
+        theme: "dark",
+        onboarded: true,
+        notificationsEnabled: false,
+      },
     };
     localStorage.setItem(LEGACY_KEY, JSON.stringify(old));
     localStorage.removeItem(MIGRATED_KEY);

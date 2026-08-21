@@ -1,38 +1,37 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Check, ChevronLeft, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
-import { draftToHabit, emptyDraft, habitToDraft, HabitFormModal, type HabitDraft } from "@/components/habits";
-import { Button, CatIcon, CATEGORY_ICONS, Chip, EmptyState, Input, Modal, Progress, SectionTitle } from "@/components/ui";
-import { faNum, monthTitle, todayKey, type Lang } from "@/lib/dates";
+import {
+  draftToHabit,
+  emptyDraft,
+  habitToDraft,
+  HabitFormModal,
+  type HabitDraft,
+} from "@/components/habits";
+import {
+  Button,
+  CatIcon,
+  CATEGORY_ICONS,
+  Chip,
+  EmptyState,
+  Input,
+  Modal,
+  Progress,
+  SectionTitle,
+} from "@/components/ui";
+import { faNum, monthTitle, todayKey } from "@/lib/dates";
+import { ensurePresetCategory, presetToHabitDraft } from "@/lib/habit-starters";
 import { earnedBadges, getLog, isCompleted, monthProgress, streak } from "@/lib/logic";
-import { CATEGORY_COLOR_CHOICES, DEFAULT_CATEGORIES, PRESET_HABITS, type PresetHabit } from "@/lib/presets";
-import { uid, type Category, type Habit, type UnitKind } from "@/lib/store";
-
-const TIME_UNIT_WORDS = ["دقیقه", "ساعت", "min", "hour", "hours", "hr"];
-function inferUnitKind(unit: string | undefined): UnitKind {
-  if (!unit) return "count";
-  return TIME_UNIT_WORDS.some((w) => unit.includes(w)) ? "time" : "count";
-}
-
-const HOUR_WORDS = ["ساعت", "hours", "hour"];
-
-/** Seeds the habit form from a preset. Presets carry no id, so the form
- * correctly reads as "new habit" and `saveHabit` creates rather than updates. */
-function presetToDraft(p: PresetHabit, categoryId: string, lang: Lang): HabitDraft {
-  const unit = lang === "fa" ? p.unitFa : p.unitEn;
-  const kind = inferUnitKind(unit);
-  return {
-    ...emptyDraft(categoryId),
-    name: lang === "fa" ? p.nameFa : p.nameEn,
-    type: p.type,
-    // A draft's target is always MINUTES for time units, but presets state the
-    // number in whatever reads naturally ("8 hours", "30 minutes").
-    target: kind === "time" && HOUR_WORDS.includes(unit ?? "") ? p.target * 60 : p.target,
-    unit: kind === "count" ? (unit ?? "") : "",
-    unitKind: kind,
-  };
-}
+import {
+  checkNativeExactAlarmSetting,
+  isNativeRuntime,
+  requestNativeExactAlarmSetting,
+  requestNotificationPermission,
+} from "@/lib/native-notifications";
+import { CATEGORY_COLOR_CHOICES, DEFAULT_CATEGORIES, PRESET_HABITS } from "@/lib/presets";
+import { uid, type Habit } from "@/lib/store";
 import { useAppMaybe } from "@/state/app";
 
 export const Route = createFileRoute("/habits")({
@@ -57,7 +56,7 @@ function HabitsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Habit | null>(null);
 
   if (!ctx?.db) return null;
-  const { db, update, t, lang, cal } = ctx;
+  const { db, update, updatePreferences, t, lang, cal } = ctx;
 
   // فیلترهای ویژه علاوه بر دسته‌ها: انجام‌شده / انجام‌نشدهٔ امروز.
   const TODAY = todayKey();
@@ -73,23 +72,42 @@ function HabitsPage() {
   const visibleCats = db.categories.filter((c) => usedCatIds.has(c.id));
   const badges = earnedBadges(db, cal);
 
-  /** Recreate a default category (e.g. "study") if the user deleted it, so
-   * presets and habits under it work again. Returns the up-to-date category list. */
-  const ensureCategory = (d: typeof db, categoryId: string): Category[] => {
-    if (d.categories.some((c) => c.id === categoryId)) return d.categories;
-    const fallback = DEFAULT_CATEGORIES.find((c) => c.id === categoryId);
-    if (!fallback) return d.categories;
-    return [...d.categories, fallback];
-  };
-
   const saveHabit = () => {
     const existing = draft.id ? db.habits.find((h) => h.id === draft.id) : undefined;
     const habit = draftToHabit(draft, existing);
-    update((d) => ({
+    const accepted = update((d) => ({
       ...d,
-      categories: ensureCategory(d, habit.categoryId),
-      habits: existing ? d.habits.map((h) => (h.id === habit.id ? habit : h)) : [...d.habits, habit],
+      categories: ensurePresetCategory(d.categories, habit.categoryId),
+      habits: existing
+        ? d.habits.map((h) => (h.id === habit.id ? habit : h))
+        : [...d.habits, habit],
     }));
+    if (!accepted) {
+      setFormOpen(false);
+      return;
+    }
+    if (habit.reminderTime && !db.settings.notificationsEnabled) {
+      updatePreferences({ notificationsEnabled: true });
+      void (async () => {
+        const granted = await requestNotificationPermission();
+        if (!granted) {
+          toast.error(
+            t(
+              "عادت ذخیره شد، اما مجوز اعلان بسته است؛ یادآوری از تنظیمات فعال می‌شود.",
+              "Habit saved, but notification permission is blocked; enable reminders in Settings.",
+            ),
+          );
+          return;
+        }
+        if (isNativeRuntime()) {
+          const exact = await checkNativeExactAlarmSetting();
+          if (exact !== "granted" && exact !== "not-android") {
+            await requestNativeExactAlarmSetting();
+          }
+        }
+        updatePreferences({ notificationsEnabled: true });
+      })();
+    }
     setFormOpen(false);
   };
 
@@ -145,7 +163,12 @@ function HabitsPage() {
           {t("انجام‌شده", "Done")}
         </Chip>
         {visibleCats.map((c) => (
-          <Chip key={c.id} active={filterCat === c.id} color={c.color} onClick={() => setFilterCat(c.id)}>
+          <Chip
+            key={c.id}
+            active={filterCat === c.id}
+            color={c.color}
+            onClick={() => setFilterCat(c.id)}
+          >
             <CatIcon icon={c.icon} className="h-3 w-3" />
             {lang === "fa" ? c.nameFa : c.nameEn}
           </Chip>
@@ -194,13 +217,20 @@ function HabitsPage() {
                             >
                               <CatIcon icon={cat.icon} className="h-3.5 w-3.5" />
                             </span>
-                            <Link to="/habit/$habitId" params={{ habitId: h.id }} className="min-w-0 flex-1">
-                              <p className={`truncate text-sm font-bold ${reached ? "text-success" : "text-foreground"}`}>
+                            <Link
+                              to="/habit/$habitId"
+                              params={{ habitId: h.id }}
+                              className="min-w-0 flex-1"
+                            >
+                              <p
+                                className={`truncate text-sm font-bold ${reached ? "text-success" : "text-foreground"}`}
+                              >
                                 {reached && "🏆 "}
                                 {h.name}
                               </p>
                               <p className="text-[10px] text-muted-foreground">
-                                {faNum(mp.doneDays, lang)}/{faNum(mp.goalDays, lang)} {t("روز", "days")}
+                                {faNum(mp.doneDays, lang)}/{faNum(mp.goalDays, lang)}{" "}
+                                {t("روز", "days")}
                                 {st > 0 && ` · 🔥 ${faNum(st, lang)}`}
                               </p>
                             </Link>
@@ -261,7 +291,9 @@ function HabitsPage() {
                 <div key={b.id} className="card-surface flex items-center gap-2 px-3 py-2">
                   <span className="text-lg">🏆</span>
                   <span className="min-w-0">
-                    <span className="block truncate text-xs font-bold text-foreground">{b.habitName}</span>
+                    <span className="block truncate text-xs font-bold text-foreground">
+                      {b.habitName}
+                    </span>
                     <span className="block text-[10px] text-muted-foreground">
                       {monthTitle(b.monthId, cal, lang)}
                     </span>
@@ -282,7 +314,12 @@ function HabitsPage() {
       </section>
 
       {/* preset picker */}
-      <Modal open={presetsOpen} onClose={() => setPresetsOpen(false)} title={t("عادت‌های آماده", "Preset habits")} wide>
+      <Modal
+        open={presetsOpen}
+        onClose={() => setPresetsOpen(false)}
+        title={t("عادت‌های آماده", "Preset habits")}
+        wide
+      >
         <div className="scrollbar-none mb-3 flex gap-1.5 overflow-x-auto pb-1">
           {DEFAULT_CATEGORIES.filter((c) => PRESET_HABITS[c.id]).map((c) => {
             // prefer the user's live category (in case they recolored/renamed it) but
@@ -290,7 +327,12 @@ function HabitsPage() {
             // preset entry point available so re-adding recreates the category.
             const live = db.categories.find((x) => x.id === c.id) ?? c;
             return (
-              <Chip key={c.id} active={presetCat === c.id} color={live.color} onClick={() => setPresetCat(c.id)}>
+              <Chip
+                key={c.id}
+                active={presetCat === c.id}
+                color={live.color}
+                onClick={() => setPresetCat(c.id)}
+              >
                 <CatIcon icon={live.icon} className="h-3 w-3" />
                 {lang === "fa" ? live.nameFa : live.nameEn}
               </Chip>
@@ -311,7 +353,7 @@ function HabitsPage() {
                 key={i}
                 type="button"
                 onClick={() => {
-                  setDraft(presetToDraft(p, presetCat, lang));
+                  setDraft(presetToHabitDraft(p, presetCat, lang));
                   setPresetsOpen(false);
                   setFormOpen(true);
                 }}
@@ -323,7 +365,10 @@ function HabitsPage() {
                     {/* A badge, not a button: without it there is no sign the
                         habit already exists, and duplicates get created. */}
                     {alreadyAdded && (
-                      <Check className="h-3.5 w-3.5 shrink-0 text-emerald-500" aria-label={t("اضافه شده", "Added")} />
+                      <Check
+                        className="h-3.5 w-3.5 shrink-0 text-emerald-500"
+                        aria-label={t("اضافه شده", "Added")}
+                      />
                     )}
                   </div>
                   {p.type === "quantity" && (
@@ -340,9 +385,17 @@ function HabitsPage() {
       </Modal>
 
       {/* custom category */}
-      <Modal open={catFormOpen} onClose={() => setCatFormOpen(false)} title={t("دسته‌بندی جدید", "New category")}>
+      <Modal
+        open={catFormOpen}
+        onClose={() => setCatFormOpen(false)}
+        title={t("دسته‌بندی جدید", "New category")}
+      >
         <div className="flex flex-col gap-3">
-          <Input value={catName} onChange={(e) => setCatName(e.target.value)} placeholder={t("نام دسته", "Category name")} />
+          <Input
+            value={catName}
+            onChange={(e) => setCatName(e.target.value)}
+            placeholder={t("نام دسته", "Category name")}
+          />
 
           <div>
             <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("آیکون", "Icon")}</p>
@@ -352,7 +405,9 @@ function HabitsPage() {
                   key={iconKey}
                   onClick={() => setCatIcon(iconKey)}
                   className={`flex h-9 w-9 items-center justify-center rounded-xl border transition-all ${
-                    catIcon === iconKey ? "border-primary bg-primary-soft text-primary" : "border-border text-muted-foreground"
+                    catIcon === iconKey
+                      ? "border-primary bg-primary-soft text-primary"
+                      : "border-border text-muted-foreground"
                   }`}
                 >
                   <CatIcon icon={iconKey} className="h-4 w-4" />
@@ -382,9 +437,16 @@ function HabitsPage() {
       </Modal>
 
       {/* delete confirm */}
-      <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title={t("حذف عادت", "Delete habit")}>
+      <Modal
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        title={t("حذف عادت", "Delete habit")}
+      >
         <p className="mb-4 text-sm text-muted-foreground">
-          {t(`«${deleteTarget?.name}» حذف بشه؟ تاریخچه‌اش هم پاک می‌شه.`, `Delete "${deleteTarget?.name}"? Its history will be removed too.`)}
+          {t(
+            `«${deleteTarget?.name}» حذف بشه؟ تاریخچه‌اش هم پاک می‌شه.`,
+            `Delete "${deleteTarget?.name}"? Its history will be removed too.`,
+          )}
         </p>
         <div className="flex gap-2">
           <Button
@@ -395,7 +457,9 @@ function HabitsPage() {
               update((d) => ({
                 ...d,
                 habits: d.habits.filter((h) => h.id !== id),
-                logs: Object.fromEntries(Object.entries(d.logs).filter(([k]) => !k.startsWith(`${id}|`))),
+                logs: Object.fromEntries(
+                  Object.entries(d.logs).filter(([k]) => !k.startsWith(`${id}|`)),
+                ),
               }));
               setDeleteTarget(null);
             }}

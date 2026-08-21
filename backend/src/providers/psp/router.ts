@@ -1,4 +1,11 @@
-import type { PspCheckout, PspName, PspProvider, PspRequestInput, PspRouter, PspVerifyResult } from "./index.js";
+import type {
+  PspCheckout,
+  PspName,
+  PspProvider,
+  PspRequestInput,
+  PspRouter,
+  PspVerifyResult,
+} from "./index.js";
 
 /**
  * Multi-gateway router.

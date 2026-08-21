@@ -30,7 +30,7 @@ function OnboardingPage() {
   }, [onboarded, navigate]);
 
   if (!ctx?.db) return null;
-  const { db, update, t } = ctx;
+  const { db, updatePreferences, t } = ctx;
 
   const slides = [
     {
@@ -57,7 +57,7 @@ function OnboardingPage() {
   ];
 
   const finish = () => {
-    update((d) => ({ ...d, settings: { ...d.settings, onboarded: true } }));
+    updatePreferences({ onboarded: true });
     navigate({ to: "/auth" });
   };
 
@@ -104,7 +104,7 @@ function OnboardingPage() {
                 {(["fa", "en"] as const).map((l) => (
                   <button
                     key={l}
-                    onClick={() => update((d) => ({ ...d, settings: { ...d.settings, lang: l } }))}
+                    onClick={() => updatePreferences({ lang: l })}
                     className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition-all ${
                       db.settings.lang === l
                         ? "border-primary bg-primary-soft text-primary"
@@ -125,9 +125,7 @@ function OnboardingPage() {
                 {(["jalali", "gregorian"] as const).map((c) => (
                   <button
                     key={c}
-                    onClick={() =>
-                      update((d) => ({ ...d, settings: { ...d.settings, calendar: c } }))
-                    }
+                    onClick={() => updatePreferences({ calendar: c })}
                     className={`rounded-xl border px-3 py-2.5 text-sm font-medium transition-all ${
                       db.settings.calendar === c
                         ? "border-primary bg-primary-soft text-primary"
@@ -148,9 +146,7 @@ function OnboardingPage() {
                 {(["light", "dark"] as const).map((th) => (
                   <button
                     key={th}
-                    onClick={() =>
-                      update((d) => ({ ...d, settings: { ...d.settings, theme: th } }))
-                    }
+                    onClick={() => updatePreferences({ theme: th })}
                     className={`flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-medium transition-all ${
                       db.settings.theme === th
                         ? "border-primary bg-primary-soft text-primary"

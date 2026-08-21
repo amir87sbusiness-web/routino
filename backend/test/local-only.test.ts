@@ -5,7 +5,7 @@ let h: Harness;
 let access: string;
 
 beforeAll(async () => {
-  h = await makeHarness({ LEGACY_PERSONAL_SYNC_ENABLED: "false" });
+  h = await makeHarness();
   await h.app.inject({
     method: "POST",
     url: "/v1/auth/otp/request",
@@ -21,8 +21,8 @@ beforeAll(async () => {
 
 afterAll(async () => h.close());
 
-describe("local-only personal data", () => {
-  it("retires both legacy personal-record sync endpoints", async () => {
+describe("personal-data sync", () => {
+  it("keeps authenticated sync available", async () => {
     const headers = { authorization: `Bearer ${access}` };
     const push = await h.app.inject({
       method: "POST",
@@ -31,8 +31,9 @@ describe("local-only personal data", () => {
       payload: { records: [] },
     });
     const pull = await h.app.inject({ method: "GET", url: "/v1/sync/pull?cursor=0", headers });
-    expect(push.statusCode).toBe(410);
-    expect(pull.statusCode).toBe(410);
-    expect(push.json()).toMatchObject({ error: "sync_disabled" });
+    expect(push.statusCode).toBe(200);
+    expect(pull.statusCode).toBe(200);
+    expect(push.json()).toMatchObject({ applied: 0 });
+    expect(pull.json()).toMatchObject({ records: [], reset: false });
   });
 });

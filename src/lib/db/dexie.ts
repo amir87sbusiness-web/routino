@@ -98,7 +98,7 @@ export const SYNCED_TABLES: SyncedTable[] = [
  */
 export interface SyncMetaRow {
   key: "cursor";
-  /** Phone that owns this cursor. Another account signing in starts from zero —
+  /** Authenticated server user id that owns this cursor. Another account starts from zero —
    * its records are a different log entirely. */
   owner: string | null;
   cursor: number;

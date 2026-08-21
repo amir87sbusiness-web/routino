@@ -31,4 +31,24 @@ describe("edge device ping", () => {
     expect(response.status).toBe(401);
     expect((await response.json()).error).toBe("device_revoked");
   });
+
+  it("lists devices without retired quota counters", async () => {
+    const current = await signIn(h);
+    const response = await h.call("GET", "/v1/devices", { headers: auth(current.access) });
+    const body = await response.json();
+    expect(response.status).toBe(200);
+    expect(body).not.toHaveProperty("maxActiveDevices");
+    expect(body).not.toHaveProperty("switchCount30d");
+    expect(body).not.toHaveProperty("securityLocked");
+    expect(body.devices).toHaveLength(1);
+  });
+
+  it("does not let a legacy device-switch lock reject a valid session", async () => {
+    const current = await signIn(h);
+    await h.raw(
+      `update users set security_locked_at = now(), security_lock_reason = 'device_switch_limit' where id = '${current.user.id}'`,
+    );
+    const response = await h.call("GET", "/v1/devices/ping", { headers: auth(current.access) });
+    expect(response.status).toBe(200);
+  });
 });

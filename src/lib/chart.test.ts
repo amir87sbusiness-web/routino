@@ -65,13 +65,20 @@ describe("buildChartBars", () => {
   it("year buckets average only the days that have data", () => {
     const keys = analyticsDayKeys("year", "gregorian", TODAY);
     // only the final day has a value → last bucket 80, earlier full months null
-    const series = keys.map((dateKey, i) => ({ dateKey, percent: i === keys.length - 1 ? 80 : null }));
+    const series = keys.map((dateKey, i) => ({
+      dateKey,
+      percent: i === keys.length - 1 ? 80 : null,
+    }));
     const { buckets } = buildChartBars(series, "year", "gregorian", "fa");
     expect(buckets[buckets.length - 1]).toBe(80);
     expect(buckets.slice(0, -1).every((b) => b === null)).toBe(true);
   });
 
   it("handles an empty series", () => {
-    expect(buildChartBars([], "year", "jalali", "fa")).toEqual({ buckets: [], labels: [], barUnit: "day" });
+    expect(buildChartBars([], "year", "jalali", "fa")).toEqual({
+      buckets: [],
+      labels: [],
+      barUnit: "day",
+    });
   });
 });

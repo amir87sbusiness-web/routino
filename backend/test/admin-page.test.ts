@@ -32,6 +32,9 @@ describe("admin page", () => {
       runScripts: "dangerously",
       url: "https://admin.routino.test/admin",
       beforeParse(window: object) {
+        const dialog = (window as { HTMLDialogElement?: { prototype: { showModal: () => void } } })
+          .HTMLDialogElement;
+        if (dialog) dialog.prototype.showModal = () => undefined;
         Object.assign(window, { fetch, alert: vi.fn(), confirm: vi.fn(() => true) });
       },
     });
@@ -45,6 +48,43 @@ describe("admin page", () => {
 
       expect(fetch.mock.calls.filter(([path]) => path === "/v1/admin/overview")).toHaveLength(1);
       expect(document.querySelector("#ovCards")?.textContent).toContain("۴۲");
+    } finally {
+      dom.window.close();
+    }
+  });
+
+  it("shows session visibility without retired device quota controls", async () => {
+    const detail = {
+      user: { phone: "989123334444", blocked: false, createdAt: new Date().toISOString() },
+      entitlement: { planId: "trial", expiresAt: new Date().toISOString() },
+      devices: [],
+      payments: [],
+      grants: [],
+    };
+    const fetch = vi.fn(async (path: string) => ({
+      status: 200,
+      ok: true,
+      json: async () => (path.includes("/users/") ? detail : overview),
+    }));
+    const dom = new JSDOM(ADMIN_PAGE, {
+      runScripts: "dangerously",
+      url: "https://admin.routino.test/admin",
+      beforeParse(window: object) {
+        const dialog = (window as { HTMLDialogElement?: { prototype: { showModal: () => void } } })
+          .HTMLDialogElement;
+        if (dialog) dialog.prototype.showModal = () => undefined;
+        Object.assign(window, { fetch, alert: vi.fn(), confirm: vi.fn(() => true) });
+      },
+    });
+
+    try {
+      await (dom.window as unknown as { openUser: (id: string) => Promise<void> }).openUser(
+        "user-id",
+      );
+      expect(dom.window.document.querySelector("#maxDevices")).toBeNull();
+      expect(dom.window.document.querySelector("#devicePolicyGo")).toBeNull();
+      expect(dom.window.document.querySelector("#resetSwitchGo")).toBeNull();
+      expect(dom.window.document.querySelector("#userDlg")?.textContent).toContain("دستگاه‌ها");
     } finally {
       dom.window.close();
     }

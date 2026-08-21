@@ -47,7 +47,10 @@ describe("applyChanges", () => {
     const v1: Db = { ...base, habits: [habit("a"), habit("b"), habit("c")] };
     await applyChanges(diffDb(null, v1));
 
-    const v2: Db = { ...v1, habits: v1.habits.map((h) => (h.id === "a" ? { ...h, name: "edited" } : h)) };
+    const v2: Db = {
+      ...v1,
+      habits: v1.habits.map((h) => (h.id === "a" ? { ...h, name: "edited" } : h)),
+    };
     await applyChanges(diffDb(v1, v2));
 
     const out = (await hydrate()).db;
@@ -118,7 +121,10 @@ describe("applyChanges", () => {
     const first = await hydrate();
     expect(first.db.categories).toHaveLength(DEFAULT_CATEGORIES.length);
 
-    const without: Db = { ...first.db, categories: first.db.categories.filter((c) => c.id !== "sport") };
+    const without: Db = {
+      ...first.db,
+      categories: first.db.categories.filter((c) => c.id !== "sport"),
+    };
     await applyChanges(diffDb(first.db, without));
 
     const second = await hydrate();

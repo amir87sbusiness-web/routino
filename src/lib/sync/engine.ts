@@ -181,8 +181,8 @@ export interface SyncOutcome {
    * but they are the reason a device can be online and still not fully synced,
    * so the count is surfaced rather than hidden inside a console warning. */
   rejected: number;
-  /** True when local storage changed, so the caller should re-hydrate the UI. */
-  changed: boolean;
+  /** True only when remote/reset data changed product rows in IndexedDB. */
+  remoteChanged: boolean;
   /**
    * The server's answer on this account's subscription, delivered on the last
    * pull page. Undefined when the sync never reached the server.
@@ -197,21 +197,36 @@ export interface SyncOutcome {
 /** Concurrent callers share one run. The app triggers sync from several places
  * (boot, visibility change, a debounce after edits) and two overlapping runs
  * would push the same rows twice and fight over the cursor. */
-let running: Promise<SyncOutcome> | null = null;
+interface RunningSync {
+  owner: string;
+  promise: Promise<SyncOutcome>;
+}
+
+let running: RunningSync | null = null;
 
 export function syncNow(owner: string): Promise<SyncOutcome> {
-  running ??= run(owner).finally(() => {
-    running = null;
+  if (running?.owner === owner) return running.promise;
+  if (running) {
+    return running.promise.then(
+      () => syncNow(owner),
+      () => syncNow(owner),
+    );
+  }
+
+  const promise = run(owner).finally(() => {
+    if (running?.promise === promise) running = null;
   });
-  return running;
+  running = { owner, promise };
+  return promise;
 }
 
 async function run(owner: string): Promise<SyncOutcome> {
-  if (!hasSession()) return { pushed: 0, pulled: 0, rejected: 0, changed: false };
+  if (!hasSession()) return { pushed: 0, pulled: 0, rejected: 0, remoteChanged: false };
 
   let state = await loadSyncState(owner);
   let pushed = 0;
   let pulled = 0;
+  let resetApplied = false;
   let entitlement: ServerEntitlement | undefined;
 
   // ---- push ----
@@ -220,7 +235,10 @@ async function run(owner: string): Promise<SyncOutcome> {
   for (const batch of chunk(outbox)) {
     let res;
     try {
-      res = await pushRecords(batch.map(({ table, row }) => toWire(table, row)));
+      res = await pushRecords(
+        batch.map(({ table, row }) => toWire(table, row)),
+        owner,
+      );
     } catch (err) {
       // A 4xx is the server's permanent judgement on THESE rows — an oversized
       // journal entry is the realistic one. Retrying cannot fix it, and letting
@@ -264,12 +282,13 @@ async function run(owner: string): Promise<SyncOutcome> {
     // real account, and a bound is cheaper than trusting the peer.
     if (++guard > 200) break;
 
-    const page = await pullRecords(state.cursor);
+    const page = await pullRecords(state.cursor, undefined, owner);
 
     if (page.reset) {
       // This device sat below the tombstone purge line, so it cannot be brought
       // up to date incrementally without risking resurrected records. Start over.
       await wipeSyncedTables();
+      resetApplied = true;
       state = { ...state, cursor: 0 };
       await saveSyncState({ ...state, owner });
       continue;
@@ -284,5 +303,5 @@ async function run(owner: string): Promise<SyncOutcome> {
   }
 
   await saveSyncState({ ...state, owner, lastSyncedAt: Date.now() });
-  return { pushed, pulled, rejected, changed: pushed > 0 || pulled > 0, entitlement };
+  return { pushed, pulled, rejected, remoteChanged: resetApplied || pulled > 0, entitlement };
 }

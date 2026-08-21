@@ -47,7 +47,7 @@ select cron.schedule('routino-login-attempts-purge', '30 * * * *',
 -- REFRESH_TTL_DAYS later would then start signing people out early, silently.
 -- Not worth it next to what a user's synced records cost.
 select cron.schedule('routino-devices-purge', '15 3 * * 0',
-  $delete from devices where revoked_at is not null and revoked_at < now() - interval '30 days'$);
+  $$delete from devices where revoked_at is not null and revoked_at < now() - interval '30 days'$$);
 
 -- Tombstones, weekly. A deleted habit or log leaves a row behind on purpose: a
 -- delete has to be able to TRAVEL to the user's other devices, and an absence
@@ -96,6 +96,7 @@ const RLS_TABLES = [
   "users",
   "records",
   "devices",
+  "device_security_events",
   "otp_codes",
   "login_attempts",
   "plans",

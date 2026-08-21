@@ -1,4 +1,4 @@
-import { useDatabase } from "./dexie";
+import { useDatabase as selectDatabase } from "./dexie";
 
 const REGISTRY_KEY = "routino:vaults:v1";
 export const LEGACY_VAULT_ID = "legacy";
@@ -63,11 +63,11 @@ export async function activateVault(vaultId: string): Promise<void> {
   const registry = readRegistry();
   registry.activeVaultId = vaultId;
   writeRegistry(registry);
-  await useDatabase(databaseNameForVault(vaultId));
+  await selectDatabase(databaseNameForVault(vaultId));
 }
 
 export async function activateStoredVault(): Promise<void> {
-  await useDatabase(databaseNameForVault(getActiveVaultId()));
+  await selectDatabase(databaseNameForVault(getActiveVaultId()));
 }
 
 /**
@@ -77,7 +77,10 @@ export async function activateStoredVault(): Promise<void> {
  * keep all of their data. A different account receives a new database; a later
  * login reopens the exact database previously assigned to that account.
  */
-export async function switchOwnerVault(ownerId: string): Promise<VaultSwitchResult> {
+export async function switchOwnerVault(
+  ownerId: string,
+  options: { claimCurrent?: boolean } = {},
+): Promise<VaultSwitchResult> {
   const registry = readRegistry();
   const previous = registry.activeVaultId;
   const known = registry.ownerVaults[ownerId];
@@ -86,7 +89,7 @@ export async function switchOwnerVault(ownerId: string): Promise<VaultSwitchResu
 
   if (!vaultId) {
     const currentOwner = registry.vaultOwners[previous];
-    if (!currentOwner) {
+    if (!currentOwner && options.claimCurrent !== false) {
       vaultId = previous;
       claimedCurrent = true;
     } else {
@@ -98,6 +101,6 @@ export async function switchOwnerVault(ownerId: string): Promise<VaultSwitchResu
 
   registry.activeVaultId = vaultId;
   writeRegistry(registry);
-  await useDatabase(databaseNameForVault(vaultId));
+  await selectDatabase(databaseNameForVault(vaultId));
   return { vaultId, changed: vaultId !== previous, claimedCurrent };
 }

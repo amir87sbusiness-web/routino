@@ -362,9 +362,28 @@ export function DurationPicker({
 
   return (
     <div className="flex gap-2" dir="ltr">
-      <WheelColumn value={h} max={24} label={t("ساعت", "hr")} lang={lang} onChange={(v) => setParts(v, m, s)} />
-      <WheelColumn value={m} max={60} label={t("دقیقه", "min")} lang={lang} onChange={(v) => setParts(h, v, s)} />
-      <WheelColumn value={s} max={60} step={5} label={t("ثانیه", "sec")} lang={lang} onChange={(v) => setParts(h, m, v)} />
+      <WheelColumn
+        value={h}
+        max={24}
+        label={t("ساعت", "hr")}
+        lang={lang}
+        onChange={(v) => setParts(v, m, s)}
+      />
+      <WheelColumn
+        value={m}
+        max={60}
+        label={t("دقیقه", "min")}
+        lang={lang}
+        onChange={(v) => setParts(h, v, s)}
+      />
+      <WheelColumn
+        value={s}
+        max={60}
+        step={5}
+        label={t("ثانیه", "sec")}
+        lang={lang}
+        onChange={(v) => setParts(h, m, v)}
+      />
     </div>
   );
 }
@@ -406,9 +425,21 @@ export function TimePicker24({
   return (
     <div className="flex flex-col items-center gap-2">
       <div className="flex items-center gap-2" dir="ltr">
-        <WheelColumn value={h} max={24} label={t("ساعت", "hour")} lang={lang} onChange={(v) => set(v, m)} />
+        <WheelColumn
+          value={h}
+          max={24}
+          label={t("ساعت", "hour")}
+          lang={lang}
+          onChange={(v) => set(v, m)}
+        />
         <span className="pb-6 text-lg font-black text-muted-foreground">:</span>
-        <WheelColumn value={m} max={60} label={t("دقیقه", "min")} lang={lang} onChange={(v) => set(h, v)} />
+        <WheelColumn
+          value={m}
+          max={60}
+          label={t("دقیقه", "min")}
+          lang={lang}
+          onChange={(v) => set(h, v)}
+        />
       </div>
       <p className="text-[10px] text-muted-foreground">{t("سیستم ۲۴ ساعته", "24-hour format")}</p>
     </div>
@@ -521,7 +552,9 @@ export function DateTimePicker({
     onChange(`${dateStr}T${timePart || "09:00"}`);
   };
   const setTime = (hhmm: string) => {
-    const dateStr = datePart || `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const dateStr =
+      datePart ||
+      `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
     onChange(`${dateStr}T${hhmm}`);
   };
 
@@ -531,7 +564,11 @@ export function DateTimePicker({
     const isTomorrow = dd.toDateString() === tmrw.toDateString();
     if (isToday) return t("امروز", "Today");
     if (isTomorrow) return t("فردا", "Tomorrow");
-    return dd.toLocaleDateString(lang === "fa" ? "fa-IR" : "en-US", { weekday: "short", day: "numeric", month: "short" });
+    return dd.toLocaleDateString(lang === "fa" ? "fa-IR" : "en-US", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+    });
   };
 
   return (
@@ -541,13 +578,16 @@ export function DateTimePicker({
         <div className="scrollbar-none flex gap-1.5 overflow-x-auto pb-1">
           {dayOptions.map((dd) => {
             const dateStr = `${dd.getFullYear()}-${String(dd.getMonth() + 1).padStart(2, "0")}-${String(dd.getDate()).padStart(2, "0")}`;
-            const active = datePart === dateStr || (!datePart && dd.toDateString() === now.toDateString());
+            const active =
+              datePart === dateStr || (!datePart && dd.toDateString() === now.toDateString());
             return (
               <button
                 key={dateStr}
                 onClick={() => setDate(dd)}
                 className={`shrink-0 rounded-xl border px-3 py-2 text-xs font-medium transition-all ${
-                  active ? "border-primary bg-primary-soft text-primary" : "border-border text-muted-foreground"
+                  active
+                    ? "border-primary bg-primary-soft text-primary"
+                    : "border-border text-muted-foreground"
                 }`}
               >
                 {dayLabel(dd)}
@@ -618,7 +658,10 @@ export function MiniBars({
       {labels && (
         <div className="mt-1 flex gap-1">
           {labels.map((l, i) => (
-            <div key={i} className="flex-1 whitespace-nowrap text-center text-[9px] text-muted-foreground">
+            <div
+              key={i}
+              className="flex-1 whitespace-nowrap text-center text-[9px] text-muted-foreground"
+            >
               {l}
             </div>
           ))}
@@ -644,13 +687,20 @@ function hsvToHex(h: number, s: number, v: number): string {
   else if (h < 240) [r, g, b] = [0, x, c];
   else if (h < 300) [r, g, b] = [x, 0, c];
   else [r, g, b] = [c, 0, x];
-  const hex = (n: number) => Math.round((n + m) * 255).toString(16).padStart(2, "0");
+  const hex = (n: number) =>
+    Math.round((n + m) * 255)
+      .toString(16)
+      .padStart(2, "0");
   return `#${hex(r)}${hex(g)}${hex(b)}`;
 }
 
 function hexToHsv(hex: string): { h: number; s: number; v: number } {
   let x = (hex || "#f97316").replace("#", "");
-  if (x.length === 3) x = x.split("").map((c) => c + c).join("");
+  if (x.length === 3)
+    x = x
+      .split("")
+      .map((c) => c + c)
+      .join("");
   const r = parseInt(x.slice(0, 2), 16) / 255;
   const g = parseInt(x.slice(2, 4), 16) / 255;
   const b = parseInt(x.slice(4, 6), 16) / 255;
@@ -670,7 +720,13 @@ function hexToHsv(hex: string): { h: number; s: number; v: number } {
 /** Circular HSV colour picker. Drag on the wheel to change hue/saturation and a
  * slider for brightness; `onChange` fires live so the brand colour updates as
  * the finger moves. */
-export function ColorWheel({ value, onChange }: { value: string; onChange: (hex: string) => void }) {
+export function ColorWheel({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (hex: string) => void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const dragging = useRef(false);
   const hsv = hexToHsv(value);
@@ -730,7 +786,10 @@ export function ColorWheel({ value, onChange }: { value: string; onChange: (hex:
         aria-label="brightness"
       />
       <div className="flex items-center gap-2">
-        <span className="h-8 w-8 rounded-full border border-border" style={{ backgroundColor: value }} />
+        <span
+          className="h-8 w-8 rounded-full border border-border"
+          style={{ backgroundColor: value }}
+        />
         <span className="font-mono text-sm font-bold text-foreground" dir="ltr">
           {value.toUpperCase()}
         </span>

@@ -1,9 +1,9 @@
 /**
- * Supabase budget guard for the local-first launch architecture.
+ * Supabase budget guard for the local-first, cloud-synced launch architecture.
  *
- * Personal habits, tasks, logs, journal text and settings are device-only. The
- * server budget therefore contains account/device/security/subscription rows,
- * rolling auth ledgers, and small API responses — never a user's content.
+ * Personal rows live in the generic `records` log. The model below writes a
+ * modest quarter of small records per account, while account/session and
+ * subscription rows remain bounded separately.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { auth, makeHarness, type Harness } from "./helpers/harness.ts";
@@ -14,9 +14,11 @@ const FREE_FUNCTION_INVOCATIONS = 500_000;
 const USERS = 120;
 const HALF = USERS / 2;
 const PAYING = 36;
+const RECORDS_PER_USER = 48;
 
 const PERMANENT = [
   "users",
+  "records",
   "devices",
   "device_security_events",
   "entitlements",
@@ -49,7 +51,26 @@ async function signUp(index: number) {
       body: { phone, code: h.sms.last()!.code },
     }),
   );
-  return (await login.json()) as { access: string; refresh: string };
+  const session = (await login.json()) as { access: string; refresh: string };
+  const sync = await record(
+    "POST /v1/sync/push",
+    await h.call("POST", "/v1/sync/push", {
+      headers: auth(session.access),
+      body: {
+        records: Array.from({ length: RECORDS_PER_USER }, (_, recordIndex) => ({
+          kind: "logs",
+          id: `habit-${index}|2026-08-${String((recordIndex % 28) + 1).padStart(2, "0")}-${recordIndex}`,
+          data: { done: recordIndex % 2 === 0 },
+          updatedAt: index * 10_000 + recordIndex,
+          deleted: false,
+        })),
+      },
+    }),
+  );
+  return {
+    ...session,
+    syncCursor: (await sync.json()).cursor as number,
+  };
 }
 
 async function buyPlan(access: string) {
@@ -80,7 +101,7 @@ async function measure(into: Map<string, number>) {
 }
 
 beforeAll(async () => {
-  h = await makeHarness({ LEGACY_PERSONAL_SYNC_ENABLED: "false" });
+  h = await makeHarness();
   for (let index = 0; index < USERS; index += 1) {
     if (index === HALF) await measure(sizesAtHalf);
     const session = await signUp(index);
@@ -95,8 +116,10 @@ beforeAll(async () => {
       await h.call("GET", "/v1/devices/ping", { headers: auth(rotated.access) }),
     );
     await record(
-      "GET /v1/subscriptions/me",
-      await h.call("GET", "/v1/subscriptions/me", { headers: auth(rotated.access) }),
+      "GET /v1/sync/pull",
+      await h.call("GET", `/v1/sync/pull?cursor=${session.syncCursor}`, {
+        headers: auth(rotated.access),
+      }),
     );
     if (index < PAYING) await buyPlan(rotated.access);
   }
@@ -109,17 +132,13 @@ afterAll(async () => h?.close());
 const sum = (tables: readonly string[], source = sizes) =>
   tables.reduce((total, table) => total + (source.get(table) ?? 0), 0);
 
-describe("local-first database budget", () => {
-  it("stores no personal app records and retires both sync directions", async () => {
+describe("cloud-sync database budget", () => {
+  it("stores personal records through authenticated push and pull", async () => {
     const [records] = await h.query<{ n: string }>("select count(*)::text as n from records");
-    expect(Number(records.n)).toBe(0);
-    const pull = await h.call("GET", "/v1/sync/pull", { headers: auth(sampleAccess) });
-    const push = await h.call("POST", "/v1/sync/push", {
-      headers: auth(sampleAccess),
-      body: { records: [] },
-    });
-    expect(pull.status).toBe(410);
-    expect(push.status).toBe(410);
+    expect(Number(records.n)).toBe(USERS * RECORDS_PER_USER);
+    const pull = await h.call("GET", "/v1/sync/pull?cursor=0", { headers: auth(sampleAccess) });
+    expect(pull.status).toBe(200);
+    expect((await pull.json()).records).toHaveLength(RECORDS_PER_USER);
   });
 
   it("keeps permanent account/device/subscription rows comfortably bounded", () => {
@@ -128,8 +147,8 @@ describe("local-first database budget", () => {
     console.log(
       `[db] account-only marginal cost ≈ ${Math.round(marginal)} B/user; 500 MB ≈ ${capacity.toLocaleString("en-US")} users`,
     );
-    expect(marginal).toBeLessThan(16 * 1024);
-    expect(capacity).toBeGreaterThan(30_000);
+    expect(marginal).toBeLessThan(64 * 1024);
+    expect(capacity).toBeGreaterThan(8_000);
   });
 
   it("keeps auth ledgers rolling rather than permanent", async () => {
@@ -156,7 +175,7 @@ describe("egress and invocation budget", () => {
     }
     const visibleHourBytes =
       60 * (responseBytes.get("GET /v1/devices/ping") ?? 0) +
-      (responseBytes.get("GET /v1/subscriptions/me") ?? 0) +
+      (responseBytes.get("GET /v1/sync/pull") ?? 0) +
       (responseBytes.get("POST /v1/auth/token/refresh") ?? 0);
     const monthlyDau = Math.floor(FREE_EGRESS_BYTES / (visibleHourBytes * 30));
     console.log(`[egress] one visible hour/day ≈ ${visibleHourBytes} B; 5 GB ≈ ${monthlyDau} DAU`);
@@ -164,8 +183,8 @@ describe("egress and invocation budget", () => {
   });
 
   it("reports the binding function-invocation ceiling honestly", () => {
-    // Per visible hour: 60 security pings, one entitlement read, and at most
-    // one token refresh. Plans, /health and OPTIONS are served by Cloudflare.
+    // Per visible hour: 60 security pings, one final-pull entitlement read, and
+    // at most one token refresh. Plans, /health and OPTIONS are cached.
     const dailyInvocations = 62;
     const monthlyDau = Math.floor(FREE_FUNCTION_INVOCATIONS / (dailyInvocations * 30));
     console.log(

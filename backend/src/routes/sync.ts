@@ -53,12 +53,6 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
    * history is thousands of rows.
    */
   app.post("/sync/push", { preHandler: app.authenticate }, async (req, reply) => {
-    if (!app.deps.env.LEGACY_PERSONAL_SYNC_ENABLED) {
-      return reply.code(410).send({
-        error: "sync_disabled",
-        message: "Personal data sync is retired; data remains on the user's device.",
-      });
-    }
     const user = requireUser(req);
     const { records } = pushBody.parse(req.body);
     return pushRecords(db, user.id, records as PushRecord[], now());
@@ -85,12 +79,6 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
    * paints. On the normal path that is one indexed SELECT returning nothing.
    */
   app.get("/sync/pull", { preHandler: app.authenticate }, async (req, reply) => {
-    if (!app.deps.env.LEGACY_PERSONAL_SYNC_ENABLED) {
-      return reply.code(410).send({
-        error: "sync_disabled",
-        message: "Personal data sync is retired; data remains on the user's device.",
-      });
-    }
     const user = requireUser(req);
     const { cursor, limit } = pullQuery.parse(req.query);
     const t = now();

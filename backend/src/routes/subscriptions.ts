@@ -7,6 +7,7 @@ import {
   hasSettledGrant,
   listGrants,
   readEntitlement,
+  startTrialOnce,
 } from "../services/entitlement.js";
 import { settleOpenPayments } from "../services/payment-flow.js";
 
@@ -30,6 +31,11 @@ export const subscriptionRoutes: FastifyPluginAsync = async (app) => {
     const t = now();
     await settleOpenPayments(db, psp, user.id, t);
     return { entitlement: await readEntitlement(db, user.id, t) };
+  });
+
+  app.post("/subscriptions/trial/start", { preHandler: app.authenticate }, async (req) => {
+    const user = requireUser(req);
+    return startTrialOnce(db, user.id, now());
   });
 
   /**

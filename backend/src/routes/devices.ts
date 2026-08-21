@@ -1,10 +1,9 @@
-import { and, count, desc, eq, gt } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
-import { deviceSecurityEvents, devices, users } from "../db/schema.js";
+import { devices } from "../db/schema.js";
 import { requireUser } from "../plugins/auth.js";
 import { notFound } from "../plugins/errors.js";
-import { DEVICE_SWITCH_WINDOW_MS } from "../services/tokens.js";
 
 const paramsBody = z.object({ id: z.string().uuid() });
 
@@ -18,36 +17,13 @@ export const deviceRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/devices", { preHandler: app.authenticate }, async (req) => {
     const caller = requireUser(req);
-    const [account] = await db.select().from(users).where(eq(users.id, caller.id)).limit(1);
-    if (!account) throw notFound("unknown_user", "No such user");
-
-    const rollingStart = new Date(now().getTime() - DEVICE_SWITCH_WINDOW_MS);
-    const since =
-      account.deviceSwitchResetAt && account.deviceSwitchResetAt > rollingStart
-        ? account.deviceSwitchResetAt
-        : rollingStart;
-    const [rows, switchRows] = await Promise.all([
-      db
-        .select()
-        .from(devices)
-        .where(eq(devices.userId, caller.id))
-        .orderBy(desc(devices.lastSeenAt), desc(devices.createdAt)),
-      db
-        .select({ n: count() })
-        .from(deviceSecurityEvents)
-        .where(
-          and(
-            eq(deviceSecurityEvents.userId, caller.id),
-            eq(deviceSecurityEvents.kind, "replacement"),
-            gt(deviceSecurityEvents.createdAt, since),
-          ),
-        ),
-    ]);
+    const rows = await db
+      .select()
+      .from(devices)
+      .where(eq(devices.userId, caller.id))
+      .orderBy(desc(devices.lastSeenAt), desc(devices.createdAt));
 
     return {
-      maxActiveDevices: account.maxActiveDevices,
-      switchCount30d: switchRows[0]?.n ?? 0,
-      securityLocked: !!account.securityLockedAt,
       devices: rows.map((device) => ({
         id: device.id,
         name: device.name,

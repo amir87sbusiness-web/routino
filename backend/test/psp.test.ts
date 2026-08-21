@@ -38,7 +38,12 @@ function stub(
         : { ok: true, ref: `${name}-ref`, result: ZIBAL_RESULT.OK };
     },
     async verify(ref: string) {
-      return { result: ZIBAL_RESULT.OK, status: ZIBAL_STATUS.PAID_VERIFIED, amount: 0, refNumber: `${name}:${ref}` };
+      return {
+        result: ZIBAL_RESULT.OK,
+        status: ZIBAL_STATUS.PAID_VERIFIED,
+        amount: 0,
+        refNumber: `${name}:${ref}`,
+      };
     },
     startUrl(ref: string) {
       return `https://${name}/start/${ref}`;
@@ -133,16 +138,21 @@ describe("zarinpal adapter", () => {
   }
 
   it("requests in Rial with an explicit IRR currency and returns the authority as ref", async () => {
-    const cap: { body?: any } = {};
-    mockFetch({ data: { code: 100, authority: "A00000000000000000000000000abcdef123" }, errors: [] }, cap);
+    const cap: { body?: Record<string, unknown> } = {};
+    mockFetch(
+      { data: { code: 100, authority: "A00000000000000000000000000abcdef123" }, errors: [] },
+      cap,
+    );
     const res = await zarinpalPsp("merchant-x").request(INPUT);
 
     expect(res.ok).toBe(true);
     expect(res.result).toBe(ZIBAL_RESULT.OK);
     expect(res.ref).toBe("A00000000000000000000000000abcdef123");
-    expect(cap.body.amount).toBe(INPUT.amountRial); // Rial, not Toman
-    expect(cap.body.currency).toBe("IRR");
-    expect(cap.body.merchant_id).toBe("merchant-x");
+    expect(cap.body).toMatchObject({
+      amount: INPUT.amountRial, // Rial, not Toman
+      currency: "IRR",
+      merchant_id: "merchant-x",
+    });
   });
 
   it("treats a non-100 request code as a failure", async () => {
@@ -152,8 +162,11 @@ describe("zarinpal adapter", () => {
   });
 
   it("maps a verified payment to the canonical paid-and-verified codes", async () => {
-    const cap: { body?: any } = {};
-    mockFetch({ data: { code: 100, ref_id: 998877, card_pan: "603799******1234" }, errors: [] }, cap);
+    const cap: { body?: Record<string, unknown> } = {};
+    mockFetch(
+      { data: { code: 100, ref_id: 998877, card_pan: "603799******1234" }, errors: [] },
+      cap,
+    );
     const v = await zarinpalPsp("m").verify("A000", 1_490_000);
 
     expect(v.result).toBe(ZIBAL_RESULT.OK);
@@ -161,7 +174,7 @@ describe("zarinpal adapter", () => {
     // ZarinPal's verify carries no amount; the adapter echoes the amount we sent
     // so the payment route's `amount === charged` assertion stays honest.
     expect(v.amount).toBe(1_490_000);
-    expect(cap.body.amount).toBe(1_490_000);
+    expect(cap.body).toMatchObject({ amount: 1_490_000 });
     expect(v.refNumber).toBe("998877");
     expect(v.cardNumber).toBe("603799******1234");
   });

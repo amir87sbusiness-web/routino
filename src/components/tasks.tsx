@@ -3,21 +3,27 @@ import { Bell, Check, ChevronDown, Minus, Plus, Trash2, X } from "lucide-react";
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { CatIcon, formatDuration, Progress } from "@/components/ui";
 import { faNum, type Lang } from "@/lib/dates";
-import { uid, type Db, type Task } from "@/lib/store";
+import {
+  shouldTriggerCompletionFeedback,
+  triggerCompletionFeedback,
+} from "@/lib/completion-feedback";
+import { uid, type Db, type Settings, type Task } from "@/lib/store";
 
 /** A single task row with swipe-to-complete/undo gesture and a check-pop
  * animation, matching HabitRow's interaction pattern. */
 export function TaskRow({
   task,
+  settings,
   lang,
   t,
   onUpdate,
   onDelete,
 }: {
   task: Task;
+  settings: Pick<Settings, "completionSoundEnabled" | "hapticsEnabled">;
   lang: Lang;
   t: (fa: string, en: string) => string;
-  onUpdate: (patch: Partial<Task>) => void;
+  onUpdate: (patch: Partial<Task>) => boolean;
   onDelete: () => void;
 }) {
   const [dragX, setDragX] = useState(0);
@@ -29,8 +35,26 @@ export function TaskRow({
   const tint = task.color ?? "var(--primary)";
   const SWIPE_THRESHOLD = 76;
 
+  const commit = (patch: Partial<Task>) => {
+    const afterCompleted =
+      patch.done ??
+      (task.type === "quantity" ? (patch.value ?? task.value) >= task.target : task.done);
+    const mutationAccepted = onUpdate(patch);
+    if (
+      shouldTriggerCompletionFeedback({
+        source: "user",
+        mutationAccepted,
+        beforeCompleted: task.done,
+        afterCompleted,
+      })
+    ) {
+      triggerCompletionFeedback(settings);
+    }
+    return mutationAccepted;
+  };
+
   const toggleDone = (next: boolean) => {
-    onUpdate({ done: next, value: next ? task.target : task.value });
+    commit({ done: next, value: next ? task.target : task.value });
     setRowFlash(true);
     setTimeout(() => setRowFlash(false), 300);
     if (next) {
@@ -93,11 +117,16 @@ export function TaskRow({
           <button
             onClick={() => toggleDone(!task.done)}
             className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition-all active:scale-90 ${
-              task.done ? "border-transparent text-white" : "border-border text-transparent hover:border-primary"
+              task.done
+                ? "border-transparent text-white"
+                : "border-border text-transparent hover:border-primary"
             }`}
             style={task.done ? { backgroundColor: tint } : undefined}
           >
-            <Check className={`h-5 w-5 ${justCompleted ? "animate-check-pop" : ""}`} strokeWidth={3} />
+            <Check
+              className={`h-5 w-5 ${justCompleted ? "animate-check-pop" : ""}`}
+              strokeWidth={3}
+            />
           </button>
 
           <span
@@ -108,7 +137,9 @@ export function TaskRow({
           </span>
 
           <div className="min-w-0 flex-1">
-            <p className={`text-sm font-medium ${task.done ? "text-muted-foreground line-through" : "text-foreground"}`}>
+            <p
+              className={`text-sm font-medium ${task.done ? "text-muted-foreground line-through" : "text-foreground"}`}
+            >
               {task.title}
             </p>
             <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
@@ -131,7 +162,7 @@ export function TaskRow({
               <button
                 onClick={() => {
                   const v = Math.max(0, task.value - 1);
-                  onUpdate({ value: v, done: v >= task.target });
+                  commit({ value: v, done: v >= task.target });
                 }}
                 className="rounded-full border border-border p-1.5 text-muted-foreground"
               >
@@ -145,7 +176,7 @@ export function TaskRow({
               <button
                 onClick={() => {
                   const v = task.value + 1;
-                  onUpdate({ value: v, done: v >= task.target });
+                  commit({ value: v, done: v >= task.target });
                 }}
                 className="rounded-full border border-border p-1.5 text-muted-foreground"
               >
@@ -154,12 +185,19 @@ export function TaskRow({
             </div>
           )}
 
-          <button onClick={onDelete} className="rounded-full p-1.5 text-muted-foreground hover:text-destructive">
+          <button
+            onClick={onDelete}
+            className="rounded-full p-1.5 text-muted-foreground hover:text-destructive"
+          >
             <Trash2 className="h-4 w-4" />
           </button>
         </div>
         {task.type === "quantity" && (
-          <Progress value={(task.value / task.target) * 100} color={task.color} className="mt-2.5" />
+          <Progress
+            value={(task.value / task.target) * 100}
+            color={task.color}
+            className="mt-2.5"
+          />
         )}
       </div>
     </div>
@@ -202,7 +240,7 @@ export function TodayTodosCard({
   dateKey: string;
   lang: Lang;
   t: (fa: string, en: string) => string;
-  onUpdate: (fn: (d: Db) => Db) => void;
+  onUpdate: (fn: (d: Db) => Db) => boolean;
   defaultOpen?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
@@ -219,7 +257,10 @@ export function TodayTodosCard({
 
   return (
     <div className="card-surface overflow-hidden !p-0">
-      <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between p-4">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between p-4"
+      >
         <div className="flex items-center gap-2">
           <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-success/20 text-success">
             <Check className="h-3.5 w-3.5" strokeWidth={3} />
@@ -231,7 +272,9 @@ export function TodayTodosCard({
             </span>
           </span>
         </div>
-        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+        <ChevronDown
+          className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+        />
       </button>
 
       {open && (
@@ -258,10 +301,18 @@ export function TodayTodosCard({
             <TaskRow
               key={task.id}
               task={task}
+              settings={db.settings}
               lang={lang}
               t={t}
-              onUpdate={(patch) => onUpdate((d) => ({ ...d, tasks: d.tasks.map((x) => (x.id === task.id ? { ...x, ...patch } : x)) }))}
-              onDelete={() => onUpdate((d) => ({ ...d, tasks: d.tasks.filter((x) => x.id !== task.id) }))}
+              onUpdate={(patch) =>
+                onUpdate((d) => ({
+                  ...d,
+                  tasks: d.tasks.map((x) => (x.id === task.id ? { ...x, ...patch } : x)),
+                }))
+              }
+              onDelete={() =>
+                onUpdate((d) => ({ ...d, tasks: d.tasks.filter((x) => x.id !== task.id) }))
+              }
             />
           ))}
         </div>

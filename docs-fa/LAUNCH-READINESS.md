@@ -1,50 +1,84 @@
-# گزارش آمادگی لانچ — معماری Local-first و امنیت دستگاه
+# آمادگی لانچ روتینو
 
-آخرین بررسی: ۲۷ مرداد ۱۴۰۵ / 18 August 2026
+آخرین بازبینی: ۳۰ مرداد ۱۴۰۵ / 21 August 2026
 
-## نتیجهٔ محصول
+این سند وضعیت **کد فعلی همین working tree** را خلاصه می‌کند. طراحی‌های قدیمی
+`docs/superpowers/` تاریخی‌اند و قرارداد محصول امروز نیستند.
 
-- محتوای شخصی کاربر (عادت، لاگ، کار، ژورنال، تایمر، آنالیز، دسته و تنظیمات) فقط در IndexedDB دستگاه می‌ماند و به سرور ارسال نمی‌شود.
-- هر حساب در همان مرورگر یک vault جدا دارد. جابه‌جایی A→B→A هیچ داده‌ای را حذف یا بین حساب‌ها مخلوط نمی‌کند.
-- Export همیشه فعال و بدون اطلاعات نشست/اشتراک/شناسهٔ دستگاه است. Import فقط برای اشتراک پولی فعال است و در trial/free/expired دو بار، قبل از انتخاب فایل و قبل از اعمال، کنترل می‌شود.
-- پیش‌فرض هر حساب یک دستگاه فعال است؛ ادمین برای هر حساب می‌تواند ۱ تا ۱۰ تنظیم کند. سه جایگزینی در بازهٔ rolling پانزده‌روزه مجاز است و جایگزینی چهارم حساب را با پیام امنیتی و شناسهٔ `@routino_support` قفل می‌کند.
-- نشست با هر درخواست خصوصی سمت سرور دوباره با ردیف دستگاه تطبیق داده می‌شود. کلاینت در boot، برگشت اینترنت، foreground و هر ۶۰ ثانیهٔ foreground بررسی می‌کند.
-- lease آفلاین ۱۵ روز است. داخل این بازه UI فوراً از دیتای محلی باز می‌شود، حتی اگر اینترنت بسیار کند/نیمه‌وصل باشد. بعد از ۱۵ روز فقط تأیید آنلاین لازم است؛ هیچ دیتایی حذف نمی‌شود.
-- اعلان اشتراک در سه روز مانده و زمان پایان ساخته می‌شود. وب اعلان داخل اپ را در اولین فرصت نگه می‌دارد و در صورت مجوز Notification سیستمی می‌دهد؛ موبایل اعلان‌ها را با سیستم‌عامل زمان‌بندی می‌کند تا وقتی اپ بسته است هم اجرا شوند.
+## قرارداد محصول فعلی
 
-## وضعیت دیتابیس Supabase
+- روتینو local-first و cloud-synced است: UI از Dexie/IndexedDB می‌خواند و همان
+  رکوردهای syncable با جدول عمومی `records` و API احراز‌شده بین دستگاه‌ها جابه‌جا
+  می‌شوند. فرانت به Supabase/PostgREST دسترسی مستقیم ندارد.
+- تعداد نصب‌های احراز‌شده محدودیت محصولی ندارد. revoke دستی نشست، چرخش refresh،
+  بستن نشست‌های دیگر بعد از تغییر رمز و block ادمین همچنان فعال‌اند.
+- ساخت حساب هیچ trialای نمی‌دهد. trial هفت‌روزه فقط بعد از فعال‌سازی معنادار و
+  ساخت اولین عادت، یک‌بار برای کل حساب و با تصمیم authoritative سرور شروع می‌شود.
+- پلن رایگان دائمی وجود ندارد. بعد از انقضا، محتوای موجود، تاریخچه، آنالیز، Export،
+  حساب/امنیت، خرید و reset صریح محتوای syncشده در دسترس می‌مانند؛ نوشتن محتوای
+  محصول و Import تا فعال‌شدن دسترسی قفل است.
+- یادآور عادت/کار/ژورنال و lifecycle در اپ نیتیو با Local Notifications سیستم‌عامل
+  زمان‌بندی می‌شود و برای زمان شلیک به اینترنت یا Supabase نیاز ندارد.
+- تکمیل مستقیم کاربر visual feedback موجود را نگه می‌دارد و فقط در گذار واقعی
+  ناقص→کامل، sound اصلی کوتاه و haptic دستگاه را طبق تنظیم محلی اجرا می‌کند.
+- Analytics یک Weekly Review روی همان `dayScore` و `weekComparison` دارد؛ امروز
+  ناتمام و روز بدون عادت موعددار را شکست حساب نمی‌کند و با دادهٔ کم insight نمی‌سازد.
 
-- پروژهٔ بررسی‌شده: `routino` (`axychfrteevhfdhgvfuv`).
-- ستون‌های امنیت کاربر و دستگاه و جدول `device_security_events` در 18 August 2026 اعمال و با query خواندنی تأیید شدند.
-- پیش از پاک‌سازی، جدول قدیمی `public.records` شامل ۵۳ رکورد متعلق به ۳ حساب تست بود.
-- فقط همان ۵۳ رکورد حذف شد و شمارش نهایی `public.records = 0` تأیید شد. این حذف قابل بازگشت از سرور نیست؛ دادهٔ محلی دستگاه‌ها را لمس نکرد.
-- مسیرهای قدیمی sync در کد لانچ `410 sync_disabled` می‌دهند و روشن‌کردن `LEGACY_PERSONAL_SYNC_ENABLED` در production باعث خطای boot می‌شود.
+## یکپارچگی فنی
 
-## تست‌های انجام‌شده
+- sync همیشه push-before-pull، cursorمحور، صفحه‌بندی‌شده و مستقل از entitlement
+  است. tombstone، reset بعد از GC، بازیابی نصب تازه و جداسازی vault حساب‌ها پوشش
+  رگرسیون دارند؛ remote hydration مسیر feedback تکمیل را صدا نمی‌زند.
+- تنها مسیر عمومی تغییر محتوای محصول `AppProvider.update` است. bypassهای داخلی به
+  عملیات نام‌دار و ممیزی‌شدهٔ entitlement، activation، preference، account/session،
+  feedback و reset محدود شده‌اند.
+- احراز هویت همان custom JWT + refresh token چرخشی + device session است؛ Supabase
+  Auth وارد معماری نشده است.
+- هر ۱۴ جدول فعلی برنامه، از جمله `device_security_events`، در setup تولیدشده RLS
+  فعال و صفر policy دارند؛ Edge با Postgres مستقیم کار می‌کند.
+- `backend/src/` منبع canonical است. `supabase/functions/api/shared/` فقط با
+  `npm run sync:edge` تولید می‌شود و parity test اختلاف را رد می‌کند.
 
-- Frontend unit/integration: ۲۲ فایل، ۱۴۵ تست پاس.
-- Backend: ۲۶ فایل، ۲۵۳ تست پاس؛ typecheck و production build پاس.
-- Supabase Edge parity/integration: ۱۰ فایل، ۹۴ تست پاس.
-- Web production build و mobile build پاس؛ service worker وب ۷۷ فایل ضروری را precache می‌کند و در mobile غیرفعال است.
-- Production dependency audit فرانت و بک‌اند: صفر آسیب‌پذیری شناخته‌شده. هشدارهای باقیمانده فقط ابزارهای توسعهٔ Capacitor 7 هستند و وارد bundle/runtime لانچ نمی‌شوند.
-- مرورگر واقعی Chromium، موبایل 390×844 و دسکتاپ 1440×900: onboarding، OTP محلی، صفحهٔ اصلی، تنظیمات، دستگاه حساب و RTL بررسی شد؛ هیچ پیامک کاوه‌نگار در تست‌های لانچ ارسال نشد.
-- تست offline واقعی روی production PWA: service worker کنترل صفحه را گرفت، reload کامل آفلاین و حرکت در onboarding موفق بود و ورود آفلاین پیام روشنِ نیاز به اینترنت نشان داد. ماندگاری محتوای حساب با IndexedDB و تست‌های persistence جداگانه پوشش داده شد.
-- تست فشار محلی API: ۳۰۰ درخواست با concurrency=30، صفر خطا؛ p50=23ms، p95=35ms و بیشینه=56ms. این تست فقط از providerهای `console`/`fake` استفاده کرد.
-- شبیه‌سازی lease منقضی: صفحهٔ اتصال امنیتی نمایش داده شد؛ با برگشت اینترنت همان حساب و همان دیتای محلی بدون حذف باز شد.
-- Android Release lint پاس شد. APK امضاشدهٔ `com.routino.app` نسخهٔ 1.0 با اندازهٔ 2,486,166 بایت و SHA-256 برابر `c9c0a6eb74c5e102bc8da57f500073ea4608dadabc7766d45ab975a7f736ed23` توسط `apksigner` و `aapt2` تأیید شد.
-- مسیر production وب `/v1/*` با Pages Function ثابت به `api.routino.me` پروکسی می‌شود؛ تست contract آن method، query، authorization، body، سقف ۶۴KB و خطای 502 بدون نشت جزئیات را پوشش می‌دهد.
+## وضعیت محیط زنده
 
-## محدودیت‌های واقعی مرورگر
+بررسی خواندنی 21 August 2026: `api.routino.me/health` و `/health/ready` پاسخ ۲۰۰
+با DB بالا دادند؛ `routino.me/v1/plans` نیز پلن‌های فعلی را برگرداند. fingerprint
+secretها با `SMS_PROVIDER=kavenegar`، `PSP_PROVIDER=zibal` و مرچنت غیر-sandbox
+تطبیق داشت و `ALLOW_TEST_PROVIDERS` وجود نداشت. مقدار هیچ secretی خوانده یا تغییر
+داده نشد. OTP و پرداخت واقعی عمداً بدون تأیید مالک اجرا نشدند.
 
-- وقتی web app واقعاً بسته است، کد جاوااسکریپت اجرا نمی‌شود؛ بنابراین revoke سرور همان لحظه ثبت می‌شود اما خروج روی آن مرورگر در اولین open/request/online event اجرا می‌شود. اجرای اجباری در اپ کاملاً بسته فقط با زیرساخت Web Push ممکن است و مرورگر/سیستم‌عامل تضمین زمانی نمی‌دهد.
-- هیچ وب‌اپی نمی‌تواند جلوی اقدام صریح کاربر برای Clear site data، حذف پروفایل مرورگر یا private/incognito را بگیرد. persistent storage، نصب PWA، هشدار واضح و Export دائمی ریسک را کم می‌کنند؛ فایل پشتیبان همچنان راه بازیابی قطعی است.
-- VPN و IP در هویت دستگاه استفاده نمی‌شوند؛ در نتیجه تغییر VPN باعث ساخت دستگاه تازه یا قفل اشتباه نمی‌شود.
-- روی این سیستم device/AVD اندروید در دسترس نبود؛ بنابراین نصب و smoke روی سخت‌افزار واقعی هنوز باید پس از انتقال APK انجام شود، هرچند build، lint، امضا و metadata پاس شده‌اند.
+## کارهای لازم پیش از انتشار عمومی
 
-## وضعیت انتشار
+1. تغییرات همین working tree هنوز deploy نشده‌اند: Edge/backend shared، فرانت و
+   `supabase/setup.sql` جدید باید در فرایند انتشار اعمال و سپس smoke شوند.
+2. ماتریس reminder روی حداقل یک گوشی واقعی، شامل اپ بسته/پس‌زمینه، permission،
+   timezone/reboot و exact alarm اندروید باید اجرا شود؛ build یا شبیه‌ساز جای آن نیست.
+3. یک OTP واقعی و یک پرداخت واقعی کنترل‌شده فقط با تأیید صریح مالک انجام شود.
+4. URL واقعی APK بعد از آپلود در `ANDROID_DOWNLOAD_URL` قرار بگیرد؛ URL حدسی ممنوع است.
 
-1. Supabase Edge Function `api` نسخهٔ 44 و Git/Cloudflare Pages شامل commit عملکردی `ad59ec1` زنده‌اند.
-2. smoke زندهٔ `routino.me`، deep route، service worker، same-origin `/v1/plans`، ping بدون auth، bad POST و DB readiness پاس شد. هیچ OTP واقعی درخواست نشد.
-3. `cloudflare/api-worker.js` روی service درست `routino-api` با نسخهٔ `a8a84906-8245-4ae9-94f1-cd8d8b76d9a5` deploy شد. روی دامنهٔ واقعی health محلی، DB readiness، CORS، نگهبان احراز هویت، CSP پنل و توالی cache `MISS` سپس `HIT` پاس شدند.
-4. APK آماده است؛ پس از آپلود HTTPS باید build لندینگ با `ANDROID_DOWNLOAD_URL` تکرار و روی گوشی واقعی smoke شود.
-5. یک OTP و پرداخت واقعی فقط با تأیید صریح مالک اجرا شود؛ این دو تست خودکار نیستند چون هزینه/تراکنش واقعی دارند.
+## گیت تأیید هر انتشار
+
+```text
+npm test
+npm run test:edge
+npm run lint
+npm run build
+npm run build:mobile
+npm run sync:edge
+cd backend && npm test
+cd backend && npm run typecheck
+cd backend && npm run build
+npm run cap:sync
+```
+
+اگر DDL/setup تغییر کرده، `node scripts/gen-setup-sql.mjs` نیز باید اجرا و SQL
+تولیدشده از نظر cron و RLS بررسی شود. پاسِ محلی به معنی deploy یا اعمال SQL در
+پروداکشن نیست.
+
+## محدودیت‌های واقعی
+
+- وب‌اپ کاملاً بسته کد اجرا نمی‌کند؛ revoke در اولین open/request/online اثر می‌کند.
+- مرورگر نمی‌تواند Clear site data یا حذف پروفایل را متوقف کند؛ cloud sync و Export
+  ریسک را کم می‌کنند.
+- زمان تحویل اعلان به سیاست‌های سیستم‌عامل، battery optimization و permission وابسته
+  است و فقط روی سخت‌افزار واقعی قابل تأیید است.

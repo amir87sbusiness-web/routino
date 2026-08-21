@@ -130,7 +130,7 @@ describe("one account, several devices at once", () => {
 });
 
 describe("sign-in and sign-out racing each other", () => {
-  it("leaves exactly MAX_ACTIVE_DEVICES sessions when four devices sign in at once", async () => {
+  it("keeps every simultaneous valid installation session", async () => {
     const phone = "09130000004";
     const first = await signIn(phone);
 
@@ -145,15 +145,24 @@ describe("sign-in and sign-out racing each other", () => {
       payload: { newPassword: "Routino!2026" },
     });
 
-    const login = () =>
+    const login = (installationKey: string) =>
       h.app.inject({
         method: "POST",
         url: "/v1/auth/password/login",
-        payload: { identifier: phone, password: "Routino!2026" },
+        payload: {
+          identifier: phone,
+          password: "Routino!2026",
+          device: { installationKey, name: installationKey, platform: "web" },
+        },
       });
 
-    // Four devices, all at the same moment. The limit is 2.
-    const logins = await Promise.all([login(), login(), login(), login()]);
+    // Four devices, all at the same moment. Each has its own installation key.
+    const logins = await Promise.all([
+      login("racing-device-a"),
+      login("racing-device-b"),
+      login("racing-device-c"),
+      login("racing-device-d"),
+    ]);
     for (const r of logins) expect(r.statusCode).toBe(200);
 
     const [row] = await h.query<{ n: number }>(
@@ -161,10 +170,7 @@ describe("sign-in and sign-out racing each other", () => {
         join users u on u.id = d.user_id
        where u.phone = '98${phone.slice(1)}' and d.revoked_at is null`,
     );
-    expect(Number(row!.n)).toBeLessThanOrEqual(2);
-    // And at least one survives — evicting everybody would sign the user out of
-    // the device they are holding.
-    expect(Number(row!.n)).toBeGreaterThanOrEqual(1);
+    expect(Number(row!.n)).toBe(5);
   });
 
   it("refuses to let one refresh token be spent twice", async () => {

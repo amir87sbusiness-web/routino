@@ -2,8 +2,9 @@
 
 سرور روتینو: احراز هویت با شماره تلفن، سینک چنددستگاهی، اشتراک و پرداخت.
 
-> **این پوشه هنوز دیپلوی نشده.** کد و `docker-compose.yml` آماده‌اند تا هر وقت
-> خواستی روی یک Cloud Server آروان بالا بیاید. توسعه و تست به Docker نیاز ندارند.
+> `backend/src/` منبع canonical منطق سرور است. پروداکشن همین منطق را بعد از
+> `npm run sync:edge` در Supabase Edge اجرا می‌کند؛ `supabase/functions/api/shared/`
+> تولیدشده است و نباید دستی ویرایش شود. سرور Fastify برای توسعهٔ محلی باقی مانده است.
 
 ## اجرا
 
@@ -98,10 +99,10 @@ cloudflared tunnel --url http://localhost:3000
 # PUBLIC_API_URL را روی آدرس https تونل بگذار
 ```
 
-## دیپلوی (وقتی آماده شدی)
+## اجرای جایگزین روی VM
 
 ```bash
-# روی VM آروان
+# فقط اگر به‌جای Edge عمداً مسیر VM انتخاب شد
 cp .env.example .env    # مقادیر واقعی؛ JWT_SECRET و OTP_PEPPER حتماً عوض شوند
 docker compose up -d
 ```

@@ -27,7 +27,13 @@ describe("tomanToRial", () => {
 describe("quote", () => {
   it("prices from the database, not the client", async () => {
     const q = await quote(h.db, "m3", null, USER, PHONE, NOW);
-    expect(q).toMatchObject({ planId: "m3", months: 3, finalToman: 149000, finalRial: 1490000, discountPercent: 0 });
+    expect(q).toMatchObject({
+      planId: "m3",
+      months: 3,
+      finalToman: 149000,
+      finalRial: 1490000,
+      discountPercent: 0,
+    });
   });
 
   it("applies a valid discount", async () => {
@@ -64,8 +70,12 @@ describe("quote", () => {
 describe("checkDiscount", () => {
   it("rejects expired, inactive and exhausted codes", async () => {
     await h.raw(`insert into discounts (code, percent, active) values ('OFF', 20, false)`);
-    await h.raw(`insert into discounts (code, percent, expires_at) values ('OLD', 20, '2026-01-01')`);
-    await h.raw(`insert into discounts (code, percent, max_uses, used_count) values ('GONE', 20, 5, 5)`);
+    await h.raw(
+      `insert into discounts (code, percent, expires_at) values ('OLD', 20, '2026-01-01')`,
+    );
+    await h.raw(
+      `insert into discounts (code, percent, max_uses, used_count) values ('GONE', 20, 5, 5)`,
+    );
 
     expect((await checkDiscount(h.db, "OFF", USER, PHONE, NOW)).reason).toBe("inactive");
     expect((await checkDiscount(h.db, "OLD", USER, PHONE, NOW)).reason).toBe("expired");
@@ -126,6 +136,9 @@ describe("checkDiscount", () => {
   });
 
   it("treats an empty code as no code", async () => {
-    expect(await checkDiscount(h.db, "  ", USER, PHONE, NOW)).toMatchObject({ valid: false, code: null });
+    expect(await checkDiscount(h.db, "  ", USER, PHONE, NOW)).toMatchObject({
+      valid: false,
+      code: null,
+    });
   });
 });

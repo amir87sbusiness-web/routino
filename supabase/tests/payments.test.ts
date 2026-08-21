@@ -24,6 +24,14 @@ async function checkout(access: string, body: Record<string, unknown>) {
   return h.call("POST", "/v1/payments/checkout", { headers: auth(access), body });
 }
 
+async function startTrial(access: string) {
+  const res = await h.call("POST", "/v1/subscriptions/trial/start", {
+    headers: auth(access),
+  });
+  expect(res.status).toBe(200);
+  return (await res.json()) as { entitlement: { expiresAt: string } };
+}
+
 /** Clicks "Pay"/"Cancel" on the fake gateway and follows the redirect into the
  * callback, exactly as a browser would. Returns the callback response. */
 async function settleAndCallback(trackId: number, outcome: "paid" | "canceled") {
@@ -72,7 +80,8 @@ describe("POST /v1/payments/quote", () => {
 
 describe("checkout → gateway → callback", () => {
   it("completes a payment and grants the plan exactly once", async () => {
-    const { access, user, entitlement } = await signIn(h);
+    const { access, user } = await signIn(h);
+    const trial = await startTrial(access);
     const res = await checkout(access, { planId: "m3", platform: "web" });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
@@ -106,7 +115,7 @@ describe("checkout → gateway → callback", () => {
     // 3 calendar months stacked on the trial's remaining days, not replacing them.
     const status = await h.call("GET", `/v1/payments/${body.paymentId}`, { headers: auth(access) });
     const after = Date.parse((await status.json()).entitlement.expiresAt);
-    const trialEnd = Date.parse(entitlement.expiresAt);
+    const trialEnd = Date.parse(trial.entitlement.expiresAt);
     expect(after).toBeGreaterThan(trialEnd + 85 * DAY);
 
     const grants = await h.query<{ source: string }>(

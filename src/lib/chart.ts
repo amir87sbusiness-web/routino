@@ -35,7 +35,12 @@ export interface ChartBars {
 
 const avg = (vals: number[]) => Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
 
-export function buildChartBars(series: ChartPoint[], rangeId: ChartRangeId, cal: Calendar, lang: Lang): ChartBars {
+export function buildChartBars(
+  series: ChartPoint[],
+  rangeId: ChartRangeId,
+  cal: Calendar,
+  lang: Lang,
+): ChartBars {
   if (series.length === 0) return { buckets: [], labels: [], barUnit: "day" };
 
   if (rangeId === "week" || rangeId === "month") {

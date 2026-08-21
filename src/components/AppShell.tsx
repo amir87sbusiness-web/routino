@@ -1,5 +1,5 @@
 /**
- * AppShell: gating (onboarding → auth → subscription), navigation
+ * AppShell: gating (onboarding → auth → activation/subscription), navigation
  * (bottom bar on mobile, sidebar on desktop), notification center,
  * feedback popup, and celebration popups.
  */
@@ -13,6 +13,7 @@ import {
   Repeat,
   Settings,
   Timer,
+  LockKeyhole,
   WifiOff,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -20,7 +21,7 @@ import { FeedbackModal } from "@/components/FeedbackModal";
 import { InstallBanner } from "@/components/pwa";
 import { Button, Logo, Modal } from "@/components/ui";
 import { faNum } from "@/lib/dates";
-import { subscriptionActive } from "@/lib/logic";
+import { accessRoute, accessState } from "@/lib/access-state";
 import { requestPersistentStorage } from "@/lib/pwa";
 import { useAppMaybe } from "@/state/app";
 
@@ -55,8 +56,8 @@ function ReconnectGate({
         </h1>
         <p className="mt-3 text-sm leading-7 text-muted-foreground">
           {t(
-            "برای امنیت حسابت، بعد از ۱۵ روز آفلاین باید دستگاه دوباره تأیید شود. اطلاعاتت روی همین دستگاه ذخیره شده و پاک نمی‌شود.",
-            "For account security, this device must be verified after 15 offline days. Your local data is still saved and will not be deleted.",
+            "برای امنیت حسابت، دستگاه باید دوباره آنلاین تأیید شود. اطلاعاتت روی دستگاه و فضای ابری حسابت محفوظ است و پاک نمی‌شود.",
+            "For account security, this device must be verified online again. Your data remains safe on this device and in your account cloud.",
           )}
         </p>
         <Button
@@ -104,24 +105,22 @@ export function AppShell({ children }: { children: ReactNode }) {
   const gate = useMemo(() => {
     if (!db) return "loading";
     if (!db.settings.onboarded) return "onboarding";
-    if (!db.auth) return "auth";
-    if (ctx?.sessionGate === "checking") return "loading";
-    if (ctx?.sessionGate === "needs-online") return "needs-online";
-    if (!subscriptionActive(db)) return "subscribe";
-    return "ok";
+    return accessState(db, ctx?.sessionGate ?? "checking");
   }, [db, ctx?.sessionGate]);
 
   useEffect(() => {
     if (gate === "onboarding") navigate({ to: "/onboarding" });
-    else if (gate === "auth") navigate({ to: "/auth" });
-    else if (gate === "subscribe") navigate({ to: "/subscribe" });
+    else if (gate !== "loading") {
+      const destination = accessRoute(gate);
+      if (destination) navigate({ to: destination });
+    }
   }, [gate, navigate]);
 
   // Ask the browser to keep our data as soon as onboarding is done — before the
-  // auth/subscribe screens — so everything entered from then on is under durable
-  // storage. IndexedDB is the only copy of their personal content. Persistence
-  // reduces eviction risk, but browsers still control their own storage and an
-  // explicit Clear site data always wins. Not fired on the first onboarding paint:
+  // auth/activation screens — so everything entered from then on is under durable
+  // storage. IndexedDB is the UI's local source and sync supplies the account's
+  // cloud copy. Persistence still reduces offline eviction risk, but browsers
+  // control their own storage and an explicit Clear site data always wins. Not fired on the first onboarding paint:
   // prompt for it, and engagement makes the grant likelier. The call no-ops when
   // durability is already granted, so re-running it is free.
   useEffect(() => {
@@ -145,8 +144,9 @@ export function AppShell({ children }: { children: ReactNode }) {
   // اشتراک)، و اگر افکت با هر تغییرِ آن دوباره اجرا شود، cleanup همان تایمرِ ۴
   // ثانیه‌ای را می‌کُشد و اجرای بعدی هم به‌خاطر `askedThisBoot` زود برمی‌گردد —
   // یعنی پاپ‌آپ هیچ‌وقت باز نمی‌شود. (دقیقاً همین اتفاق افتاد و تست گرفتش.)
+  const writeActive = gate === "active-trial" || gate === "active-paid";
   const canAsk =
-    gate === "ok" &&
+    writeActive &&
     !!db &&
     db.meta.sessions >= 3 &&
     Date.now() - db.meta.lastFeedbackAt >= FEEDBACK_INTERVAL;
@@ -160,14 +160,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   /** بعد از ثبت یا رد کردن، ساعت را جلو ببر تا تا فردا دوباره پرسیده نشود. */
   const closeFeedback = () => {
     setFeedbackOpen(false);
-    ctx?.update((d) => ({ ...d, meta: { ...d.meta, lastFeedbackAt: Date.now() } }));
+    ctx?.recordFeedbackPrompt();
   };
 
   if (!ctx || !db) return <Splash />;
-  if (gate === "needs-online") return <ReconnectGate t={ctx.t} retry={ctx.retrySession} />;
-  if (gate !== "ok") return <Splash />;
+  if (gate === "needs-online-verification") {
+    return <ReconnectGate t={ctx.t} retry={ctx.retrySession} />;
+  }
+  if (!writeActive && gate !== "expired") return <Splash />;
 
-  const { t, lang, update } = ctx;
+  const { t, lang } = ctx;
   const unread = db.notifications.filter((n) => !n.read).length;
 
   return (
@@ -213,7 +215,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             the user signs in on, and that is exactly the reassurance someone
             worries about when they pick up a new phone — so say it. */}
         <div className="mt-auto px-2 text-[10px] text-muted-foreground">
-          {t("ذخیره‌شده روی همین دستگاه", "Saved on this device")}
+          {t(
+            "ذخیره‌شده روی دستگاه و فضای ابری حسابت",
+            "Saved on this device and your account cloud",
+          )}
         </div>
       </aside>
 
@@ -264,6 +269,21 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
+        {gate === "expired" && (
+          <Link
+            to="/subscribe"
+            className="mx-4 mt-3 flex items-center gap-2 rounded-xl border border-primary/25 bg-primary-soft px-3 py-2 text-xs leading-5 text-foreground"
+          >
+            <LockKeyhole className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+            <span className="flex-1">
+              {t(
+                "اشتراکت تموم شده؛ اطلاعاتت محفوظ است. برای ادامه فعالیت اشتراک را فعال کن.",
+                "Your subscription ended; your data is safe. Activate a plan to continue making changes.",
+              )}
+            </span>
+          </Link>
+        )}
+
         <InstallBanner />
         <main className="px-4 py-4">{children}</main>
       </div>
@@ -311,15 +331,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <p className="text-xs text-muted-foreground">{n.body}</p>
               </div>
             ))}
-            <Button
-              variant="secondary"
-              onClick={() =>
-                update((d) => ({
-                  ...d,
-                  notifications: d.notifications.map((n) => ({ ...n, read: true })),
-                }))
-              }
-            >
+            <Button variant="secondary" onClick={ctx.markNotificationsRead}>
               {t("خواندن همه", "Mark all read")}
             </Button>
           </div>
@@ -328,6 +340,35 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* پاپ‌آپ نظرسنجی — همان فرمی که دکمه‌ی تنظیمات هم باز می‌کند. */}
       <FeedbackModal open={feedbackOpen} onDone={closeFeedback} />
+
+      <Modal
+        open={ctx.writeBlocked}
+        onClose={ctx.clearWriteBlocked}
+        title={t("اشتراک برای ادامه فعالیت", "Subscription required to continue")}
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm leading-7 text-muted-foreground">
+            {t(
+              "اطلاعات قبلی‌ات همچنان قابل مشاهده و همگام‌سازی است؛ برای ثبت تغییر جدید اشتراکت را فعال کن.",
+              "Your existing data remains visible and synced. Activate a plan to save new changes.",
+            )}
+          </p>
+          <div className="flex gap-2">
+            <Button
+              className="flex-1"
+              onClick={() => {
+                ctx.clearWriteBlocked();
+                navigate({ to: "/subscribe" });
+              }}
+            >
+              {t("فعال کردن اشتراک", "Activate subscription")}
+            </Button>
+            <Button variant="ghost" className="flex-1" onClick={ctx.clearWriteBlocked}>
+              {t("فعلاً فقط مشاهده", "Keep viewing")}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

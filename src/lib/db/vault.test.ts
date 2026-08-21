@@ -26,7 +26,9 @@ const habit = (id: string, name: string): Habit => ({
 beforeEach(async () => {
   const databases = await Dexie.getDatabaseNames();
   await Promise.all(
-    databases.filter((name) => name === "routino" || name.startsWith("routino:vault:")).map((name) => Dexie.delete(name)),
+    databases
+      .filter((name) => name === "routino" || name.startsWith("routino:vault:"))
+      .map((name) => Dexie.delete(name)),
   );
   localStorage.clear();
   await activateVault(LEGACY_VAULT_ID);
@@ -66,6 +68,18 @@ describe("account vault lifecycle", () => {
     expect(databaseNameForVault(claimed.vaultId)).toBe("routino");
     expect(getActiveVaultId()).toBe(LEGACY_VAULT_ID);
     expect((await db.habits.get("legacy-habit"))?.data.name).toBe("Legacy");
+  });
+
+  it("does not let a different first account claim a legacy vault known to belong to another phone", async () => {
+    await db.habits.put(row("legacy-habit", habit("legacy-habit", "A")));
+
+    const assigned = await switchOwnerVault("user-b", { claimCurrent: false });
+
+    expect(assigned.vaultId).not.toBe(LEGACY_VAULT_ID);
+    expect(assigned.claimedCurrent).toBe(false);
+    expect(await db.habits.get("legacy-habit")).toBeUndefined();
+    await activateVault(LEGACY_VAULT_ID);
+    expect((await db.habits.get("legacy-habit"))?.data.name).toBe("A");
   });
 
   it("isolates device-local auth, subscription and notifications with the vault", async () => {

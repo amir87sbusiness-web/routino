@@ -13,6 +13,7 @@ const api = vi.hoisted(() => ({
   verifyOtp: vi.fn(),
 }));
 const navigate = vi.hoisted(() => vi.fn());
+const app = vi.hoisted(() => ({ switchAccount: vi.fn(), update: vi.fn() }));
 
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (options: unknown) => options,
@@ -27,8 +28,8 @@ vi.mock("@/lib/api/auth", () => api);
 vi.mock("@/state/app", () => ({
   useAppMaybe: () => ({
     db: { meta: { dataOwner: null }, subscription: null, auth: null },
-    update: vi.fn(),
-    switchAccount: vi.fn(),
+    update: app.update,
+    switchAccount: app.switchAccount,
     t: (fa: string) => fa,
     lang: "fa",
   }),
@@ -60,6 +61,7 @@ describe("AuthPage registration and recovery", () => {
       user: { id: "u1", phone: "989123334444" },
       entitlement: { status: "none", planId: null, expiresAt: null, issuedAt: "now" },
     });
+    app.switchAccount.mockResolvedValue(undefined);
     host = document.createElement("div");
     document.body.append(host);
     root = createRoot(host);
@@ -109,6 +111,11 @@ describe("AuthPage registration and recovery", () => {
       intent: "signup",
       newPassword: "Amir@1387",
     });
+    expect(api.importSubscription).not.toHaveBeenCalled();
+    expect(app.switchAccount).toHaveBeenCalledWith(
+      { id: "u1", phone: "989123334444" },
+      { status: "none", planId: null, expiresAt: null, issuedAt: "now" },
+    );
   });
 
   it("sends the password-reset intent only after four digits", async () => {

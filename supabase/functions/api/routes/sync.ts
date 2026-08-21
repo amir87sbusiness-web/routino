@@ -43,15 +43,6 @@ export function syncRoutes(deps: Deps) {
   const r = new Hono<AppEnv>();
 
   r.post("/sync/push", auth, async (c) => {
-    if (!deps.env.LEGACY_PERSONAL_SYNC_ENABLED) {
-      return c.json(
-        {
-          error: "sync_disabled",
-          message: "Personal data sync is retired; data remains on the user's device.",
-        },
-        410,
-      );
-    }
     const user = requireUser(c);
     const { records } = pushBody.parse(await readJson(c));
     return c.json(await pushRecords(db, user.id, records as PushRecord[], now()));
@@ -61,15 +52,6 @@ export function syncRoutes(deps: Deps) {
   // second invocation on `GET /subscriptions/me` every time it opens. See the
   // Fastify twin for the reasoning; on the free tier invocations are the ceiling.
   r.get("/sync/pull", auth, async (c) => {
-    if (!deps.env.LEGACY_PERSONAL_SYNC_ENABLED) {
-      return c.json(
-        {
-          error: "sync_disabled",
-          message: "Personal data sync is retired; data remains on the user's device.",
-        },
-        410,
-      );
-    }
     const user = requireUser(c);
     const { cursor, limit } = pullQuery.parse({
       cursor: c.req.query("cursor"),

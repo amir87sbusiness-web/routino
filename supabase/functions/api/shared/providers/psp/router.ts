@@ -1,5 +1,12 @@
 // AUTO-GENERATED from backend/src — do not edit. Run `node scripts/sync-edge-shared.mjs`.
-import type { PspCheckout, PspName, PspProvider, PspRequestInput, PspRouter, PspVerifyResult } from "./index.ts";
+import type {
+  PspCheckout,
+  PspName,
+  PspProvider,
+  PspRequestInput,
+  PspRouter,
+  PspVerifyResult,
+} from "./index.ts";
 
 /**
  * Multi-gateway router.

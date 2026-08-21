@@ -111,13 +111,6 @@ const schema = z.object({
   /** Bound the damage from the inherently-untrusted subscription import. */
   IMPORT_MAX_DAYS: z.coerce.number().default(400),
 
-  /** Temporary test/dev escape hatch for exercising the retired sync engine.
-   * Production is forbidden from enabling it: personal records are local-only. */
-  LEGACY_PERSONAL_SYNC_ENABLED: z
-    .string()
-    .default("false")
-    .transform((v) => v === "true" || v === "1"),
-
   /**
    * Optional owner bootstrap. When OWNER_PHONE and OWNER_PASSWORD are both set,
    * the server ensures that account exists with that password on boot (see
@@ -170,8 +163,6 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     throw new Error(`Invalid environment:\n${issues}`);
   }
   if (parsed.data.NODE_ENV === "production") {
-    if (parsed.data.LEGACY_PERSONAL_SYNC_ENABLED)
-      throw new Error("LEGACY_PERSONAL_SYNC_ENABLED is forbidden in production");
     if (parsed.data.JWT_SECRET.startsWith("dev-only"))
       throw new Error("JWT_SECRET must be set in production");
     if (parsed.data.OTP_PEPPER.startsWith("dev-only"))

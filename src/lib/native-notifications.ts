@@ -1,172 +1,149 @@
-/**
- * لایه‌ی نوتیفیکیشن بومی برای نسخه‌ی موبایل (Capacitor).
- *
- * تفاوت با سیستم قبلی (state/app.tsx):
- * سیستم قبلی هر ۳۰ ثانیه‌یک‌بار زمان را چک می‌کند و فقط وقتی خودِ اپ باز و
- * در فرگراند است نوتیف مرورگر می‌سازد. این ماژول به‌جای آن، نوتیفیکیشن‌ها را
- * از قبل نزد سیستم‌عامل (iOS/Android) زمان‌بندی می‌کند تا حتی وقتی اپ کاملاً
- * بسته است هم در زمان مقرر نمایش داده شوند.
- *
- * روی وب (npm run dev / build عادی) این ماژول کاملاً بی‌اثر است — چون
- * Capacitor.isNativePlatform() آنجا false برمی‌گردد و توابع زودتر return
- * می‌کنند. یعنی نسخه‌ی وب فعلی هیچ تغییر رفتاری نمی‌بیند.
- */
+/** Capacitor boundary for Routino-owned local OS reminders. */
 import { Capacitor } from "@capacitor/core";
+import type { PermissionState } from "@capacitor/core";
+import { planNativeReminders, type ReminderPlanOptions } from "./reminder-planner";
 import type { Db } from "./store";
-import { dueHabitsOn, isCompleted, getLog } from "./logic";
-import { todayKey } from "./dates";
 
-// شناسه‌های عددی نوتیف را با هش ساده از رشته‌ی id می‌سازیم چون
-// LocalNotifications به عدد صحیح ۳۲بیتی نیاز دارد، نه رشته.
-function idFromString(s: string): number {
-  let h = 0;
-  for (let i = 0; i < s.length; i++) {
-    h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
-  }
-  return Math.abs(h) || 1;
+export type NativePermissionState = PermissionState | "web";
+export type NativeExactAlarmState = PermissionState | "not-android";
+
+export interface NativeReminderOptions extends Omit<ReminderPlanOptions, "now"> {
+  now?: Date;
 }
 
-export async function isNative(): Promise<boolean> {
+export interface NativeReconcileResult {
+  status: "web" | "disabled" | "permission-denied" | "scheduled";
+  scheduled: number;
+}
+
+export function notificationDeliveryActive(
+  preferred: boolean,
+  permission: PermissionState | "checking" | "unsupported",
+): boolean {
+  return preferred && permission === "granted";
+}
+
+const NATIVE_CAPACITY = 60;
+const LEGACY_ROUTINO_KINDS = new Set(["recurring", "task", "subscription"]);
+let reconcileQueue: Promise<void> = Promise.resolve();
+
+function isRoutinoOwned(extra: Record<string, unknown> | undefined): boolean {
+  if (extra?.routino === true) return true;
+  // One-release migration for alarms created by the previous Routino adapter.
+  // These were the only Local Notifications kinds the app emitted, and must be
+  // removed once or they survive beside the new deterministic plan.
+  return typeof extra?.kind === "string" && LEGACY_ROUTINO_KINDS.has(extra.kind);
+}
+
+export function isNativeRuntime(): boolean {
   return Capacitor.isNativePlatform();
 }
 
-/** درخواست مجوز نوتیفیکیشن از کاربر؛ باید هنگام روشن‌کردن سوییچ در تنظیمات صدا زده شود. */
+/** Read-only permission check. This function never opens an OS dialog. */
+export async function checkNativeNotificationPermission(): Promise<NativePermissionState> {
+  if (!isNativeRuntime()) return "web";
+  const { LocalNotifications } = await import("@capacitor/local-notifications");
+  return (await LocalNotifications.checkPermissions()).display;
+}
+
+/** Explicit user-action path used by Settings/activation only. */
 export async function requestNativePermission(): Promise<boolean> {
-  if (!Capacitor.isNativePlatform()) return true; // در وب، منطق موجود مرورگر مسئول است
+  if (!isNativeRuntime()) return true;
   const { LocalNotifications } = await import("@capacitor/local-notifications");
-  const perm = await LocalNotifications.requestPermissions();
-  return perm.display === "granted";
+  return (await LocalNotifications.requestPermissions()).display === "granted";
 }
 
-/**
- * تمام یادآوری‌های تکرارشونده (عادت‌های روزانه با reminderTime و ژورنال) را
- * دوباره با سیستم‌عامل زمان‌بندی می‌کند. هر بار که db تغییر می‌کند (عادت
- * جدید، تغییر ساعت یادآوری، خاموش/روشن‌شدن نوتیف) باید صدا زده شود.
- */
-export async function syncRecurringReminders(db: Db): Promise<void> {
-  if (!Capacitor.isNativePlatform()) return;
-  const { LocalNotifications } = await import("@capacitor/local-notifications");
-
-  // اول همه‌ی نوتیف‌های تکرارشونده‌ی قبلی را پاک می‌کنیم تا با state تازه جایگزین شوند
-  const pending = await LocalNotifications.getPending();
-  const recurringIds = pending.notifications
-    .filter((n) => n.extra?.kind === "recurring")
-    .map((n) => n.id);
-  if (recurringIds.length) {
-    await LocalNotifications.cancel({ notifications: recurringIds.map((id) => ({ id })) });
-  }
-
-  if (!db.settings.notificationsEnabled) return;
-
-  const fa = db.settings.lang === "fa";
-  const toSchedule: {
-    id: number;
-    title: string;
-    body: string;
-    schedule: { on: { hour: number; minute: number } };
-    extra: { kind: "recurring" };
-  }[] = [];
-
-  for (const h of db.habits) {
-    if (h.archived || !h.reminderTime) continue;
-    const [hh, mm] = h.reminderTime.split(":").map(Number);
-    toSchedule.push({
-      id: idFromString(`habit|${h.id}`),
-      title: fa ? "یادآوری عادت" : "Habit reminder",
-      body: fa ? `وقتشه: ${h.name}` : `Time for: ${h.name}`,
-      schedule: { on: { hour: hh, minute: mm } },
-      extra: { kind: "recurring" },
-    });
-  }
-
-  if (db.settings.journalReminder) {
-    const [hh, mm] = db.settings.journalReminder.split(":").map(Number);
-    toSchedule.push({
-      id: idFromString("journal-daily"),
-      title: fa ? "ژورنال روتینو" : "Routino Journal",
-      body: fa ? "وقت ژورنال‌نویسیه ✍️" : "Time to write your journal ✍️",
-      schedule: { on: { hour: hh, minute: mm } },
-      extra: { kind: "recurring" },
-    });
-  }
-
-  if (toSchedule.length) {
-    await LocalNotifications.schedule({ notifications: toSchedule });
-  }
+/** Explicit cross-platform request for reminder delivery permission. */
+export async function requestNotificationPermission(): Promise<boolean> {
+  if (isNativeRuntime()) return requestNativePermission();
+  if (typeof Notification === "undefined") return false;
+  const permission =
+    Notification.permission === "default"
+      ? await Notification.requestPermission()
+      : Notification.permission;
+  return permission === "granted";
 }
 
-/** Schedule subscription lifecycle alerts with the mobile OS so they can fire
- * while the native app is fully closed. Web catches missed alerts on next open. */
-export async function syncSubscriptionReminders(db: Db): Promise<void> {
-  if (!Capacitor.isNativePlatform()) return;
+/** Android-only read of whether AlarmManager may schedule exact alarms. */
+export async function checkNativeExactAlarmSetting(): Promise<NativeExactAlarmState> {
+  if (!isNativeRuntime() || Capacitor.getPlatform() !== "android") return "not-android";
+  const { LocalNotifications } = await import("@capacitor/local-notifications");
+  return (await LocalNotifications.checkExactNotificationSetting()).exact_alarm;
+}
+
+/** Opens Android's exact-alarm settings; call only after an explicit user action. */
+export async function requestNativeExactAlarmSetting(): Promise<NativeExactAlarmState> {
+  if (!isNativeRuntime() || Capacitor.getPlatform() !== "android") return "not-android";
+  const { LocalNotifications } = await import("@capacitor/local-notifications");
+  return (await LocalNotifications.changeExactNotificationSetting()).exact_alarm;
+}
+
+async function runReconcile(
+  db: Db,
+  options: NativeReminderOptions,
+): Promise<NativeReconcileResult> {
+  if (!isNativeRuntime()) return { status: "web", scheduled: 0 };
+
   const { LocalNotifications } = await import("@capacitor/local-notifications");
   const pending = await LocalNotifications.getPending();
-  const oldIds = pending.notifications
-    .filter((item) => item.extra?.kind === "subscription")
-    .map((item) => item.id);
-  if (oldIds.length) {
-    await LocalNotifications.cancel({ notifications: oldIds.map((id) => ({ id })) });
+  const owned = pending.notifications.filter((item) => isRoutinoOwned(item.extra));
+  const cancelOwned = async () => {
+    if (owned.length) {
+      await LocalNotifications.cancel({
+        notifications: owned.map(({ id }) => ({ id })),
+      });
+    }
+  };
+
+  if (!options.productRemindersAllowed && !options.lifecycleRemindersAllowed) {
+    await cancelOwned();
+    return { status: "disabled", scheduled: 0 };
   }
-  if (!db.settings.notificationsEnabled || !db.subscription || db.subscription.trial) return;
 
-  const fa = db.settings.lang === "fa";
-  const expiry = db.subscription.expiresAt;
-  const threeDaysBefore = expiry - 3 * 86_400_000;
-  const notifications = [
-    threeDaysBefore > Date.now()
-      ? {
-          id: idFromString(`subscription-soon|${expiry}`),
-          title: fa ? "یادآوری اشتراک روتینو" : "Routino subscription reminder",
-          body: fa
-            ? "سه روز تا پایان اشتراکت باقی مانده است."
-            : "Your subscription expires in three days.",
-          schedule: { at: new Date(threeDaysBefore) },
-          extra: { kind: "subscription" },
-        }
-      : null,
-    expiry > Date.now()
-      ? {
-          id: idFromString(`subscription-expired|${expiry}`),
-          title: fa ? "اشتراک روتینو پایان یافت" : "Routino subscription expired",
-          body: fa
-            ? "اشتراکت پایان یافت؛ اطلاعات روی دستگاهت باقی می‌ماند."
-            : "Your subscription ended; your on-device data remains safe.",
-          schedule: { at: new Date(expiry) },
-          extra: { kind: "subscription" },
-        }
-      : null,
-  ].filter((item): item is NonNullable<typeof item> => item !== null);
-  if (notifications.length) await LocalNotifications.schedule({ notifications });
-}
+  const permission = await LocalNotifications.checkPermissions();
+  if (permission.display !== "granted") {
+    await cancelOwned();
+    return { status: "permission-denied", scheduled: 0 };
+  }
 
-/**
- * برای یادآوری‌های یک‌بارمصرف تسک‌ها (task.reminderAt) — این‌ها یک زمان دقیق
- * دارند نه یک ساعت تکرارشونده، پس جدا زمان‌بندی می‌شوند.
- */
-export async function scheduleTaskReminder(
-  taskId: string,
-  title: string,
-  reminderAtIso: string,
-): Promise<void> {
-  if (!Capacitor.isNativePlatform()) return;
-  const at = new Date(reminderAtIso);
-  if (at.getTime() <= Date.now()) return;
-  const { LocalNotifications } = await import("@capacitor/local-notifications");
-  await LocalNotifications.schedule({
-    notifications: [
-      {
-        id: idFromString(`task|${taskId}`),
-        title: "Task reminder",
-        body: title,
-        schedule: { at },
-        extra: { kind: "task" },
-      },
-    ],
+  const unrelatedCount = pending.notifications.length - owned.length;
+  const available = Math.max(
+    0,
+    Math.min(options.maxPending ?? NATIVE_CAPACITY, NATIVE_CAPACITY - unrelatedCount),
+  );
+  const plan = planNativeReminders(db, {
+    ...options,
+    now: options.now ?? new Date(),
+    maxPending: available,
   });
+
+  // Schedule/replace desired ids first. Only after that succeeds remove ids no
+  // longer present in the plan, so a transient scheduling failure cannot wipe
+  // every previously working reminder.
+  if (plan.length) await LocalNotifications.schedule({ notifications: plan });
+  const desiredIds = new Set(plan.map(({ id }) => id));
+  const obsolete = owned.filter(({ id }) => !desiredIds.has(id));
+  if (obsolete.length) {
+    await LocalNotifications.cancel({
+      notifications: obsolete.map(({ id }) => ({ id })),
+    });
+  }
+  return { status: "scheduled", scheduled: plan.length };
 }
 
-export async function cancelTaskReminder(taskId: string): Promise<void> {
-  if (!Capacitor.isNativePlatform()) return;
-  const { LocalNotifications } = await import("@capacitor/local-notifications");
-  await LocalNotifications.cancel({ notifications: [{ id: idFromString(`task|${taskId}`) }] });
+/**
+ * Replaces the complete Routino-owned pending set from current DB state.
+ * Calls are serialized so a slower stale reconciliation cannot overwrite a
+ * newer one. Unrelated pending notifications are never cancelled.
+ */
+export function reconcileNativeReminders(
+  db: Db,
+  options: NativeReminderOptions,
+): Promise<NativeReconcileResult> {
+  const result = reconcileQueue.then(() => runReconcile(db, options));
+  reconcileQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
 }

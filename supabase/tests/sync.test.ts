@@ -30,8 +30,8 @@ const habit = (id: string, name: string, updatedAt = 1000) => ({
 });
 
 describe("edge sync", () => {
-  it("returns 410 for personal sync in the launch configuration", async () => {
-    const localOnly = await makeHarness({ LEGACY_PERSONAL_SYNC_ENABLED: "false" });
+  it("keeps authenticated personal sync available", async () => {
+    const localOnly = await makeHarness();
     try {
       const { access } = await signIn(localOnly, "09120001122");
       const headers = auth(access);
@@ -40,9 +40,10 @@ describe("edge sync", () => {
         body: { records: [] },
       });
       const pull = await localOnly.call("GET", "/v1/sync/pull?cursor=0", { headers });
-      expect(push.status).toBe(410);
-      expect(pull.status).toBe(410);
-      expect((await push.json()).error).toBe("sync_disabled");
+      expect(push.status).toBe(200);
+      expect(pull.status).toBe(200);
+      expect(await push.json()).toMatchObject({ applied: 0 });
+      expect(await pull.json()).toMatchObject({ records: [], reset: false });
     } finally {
       await localOnly.close();
     }

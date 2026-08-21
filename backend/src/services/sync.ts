@@ -285,7 +285,8 @@ export async function pullRecords(
  * seq is what makes the deletion safe: any device still below that line is told
  * to full-resync rather than being allowed to miss a delete and resurrect it.
  *
- * Not wired to a schedule yet; call it from a cron job once real data exists.
+ * Supabase schedules the equivalent single-statement purge in generated
+ * `supabase/setup.sql`; this function remains the directly testable service form.
  */
 export async function purgeTombstones(
   db: Database,

@@ -7,10 +7,19 @@
  * week" side while the other side was made of finished days, so it announced a
  * decline every morning.
  */
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildChartBars } from "./chart";
 import { addDays, weekStartOf, type Calendar } from "./dates";
-import { avgOf, cappedPercent, dayScore, monthProgress, streak, successRate, weekComparison } from "./logic";
+import {
+  avgOf,
+  cappedPercent,
+  dayScore,
+  monthProgress,
+  streak,
+  successRate,
+  weekComparison,
+  weeklyReview,
+} from "./logic";
 import { DEFAULT_CATEGORIES } from "./presets";
 import { defaultDb, logKey, type Db, type Habit, type HabitLog } from "./store";
 
@@ -18,6 +27,13 @@ import { defaultDb, logKey, type Db, type Habit, type HabitLog } from "./store";
  * accident and the Jalali (Sat) and Gregorian (Sun) week starts both fall
  * mid-history. */
 const TODAY = "2026-07-15";
+
+beforeAll(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date(`${TODAY}T12:00:00`));
+});
+
+afterAll(() => vi.useRealTimers());
 
 const habit = (over: Partial<Habit> = {}): Habit => ({
   id: "h1",
@@ -126,7 +142,8 @@ describe("weekComparison", () => {
     const lastWeek = elapsed.map((d) => addDays(d, -7));
     // Two habits: last week both done, this week only one → 100% vs 50%.
     const db = dbWith([habit({ id: "a" }), habit({ id: "b" })], lastWeek);
-    for (const dk of elapsed) db.logs[logKey("a", dk)] = { habitId: "a", dateKey: dk, value: 1, done: true };
+    for (const dk of elapsed)
+      db.logs[logKey("a", dk)] = { habitId: "a", dateKey: dk, value: 1, done: true };
 
     const wc = weekComparison(db, cal, TODAY);
     expect(wc.prev).toBe(100);
@@ -149,6 +166,71 @@ describe("weekComparison", () => {
     expect(wc.prev).toBe(0); // the 7 before those
     expect(wc.comparable).toBe(true);
   });
+});
+
+describe("weeklyReview", () => {
+  it("summarizes the same completed week span without counting unfinished today", () => {
+    const a = habit({ id: "a", name: "Read" });
+    const b = habit({ id: "b", name: "Walk" });
+    const current = ["2026-07-12", "2026-07-13", "2026-07-14"];
+    const previous = ["2026-07-05", "2026-07-06", "2026-07-07"];
+    const db = dbWith([a, b], []);
+
+    for (const dk of [...current, ...previous]) {
+      db.logs[logKey("a", dk)] = { habitId: "a", dateKey: dk, value: 1, done: true };
+    }
+    for (const dk of [...current.slice(0, 2), ...previous]) {
+      db.logs[logKey("b", dk)] = { habitId: "b", dateKey: dk, value: 1, done: true };
+    }
+
+    const review = weeklyReview(db, "gregorian", TODAY);
+    expect(review).toMatchObject({
+      completionPercent: 83,
+      previousPercent: 100,
+      changePoints: -17,
+      completedCheckIns: 5,
+      activeDays: 3,
+      days: 3,
+      strongestDay: { dateKey: "2026-07-12", percent: 100 },
+      weakestDay: { dateKey: "2026-07-14", percent: 50 },
+      mostConsistentHabit: { id: "a", completed: 3, opportunities: 3, rate: 100 },
+      mostMissedHabit: { id: "b", missed: 1, opportunities: 3, rate: 67 },
+      consistencySignal: { id: "a", streak: 3 },
+    });
+  });
+
+  it("returns no review when fewer than two finished days had due habits", () => {
+    const sundayOnly = habit({ schedule: { kind: "weekdays", weekdays: [0] } });
+    const db = dbWith([sundayOnly], ["2026-07-12"]);
+    expect(weeklyReview(db, "gregorian", TODAY)).toBeNull();
+  });
+
+  it("does not invent a comparison or habit insight from insufficient history", () => {
+    const createdThisWeek = habit({ createdAt: new Date("2026-07-12T00:00:00").getTime() });
+    const db = dbWith([createdThisWeek], ["2026-07-12", "2026-07-13", "2026-07-14"]);
+    const review = weeklyReview(db, "gregorian", TODAY);
+
+    expect(review?.completionPercent).toBe(100);
+    expect(review?.previousPercent).toBeNull();
+    expect(review?.changePoints).toBeNull();
+    expect(review?.mostConsistentHabit).toMatchObject({ name: "Read", opportunities: 3 });
+    expect(review?.mostMissedHabit).toBeNull();
+  });
+
+  for (const cal of ["jalali", "gregorian"] as const) {
+    it(`keeps ${cal} week scope identical to weekComparison`, () => {
+      const db = dbWith([habit()], daysBefore(TODAY, 14));
+      const review = weeklyReview(db, cal, TODAY);
+      const comparison = weekComparison(db, cal, TODAY);
+      expect(review).toMatchObject({
+        completionPercent: comparison.cur,
+        previousPercent: comparison.prev,
+        changePoints: comparison.delta,
+        days: comparison.days,
+        scope: comparison.scope,
+      });
+    });
+  }
 });
 
 describe("streak / successRate / monthProgress", () => {

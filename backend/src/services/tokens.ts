@@ -10,18 +10,17 @@
  * is issued.
  */
 import { createHash, randomBytes } from "node:crypto";
-import { and, asc, desc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, eq, isNull, ne, sql } from "drizzle-orm";
 import { SignJWT, jwtVerify } from "jose";
 import type { Database } from "../db/client.js";
-import { deviceSecurityEvents, devices, users } from "../db/schema.js";
+import { devices, users } from "../db/schema.js";
 import type { Env } from "../env.js";
-import { locked, unauthorized } from "../lib/http-errors.js";
+import { unauthorized } from "../lib/http-errors.js";
 
 export interface AccessClaims {
   sub: string; // userId
   did: string; // deviceId — lets us trace a token back to a device
 }
-
 const secretOf = (env: Env) => new TextEncoder().encode(env.JWT_SECRET);
 
 export async function signAccessToken(env: Env, claims: AccessClaims, now: Date): Promise<string> {
@@ -63,10 +62,6 @@ export interface DeviceDescriptor {
   os?: string;
 }
 
-export const DEVICE_SWITCH_WINDOW_MS = 15 * 86_400_000;
-export const MAX_SWITCHES_PER_WINDOW = 3;
-export const SUPPORT_ID = "routino_support";
-
 export async function issueForDevice(
   db: Database,
   env: Env,
@@ -76,77 +71,18 @@ export async function issueForDevice(
 ): Promise<IssuedTokens> {
   const installationKeyHash = hashToken(descriptor.installationKey);
   const outcome = await db.transaction(async (tx) => {
-    // Serialise all device decisions for this account. Without this lock, two
-    // simultaneous logins can both observe a free slot and both enter it.
+    // Serialise installation-key decisions for this account. The database's
+    // unique key is the final authority; the lock makes concurrent sign-ins of
+    // the same installation converge on one session row predictably.
     await tx.execute(sql`select id from users where id = ${userId} for update`);
     const [user] = await tx.select().from(users).where(eq(users.id, userId)).limit(1);
     if (!user) throw unauthorized("unknown_user", "User no longer exists");
-    if (user.securityLockedAt) return { locked: true as const };
 
     const [existing] = await tx
       .select()
       .from(devices)
       .where(and(eq(devices.userId, userId), eq(devices.installationKeyHash, installationKeyHash)))
       .limit(1);
-
-    const active = await tx
-      .select()
-      .from(devices)
-      .where(and(eq(devices.userId, userId), isNull(devices.revokedAt)))
-      .orderBy(sql`${devices.lastSeenAt} asc nulls first`, asc(devices.createdAt));
-
-    const alreadyActive = existing && !existing.revokedAt;
-    let replacedDeviceId: string | null = null;
-    if (!alreadyActive && active.length >= user.maxActiveDevices) {
-      const rollingStart = new Date(now.getTime() - DEVICE_SWITCH_WINDOW_MS);
-      const since =
-        user.deviceSwitchResetAt && user.deviceSwitchResetAt > rollingStart
-          ? user.deviceSwitchResetAt
-          : rollingStart;
-      const recent = await tx
-        .select({ id: deviceSecurityEvents.id })
-        .from(deviceSecurityEvents)
-        .where(
-          and(
-            eq(deviceSecurityEvents.userId, userId),
-            eq(deviceSecurityEvents.kind, "replacement"),
-            gt(deviceSecurityEvents.createdAt, since),
-          ),
-        )
-        .limit(MAX_SWITCHES_PER_WINDOW);
-
-      if (recent.length >= MAX_SWITCHES_PER_WINDOW) {
-        await tx
-          .update(users)
-          .set({
-            securityLockedAt: now,
-            securityLockReason: "device_switch_limit",
-          })
-          .where(eq(users.id, userId));
-        await tx
-          .update(devices)
-          .set({
-            revokedAt: now,
-            revocationReason: "security_lock",
-          })
-          .where(and(eq(devices.userId, userId), isNull(devices.revokedAt)));
-        await tx.insert(deviceSecurityEvents).values({
-          userId,
-          kind: "security_lock",
-          createdAt: now,
-        });
-        return { locked: true as const };
-      }
-
-      const stale = active[0];
-      if (stale) {
-        replacedDeviceId = stale.id;
-        await tx
-          .update(devices)
-          .set({ revokedAt: now, revocationReason: "replaced" })
-          .where(eq(devices.id, stale.id));
-      }
-    }
 
     const refresh = newRefreshToken();
     const patch = {
@@ -167,25 +103,9 @@ export async function issueForDevice(
           .returning();
     if (!device) throw new Error("failed to create device");
 
-    if (replacedDeviceId) {
-      await tx.insert(deviceSecurityEvents).values({
-        userId,
-        deviceId: device.id,
-        replacedDeviceId,
-        kind: "replacement",
-        createdAt: now,
-      });
-    }
-    return { locked: false as const, refresh, deviceId: device.id };
+    return { refresh, deviceId: device.id };
   });
 
-  if (outcome.locked) {
-    throw locked(
-      "device_security_locked",
-      "For account security, sign-in is temporarily locked. Contact support.",
-      { support: SUPPORT_ID },
-    );
-  }
   const access = await signAccessToken(env, { sub: userId, did: outcome.deviceId }, now);
   return { access, refresh: outcome.refresh, deviceId: outcome.deviceId };
 }
@@ -268,66 +188,4 @@ export async function revokeOtherDevices(
     .where(
       and(eq(devices.userId, userId), ne(devices.id, keepDeviceId), isNull(devices.revokedAt)),
     );
-}
-
-/** How many devices one account may keep signed in at once.
- *
- * Two, not one: the person who PAID typically has a phone and a laptop browser,
- * and at one they would evict themselves daily. A family of five finds two just
- * as unusable as one, so the extra slot costs nothing in sharing pressure. */
-export const MAX_ACTIVE_DEVICES = 1;
-
-/**
- * Keeps the `max` most recently used devices signed in and revokes the rest.
- *
- * Runs on SIGN-IN ONLY, never in the request path — one indexed select plus at
- * most one update, against a row that is created about once per
- * REFRESH_TTL_DAYS. Nothing else needs a new check: `rotateRefresh` already
- * refuses a revoked row, so an evicted device dies at its next refresh without
- * costing every other request a lookup.
- *
- * Evicts by `last_seen_at`, not `created_at`. The oldest-CREATED device is
- * routinely the owner's daily phone — evicting that instead of the tablet they
- * last opened in March is the one outcome that would make this feel broken to
- * the person paying for it.
- *
- * Returns how many devices were evicted.
- */
-export async function enforceDeviceLimit(
-  db: Database,
-  userId: string,
-  keepDeviceId: string,
-  now: Date,
-  max: number = MAX_ACTIVE_DEVICES,
-): Promise<number> {
-  // Same reasoning as revokeOtherDevices: Drizzle compiles `ne(col, undefined)`
-  // to `col <> NULL`, which is UNKNOWN for every row — a falsy id would evict
-  // NOTHING, silently, with no error and no log. Fail loudly instead.
-  if (!keepDeviceId) throw new Error("enforceDeviceLimit requires a device id");
-
-  const others = await db
-    .select()
-    .from(devices)
-    .where(and(eq(devices.userId, userId), ne(devices.id, keepDeviceId), isNull(devices.revokedAt)))
-    // NULLS LAST is spelled out because Postgres orders nulls FIRST under DESC,
-    // which would rank a never-seen device above the one the user lives in and
-    // evict the wrong device. `issueForDevice` always stamps `lastSeenAt`, so
-    // this is belt-and-braces for rows written before it did.
-    .orderBy(sql`${devices.lastSeenAt} desc nulls last`, desc(devices.createdAt));
-
-  // The device that just signed in always survives and claims one of the slots,
-  // so only `max - 1` of the others may stay.
-  const doomed = others.slice(Math.max(max - 1, 0));
-  if (doomed.length === 0) return 0;
-
-  await db
-    .update(devices)
-    .set({ revokedAt: now })
-    .where(
-      inArray(
-        devices.id,
-        doomed.map((d) => d.id),
-      ),
-    );
-  return doomed.length;
 }

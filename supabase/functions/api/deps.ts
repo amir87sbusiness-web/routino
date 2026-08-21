@@ -10,7 +10,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { devices, users } from "./shared/db/schema.ts";
 import type { Database } from "./shared/db/client.ts";
 import type { Env } from "./shared/env.ts";
-import { forbidden, locked, unauthorized } from "./shared/lib/http-errors.ts";
+import { forbidden, unauthorized } from "./shared/lib/http-errors.ts";
 import type { PspRouter } from "./shared/providers/psp/index.ts";
 import type { SmsProvider } from "./shared/providers/sms/index.ts";
 import { verifyAccessToken } from "./shared/services/tokens.ts";
@@ -95,13 +95,6 @@ export function makeAuthenticate(deps: Deps) {
 
     if (!row) throw unauthorized("unknown_user", "User no longer exists");
     if (row.blocked) throw forbidden("blocked", "Account is blocked");
-    if (row.securityLockedAt) {
-      throw locked(
-        "device_security_locked",
-        "For account security, sign-in is temporarily locked. Contact support.",
-        { support: "routino_support" },
-      );
-    }
     const [device] = await deps.db
       .select()
       .from(devices)

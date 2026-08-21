@@ -148,7 +148,9 @@ function pick() {
   const got = SCENES.filter((s) => want.includes(s.name));
   const bad = want.filter((w) => !SCENES.some((s) => s.name === w));
   if (bad.length)
-    throw new Error(`صحنه‌ای به اسم ${bad.join("، ")} نداریم. موجود: ${SCENES.map((s) => s.name).join("، ")}`);
+    throw new Error(
+      `صحنه‌ای به اسم ${bad.join("، ")} نداریم. موجود: ${SCENES.map((s) => s.name).join("، ")}`,
+    );
   return got;
 }
 
@@ -179,7 +181,9 @@ async function encode(frames, file, { width, height }) {
     );
     writeFileSync(file + ".raw", strip);
   }
-  await sharp(strip, { raw: { width, height: height * frames.length, channels: 3, pageHeight: height } })
+  await sharp(strip, {
+    raw: { width, height: height * frames.length, channels: 3, pageHeight: height },
+  })
     .webp({ quality: 70, effort: 5, loop: 0, delay: FRAME_MS })
     .toFile(file);
 
@@ -228,7 +232,11 @@ async function main() {
     const shoot = async () => {
       const png = await page.screenshot({ type: "png" });
       frames.push(
-        await sharp(png).resize(CLIP.width, CLIP.height, { fit: "fill" }).removeAlpha().raw().toBuffer(),
+        await sharp(png)
+          .resize(CLIP.width, CLIP.height, { fit: "fill" })
+          .removeAlpha()
+          .raw()
+          .toBuffer(),
       );
     };
     /** به‌اندازه‌ی ms فیلم بگیر بدون اینکه کاری بکنی. */
@@ -284,8 +292,12 @@ async function main() {
   await browser.close();
   const kb = (n) => (n / 1024).toFixed(1) + "KB";
   console.log("[film-landing] " + OUT);
-  for (const [f, n, fr] of written) console.log("  " + f.padEnd(28) + kb(n).padStart(9) + "  " + fr);
+  for (const [f, n, fr] of written)
+    console.log("  " + f.padEnd(28) + kb(n).padStart(9) + "  " + fr);
   console.log("  total " + kb(written.reduce((a, [, n]) => a + n, 0)));
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

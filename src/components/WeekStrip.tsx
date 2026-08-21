@@ -97,7 +97,10 @@ export function WeekStrip({
         onPointerCancel={endDrag}
         onPointerLeave={() => startX.current !== null && endDrag()}
         className="grid flex-1 touch-pan-y grid-cols-7 gap-1 select-none"
-        style={{ transform: `translateX(${dragX * 0.4}px)`, transition: startX.current ? "none" : "transform 0.2s" }}
+        style={{
+          transform: `translateX(${dragX * 0.4}px)`,
+          transition: startX.current ? "none" : "transform 0.2s",
+        }}
       >
         {days.map((dk) => {
           const active = dk === selected;
@@ -126,7 +129,14 @@ export function WeekStrip({
 
               <span className="relative flex h-12 w-12 items-center justify-center">
                 <svg viewBox="0 0 48 48" className="absolute inset-0 h-full w-full -rotate-90">
-                  <circle cx="24" cy="24" r={RING_R} fill="none" stroke="var(--secondary)" strokeWidth="3" />
+                  <circle
+                    cx="24"
+                    cy="24"
+                    r={RING_R}
+                    fill="none"
+                    stroke="var(--secondary)"
+                    strokeWidth="3"
+                  />
                   {pct !== null && ringPct > 0 && (
                     <circle
                       cx="24"
@@ -157,7 +167,9 @@ export function WeekStrip({
                 {count > 0 && (
                   <span
                     className={`absolute -top-0.5 -end-0.5 z-20 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[8px] font-bold ${
-                      active ? "bg-primary-foreground text-primary" : "bg-primary text-primary-foreground"
+                      active
+                        ? "bg-primary-foreground text-primary"
+                        : "bg-primary text-primary-foreground"
                     }`}
                   >
                     {faNum(count, lang)}
@@ -165,7 +177,9 @@ export function WeekStrip({
                 )}
               </span>
               {subLabel && (
-                <span className={`leading-none ${active ? "font-bold text-primary" : "text-muted-foreground"}`}>
+                <span
+                  className={`leading-none ${active ? "font-bold text-primary" : "text-muted-foreground"}`}
+                >
                   {subLabel}
                 </span>
               )}

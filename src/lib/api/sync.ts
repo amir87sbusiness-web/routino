@@ -30,11 +30,15 @@ export interface PullResponse {
   entitlement?: ServerEntitlement;
 }
 
-export function pushRecords(records: SyncRecord[]): Promise<PushResponse> {
-  return authedRequest("/sync/push", { method: "POST", body: { records } });
+export function pushRecords(records: SyncRecord[], expectedUserId?: string): Promise<PushResponse> {
+  return authedRequest("/sync/push", { method: "POST", body: { records }, expectedUserId });
 }
 
-export function pullRecords(cursor: number, limit?: number): Promise<PullResponse> {
+export function pullRecords(
+  cursor: number,
+  limit?: number,
+  expectedUserId?: string,
+): Promise<PullResponse> {
   const q = limit ? `?cursor=${cursor}&limit=${limit}` : `?cursor=${cursor}`;
-  return authedRequest(`/sync/pull${q}`);
+  return authedRequest(`/sync/pull${q}`, { expectedUserId });
 }

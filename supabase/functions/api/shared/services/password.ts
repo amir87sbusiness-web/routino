@@ -163,7 +163,9 @@ export function isReservedUsername(normalized: string): boolean {
   if (RESERVED_USERNAMES.has(folded)) return true;
   // `routino_support`, `admin-team`, `official.routino` — a reserved word as a
   // whole segment reads as staff regardless of what surrounds it.
-  return folded.length <= 32 && [...RESERVED_USERNAMES].some((r) => r.length >= 4 && folded.includes(r));
+  return (
+    folded.length <= 32 && [...RESERVED_USERNAMES].some((r) => r.length >= 4 && folded.includes(r))
+  );
 }
 
 /**

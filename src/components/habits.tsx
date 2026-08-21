@@ -1,7 +1,17 @@
 /** Habit form modal, daily log row, milestone celebration logic. */
 import { Check, Minus, Pencil, Plus, SmilePlus, X } from "lucide-react";
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Button, CatIcon, Chip, DurationPicker, formatDuration, Input, Modal, Progress, TimePicker24 } from "@/components/ui";
+import {
+  Button,
+  CatIcon,
+  Chip,
+  DurationPicker,
+  formatDuration,
+  Input,
+  Modal,
+  Progress,
+  TimePicker24,
+} from "@/components/ui";
 import {
   addDays,
   dayOfMonth,
@@ -16,9 +26,28 @@ import {
   type Calendar,
   type Lang,
 } from "@/lib/dates";
-import { cappedPercent, getLog, isCompleted, isDueOn, monthProgress, rawPercent } from "@/lib/logic";
+import {
+  cappedPercent,
+  getLog,
+  isCompleted,
+  isDueOn,
+  monthProgress,
+  rawPercent,
+} from "@/lib/logic";
 import { MOOD_EMOJIS } from "@/lib/presets";
-import { logKey, uid, type Category, type Db, type Habit, type ScheduleKind, type UnitKind } from "@/lib/store";
+import {
+  shouldTriggerCompletionFeedback,
+  triggerCompletionFeedback,
+} from "@/lib/completion-feedback";
+import {
+  logKey,
+  uid,
+  type Category,
+  type Db,
+  type Habit,
+  type ScheduleKind,
+  type UnitKind,
+} from "@/lib/store";
 
 /* ---------------- celebration ---------------- */
 
@@ -35,7 +64,10 @@ export interface Celebration {
  * `applyLog` inside the `update()` updater, where it always sees fresh state.
  * A value cannot be smuggled out of an updater: React invokes it during render,
  * not at call time. */
-export function useCelebration(db: Db | null | undefined): { celebration: Celebration | null; clear: () => void } {
+export function useCelebration(db: Db | null | undefined): {
+  celebration: Celebration | null;
+  clear: () => void;
+} {
   const [celebration, setCelebration] = useState<Celebration | null>(null);
   const seen = useRef<Set<string> | null>(null);
   const celebrated = db?.meta.celebrated;
@@ -53,7 +85,8 @@ export function useCelebration(db: Db | null | undefined): { celebration: Celebr
       seen.current.add(key);
       const [habitId, , milestone] = key.split("|");
       const habit = habits.find((h) => h.id === habitId);
-      if (habit) setCelebration({ habitName: habit.name, milestone: Number(milestone) as 70 | 100 });
+      if (habit)
+        setCelebration({ habitName: habit.name, milestone: Number(milestone) as 70 | 100 });
     }
   }, [celebrated, habits]);
 
@@ -115,7 +148,8 @@ export function CelebrationModal({
               : t("عالیه! ۷۰٪ راه رو رفتی!", "Awesome! You're 70% there!")}
           </h3>
           <p className="text-sm text-muted-foreground">
-            {celebration.habitName}{" · "}
+            {celebration.habitName}
+            {" · "}
             {celebration.milestone === 100
               ? t("یه نشان جدید گرفتی 🏅", "You earned a new badge 🏅")
               : t(`${faNum(70, lang)}٪ از هدف ماهانه`, `${faNum(70, lang)}% of the monthly goal`)}
@@ -144,7 +178,7 @@ export function HabitRow({
   lang: Lang;
   t: (fa: string, en: string) => string;
   dk: string;
-  onUpdate: (fn: (db: Db) => Db) => void;
+  onUpdate: (fn: (db: Db) => Db) => boolean;
 }) {
   const [detailOpen, setDetailOpen] = useState(false);
   const [noteVal, setNoteVal] = useState("");
@@ -162,8 +196,23 @@ export function HabitRow({
   const isFuture = dk > todayKey();
 
   const commit = (patch: Partial<{ value: number; done: boolean; note: string; mood: string }>) => {
-    if (isFuture) return;
-    onUpdate((d) => applyLog(d, habit, cal, patch, dk).db);
+    if (isFuture) return false;
+    const afterCompleted =
+      habit.type === "binary"
+        ? (patch.done ?? done)
+        : (patch.done ?? (patch.value ?? log?.value ?? 0) >= habit.target);
+    const mutationAccepted = onUpdate((d) => applyLog(d, habit, cal, patch, dk).db);
+    if (
+      shouldTriggerCompletionFeedback({
+        source: "user",
+        mutationAccepted,
+        beforeCompleted: done,
+        afterCompleted,
+      })
+    ) {
+      triggerCompletionFeedback(db.settings);
+    }
+    return mutationAccepted;
   };
 
   const toggleDone = (next: boolean) => {
@@ -211,123 +260,131 @@ export function HabitRow({
   return (
     <>
       <div className="relative overflow-hidden rounded-xl">
-      {/* swipe background hints */}
-      <div className="absolute inset-0 flex items-center justify-between px-5">
-        <span
-          className="flex items-center gap-1 text-xs font-bold text-success transition-opacity"
-          style={{ opacity: dragX > 20 ? Math.min(1, dragX / SWIPE_THRESHOLD) : 0 }}
-        >
-          <Check className="h-4 w-4" strokeWidth={3} /> {t("انجام شد", "Done")}
-        </span>
-        <span
-          className="flex items-center gap-1 text-xs font-bold text-destructive transition-opacity"
-          style={{ opacity: -dragX > 20 ? Math.min(1, -dragX / SWIPE_THRESHOLD) : 0 }}
-        >
-          {t("لغو", "Undo")} <X className="h-4 w-4" strokeWidth={3} />
-        </span>
-      </div>
-
-      <div
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        onPointerLeave={() => dragging && endDrag()}
-        className={`card-surface relative touch-pan-y p-3.5 ${dragging ? "" : "transition-all duration-300"} ${rowFlash ? "animate-row-flash" : ""}`}
-        style={{
-          backgroundColor: done ? `${tint}22` : undefined,
-          borderColor: done ? `${tint}55` : undefined,
-          transform: `translateX(${dragX}px)`,
-        }}
-      >
-      <div className="flex items-center gap-3">
-        {/* complete toggle */}
-        <button
-          onClick={() => toggleDone(!done)}
-          disabled={isFuture}
-          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition-all active:scale-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 ${
-            done ? "border-transparent text-white" : "border-border text-transparent hover:border-primary"
-          }`}
-          style={done ? { backgroundColor: tint } : undefined}
-        >
-          <Check className={`h-5 w-5 ${justCompleted ? "animate-check-pop" : ""}`} strokeWidth={3} />
-        </button>
-
-        <button className="min-w-0 flex-1 text-start" onClick={openDetail}>
-          <div className="flex items-center gap-1.5">
-            <span
-              className="flex h-4.5 w-4.5 items-center justify-center rounded-md text-white"
-              style={{ backgroundColor: tint }}
-            >
-              <CatIcon icon={cat?.icon ?? "star"} className="h-2.5 w-2.5" />
-            </span>
-            <p className="truncate text-sm font-bold text-foreground">
-              {habit.name}
-            </p>
-          </div>
-          <WeekChecks db={db} habit={habit} cal={cal} refDk={dk} tint={tint} />
-          <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground">
-            {habit.type === "quantity" && (
-              <span>
-                {habit.unitKind === "time"
-                  ? `${formatDuration(log?.value ?? 0, lang)} / ${formatDuration(habit.target, lang)}`
-                  : `${faNum(log?.value ?? 0, lang)} / ${faNum(habit.target, lang)} ${habit.unit ?? ""}`}
-              </span>
-            )}
-            {log?.mood && <span>{log.mood}</span>}
-            {log?.note && <span className="truncate">📝 {log.note}</span>}
-          </div>
-        </button>
-
-        {habit.type === "quantity" ? (
-          <div className="flex items-center gap-1">
-            <button
-              disabled={isFuture}
-              onClick={() => {
-                const step = habit.unitKind === "time" ? 1 : 1;
-                const v = Math.max(0, (log?.value ?? 0) - step);
-                commit({ value: v, done: v >= habit.target });
-              }}
-              className="rounded-full border border-border p-1.5 text-muted-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Minus className="h-3.5 w-3.5" />
-            </button>
-            <button
-              disabled={isFuture}
-              onClick={() => {
-                const step = habit.unitKind === "time" ? 1 : 1;
-                const v = (log?.value ?? 0) + step;
-                commit({ value: v, done: v >= habit.target });
-              }}
-              className="rounded-full border border-border p-1.5 text-muted-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </div>
-        ) : (
-          <button onClick={openDetail} className="rounded-full p-2 text-muted-foreground hover:bg-secondary">
-            <SmilePlus className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-
-      {habit.type === "quantity" && (
-        <div className="mt-2.5 flex items-center gap-2">
-          <Progress value={cappedPercent(habit, log)} color={cat?.color} className="flex-1" />
-          <span className={`text-[10px] font-bold ${raw > 100 ? "text-success" : "text-muted-foreground"}`}>
-            {faNum(raw, lang)}٪
+        {/* swipe background hints */}
+        <div className="absolute inset-0 flex items-center justify-between px-5">
+          <span
+            className="flex items-center gap-1 text-xs font-bold text-success transition-opacity"
+            style={{ opacity: dragX > 20 ? Math.min(1, dragX / SWIPE_THRESHOLD) : 0 }}
+          >
+            <Check className="h-4 w-4" strokeWidth={3} /> {t("انجام شد", "Done")}
+          </span>
+          <span
+            className="flex items-center gap-1 text-xs font-bold text-destructive transition-opacity"
+            style={{ opacity: -dragX > 20 ? Math.min(1, -dragX / SWIPE_THRESHOLD) : 0 }}
+          >
+            {t("لغو", "Undo")} <X className="h-4 w-4" strokeWidth={3} />
           </span>
         </div>
-      )}
-      {raw > 100 && (
-        <p className="mt-1 text-[10px] font-medium text-success">
-          {t(
-            `🔥 ${faNum(raw, lang)}٪، یعنی ${faNum(raw - 100, lang)}٪ بیشتر از هدف!`,
-            `🔥 ${raw}%, that is ${raw - 100}% more than your goal!`,
+
+        <div
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={endDrag}
+          onPointerCancel={endDrag}
+          onPointerLeave={() => dragging && endDrag()}
+          className={`card-surface relative touch-pan-y p-3.5 ${dragging ? "" : "transition-all duration-300"} ${rowFlash ? "animate-row-flash" : ""}`}
+          style={{
+            backgroundColor: done ? `${tint}22` : undefined,
+            borderColor: done ? `${tint}55` : undefined,
+            transform: `translateX(${dragX}px)`,
+          }}
+        >
+          <div className="flex items-center gap-3">
+            {/* complete toggle */}
+            <button
+              onClick={() => toggleDone(!done)}
+              disabled={isFuture}
+              className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition-all active:scale-90 disabled:cursor-not-allowed disabled:opacity-40 disabled:active:scale-100 ${
+                done
+                  ? "border-transparent text-white"
+                  : "border-border text-transparent hover:border-primary"
+              }`}
+              style={done ? { backgroundColor: tint } : undefined}
+            >
+              <Check
+                className={`h-5 w-5 ${justCompleted ? "animate-check-pop" : ""}`}
+                strokeWidth={3}
+              />
+            </button>
+
+            <button className="min-w-0 flex-1 text-start" onClick={openDetail}>
+              <div className="flex items-center gap-1.5">
+                <span
+                  className="flex h-4.5 w-4.5 items-center justify-center rounded-md text-white"
+                  style={{ backgroundColor: tint }}
+                >
+                  <CatIcon icon={cat?.icon ?? "star"} className="h-2.5 w-2.5" />
+                </span>
+                <p className="truncate text-sm font-bold text-foreground">{habit.name}</p>
+              </div>
+              <WeekChecks db={db} habit={habit} cal={cal} refDk={dk} tint={tint} />
+              <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground">
+                {habit.type === "quantity" && (
+                  <span>
+                    {habit.unitKind === "time"
+                      ? `${formatDuration(log?.value ?? 0, lang)} / ${formatDuration(habit.target, lang)}`
+                      : `${faNum(log?.value ?? 0, lang)} / ${faNum(habit.target, lang)} ${habit.unit ?? ""}`}
+                  </span>
+                )}
+                {log?.mood && <span>{log.mood}</span>}
+                {log?.note && <span className="truncate">📝 {log.note}</span>}
+              </div>
+            </button>
+
+            {habit.type === "quantity" ? (
+              <div className="flex items-center gap-1">
+                <button
+                  disabled={isFuture}
+                  onClick={() => {
+                    const step = habit.unitKind === "time" ? 1 : 1;
+                    const v = Math.max(0, (log?.value ?? 0) - step);
+                    commit({ value: v, done: v >= habit.target });
+                  }}
+                  className="rounded-full border border-border p-1.5 text-muted-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Minus className="h-3.5 w-3.5" />
+                </button>
+                <button
+                  disabled={isFuture}
+                  onClick={() => {
+                    const step = habit.unitKind === "time" ? 1 : 1;
+                    const v = (log?.value ?? 0) + step;
+                    commit({ value: v, done: v >= habit.target });
+                  }}
+                  className="rounded-full border border-border p-1.5 text-muted-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={openDetail}
+                className="rounded-full p-2 text-muted-foreground hover:bg-secondary"
+              >
+                <SmilePlus className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+
+          {habit.type === "quantity" && (
+            <div className="mt-2.5 flex items-center gap-2">
+              <Progress value={cappedPercent(habit, log)} color={cat?.color} className="flex-1" />
+              <span
+                className={`text-[10px] font-bold ${raw > 100 ? "text-success" : "text-muted-foreground"}`}
+              >
+                {faNum(raw, lang)}٪
+              </span>
+            </div>
           )}
-        </p>
-      )}
-      </div>
+          {raw > 100 && (
+            <p className="mt-1 text-[10px] font-medium text-success">
+              {t(
+                `🔥 ${faNum(raw, lang)}٪، یعنی ${faNum(raw - 100, lang)}٪ بیشتر از هدف!`,
+                `🔥 ${raw}%, that is ${raw - 100}% more than your goal!`,
+              )}
+            </p>
+          )}
+        </div>
       </div>
 
       {/* detail modal: actual amount, note, mood */}
@@ -342,8 +399,14 @@ export function HabitRow({
             <div className={isFuture ? "pointer-events-none opacity-50" : undefined}>
               <p className="mb-1.5 text-xs font-medium text-muted-foreground">
                 {habit.unitKind === "time"
-                  ? t(`مقدار واقعی انجام‌شده (هدف: ${formatDuration(habit.target, lang)})`, `Actual amount (goal: ${formatDuration(habit.target, lang)})`)
-                  : t(`مقدار واقعی انجام‌شده (هدف: ${faNum(habit.target, lang)} ${habit.unit ?? ""})`, `Actual amount (goal: ${habit.target} ${habit.unit ?? ""})`)}
+                  ? t(
+                      `مقدار واقعی انجام‌شده (هدف: ${formatDuration(habit.target, lang)})`,
+                      `Actual amount (goal: ${formatDuration(habit.target, lang)})`,
+                    )
+                  : t(
+                      `مقدار واقعی انجام‌شده (هدف: ${faNum(habit.target, lang)} ${habit.unit ?? ""})`,
+                      `Actual amount (goal: ${habit.target} ${habit.unit ?? ""})`,
+                    )}
               </p>
               {habit.unitKind === "time" ? (
                 <DurationPicker
@@ -366,7 +429,9 @@ export function HabitRow({
             </div>
           )}
           <div className={isFuture ? "pointer-events-none opacity-50" : undefined}>
-            <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("احساست امروز", "Today's mood")}</p>
+            <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+              {t("احساست امروز", "Today's mood")}
+            </p>
             <div className="flex flex-wrap gap-1.5">
               {MOOD_EMOJIS.map((m) => (
                 <button
@@ -382,7 +447,9 @@ export function HabitRow({
             </div>
           </div>
           <div className={isFuture ? "pointer-events-none opacity-50" : undefined}>
-            <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("یادداشت کوتاه", "Short note")}</p>
+            <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+              {t("یادداشت کوتاه", "Short note")}
+            </p>
             <Input
               value={noteVal}
               onChange={(e) => setNoteVal(e.target.value)}
@@ -392,7 +459,9 @@ export function HabitRow({
           {!isFuture && (
             <Button
               onClick={() => {
-                const patch: Partial<{ value: number; done: boolean; note: string }> = { note: noteVal };
+                const patch: Partial<{ value: number; done: boolean; note: string }> = {
+                  note: noteVal,
+                };
                 if (habit.type === "quantity" && amountVal !== "") {
                   const v = Number(amountVal) || 0;
                   patch.value = v;
@@ -495,7 +564,10 @@ export function MonthCalendarGrid({
     <div dir="ltr">
       <div className="mb-1 grid grid-cols-7 gap-[3px]">
         {headerLetters.map((l, i) => (
-          <div key={i} className="text-center text-[7px] font-semibold tracking-tight text-muted-foreground/80">
+          <div
+            key={i}
+            className="text-center text-[7px] font-semibold tracking-tight text-muted-foreground/80"
+          >
             {l}
           </div>
         ))}
@@ -518,7 +590,11 @@ export function MonthCalendarGrid({
               style={
                 done
                   ? { backgroundColor: tint, color: "#fff" }
-                  : { backgroundColor: "var(--secondary)", color: "var(--muted-foreground)", opacity: due && !future ? 0.65 : 0.3 }
+                  : {
+                      backgroundColor: "var(--secondary)",
+                      color: "var(--muted-foreground)",
+                      opacity: due && !future ? 0.65 : 0.3,
+                    }
               }
             >
               {faNum(dnum, lang)}
@@ -556,7 +632,13 @@ export function MonthHeatmap({
             title={d}
             className="h-2 flex-1 rounded-[2px] transition-colors"
             style={{
-              backgroundColor: !due ? "var(--secondary)" : future ? "var(--secondary)" : done ? color ?? "var(--primary)" : "var(--destructive)",
+              backgroundColor: !due
+                ? "var(--secondary)"
+                : future
+                  ? "var(--secondary)"
+                  : done
+                    ? (color ?? "var(--primary)")
+                    : "var(--destructive)",
               opacity: !due || future ? 0.35 : done ? 1 : 0.4,
             }}
           />
@@ -625,10 +707,17 @@ export function HabitFormModal({
   const pickerOrder = weekdayOrder(lang === "fa" ? "jalali" : "gregorian");
   const [reminderPickerOpen, setReminderPickerOpen] = useState(false);
   return (
-    <Modal open={open} onClose={onClose} title={draft.id ? t("ویرایش عادت", "Edit habit") : t("عادت جدید", "New habit")} wide>
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={draft.id ? t("ویرایش عادت", "Edit habit") : t("عادت جدید", "New habit")}
+      wide
+    >
       <div className="flex flex-col gap-4">
         <div>
-          <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("نام عادت", "Habit name")}</p>
+          <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+            {t("نام عادت", "Habit name")}
+          </p>
           <Input
             value={draft.name}
             onChange={(e) => setDraft({ ...draft, name: e.target.value })}
@@ -637,7 +726,9 @@ export function HabitFormModal({
         </div>
 
         <div>
-          <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("دسته‌بندی", "Category")}</p>
+          <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+            {t("دسته‌بندی", "Category")}
+          </p>
           <div className="flex flex-wrap gap-1.5">
             {categories.map((c) => (
               <Chip
@@ -654,12 +745,16 @@ export function HabitFormModal({
         </div>
 
         <div>
-          <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("نوع سنجش", "Measurement")}</p>
+          <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+            {t("نوع سنجش", "Measurement")}
+          </p>
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => setDraft({ ...draft, type: "binary", target: 1 })}
               className={`rounded-xl border px-3 py-2 text-xs font-medium ${
-                draft.type === "binary" ? "border-primary bg-primary-soft text-primary" : "border-border text-muted-foreground"
+                draft.type === "binary"
+                  ? "border-primary bg-primary-soft text-primary"
+                  : "border-border text-muted-foreground"
               }`}
             >
               {t("انجام شد / نشد", "Done / not done")}
@@ -667,7 +762,9 @@ export function HabitFormModal({
             <button
               onClick={() => setDraft({ ...draft, type: "quantity", target: draft.target || 10 })}
               className={`rounded-xl border px-3 py-2 text-xs font-medium ${
-                draft.type === "quantity" ? "border-primary bg-primary-soft text-primary" : "border-border text-muted-foreground"
+                draft.type === "quantity"
+                  ? "border-primary bg-primary-soft text-primary"
+                  : "border-border text-muted-foreground"
               }`}
             >
               {t("مقداری (عدد + واحد)", "Quantity (amount + unit)")}
@@ -678,20 +775,30 @@ export function HabitFormModal({
         {draft.type === "quantity" && (
           <div className="flex flex-col gap-3">
             <div>
-              <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("واحد سنجش", "Unit type")}</p>
+              <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+                {t("واحد سنجش", "Unit type")}
+              </p>
               <div className="grid grid-cols-2 gap-2">
                 <button
-                  onClick={() => setDraft({ ...draft, unitKind: "count", target: draft.target || 10 })}
+                  onClick={() =>
+                    setDraft({ ...draft, unitKind: "count", target: draft.target || 10 })
+                  }
                   className={`rounded-xl border px-3 py-2 text-xs font-medium ${
-                    draft.unitKind === "count" ? "border-primary bg-primary-soft text-primary" : "border-border text-muted-foreground"
+                    draft.unitKind === "count"
+                      ? "border-primary bg-primary-soft text-primary"
+                      : "border-border text-muted-foreground"
                   }`}
                 >
                   {t("تعدادی (عدد + واحد)", "Count (number + unit)")}
                 </button>
                 <button
-                  onClick={() => setDraft({ ...draft, unitKind: "time", target: draft.target || 25 })}
+                  onClick={() =>
+                    setDraft({ ...draft, unitKind: "time", target: draft.target || 25 })
+                  }
                   className={`rounded-xl border px-3 py-2 text-xs font-medium ${
-                    draft.unitKind === "time" ? "border-primary bg-primary-soft text-primary" : "border-border text-muted-foreground"
+                    draft.unitKind === "time"
+                      ? "border-primary bg-primary-soft text-primary"
+                      : "border-border text-muted-foreground"
                   }`}
                 >
                   {t("زمانی (ساعت/دقیقه/ثانیه)", "Time (hr/min/sec)")}
@@ -702,7 +809,9 @@ export function HabitFormModal({
             {draft.unitKind === "count" ? (
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("مقدار هدف", "Target amount")}</p>
+                  <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+                    {t("مقدار هدف", "Target amount")}
+                  </p>
                   <Input
                     type="number"
                     dir="ltr"
@@ -712,7 +821,9 @@ export function HabitFormModal({
                   />
                 </div>
                 <div>
-                  <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("واحد", "Unit")}</p>
+                  <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+                    {t("واحد", "Unit")}
+                  </p>
                   <Input
                     value={draft.unit}
                     onChange={(e) => setDraft({ ...draft, unit: e.target.value })}
@@ -722,7 +833,9 @@ export function HabitFormModal({
               </div>
             ) : (
               <div>
-                <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("مدت‌زمان هدف", "Target duration")}</p>
+                <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+                  {t("مدت‌زمان هدف", "Target duration")}
+                </p>
                 <DurationPicker
                   totalMinutes={draft.target}
                   onChange={(m) => setDraft({ ...draft, target: m })}
@@ -750,7 +863,9 @@ export function HabitFormModal({
                     if (on && draft.weekdays.length === 1) return;
                     setDraft({
                       ...draft,
-                      weekdays: on ? draft.weekdays.filter((x) => x !== wd) : [...draft.weekdays, wd],
+                      weekdays: on
+                        ? draft.weekdays.filter((x) => x !== wd)
+                        : [...draft.weekdays, wd],
                     });
                   }}
                 >
@@ -776,7 +891,9 @@ export function HabitFormModal({
             />
           </div>
           <div>
-            <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("یادآوری روزانه", "Daily reminder")}</p>
+            <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+              {t("یادآوری روزانه", "Daily reminder")}
+            </p>
             <button
               type="button"
               onClick={() => setReminderPickerOpen((v) => !v)}
@@ -850,7 +967,10 @@ export function habitToDraft(h: Habit): HabitDraft {
     unitKind: h.unitKind ?? "count",
     scheduleKind: "weekdays",
     // روزهای تکرار را از زمان‌بندی می‌سازیم؛ روزانه/فرد/زوجِ قدیمی = همه‌ی روزها.
-    weekdays: h.schedule.kind === "weekdays" ? (h.schedule.weekdays ?? [...ALL_WEEKDAYS]) : [...ALL_WEEKDAYS],
+    weekdays:
+      h.schedule.kind === "weekdays"
+        ? (h.schedule.weekdays ?? [...ALL_WEEKDAYS])
+        : [...ALL_WEEKDAYS],
     monthlyGoal: h.monthlyGoal ? String(h.monthlyGoal) : "",
     reminderTime: h.reminderTime ?? "",
   };

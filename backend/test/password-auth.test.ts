@@ -288,17 +288,15 @@ describe("username", () => {
 });
 
 describe("admin set-password", () => {
-  it("creates an account with a password and a trial when none exists", async () => {
+  it("creates an account with a password and no automatic access", async () => {
     const res = await adminSetPw("09138982893", "Amir@1387");
     expect(res.statusCode).toBe(200);
     expect((res.json() as { created: boolean }).created).toBe(true);
 
     const login1 = await login("09138982893", "Amir@1387");
     expect(login1.statusCode).toBe(200);
-    // Trial granted so the account is actually usable after logging in.
-    expect((login1.json() as { entitlement: { status: string } }).entitlement.status).toBe(
-      "active",
-    );
+    expect((login1.json() as { entitlement: { status: string } }).entitlement.status).toBe("none");
+    expect(await h.query(`select id from grants`)).toHaveLength(0);
   });
 
   it("resets the password of an existing account", async () => {

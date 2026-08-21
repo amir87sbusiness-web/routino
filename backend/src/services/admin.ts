@@ -7,11 +7,10 @@
  * single `Promise.all`, so the panel's landing query is one round-trip's worth
  * of latency instead of seven. The per-user detail view does the same.
  */
-import { and, count, desc, eq, gt, ilike, inArray, isNull, sql } from "drizzle-orm";
+import { and, count, desc, eq, gt, ilike, sql } from "drizzle-orm";
 import type { Database } from "../db/client.js";
 import {
   devices,
-  deviceSecurityEvents,
   discounts,
   entitlements,
   grants,
@@ -23,7 +22,7 @@ import { badRequest, notFound } from "../lib/http-errors.js";
 import { normalizePhone, toAsciiDigits } from "../lib/phone.js";
 import { grantInterval, listGrants, readEntitlement } from "./entitlement.js";
 import { hashPassword, validatePassword } from "./password.js";
-import { DEVICE_SWITCH_WINDOW_MS, revokeAllDevices } from "./tokens.js";
+import { revokeAllDevices } from "./tokens.js";
 
 const DAY_MS = 86_400_000;
 
@@ -103,26 +102,11 @@ export async function adminUserDetail(db: Database, id: string, now: Date) {
   const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
   if (!user) throw notFound("unknown_user", "No such user");
 
-  const rollingStart = new Date(now.getTime() - DEVICE_SWITCH_WINDOW_MS);
-  const switchSince =
-    user.deviceSwitchResetAt && user.deviceSwitchResetAt > rollingStart
-      ? user.deviceSwitchResetAt
-      : rollingStart;
-  const [userDevices, userPayments, userGrants, entitlement, switchRows] = await Promise.all([
+  const [userDevices, userPayments, userGrants, entitlement] = await Promise.all([
     db.select().from(devices).where(eq(devices.userId, id)).orderBy(desc(devices.createdAt)),
     db.select().from(payments).where(eq(payments.userId, id)).orderBy(desc(payments.createdAt)),
     listGrants(db, id),
     readEntitlement(db, id, now),
-    db
-      .select({ n: count() })
-      .from(deviceSecurityEvents)
-      .where(
-        and(
-          eq(deviceSecurityEvents.userId, id),
-          eq(deviceSecurityEvents.kind, "replacement"),
-          gt(deviceSecurityEvents.createdAt, switchSince),
-        ),
-      ),
   ]);
 
   return {
@@ -130,10 +114,6 @@ export async function adminUserDetail(db: Database, id: string, now: Date) {
       id: user.id,
       phone: user.phone,
       blocked: user.blocked,
-      maxActiveDevices: user.maxActiveDevices,
-      securityLockedAt: user.securityLockedAt,
-      securityLockReason: user.securityLockReason,
-      switchCount30d: switchRows[0]?.n ?? 0,
       createdAt: user.createdAt,
     },
     entitlement,
@@ -150,68 +130,6 @@ export async function adminUserDetail(db: Database, id: string, now: Date) {
     })),
     payments: userPayments,
     grants: userGrants,
-  };
-}
-
-export async function adminSetDevicePolicy(
-  db: Database,
-  id: string,
-  body: { maxActiveDevices?: number; resetSwitchCount?: boolean; unlock?: boolean },
-  now: Date,
-) {
-  if (!UUID_RE.test(id)) throw badRequest("bad_id", "Malformed user id");
-  const patch: Record<string, unknown> = {};
-  if (body.maxActiveDevices !== undefined) patch.maxActiveDevices = body.maxActiveDevices;
-  if (body.resetSwitchCount) patch.deviceSwitchResetAt = now;
-  if (body.unlock) {
-    patch.securityLockedAt = null;
-    patch.securityLockReason = null;
-  }
-  if (!Object.keys(patch).length) throw badRequest("empty_patch", "Nothing to update");
-
-  const [user] = await db.update(users).set(patch).where(eq(users.id, id)).returning();
-  if (!user) throw notFound("unknown_user", "No such user");
-
-  // Lowering the limit takes effect now. Keep the most recently active rows and
-  // revoke only the excess; local data on those devices remains untouched.
-  const active = await db
-    .select()
-    .from(devices)
-    .where(and(eq(devices.userId, id), isNull(devices.revokedAt)))
-    .orderBy(sql`${devices.lastSeenAt} desc nulls last`, desc(devices.createdAt));
-  const excess = active.slice(user.maxActiveDevices);
-  if (excess.length) {
-    await db
-      .update(devices)
-      .set({ revokedAt: now, revocationReason: "admin_limit" })
-      .where(
-        inArray(
-          devices.id,
-          excess.map((device) => device.id),
-        ),
-      );
-  }
-
-  const rollingStart = new Date(now.getTime() - DEVICE_SWITCH_WINDOW_MS);
-  const since =
-    user.deviceSwitchResetAt && user.deviceSwitchResetAt > rollingStart
-      ? user.deviceSwitchResetAt
-      : rollingStart;
-  const counts = await db
-    .select({ n: count() })
-    .from(deviceSecurityEvents)
-    .where(
-      and(
-        eq(deviceSecurityEvents.userId, id),
-        eq(deviceSecurityEvents.kind, "replacement"),
-        gt(deviceSecurityEvents.createdAt, since),
-      ),
-    );
-  return {
-    ok: true as const,
-    maxActiveDevices: user.maxActiveDevices,
-    securityLocked: !!user.securityLockedAt,
-    switchCount30d: counts[0]?.n ?? 0,
   };
 }
 
@@ -256,8 +174,8 @@ export async function adminGrant(
  * Sets (or resets) a user's password by phone number, creating the account if it
  * doesn't exist yet. This is how the owner provisions a password-login account
  * from the panel when SMS isn't live — the panel is deliberately usable exactly
- * when OTP is down. A brand-new account gets a 7-day trial, same as an OTP first
- * sign-in, so it can actually be used after logging in.
+ * when OTP is down. Account creation itself grants no access; entitlement is
+ * activated or granted through its own explicit business path.
  */
 export async function adminSetPassword(
   db: Database,
@@ -288,12 +206,6 @@ export async function adminSetPassword(
     [user] = await db.insert(users).values({ phone, passwordHash, createdAt: now }).returning();
     created = true;
     if (!user) throw new Error("failed to create user");
-    await grantInterval(
-      db,
-      user.id,
-      { planId: "trial", days: 7, source: "admin", note: "created via admin set-password" },
-      now,
-    );
   }
 
   return { ok: true as const, created, userId: user.id, phone };

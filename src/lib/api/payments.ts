@@ -16,7 +16,10 @@ export interface ServerPlan {
   price: number; // Toman
 }
 
-export async function fetchPlans(): Promise<{ plans: ServerPlan[]; offer: null | { label: string; percent: number; until: number } }> {
+export async function fetchPlans(): Promise<{
+  plans: ServerPlan[];
+  offer: null | { label: string; percent: number; until: number };
+}> {
   return apiRequest("/plans");
 }
 
@@ -38,7 +41,10 @@ export interface QuoteResult {
 }
 
 export async function fetchQuote(planId: string, code?: string): Promise<QuoteResult> {
-  return authedRequest("/payments/quote", { method: "POST", body: { planId, code: code || undefined } });
+  return authedRequest("/payments/quote", {
+    method: "POST",
+    body: { planId, code: code || undefined },
+  });
 }
 
 export interface CheckoutResult {

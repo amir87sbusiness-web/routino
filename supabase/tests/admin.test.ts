@@ -29,7 +29,10 @@ describe("admin auth", () => {
     // in-memory counter that a cold start would reset.
     const codes: number[] = [];
     for (let i = 0; i < 12; i++) {
-      codes.push((await h.call("GET", "/v1/admin/overview", { headers: { "x-admin-token": `g${i}` } })).status);
+      codes.push(
+        (await h.call("GET", "/v1/admin/overview", { headers: { "x-admin-token": `g${i}` } }))
+          .status,
+      );
     }
     expect(codes.slice(0, 9)).toEqual(Array(9).fill(401));
     expect(codes.slice(9)).toEqual(Array(3).fill(429));
@@ -88,14 +91,15 @@ describe("overview + users", () => {
 
 describe("manual grant", () => {
   it("extends entitlement and writes an auditable ledger row", async () => {
-    const { user, entitlement } = await signIn(h);
+    const { user } = await signIn(h);
+    const before = Date.now();
     const res = await h.call("POST", `/v1/admin/users/${user.id}/grant`, {
       headers: admin(),
       body: { months: 1, note: "support gift" },
     });
     expect(res.status).toBe(200);
     const after = Date.parse((await res.json()).entitlement.expiresAt);
-    expect(after).toBeGreaterThan(Date.parse(entitlement.expiresAt) + 27 * 86_400_000);
+    expect(after).toBeGreaterThan(before + 27 * 86_400_000);
 
     const rows = await h.query<{ source: string; note: string }>(
       `select source, note from grants where user_id = '${user.id}' and source = 'admin'`,
@@ -125,9 +129,9 @@ describe("user detail", () => {
       await h.call("GET", `/v1/admin/users/${user.id}`, { headers: admin() })
     ).json();
     expect(d.user.phone).toBe("989123334444");
-    expect(d.entitlement.planId).toBe("trial");
+    expect(d.entitlement).toMatchObject({ status: "none", planId: null, expiresAt: null });
     expect(d.devices).toHaveLength(1); // the sign-in device
-    expect(d.grants).toHaveLength(1); // the trial grant
+    expect(d.grants).toHaveLength(0);
     expect(d.payments).toHaveLength(1); // the pending checkout
   });
 
@@ -142,6 +146,17 @@ describe("user detail", () => {
     expect((await h.call("GET", "/v1/admin/users/not-a-uuid", { headers: admin() })).status).toBe(
       400,
     );
+  });
+});
+
+describe("device policy", () => {
+  it("does not expose obsolete device quota administration", async () => {
+    const { user } = await signIn(h);
+    const response = await h.call("POST", `/v1/admin/users/${user.id}/device-policy`, {
+      headers: admin(),
+      body: { maxActiveDevices: 3 },
+    });
+    expect(response.status).toBe(404);
   });
 });
 

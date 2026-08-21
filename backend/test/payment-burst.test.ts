@@ -144,10 +144,14 @@ describe("a burst of simultaneous sales", () => {
     h.psp._settle(a.body.trackId, "paid");
     h.psp._settle(b.body.trackId, "paid");
 
+    // Signup deliberately creates no entitlement. Two real payments from a
+    // pretrial account must still stack from server now rather than requiring a
+    // trial row to exist first.
     const before = await h.query<{ expires_at: string }>(
       `select expires_at::text from entitlements where user_id = '${user.id}'`,
     );
-    const start = new Date(before[0]!.expires_at).getTime();
+    expect(before).toHaveLength(0);
+    const start = Date.now();
 
     await Promise.all([
       callback(a.body.paymentId, a.body.trackId),

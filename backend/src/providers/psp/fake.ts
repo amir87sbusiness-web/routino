@@ -45,7 +45,8 @@ export function fakePsp(publicApiUrl: string) {
     async request(input: PspRequestInput) {
       // Mirror Zibal's real validation so we hit these branches in tests.
       if (input.amountRial <= 1000) return { ok: false, result: ZIBAL_RESULT.AMOUNT_TOO_LOW };
-      if (!/^https?:\/\//.test(input.callbackUrl)) return { ok: false, result: ZIBAL_RESULT.CALLBACK_INVALID };
+      if (!/^https?:\/\//.test(input.callbackUrl))
+        return { ok: false, result: ZIBAL_RESULT.CALLBACK_INVALID };
 
       const trackId = nextTrackId++;
       txns.set(trackId, {

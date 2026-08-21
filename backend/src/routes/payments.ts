@@ -16,7 +16,12 @@ import { z } from "zod";
 import { renderResultPage } from "../lib/pay-result-page.js";
 import { requireUser } from "../plugins/auth.js";
 import { badRequest } from "../plugins/errors.js";
-import { checkoutPayment, handlePaymentCallback, pollPayment, UUID_RE } from "../services/payment-flow.js";
+import {
+  checkoutPayment,
+  handlePaymentCallback,
+  pollPayment,
+  UUID_RE,
+} from "../services/payment-flow.js";
 import { checkDiscount, quote } from "../services/pricing.js";
 
 const quoteBody = z.object({

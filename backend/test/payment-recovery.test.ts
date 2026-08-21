@@ -83,7 +83,7 @@ describe("a payment whose callback never came back", () => {
 
     const after = await openApp(access);
 
-    // Still on the 7-day trial, not a month.
+    // Still has no entitlement; the canceled payment granted nothing.
     expect(daysLeft(after.entitlement.expiresAt)).toBeLessThan(10);
   });
 

@@ -25,27 +25,20 @@ export function FeedbackModal({
   /** بعد از ثبت یا رد شدن. `submitted` می‌گوید نظری واقعاً ذخیره شد یا نه. */
   onDone: (submitted: boolean) => void;
 }) {
-  const { t, update } = useApp();
+  const { t, submitFeedback } = useApp();
   const [rating, setRating] = useState(0);
   const [section, setSection] = useState("");
   const [comment, setComment] = useState("");
 
   const finish = (submitted: boolean) => {
     if (submitted) {
-      update((d) => ({
-        ...d,
-        feedback: [
-          {
-            id: uid(),
-            rating,
-            section: rating <= 3 ? section || undefined : undefined,
-            comment: comment.trim() || undefined,
-            at: Date.now(),
-            phone: d.auth?.phone,
-          },
-          ...d.feedback,
-        ],
-      }));
+      submitFeedback({
+        id: uid(),
+        rating,
+        section: rating <= 3 ? section || undefined : undefined,
+        comment: comment.trim() || undefined,
+        at: Date.now(),
+      });
     }
     setRating(0);
     setSection("");
@@ -54,7 +47,11 @@ export function FeedbackModal({
   };
 
   return (
-    <Modal open={open} onClose={() => finish(false)} title={t("نظرت درباره روتینو؟", "How is Routino?")}>
+    <Modal
+      open={open}
+      onClose={() => finish(false)}
+      title={t("نظرت درباره روتینو؟", "How is Routino?")}
+    >
       <div className="flex flex-col gap-4">
         <div className="flex justify-center gap-2" dir="ltr">
           {[1, 2, 3, 4, 5].map((s) => (

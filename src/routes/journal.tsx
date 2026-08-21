@@ -36,13 +36,14 @@ function JournalPage() {
   const { db, update, t, lang, cal } = ctx;
 
   const save = () => {
-    update((d) => ({
+    const accepted = update((d) => ({
       ...d,
       journal: {
         ...d.journal,
         [dk]: { dateKey: dk, text, score, mood, updatedAt: Date.now() },
       },
     }));
+    if (!accepted) return;
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
   };
