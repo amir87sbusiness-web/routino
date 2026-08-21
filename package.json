@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite dev",
     "build": "vite build && npm run build:landing",
-    "build:mobile": "cross-env BUILD_TARGET=mobile vite build",
+    "build:mobile": "cross-env BUILD_TARGET=mobile VITE_API_URL=https://api.routino.me/v1 vite build",
     "build:landing": "node scripts/build-landing.mjs",
     "shots": "node scripts/shoot-landing.mjs",
     "film": "node scripts/film-landing.mjs",

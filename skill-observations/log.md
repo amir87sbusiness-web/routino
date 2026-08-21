@@ -256,3 +256,18 @@
 **Suggested improvement:** Record live service health, local suite results, deployment state, SQL application state, and physical-device validation as separate evidence classes with explicit dates and versions. Never let one substitute for another.
 
 **Principle:** Release evidence is meaningful only when it names both what was verified and which version received that verification.
+
+### Observation 18: Release verification must inspect built endpoint bindings
+
+**Status:** OPEN
+**Date:** 2026-08-21
+**Session context:** Preparing a production release after source tests and mobile compilation passed while the native bundle still used a relative development API path.
+**Skill:** verification-before-completion
+**Type:** open-source
+**Phase/Area:** Production build and release tagging
+
+**Issue:** Unit tests, typechecks, and successful native compilation did not prove that the generated mobile bundle contained the production API origin. The misconfiguration was visible only in the built artifact, after the release tag had already been pushed.
+
+**Suggested improvement:** Before tagging a release, inspect each platform's final bundle for its effective API/backend endpoint and forbidden development fallbacks. Make this a build-level regression test, then create the release tag only after that test passes.
+
+**Principle:** A production build is not verified until its generated artifact proves where it will send real traffic.
