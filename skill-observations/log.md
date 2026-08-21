@@ -271,3 +271,18 @@
 **Suggested improvement:** Before tagging a release, inspect each platform's final bundle for its effective API/backend endpoint and forbidden development fallbacks. Make this a build-level regression test, then create the release tag only after that test passes.
 
 **Principle:** A production build is not verified until its generated artifact proves where it will send real traffic.
+
+### Observation 19: Verify backup execution before release mutations
+
+**Status:** OPEN
+**Date:** 2026-08-21
+**Session context:** A production schema audit found a security-hardening ALTER was needed, but platform backups were unavailable and the logical dump command depended on a missing local runtime.
+**Skill:** New skill candidate: safe production deployment
+**Type:** open-source
+**Phase/Area:** Pre-deployment safety gates
+
+**Issue:** Checking that a backup command exists is weaker than proving it can produce a recoverable artifact. Discovering a missing runtime only after tagging and deploying another component leaves the release partially advanced while the database gate remains blocked.
+
+**Suggested improvement:** Put an executable backup-and-validate checkpoint before every Git tag or external deployment. Require a nonempty schema dump, a nonempty data dump, hashes, and a documented restore path before allowing any release mutation.
+
+**Principle:** A backup is a release prerequisite only when its creation and recovery path have both been demonstrated in the current environment.
