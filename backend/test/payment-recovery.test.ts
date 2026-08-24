@@ -38,7 +38,7 @@ async function checkout(access: string) {
     method: "POST",
     url: "/v1/payments/checkout",
     headers: auth(access),
-    payload: { planId: "m1" },
+    payload: { planId: "m1", attemptId: crypto.randomUUID() },
   });
   expect(res.statusCode).toBe(200);
   return res.json() as { paymentId: string; trackId: number };

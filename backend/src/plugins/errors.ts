@@ -11,6 +11,10 @@ export {
   forbidden,
   locked,
   notFound,
+  conflict,
+  badGateway,
+  serviceUnavailable,
+  gatewayTimeout,
   tooMany,
 } from "../lib/http-errors.js";
 

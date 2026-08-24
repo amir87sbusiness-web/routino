@@ -43,7 +43,7 @@ async function checkout(access: string, code?: string) {
     method: "POST",
     url: "/v1/payments/checkout",
     headers: auth(access),
-    payload: code ? { planId: "m1", code } : { planId: "m1" },
+    payload: { planId: "m1", attemptId: crypto.randomUUID(), ...(code ? { code } : {}) },
   });
   return { status: res.statusCode, body: res.json() as { paymentId: string; trackId: number } };
 }

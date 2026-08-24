@@ -40,6 +40,31 @@ async function paymentFixture() {
 }
 
 describe("atomic verified-payment grant", () => {
+  it("scopes PSP reference uniqueness by provider", async () => {
+    const [user] = await h.db
+      .insert(schema.users)
+      .values({ phone: "989121234568" })
+      .returning();
+    if (!user) throw new Error("user fixture failed");
+    const base = {
+      userId: user.id,
+      planId: "m1",
+      months: 1,
+      amountToman: 59_000,
+      amountRial: 590_000,
+      status: "redirected",
+      providerRef: "same-provider-reference",
+    };
+
+    await h.db.insert(schema.payments).values({ ...base, provider: "nextpay" });
+    await expect(
+      h.db.insert(schema.payments).values({ ...base, provider: "zibal" }),
+    ).resolves.toBeDefined();
+    await expect(
+      h.db.insert(schema.payments).values({ ...base, provider: "nextpay" }),
+    ).rejects.toThrow();
+  });
+
   it("rolls back entitlement and payment state when the payment grant cannot be recorded", async () => {
     const { user, payment } = await paymentFixture();
 

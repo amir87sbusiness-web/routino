@@ -77,7 +77,7 @@ describe("admin endpoints", () => {
         method: "POST",
         url: "/v1/payments/checkout",
         headers: { authorization: `Bearer ${access}` },
-        payload: { planId: "m3" },
+        payload: { planId: "m3", attemptId: crypto.randomUUID() },
       })
     ).json() as { trackId: number; paymentId: string };
     await h.app.inject({

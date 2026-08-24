@@ -24,6 +24,10 @@ export const forbidden = (code = "forbidden", msg = "Forbidden") => new HttpErro
 export const locked = (code = "locked", msg = "Locked", details?: Record<string, unknown>) =>
   new HttpError(423, code, msg, details);
 export const notFound = (code = "not_found", msg = "Not found") => new HttpError(404, code, msg);
+export const conflict = (code: string, msg: string) => new HttpError(409, code, msg);
+export const badGateway = (code: string, msg: string) => new HttpError(502, code, msg);
+export const serviceUnavailable = (code: string, msg: string) => new HttpError(503, code, msg);
+export const gatewayTimeout = (code: string, msg: string) => new HttpError(504, code, msg);
 export const tooMany = (msg = "Too many requests", retryAfter?: number) => {
   const e = new HttpError(429, "rate_limited", msg);
   (e as HttpError & { retryAfter?: number }).retryAfter = retryAfter;

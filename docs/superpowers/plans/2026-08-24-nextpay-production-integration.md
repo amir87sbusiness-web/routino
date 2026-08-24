@@ -125,19 +125,19 @@ Run: `cd backend && npm test -- --maxWorkers=1 test/psp.test.ts && npm run typec
 - Return safe `409 duplicate_payment_attempt` while the first identical attempt is still registering or when immutable attempt inputs conflict.
 - Persist provider transaction IDs in `provider_ref`; locate them only with provider scope.
 
-- [ ] **Step 1: Write failing checkout idempotency tests**
+- [x] **Step 1: Write failing checkout idempotency tests**
 
 Cover retry with the same UUID, concurrent double-click, same attempt with a changed plan/code/platform, client amount injection being ignored/rejected, provider timeout, provider unavailable, token rejection, and successful mocked NextPay checkout. Assert only one provider token call and one payment row for an attempt. Assert `provider_ref` is saved before a redirect response is returned.
 
-- [ ] **Step 2: Write failing provider-aware uniqueness tests**
+- [x] **Step 2: Write failing provider-aware uniqueness tests**
 
 Insert the same `provider_ref` for two different providers and assert it is allowed. Insert it twice for the same provider and assert rejection. Prove lookup never matches a reference belonging to another provider. Keep legacy `track_id`/`authority` readable; do not destructively migrate them.
 
-- [ ] **Step 3: Run RED checkout tests**
+- [x] **Step 3: Run RED checkout tests**
 
 Run: `cd backend && npm test -- --maxWorkers=1 test/payments.test.ts test/payment-burst.test.ts`
 
-- [ ] **Step 4: Implement the idempotent checkout claim**
+- [x] **Step 4: Implement the idempotent checkout claim**
 
 Insert or claim `(user_id, attempt_id)` before calling a PSP. On a unique conflict, reread the row and either return the existing redirect/result, return `409 duplicate_payment_attempt`, or reject changed immutable inputs. Never make a second provider call for the same claimed attempt. Derive amount/plan/months entirely from server pricing and persist them before provider I/O.
 
@@ -145,7 +145,7 @@ Insert or claim `(user_id, attempt_id)` before calling a PSP. On a unique confli
 
 Write all new provider identifiers to `provider_ref`, optionally maintaining legacy fields for existing providers only where current compatibility requires it. Every new lookup must bind both `provider` and `provider_ref`. Convert typed provider failures to safe HTTP errors: token error 502, timeout 504, unavailable 503, and opaque internal 500.
 
-- [ ] **Step 6: Run GREEN checkout tests**
+- [x] **Step 6: Run GREEN checkout tests**
 
 Run the same targeted payment command.
 

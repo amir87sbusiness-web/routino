@@ -46,7 +46,7 @@ async function buyAMonth(access: string) {
     method: "POST",
     url: "/v1/payments/checkout",
     headers: auth(access),
-    payload: { planId: "m1" },
+    payload: { planId: "m1", attemptId: crypto.randomUUID() },
   });
   const { paymentId, trackId } = co.json() as { paymentId: string; trackId: number };
   h.psp._settle(trackId, "paid");

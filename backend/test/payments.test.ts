@@ -4,6 +4,14 @@
  * with only an env change.
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
+import { schema } from "../src/db/schema.js";
+import {
+  PspTransportError,
+  type PspProvider,
+} from "../src/providers/psp/index.js";
+import { createRouter } from "../src/providers/psp/router.js";
+import { checkoutPayment } from "../src/services/payment-flow.js";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
 
 let h: Harness;
@@ -36,7 +44,7 @@ async function checkout(access: string, body: Record<string, unknown>) {
     method: "POST",
     url: "/v1/payments/checkout",
     headers: auth(access),
-    payload: body,
+    payload: { attemptId: crypto.randomUUID(), ...body },
   });
   return res;
 }
@@ -107,6 +115,134 @@ describe("POST /v1/payments/quote", () => {
 });
 
 describe("checkout → gateway → callback", () => {
+  it("returns the same redirect and makes one PSP call when an attempt is retried", async () => {
+    const { access, user } = await signIn();
+    const attemptId = crypto.randomUUID();
+
+    const first = await checkout(access, { planId: "m1", attemptId });
+    const second = await checkout(access, { planId: "m1", attemptId });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toMatchObject({
+      paymentId: first.json().paymentId,
+      paymentUrl: first.json().paymentUrl,
+    });
+    expect(h.psp._txns.size).toBe(1);
+    const rows = await h.query<{
+      attempt_id: string;
+      provider: string;
+      provider_ref: string;
+      status: string;
+    }>(
+      `select attempt_id, provider, provider_ref, status from payments where user_id = '${user.id}'`,
+    );
+    expect(rows).toEqual([
+      expect.objectContaining({
+        attempt_id: attemptId,
+        provider: "fake",
+        provider_ref: expect.any(String),
+        status: "redirected",
+      }),
+    ]);
+  });
+
+  it("rejects an in-progress duplicate and changed immutable attempt inputs", async () => {
+    const { access, user } = await signIn();
+    const attemptId = crypto.randomUUID();
+    await h.db.insert(schema.payments).values({
+      userId: user.id,
+      attemptId,
+      planId: "m1",
+      months: 1,
+      amountToman: 59_000,
+      amountRial: 590_000,
+      platform: "web",
+      status: "pending",
+    });
+
+    const pending = await checkout(access, { planId: "m1", attemptId });
+    expect(pending.statusCode).toBe(409);
+    expect(pending.json()).toMatchObject({ error: "duplicate_payment_attempt" });
+
+    const changed = await checkout(access, { planId: "m3", attemptId });
+    expect(changed.statusCode).toBe(409);
+    expect(changed.json()).toMatchObject({ error: "duplicate_payment_attempt" });
+    expect(h.psp._txns.size).toBe(0);
+  });
+
+  it("ignores a client-supplied amount and stores the server price", async () => {
+    const { access, user } = await signIn();
+    const res = await checkout(access, { planId: "m1", amount: 1, amountToman: 1 });
+    expect(res.statusCode).toBe(200);
+    const [payment] = await h.query<{ amount_toman: number; amount_rial: number }>(
+      `select amount_toman, amount_rial from payments where user_id = '${user.id}'`,
+    );
+    expect(Number(payment?.amount_toman)).toBe(59_000);
+    expect(Number(payment?.amount_rial)).toBe(590_000);
+  });
+
+  it.each([
+    {
+      kind: "token_rejected" as const,
+      providerResult: { ok: false as const, result: -4, failureKind: "token_rejected" as const },
+      statusCode: 502,
+      error: "nextpay_token_error",
+      paymentStatus: "failed",
+    },
+    {
+      kind: "timeout" as const,
+      providerResult: new PspTransportError("timeout"),
+      statusCode: 504,
+      error: "payment_network_timeout",
+      paymentStatus: "provider_unknown",
+    },
+    {
+      kind: "unavailable" as const,
+      providerResult: new PspTransportError("unavailable"),
+      statusCode: 503,
+      error: "payment_provider_unavailable",
+      paymentStatus: "provider_unknown",
+    },
+  ])("classifies NextPay $kind without losing the attempt", async (scenario) => {
+    const signed = await signIn(`0912${String(Math.random()).slice(2, 9)}`);
+    const [user] = await h.db.select().from(schema.users).where(eq(schema.users.id, signed.user.id));
+    if (!user) throw new Error("missing signed-in user");
+
+    const provider: PspProvider = {
+      name: "nextpay",
+      async request() {
+        if (scenario.providerResult instanceof Error) throw scenario.providerResult;
+        return scenario.providerResult;
+      },
+      async verify() {
+        return { result: -2, failureKind: "terminal_verify" };
+      },
+      startUrl(ref) {
+        return `https://nextpay.org/nx/gateway/payment/${ref}`;
+      },
+    };
+    const attemptId = crypto.randomUUID();
+
+    await expect(
+      checkoutPayment(
+        h.db,
+        h.env,
+        createRouter([provider]),
+        user,
+        { planId: "m1", attemptId },
+        new Date(),
+      ),
+    ).rejects.toMatchObject({ statusCode: scenario.statusCode, code: scenario.error });
+
+    const [payment] = await h.db
+      .select()
+      .from(schema.payments)
+      .where(eq(schema.payments.attemptId, attemptId));
+    expect(payment?.status).toBe(scenario.paymentStatus);
+    expect(payment?.provider).toBe("nextpay");
+  });
+
   it("completes a payment and grants the plan exactly once", async () => {
     const { access, user } = await signIn();
     const trial = await startTrial(access);

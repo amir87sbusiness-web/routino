@@ -20,7 +20,15 @@
 import { and, count, eq, gt, isNull, sql } from "drizzle-orm";
 import { rowsOf, type Database } from "../db/client.js";
 import { grants, payments } from "../db/schema.js";
-import { badRequest, notFound, tooMany } from "../lib/http-errors.js";
+import {
+  badGateway,
+  badRequest,
+  conflict,
+  gatewayTimeout,
+  notFound,
+  serviceUnavailable,
+  tooMany,
+} from "../lib/http-errors.js";
 import { toLocalPhone } from "../lib/phone.js";
 import {
   ZIBAL_RESULT,
@@ -53,7 +61,63 @@ function paymentProvider(p: PaymentRow): PspName {
 /** The opaque gateway token for a payment: ZarinPal's string authority, else the
  * numeric trackId as a string. Undefined only if it never reached a gateway. */
 function paymentRef(p: PaymentRow): string | undefined {
-  return p.authority ?? (p.trackId != null ? String(p.trackId) : undefined);
+  return p.providerRef ?? p.authority ?? (p.trackId != null ? String(p.trackId) : undefined);
+}
+
+function requestedCode(code: string | undefined): string | null {
+  const normalized = code?.trim().toUpperCase();
+  return normalized ? normalized : null;
+}
+
+function attemptInputsMatch(
+  payment: PaymentRow,
+  body: { planId: string; code?: string; platform?: "web" | "android" | "ios" },
+): boolean {
+  return (
+    payment.planId === body.planId &&
+    payment.platform === (body.platform ?? "web") &&
+    payment.discountCode === requestedCode(body.code)
+  );
+}
+
+async function existingAttemptResult(
+  db: Database,
+  psp: PspRouter,
+  payment: PaymentRow,
+  body: { planId: string; code?: string; platform?: "web" | "android" | "ios" },
+  t: Date,
+): Promise<CheckoutResult> {
+  if (!attemptInputsMatch(payment, body)) {
+    throw conflict(
+      "duplicate_payment_attempt",
+      "This payment attempt was already used with different checkout details.",
+    );
+  }
+
+  if (payment.amountToman <= 0 && payment.appliedAt) {
+    return {
+      free: true,
+      paymentId: payment.id,
+      entitlement: await readEntitlement(db, payment.userId, t),
+    };
+  }
+
+  const provider = paymentProvider(payment);
+  const ref = paymentRef(payment);
+  if (ref && ["redirected", "paid"].includes(payment.status)) {
+    return {
+      free: false,
+      paymentId: payment.id,
+      trackId: payment.trackId ?? undefined,
+      paymentUrl: psp.startUrl(provider, ref),
+      amountToman: payment.amountToman,
+    };
+  }
+
+  throw conflict(
+    "duplicate_payment_attempt",
+    "This payment attempt is already being processed.",
+  );
 }
 
 /** Applies a verified-paid payment exactly once.
@@ -142,9 +206,21 @@ export async function checkoutPayment(
   env: { PUBLIC_API_URL: string },
   psp: PspRouter,
   user: { id: string; phone: string },
-  body: { planId: string; code?: string; platform?: "web" | "android" | "ios" },
+  body: {
+    planId: string;
+    attemptId: string;
+    code?: string;
+    platform?: "web" | "android" | "ios";
+  },
   t: Date,
 ): Promise<CheckoutResult> {
+  const [priorAttempt] = await db
+    .select()
+    .from(payments)
+    .where(and(eq(payments.userId, user.id), eq(payments.attemptId, body.attemptId)))
+    .limit(1);
+  if (priorAttempt) return existingAttemptResult(db, psp, priorAttempt, body, t);
+
   const since = new Date(t.getTime() - 3_600_000);
   const [recent] = await db
     .select({ n: count() })
@@ -168,12 +244,22 @@ export async function checkoutPayment(
       discountPercent: q.discountPercent,
       offerPercent: q.offerPercent,
       platform: body.platform ?? "web",
+      attemptId: body.attemptId,
       status: "pending",
       createdAt: t,
       updatedAt: t,
     })
+    .onConflictDoNothing()
     .returning();
-  if (!payment) throw new Error("failed to create payment");
+  if (!payment) {
+    const [racedAttempt] = await db
+      .select()
+      .from(payments)
+      .where(and(eq(payments.userId, user.id), eq(payments.attemptId, body.attemptId)))
+      .limit(1);
+    if (racedAttempt) return existingAttemptResult(db, psp, racedAttempt, body, t);
+    throw new Error("failed to create payment");
+  }
 
   // 100% discount: nothing to charge, so nothing goes near the gateway.
   // Grant directly through the same applied_at guard as a real payment.
@@ -197,21 +283,47 @@ export async function checkoutPayment(
   });
 
   if (!res.ok || !res.ref) {
+    const ambiguous = res.failureKind === "timeout" || res.failureKind === "unavailable";
     await db
       .update(payments)
-      .set({ status: "failed", provider: res.provider, pspResult: res.result, updatedAt: t })
+      .set({
+        status: ambiguous ? "provider_unknown" : "failed",
+        provider: res.provider,
+        pspResult: res.providerCode ?? res.result,
+        updatedAt: t,
+      })
       .where(eq(payments.id, payment.id));
     console.error("psp request failed", {
       paymentId: payment.id,
       provider: res.provider,
-      result: res.result,
+      result: res.providerCode ?? res.result,
+      failureKind: res.failureKind,
     });
+    if (res.failureKind === "timeout") {
+      throw gatewayTimeout(
+        "payment_network_timeout",
+        "The payment provider did not answer in time. No retry was sent.",
+      );
+    }
+    if (res.failureKind === "unavailable") {
+      throw serviceUnavailable(
+        "payment_provider_unavailable",
+        "The payment provider is temporarily unavailable.",
+      );
+    }
+    if (res.provider === "nextpay") {
+      throw badGateway(
+        "nextpay_token_error",
+        "NextPay could not create the payment transaction.",
+      );
+    }
     throw badRequest("psp_failed", "Payment gateway rejected the request. Try again.");
   }
 
   // Store the token in the column its gateway uses: numeric trackId for
   // zibal/fake, string authority for zarinpal. Exactly one is set.
-  const numericTrackId = res.provider === "zarinpal" ? null : Number(res.ref);
+  const numericTrackId =
+    res.provider === "zibal" || res.provider === "fake" ? Number(res.ref) : null;
   const authority = res.provider === "zarinpal" ? res.ref : null;
 
   await db
@@ -219,8 +331,10 @@ export async function checkoutPayment(
     .set({
       status: "redirected",
       provider: res.provider,
+      providerRef: res.ref,
       trackId: numericTrackId,
       authority,
+      pspResult: res.providerCode ?? res.result,
       updatedAt: t,
     })
     .where(eq(payments.id, payment.id));
