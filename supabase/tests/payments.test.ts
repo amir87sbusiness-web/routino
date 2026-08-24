@@ -105,9 +105,7 @@ describe("checkout → gateway → callback", () => {
     expect(second.status).toBe(200);
     expect(secondBody.paymentId).toBe(firstBody.paymentId);
     expect(h.psp._txns.size).toBe(1);
-    expect(
-      await h.query(`select id from payments where user_id = '${user.id}'`),
-    ).toHaveLength(1);
+    expect(await h.query(`select id from payments where user_id = '${user.id}'`)).toHaveLength(1);
   });
 
   it("completes a payment and grants the plan exactly once", async () => {

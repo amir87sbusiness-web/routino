@@ -25,12 +25,14 @@ export interface NextPayOptions {
 }
 
 function tomanFromRial(amountRial: number): number | undefined {
-  if (!Number.isSafeInteger(amountRial) || amountRial <= 0 || amountRial % 10 !== 0) return undefined;
+  if (!Number.isSafeInteger(amountRial) || amountRial <= 0 || amountRial % 10 !== 0)
+    return undefined;
   return amountRial / 10;
 }
 
 function numeric(value: unknown): number | undefined {
-  const parsed = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
+  const parsed =
+    typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
   return Number.isFinite(parsed) && Number.isInteger(parsed) ? parsed : undefined;
 }
 

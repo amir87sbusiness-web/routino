@@ -6,10 +6,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { schema } from "../src/db/schema.js";
-import {
-  PspTransportError,
-  type PspProvider,
-} from "../src/providers/psp/index.js";
+import { PspTransportError, type PspProvider } from "../src/providers/psp/index.js";
 import { createRouter } from "../src/providers/psp/router.js";
 import { checkoutPayment } from "../src/services/payment-flow.js";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
@@ -206,7 +203,10 @@ describe("checkout → gateway → callback", () => {
     },
   ])("classifies NextPay $kind without losing the attempt", async (scenario) => {
     const signed = await signIn(`0912${String(Math.random()).slice(2, 9)}`);
-    const [user] = await h.db.select().from(schema.users).where(eq(schema.users.id, signed.user.id));
+    const [user] = await h.db
+      .select()
+      .from(schema.users)
+      .where(eq(schema.users.id, signed.user.id));
     if (!user) throw new Error("missing signed-in user");
 
     const provider: PspProvider = {

@@ -28,7 +28,7 @@ describe("GET /v1/subscriptions/me", () => {
     const { access } = await signIn(h);
     const checkout = await h.call("POST", "/v1/payments/checkout", {
       headers: auth(access),
-      body: { planId: "m1" },
+      body: { planId: "m1", attemptId: crypto.randomUUID() },
     });
     const payment = (await checkout.json()) as { trackId: number };
     h.psp._settle(payment.trackId, "paid");

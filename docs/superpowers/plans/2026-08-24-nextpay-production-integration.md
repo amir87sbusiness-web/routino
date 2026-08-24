@@ -190,7 +190,7 @@ Run the same targeted Verify command.
 
 **Files:**
 - Create: `src/lib/api/payments.test.ts`
-- Create or modify: `src/routes/subscribe.test.tsx`
+- Create or modify: `src/routes/-subscribe.test.tsx`
 - Modify: `src/lib/api/payments.ts`
 - Modify: `src/routes/subscribe.tsx`
 - Modify: `src/routes/pay.result.tsx` only if `verifying` needs an explicit non-terminal display state
@@ -206,7 +206,7 @@ Assert payload contains `planId`, optional code/platform, and `attemptId`, but n
 
 - [x] **Step 2: Run RED frontend tests**
 
-Run: `npm test -- --maxWorkers=1 src/lib/api/payments.test.ts src/routes/subscribe.test.tsx`
+Run: `npm test -- --maxWorkers=1 src/lib/api/payments.test.ts src/routes/-subscribe.test.tsx`
 
 - [x] **Step 3: Implement stable attempt lifecycle and safe messages**
 
@@ -214,7 +214,7 @@ Use `crypto.randomUUID()` and refs, not localStorage. Add safe Persian messages 
 
 - [x] **Step 4: Run GREEN frontend tests and typecheck**
 
-Run: `npm test -- --maxWorkers=1 src/lib/api/payments.test.ts src/routes/subscribe.test.tsx && npx tsc --noEmit`
+Run: `npm test -- --maxWorkers=1 src/lib/api/payments.test.ts src/routes/-subscribe.test.tsx && npx tsc --noEmit`
 
 ### Task 6: Mirror Edge behavior, generate migration artifacts, and update guides
 
@@ -266,19 +266,19 @@ Run: `npm run test:edge -- --maxWorkers=1 supabase/tests/payments.test.ts && cd 
 - Modify only files required to fix failures caused by this feature
 - Update: `skill-observations/log.md` only with concise workflow observations required by the active task-observer skill
 
-- [ ] **Step 1: Run formatting integrity and focused lint**
+- [x] **Step 1: Run formatting integrity and focused lint**
 
 Run: `git diff --check` and ESLint only on changed TypeScript/TSX files. Do not mass-format unrelated dirty files.
 
-- [ ] **Step 2: Run the required serial test matrix**
+- [x] **Step 2: Run the required serial test matrix**
 
 Run backend payment/provider/schema/concurrency/recovery suites with `--maxWorkers=1`, then all backend tests serially. Run frontend payment tests and the full frontend suite serially. Run `npm run sync:edge` followed by all Edge tests serially.
 
-- [ ] **Step 3: Run builds and type checks**
+- [x] **Step 3: Run builds and type checks**
 
 Run: `cd backend && npm run typecheck && npm run build`; root `npx tsc --noEmit`; root `npm run build`.
 
-- [ ] **Step 4: Scan for secret and contract leakage**
+- [x] **Step 4: Scan for secret and contract leakage**
 
 Search tracked/source/generated output for literal API keys, `NEXTPAY_API_KEY` in frontend paths, NextPay raw-response logging, `auto_verify`, unscoped `provider_ref` lookups, non-atomic payment grant calls, and calls to live NextPay endpoints in tests. Confirm all provider I/O is mocked.
 
@@ -286,6 +286,6 @@ Search tracked/source/generated output for literal API keys, `NEXTPAY_API_KEY` i
 
 Verify every requested error class, state transition, uniqueness rule, callback defense, retry path, and exactly-once entitlement invariant. Record any unresolved risk instead of weakening a test or guessing provider behavior.
 
-- [ ] **Step 6: Stop before every production action**
+- [x] **Step 6: Stop before every production action**
 
 Do not push a migration, set a Supabase secret, deploy an Edge Function, change provider selection, or call NextPay. Prepare the final report with changed files, flow architecture, required migrations, required secret, later deploy list, passed tests, remaining risks, and the exact 3–5 approved-key live-test steps.

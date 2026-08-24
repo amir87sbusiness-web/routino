@@ -16,10 +16,7 @@ afterAll(async () => {
 });
 
 async function paymentFixture() {
-  const [user] = await h.db
-    .insert(schema.users)
-    .values({ phone: "989121234567" })
-    .returning();
+  const [user] = await h.db.insert(schema.users).values({ phone: "989121234567" }).returning();
   if (!user) throw new Error("user fixture failed");
 
   const [payment] = await h.db
@@ -41,10 +38,7 @@ async function paymentFixture() {
 
 describe("atomic verified-payment grant", () => {
   it("scopes PSP reference uniqueness by provider", async () => {
-    const [user] = await h.db
-      .insert(schema.users)
-      .values({ phone: "989121234568" })
-      .returning();
+    const [user] = await h.db.insert(schema.users).values({ phone: "989121234568" }).returning();
     if (!user) throw new Error("user fixture failed");
     const base = {
       userId: user.id,

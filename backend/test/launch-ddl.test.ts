@@ -47,12 +47,12 @@ describe("launch schema repairs", () => {
       "payments_provider_ref_unique",
       "payments_user_attempt_unique",
     ]);
-    expect(indexes.find((row) => row.indexname === "payments_user_attempt_unique")?.indexdef).toMatch(
-      /unique.*\(user_id, attempt_id\).*where \(attempt_id is not null\)/i,
-    );
-    expect(indexes.find((row) => row.indexname === "payments_provider_ref_unique")?.indexdef).toMatch(
-      /unique.*\(provider, provider_ref\).*where \(provider_ref is not null\)/i,
-    );
+    expect(
+      indexes.find((row) => row.indexname === "payments_user_attempt_unique")?.indexdef,
+    ).toMatch(/unique.*\(user_id, attempt_id\).*where \(attempt_id is not null\)/i);
+    expect(
+      indexes.find((row) => row.indexname === "payments_provider_ref_unique")?.indexdef,
+    ).toMatch(/unique.*\(provider, provider_ref\).*where \(provider_ref is not null\)/i);
     expect(indexes.find((row) => row.indexname === "grants_payment_id_unique")?.indexdef).toMatch(
       /unique.*\(payment_id\).*where \(payment_id is not null\)/i,
     );

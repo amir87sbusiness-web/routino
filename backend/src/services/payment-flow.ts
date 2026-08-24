@@ -36,11 +36,7 @@ import {
   type PspName,
   type PspRouter,
 } from "../providers/psp/index.js";
-import {
-  extendEntitlement,
-  readEntitlement,
-  type Entitlement,
-} from "./entitlement.js";
+import { extendEntitlement, readEntitlement, type Entitlement } from "./entitlement.js";
 import { quote, redeemDiscount } from "./pricing.js";
 
 export type PaymentRow = typeof payments.$inferSelect;
@@ -114,10 +110,7 @@ async function existingAttemptResult(
     };
   }
 
-  throw conflict(
-    "duplicate_payment_attempt",
-    "This payment attempt is already being processed.",
-  );
+  throw conflict("duplicate_payment_attempt", "This payment attempt is already being processed.");
 }
 
 /** Applies a verified-paid payment exactly once.
@@ -318,10 +311,7 @@ export async function checkoutPayment(
       );
     }
     if (res.provider === "nextpay") {
-      throw badGateway(
-        "nextpay_token_error",
-        "NextPay could not create the payment transaction.",
-      );
+      throw badGateway("nextpay_token_error", "NextPay could not create the payment transaction.");
     }
     throw badRequest("psp_failed", "Payment gateway rejected the request. Try again.");
   }
@@ -389,11 +379,7 @@ async function releaseVerifyLease(
       updatedAt: t,
     })
     .where(
-      and(
-        eq(payments.id, paymentId),
-        eq(payments.status, "verifying"),
-        isNull(payments.appliedAt),
-      ),
+      and(eq(payments.id, paymentId), eq(payments.status, "verifying"), isNull(payments.appliedAt)),
     );
   return readPayment(db, paymentId);
 }
@@ -573,9 +559,7 @@ export async function handlePaymentCallback(
     [payment] = await db
       .select()
       .from(payments)
-      .where(
-        and(eq(payments.provider, "nextpay"), eq(payments.providerRef, nextpayTransId)),
-      )
+      .where(and(eq(payments.provider, "nextpay"), eq(payments.providerRef, nextpayTransId)))
       .limit(1);
   }
   if (!nextpayTransId && Number.isSafeInteger(trackId) && trackId > 0) {

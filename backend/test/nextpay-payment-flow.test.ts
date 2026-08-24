@@ -9,11 +9,7 @@ import {
   type PspVerifyResult,
 } from "../src/providers/psp/index.js";
 import { createRouter } from "../src/providers/psp/router.js";
-import {
-  handlePaymentCallback,
-  settleOne,
-  type PaymentRow,
-} from "../src/services/payment-flow.js";
+import { handlePaymentCallback, settleOne, type PaymentRow } from "../src/services/payment-flow.js";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
 
 let h: Harness;

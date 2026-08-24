@@ -78,7 +78,7 @@ async function buyPlan(access: string) {
     "POST /v1/payments/checkout",
     await h.call("POST", "/v1/payments/checkout", {
       headers: auth(access),
-      body: { planId: "m1", platform: "web" },
+      body: { planId: "m1", platform: "web", attemptId: crypto.randomUUID() },
     }),
   );
   const payment = (await checkout.json()) as { paymentId: string; trackId: number };

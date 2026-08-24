@@ -130,9 +130,7 @@ describe("SubscribePage payment attempts", () => {
     await click(oneMonth);
     await click(paymentButton(host));
 
-    expect(payments.checkout.mock.calls[1]?.[3]).not.toBe(
-      payments.checkout.mock.calls[0]?.[3],
-    );
+    expect(payments.checkout.mock.calls[1]?.[3]).not.toBe(payments.checkout.mock.calls[0]?.[3]);
   });
 
   it("releases the UUID after a definitive token rejection", async () => {
@@ -143,9 +141,7 @@ describe("SubscribePage payment attempts", () => {
     await click(paymentButton(host));
     await click(paymentButton(host));
 
-    expect(payments.checkout.mock.calls[1]?.[3]).not.toBe(
-      payments.checkout.mock.calls[0]?.[3],
-    );
+    expect(payments.checkout.mock.calls[1]?.[3]).not.toBe(payments.checkout.mock.calls[0]?.[3]);
     expect(host.textContent).not.toContain("safe");
   });
 });

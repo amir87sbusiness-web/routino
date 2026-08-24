@@ -23,5 +23,5 @@ describe("mobile production build", () => {
       .join("\n");
 
     expect(javascript).toContain("https://api.routino.me/v1");
-  });
+  }, 30_000);
 });

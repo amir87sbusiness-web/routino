@@ -155,12 +155,7 @@ function SubscribePage() {
       if (!paymentAttempt.current || paymentAttempt.current.key !== attemptKey) {
         paymentAttempt.current = { id: crypto.randomUUID(), key: attemptKey };
       }
-      const res = await checkout(
-        selected,
-        appliedCode?.code,
-        platform,
-        paymentAttempt.current.id,
-      );
+      const res = await checkout(selected, appliedCode?.code, platform, paymentAttempt.current.id);
 
       if (res.free && res.entitlement) {
         paymentAttempt.current = null;

@@ -286,3 +286,18 @@
 **Suggested improvement:** Put an executable backup-and-validate checkpoint before every Git tag or external deployment. Require a nonempty schema dump, a nonempty data dump, hashes, and a documented restore path before allowing any release mutation.
 
 **Principle:** A backup is a release prerequisite only when its creation and recovery path have both been demonstrated in the current environment.
+
+### Observation 20: Idempotency must guard the irreversible side effect
+
+**Status:** OPEN
+**Date:** 2026-08-24
+**Session context:** Hardening a payment callback where `payments.applied_at` was claimed before entitlement extension and the payment grant ledger had no unique key.
+**Skill:** test-driven-development / verification-before-completion
+**Type:** open-source
+**Phase/Area:** Payment state machines and atomic grants
+
+**Issue:** A payment-row flag can suppress ordinary callback replays while still leaving crash windows between the flag, entitlement update, and audit insert. Resetting the flag after a later bookkeeping failure can then replay the entitlement extension.
+
+**Suggested improvement:** Put a unique key on the ledger row that represents the irreversible grant, make its insert the idempotency winner, and run the ledger insert, entitlement mutation, audit fields, and payment application inside one database transaction. Inject a grant failure in tests and assert every related table rolls back.
+
+**Principle:** Exactly-once behavior is structural only when the unique guard and the side effect commit atomically.

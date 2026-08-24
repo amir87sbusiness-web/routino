@@ -73,9 +73,7 @@ describe("Edge mocked NextPay flow", () => {
       provider: string;
       provider_ref: string;
       status: string;
-    }>(
-      `select provider, provider_ref, status from payments where id = '${body.paymentId}'`,
-    );
+    }>(`select provider, provider_ref, status from payments where id = '${body.paymentId}'`);
     expect(storedBeforeRedirect).toEqual({
       provider: "nextpay",
       provider_ref: TRANS_ID,
@@ -83,8 +81,7 @@ describe("Edge mocked NextPay flow", () => {
     });
 
     const callbackUrl =
-      `/v1/payments/callback?trans_id=${TRANS_ID}&order_id=${body.paymentId}` +
-      `&amount=999999999`;
+      `/v1/payments/callback?trans_id=${TRANS_ID}&order_id=${body.paymentId}` + `&amount=999999999`;
     expect(await (await h.call("GET", callbackUrl)).text()).toContain("پرداخت موفق");
     expect(await (await h.call("GET", callbackUrl)).text()).toContain("پرداخت موفق");
     expect(provider.verifyCalls).toBe(1);

@@ -122,7 +122,7 @@ describe("user detail", () => {
     const { user, access } = await signIn(h);
     await h.call("POST", "/v1/payments/checkout", {
       headers: auth(access),
-      body: { planId: "m1" },
+      body: { planId: "m1", attemptId: crypto.randomUUID() },
     });
 
     const d = await (
@@ -211,7 +211,7 @@ describe("payments listing", () => {
     const { access } = await signIn(h);
     await h.call("POST", "/v1/payments/checkout", {
       headers: auth(access),
-      body: { planId: "m1" },
+      body: { planId: "m1", attemptId: crypto.randomUUID() },
     });
 
     const all = await (await h.call("GET", "/v1/admin/payments", { headers: admin() })).json();
