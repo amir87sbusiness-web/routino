@@ -141,7 +141,7 @@ Run: `cd backend && npm test -- --maxWorkers=1 test/payments.test.ts test/paymen
 
 Insert or claim `(user_id, attempt_id)` before calling a PSP. On a unique conflict, reread the row and either return the existing redirect/result, return `409 duplicate_payment_attempt`, or reject changed immutable inputs. Never make a second provider call for the same claimed attempt. Derive amount/plan/months entirely from server pricing and persist them before provider I/O.
 
-- [ ] **Step 5: Store and route PSP references by provider**
+- [x] **Step 5: Store and route PSP references by provider**
 
 Write all new provider identifiers to `provider_ref`, optionally maintaining legacy fields for existing providers only where current compatibility requires it. Every new lookup must bind both `provider` and `provider_ref`. Convert typed provider failures to safe HTTP errors: token error 502, timeout 504, unavailable 503, and opaque internal 500.
 
@@ -162,27 +162,27 @@ Run the same targeted payment command.
 - Verify sends database `amount` and stored provider reference; it compares provider response amount and `order_id` with database values before applying.
 - Transient Verify failures remain recoverable and retryable; terminal provider failures remain terminal.
 
-- [ ] **Step 1: Write failing callback integrity tests**
+- [x] **Step 1: Write failing callback integrity tests**
 
 Cover fake callback, altered callback amount, altered callback `order_id`, provider/reference mismatch, reused transaction, missing transaction, and a NextPay callback that contains no trusted success flag. Assert no entitlement is granted until backend Verify returns success matching database amount and order.
 
-- [ ] **Step 2: Write failing duplicate/retry tests**
+- [x] **Step 2: Write failing duplicate/retry tests**
 
 Cover duplicate callbacks, duplicate polling Verify, concurrent Verify, stale `verifying` lease, timeout/unavailable/transient NextPay code followed by success, terminal failure, and already locally applied payment. Assert transient outcomes do not become `failed`, `canceled`, or `verify_failed`; retries remain possible. Assert a second success cannot add time or a second grant.
 
-- [ ] **Step 3: Run RED Verify tests**
+- [x] **Step 3: Run RED Verify tests**
 
 Run: `cd backend && npm test -- --maxWorkers=1 test/payments.test.ts test/payment-recovery.test.ts test/payment-atomicity.test.ts`
 
-- [ ] **Step 4: Implement the database Verify lease**
+- [x] **Step 4: Implement the database Verify lease**
 
 Claim eligible payments with a conditional update. A fresh competing lease returns the current safe pending state; a stale lease may be reclaimed. Re-read before persisting a visible failure so a concurrent successful apply always wins. Locally applied rows return paid without another PSP call.
 
-- [ ] **Step 5: Implement provider-specific callback routing and authoritative Verify**
+- [x] **Step 5: Implement provider-specific callback routing and authoritative Verify**
 
 Parse NextPay `trans_id`/`order_id` only to identify the candidate row. Ignore callback amount. Verify with stored amount/provider reference; require provider `code=0`, equal stored amount, and equal order ID. Never treat an undocumented “already verified” provider code as success. Store only the numeric provider code and safe normalized status.
 
-- [ ] **Step 6: Run GREEN Verify and recovery tests**
+- [x] **Step 6: Run GREEN Verify and recovery tests**
 
 Run the same targeted Verify command.
 

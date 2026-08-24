@@ -17,7 +17,7 @@
  *    and `payments.applied_at` write share one transaction, so however many
  *    callbacks or Edge isolates race, the grant happens exactly once.
  */
-import { and, count, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, count, eq, gt, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { rowsOf, type Database } from "../db/client.js";
 import { grants, payments } from "../db/schema.js";
 import {
@@ -128,7 +128,13 @@ async function existingAttemptResult(
 export async function applyPaid(
   db: Database,
   p: PaymentRow,
-  v: { refNumber?: string; cardNumber?: string; result?: number; status?: number },
+  v: {
+    refNumber?: string;
+    cardNumber?: string;
+    result?: number;
+    providerCode?: number;
+    status?: number;
+  },
   t: Date,
 ): Promise<void> {
   const granted = await db.transaction(async (tx) => {
@@ -166,7 +172,7 @@ export async function applyPaid(
         status: "paid",
         refNumber: v.refNumber ?? p.refNumber,
         cardNumber: v.cardNumber ?? p.cardNumber,
-        pspResult: v.result ?? p.pspResult,
+        pspResult: v.providerCode ?? v.result ?? p.pspResult,
         pspStatus: v.status ?? p.pspStatus,
         paidAt: p.paidAt ?? t,
         verifiedAt: t,
@@ -354,6 +360,181 @@ export interface CallbackOutcome {
   message?: string;
 }
 
+const VERIFY_LEASE_MS = 30_000;
+
+interface VerifyPaymentOutcome extends CallbackOutcome {
+  changed: boolean;
+}
+
+async function readPayment(db: Database, id: string): Promise<PaymentRow | undefined> {
+  const [payment] = await db.select().from(payments).where(eq(payments.id, id)).limit(1);
+  return payment;
+}
+
+async function releaseVerifyLease(
+  db: Database,
+  paymentId: string,
+  restoreStatus: string,
+  t: Date,
+  providerResult?: { result: number; providerCode?: number; status?: number },
+): Promise<PaymentRow | undefined> {
+  await db
+    .update(payments)
+    .set({
+      status: restoreStatus,
+      pspResult: providerResult
+        ? (providerResult.providerCode ?? providerResult.result)
+        : undefined,
+      pspStatus: providerResult?.status ?? undefined,
+      updatedAt: t,
+    })
+    .where(
+      and(
+        eq(payments.id, paymentId),
+        eq(payments.status, "verifying"),
+        isNull(payments.appliedAt),
+      ),
+    );
+  return readPayment(db, paymentId);
+}
+
+/** Claims one recoverable Verify lease and owns every provider result mapping.
+ * A timeout or documented transient result releases the row back to its prior
+ * recoverable state. Only authoritative terminal answers become terminal. */
+async function verifyAndApplyPayment(
+  db: Database,
+  psp: PspRouter,
+  payment: PaymentRow,
+  t: Date,
+): Promise<VerifyPaymentOutcome> {
+  if (payment.appliedAt) return { outcome: "paid", payment, changed: false };
+  if (payment.status === "canceled" || payment.status === "verify_failed") {
+    return {
+      outcome: payment.status,
+      payment,
+      changed: false,
+    };
+  }
+
+  const ref = paymentRef(payment);
+  if (!ref) return { outcome: "pending", payment, changed: false };
+
+  const restoreStatus = payment.status === "verifying" ? "redirected" : payment.status;
+  const staleBefore = new Date(t.getTime() - VERIFY_LEASE_MS);
+  const [claimed] = await db
+    .update(payments)
+    .set({ status: "verifying", updatedAt: t })
+    .where(
+      and(
+        eq(payments.id, payment.id),
+        isNull(payments.appliedAt),
+        sql`${payments.status} not in ('canceled', 'verify_failed')`,
+        or(ne(payments.status, "verifying"), lt(payments.updatedAt, staleBefore)),
+      ),
+    )
+    .returning();
+
+  if (!claimed) {
+    const fresh = (await readPayment(db, payment.id)) ?? payment;
+    return {
+      outcome: fresh.appliedAt ? "paid" : "pending",
+      payment: fresh.appliedAt ? fresh : undefined,
+      changed: false,
+    };
+  }
+
+  let verified;
+  try {
+    verified = await psp.verify(paymentProvider(claimed), ref, claimed.amountRial);
+  } catch (err) {
+    console.error("psp verify unreachable", {
+      paymentId: claimed.id,
+      provider: paymentProvider(claimed),
+      failureKind: err instanceof Error ? err.name : "unknown",
+    });
+    const fresh = await releaseVerifyLease(db, claimed.id, restoreStatus, t);
+    return { outcome: "pending", payment: fresh, changed: false };
+  }
+
+  const provider = paymentProvider(claimed);
+  const paidNow =
+    verified.result === ZIBAL_RESULT.OK && verified.status === ZIBAL_STATUS.PAID_VERIFIED;
+  const providerAllowsAlreadyVerified =
+    provider !== "nextpay" && verified.result === ZIBAL_RESULT.ALREADY_VERIFIED;
+
+  if (paidNow || providerAllowsAlreadyVerified) {
+    const amountMismatch =
+      paidNow && (typeof verified.amount !== "number" || verified.amount !== claimed.amountRial);
+    const orderMismatch = provider === "nextpay" && verified.orderId !== claimed.id;
+    if (amountMismatch || orderMismatch) {
+      await db
+        .update(payments)
+        .set({
+          status: "verify_failed",
+          pspResult: verified.providerCode ?? verified.result,
+          pspStatus: verified.status ?? null,
+          updatedAt: t,
+        })
+        .where(
+          and(
+            eq(payments.id, claimed.id),
+            eq(payments.status, "verifying"),
+            isNull(payments.appliedAt),
+          ),
+        );
+      console.error("PAYMENT VERIFY MISMATCH — investigate immediately", {
+        paymentId: claimed.id,
+        provider,
+        amountMismatch,
+        orderMismatch,
+      });
+      const fresh = (await readPayment(db, claimed.id)) ?? claimed;
+      return {
+        outcome: fresh.appliedAt ? "paid" : "verify_failed",
+        payment: fresh,
+        changed: !fresh.appliedAt,
+      };
+    }
+
+    await applyPaid(db, claimed, verified, t);
+    const fresh = (await readPayment(db, claimed.id)) ?? claimed;
+    return { outcome: "paid", payment: fresh, changed: true };
+  }
+
+  if (
+    verified.failureKind === "transient_verify" ||
+    verified.failureKind === "invalid_response" ||
+    verified.status === ZIBAL_STATUS.PENDING
+  ) {
+    const fresh = await releaseVerifyLease(db, claimed.id, restoreStatus, t, verified);
+    return { outcome: "pending", payment: fresh, changed: false };
+  }
+
+  const canceled = verified.status === ZIBAL_STATUS.CANCELED_BY_USER;
+  await db
+    .update(payments)
+    .set({
+      status: canceled ? "canceled" : "failed",
+      pspResult: verified.providerCode ?? verified.result,
+      pspStatus: verified.status ?? null,
+      updatedAt: t,
+    })
+    .where(
+      and(
+        eq(payments.id, claimed.id),
+        eq(payments.status, "verifying"),
+        isNull(payments.appliedAt),
+      ),
+    );
+  const fresh = (await readPayment(db, claimed.id)) ?? claimed;
+  if (fresh.appliedAt) return { outcome: "paid", payment: fresh, changed: true };
+  return {
+    outcome: canceled ? "canceled" : "failed",
+    payment: fresh,
+    changed: true,
+  };
+}
+
 /**
  * Decides the outcome of a gateway callback.
  *
@@ -384,19 +565,30 @@ export async function handlePaymentCallback(
   const trackId = Number(q("trackId"));
   const authorityParam = q("Authority");
   const orderIdParam = q("orderId");
+  const nextpayTransId = q("trans_id");
+  const nextpayOrderId = q("order_id");
 
   let payment: PaymentRow | undefined;
-  if (Number.isSafeInteger(trackId) && trackId > 0) {
+  if (nextpayTransId) {
+    [payment] = await db
+      .select()
+      .from(payments)
+      .where(
+        and(eq(payments.provider, "nextpay"), eq(payments.providerRef, nextpayTransId)),
+      )
+      .limit(1);
+  }
+  if (!nextpayTransId && Number.isSafeInteger(trackId) && trackId > 0) {
     [payment] = await db.select().from(payments).where(eq(payments.trackId, trackId)).limit(1);
   }
-  if (!payment && authorityParam) {
+  if (!nextpayTransId && !payment && authorityParam) {
     [payment] = await db
       .select()
       .from(payments)
       .where(eq(payments.authority, authorityParam))
       .limit(1);
   }
-  if (!payment && orderIdParam && UUID_RE.test(orderIdParam)) {
+  if (!nextpayTransId && !payment && orderIdParam && UUID_RE.test(orderIdParam)) {
     [payment] = await db.select().from(payments).where(eq(payments.id, orderIdParam)).limit(1);
   }
 
@@ -418,9 +610,13 @@ export async function handlePaymentCallback(
   // UUID_RE is case-insensitive), so the row above can be found by an upper-cased
   // orderId that would then fail a strict `===` against the canonical lower-case
   // `payment.id` — turning a legitimate caller away.
+  const provider = paymentProvider(payment);
   const proven =
-    orderIdParam?.toLowerCase() === payment.id.toLowerCase() ||
-    (!!authorityParam && authorityParam === payment.authority);
+    provider === "nextpay"
+      ? nextpayTransId === payment.providerRef &&
+        nextpayOrderId?.toLowerCase() === payment.id.toLowerCase()
+      : orderIdParam?.toLowerCase() === payment.id.toLowerCase() ||
+        (!!authorityParam && authorityParam === payment.authority);
 
   // Everything past this line either mutates the payment or discloses its state,
   // and this endpoint is public and unauthenticated. A caller who proved nothing
@@ -440,14 +636,15 @@ export async function handlePaymentCallback(
   // production edge deployment has no rate limiter at all.
   if (!proven) return neutral;
 
-  // Already granted (double callback / refresh): render the final state.
+  // Already granted (double callback / refresh): render the final state without
+  // calling the PSP again. Local success is the only safe NextPay replay proof.
   if (payment.appliedAt) return { outcome: "paid", payment };
 
   // The user canceled at the gateway. Zibal signals it with `success!=1`,
   // ZarinPal with `Status!=OK`. Verify would also tell us, but skipping the
   // round-trip for the common cancel case keeps the page fast.
   const userApproved = q("success") === "1" || q("Status") === "OK";
-  if (!userApproved) {
+  if (provider !== "nextpay" && !userApproved) {
     await db
       .update(payments)
       .set({ status: "canceled", pspStatus: Number(q("status")) || null, updatedAt: t })
@@ -455,68 +652,8 @@ export async function handlePaymentCallback(
     return { outcome: "canceled", payment };
   }
 
-  // From here on, the gateway's "approved" flag in the query string is a CLAIM,
-  // nothing more — anyone can type that URL. Even a payment previously marked
-  // failed or canceled is re-verified: a stale local status must never beat the
-  // gateway's server-to-server answer, or a paid user loses their grant.
-  const ref = paymentRef(payment);
-  if (!ref) return { outcome: "pending", payment };
-  let v;
-  try {
-    v = await psp.verify(paymentProvider(payment), ref, payment.amountRial);
-  } catch (err) {
-    console.error("psp verify unreachable", { err, paymentId: payment.id });
-    // Do NOT mark failed: the money may have moved. Leave the row as-is; the
-    // status poll and the next callback can retry verification.
-    return { outcome: "pending", payment };
-  }
-
-  if (v.result === ZIBAL_RESULT.OK && v.status === ZIBAL_STATUS.PAID_VERIFIED) {
-    if (typeof v.amount === "number" && v.amount !== payment.amountRial) {
-      // The single scariest branch in the codebase: gateway says an amount we
-      // never asked for. Never grant; flag loudly.
-      await db
-        .update(payments)
-        .set({ status: "verify_failed", pspResult: v.result, pspStatus: v.status, updatedAt: t })
-        .where(and(eq(payments.id, payment.id), isNull(payments.appliedAt)));
-      console.error("PAYMENT AMOUNT MISMATCH — investigate immediately", {
-        paymentId: payment.id,
-        expectedRial: payment.amountRial,
-        gotRial: v.amount,
-      });
-      return { outcome: "verify_failed", payment };
-    }
-    await applyPaid(db, payment, v, t);
-    const [fresh] = await db.select().from(payments).where(eq(payments.id, payment.id)).limit(1);
-    return { outcome: "paid", payment: fresh ?? payment };
-  }
-
-  if (v.result === ZIBAL_RESULT.ALREADY_VERIFIED) {
-    // Verified in a previous callback we never finished processing. Zibal's
-    // 201 carries no amount, but the amount was asserted the first time; the
-    // applied_at guard makes re-applying safe.
-    await applyPaid(db, payment, v, t);
-    const [fresh] = await db.select().from(payments).where(eq(payments.id, payment.id)).limit(1);
-    return { outcome: "paid", payment: fresh ?? payment };
-  }
-
-  if (v.status === ZIBAL_STATUS.PENDING) {
-    // Not settled at the gateway yet (or a premature/forged callback). Leave
-    // the row untouched so the real outcome can still land later.
-    return { outcome: "pending", payment };
-  }
-
-  const canceled = v.status === ZIBAL_STATUS.CANCELED_BY_USER;
-  await db
-    .update(payments)
-    .set({
-      status: canceled ? "canceled" : "failed",
-      pspResult: v.result,
-      pspStatus: v.status ?? null,
-      updatedAt: t,
-    })
-    .where(and(eq(payments.id, payment.id), isNull(payments.appliedAt)));
-  return { outcome: canceled ? "canceled" : "failed", payment };
+  const result = await verifyAndApplyPayment(db, psp, payment, t);
+  return { outcome: result.outcome, payment: result.payment, message: result.message };
 }
 
 /**
@@ -543,56 +680,7 @@ export async function settleOne(
     payment.status !== "canceled" &&
     payment.status !== "verify_failed";
   if (!unsettled) return false;
-  const ref = paymentRef(payment);
-  if (!ref) return false;
-
-  let v;
-  try {
-    v = await psp.verify(paymentProvider(payment), ref, payment.amountRial);
-  } catch {
-    // Gateway unreachable or timed out. Do NOT mark failed — the money may have
-    // moved. The next poll or the next app open asks again.
-    return false;
-  }
-
-  const paid =
-    (v.result === ZIBAL_RESULT.OK && v.status === ZIBAL_STATUS.PAID_VERIFIED) ||
-    v.result === ZIBAL_RESULT.ALREADY_VERIFIED;
-
-  if (paid) {
-    if (
-      v.result === ZIBAL_RESULT.OK &&
-      typeof v.amount === "number" &&
-      v.amount !== payment.amountRial
-    ) {
-      await db
-        .update(payments)
-        .set({
-          status: "verify_failed",
-          pspResult: v.result,
-          pspStatus: v.status ?? null,
-          updatedAt: t,
-        })
-        .where(eq(payments.id, payment.id));
-      console.error("PAYMENT AMOUNT MISMATCH — investigate immediately", {
-        paymentId: payment.id,
-        expectedRial: payment.amountRial,
-        gotRial: v.amount,
-      });
-      return true;
-    }
-    await applyPaid(db, payment, v, t);
-    return true;
-  }
-
-  if (v.status === ZIBAL_STATUS.CANCELED_BY_USER) {
-    await db
-      .update(payments)
-      .set({ status: "canceled", pspResult: v.result, pspStatus: v.status ?? null, updatedAt: t })
-      .where(and(eq(payments.id, payment.id), isNull(payments.appliedAt)));
-    return true;
-  }
-  return false;
+  return (await verifyAndApplyPayment(db, psp, payment, t)).changed;
 }
 
 /** How far back a stranded payment is still worth chasing on sign-in. */
