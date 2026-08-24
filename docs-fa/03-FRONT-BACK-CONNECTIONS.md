@@ -124,7 +124,7 @@ subscribe.tsx (فرانت)
 2. فرانت: الگوی `pay/result` در `src/client.tsx`
 3. اندروید: intent-filter در `android/app/src/main/AndroidManifest.xml` (و مشابهش در iOS)
 
-**پارامترهای callback** بسته به درگاه فرق دارن: زیبال `trackId`, `success`, `status`, `orderId` (فیک هم همین را تقلید می‌کند)، زرین‌پال `Authority`, `Status`، و NextPay `trans_id`, `order_id`, `amount`. همه untrusted هستند. NextPay فقط با جفت `provider=nextpay` + `provider_ref=trans_id` پیدا می‌شود، callback amount کنار گذاشته می‌شود، و مبلغ/order نهایی از DB و پاسخ Verify سنجیده می‌شوند.
+**پارامترهای callback** بسته به درگاه فرق دارن: زیبال `trackId`, `success`, `status`, `orderId` (فیک هم همین را تقلید می‌کند)، زرین‌پال `Authority`, `Status`، و NextPay `trans_id`, `order_id`, `amount`. همه untrusted هستند. NextPay معمولاً فقط با جفت `provider=nextpay` + `provider_ref=trans_id` پیدا می‌شود، callback amount کنار گذاشته می‌شود، و مبلغ/order نهایی از DB و پاسخ Verify سنجیده می‌شوند. تنها استثنا recoveryِ crash بین صدور و ذخیرهٔ token است: payment با `order_id` سروری پیدا می‌شود، ولی `trans_id` فقط وقتی ثبت می‌شود که Verify همان amount/order را برگرداند؛ ref جعلی payment را terminal نمی‌کند.
 
 ### 🌍 قرارداد ۶: آدرس‌ها و CORS
 

@@ -282,7 +282,7 @@ Run: `cd backend && npm run typecheck && npm run build`; root `npx tsc --noEmit`
 
 Search tracked/source/generated output for literal API keys, `NEXTPAY_API_KEY` in frontend paths, NextPay raw-response logging, `auto_verify`, unscoped `provider_ref` lookups, non-atomic payment grant calls, and calls to live NextPay endpoints in tests. Confirm all provider I/O is mocked.
 
-- [ ] **Step 5: Review the complete diff against the approved spec**
+- [x] **Step 5: Review the complete diff against the approved spec**
 
 Verify every requested error class, state transition, uniqueness rule, callback defense, retry path, and exactly-once entitlement invariant. Record any unresolved risk instead of weakening a test or guessing provider behavior.
 

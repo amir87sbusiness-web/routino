@@ -9,7 +9,12 @@ import {
   type PspVerifyResult,
 } from "../src/providers/psp/index.js";
 import { createRouter } from "../src/providers/psp/router.js";
-import { handlePaymentCallback, settleOne, type PaymentRow } from "../src/services/payment-flow.js";
+import {
+  handlePaymentCallback,
+  settleOne,
+  settleOpenPayments,
+  type PaymentRow,
+} from "../src/services/payment-flow.js";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
 
 let h: Harness;
@@ -121,6 +126,56 @@ describe("NextPay callback and Verify state machine", () => {
       .from(schema.payments)
       .where(eq(schema.payments.id, payment.id));
     expect(stored?.pspResult).toBe(0);
+  });
+
+  it("recovers a NextPay trans_id issued before Routino could persist it", async () => {
+    const payment = await fixture({
+      status: "pending",
+      provider: null,
+      providerRef: null,
+    });
+    const provider = nextpayStub(() => paid(payment.id));
+
+    const result = await callback(payment, provider, {
+      trans_id: TRANS_ID,
+      order_id: payment.id,
+    });
+    const [stored] = await h.db
+      .select()
+      .from(schema.payments)
+      .where(eq(schema.payments.id, payment.id));
+
+    expect(result.outcome).toBe("paid");
+    expect(provider.verifyCalls).toBe(1);
+    expect(stored).toMatchObject({
+      provider: "nextpay",
+      providerRef: TRANS_ID,
+      status: "paid",
+    });
+    expect(await grantCount(payment.id)).toBe(1);
+  });
+
+  it("does not bind an unpersisted trans_id when Verify returns a different order", async () => {
+    const payment = await fixture({
+      status: "pending",
+      provider: null,
+      providerRef: null,
+    });
+    const provider = nextpayStub(() => paid(crypto.randomUUID()));
+
+    const result = await callback(payment, provider, {
+      trans_id: TRANS_ID,
+      order_id: payment.id,
+    });
+    const [stored] = await h.db
+      .select()
+      .from(schema.payments)
+      .where(eq(schema.payments.id, payment.id));
+
+    expect(result).toEqual({ outcome: "pending" });
+    expect(provider.verifyCalls).toBe(1);
+    expect(stored).toMatchObject({ status: "pending", provider: null, providerRef: null });
+    expect(await grantCount(payment.id)).toBe(0);
   });
 
   it("keeps an altered callback order_id neutral and performs no Verify", async () => {
@@ -263,6 +318,54 @@ describe("NextPay callback and Verify state machine", () => {
     expect(await grantCount(payment.id)).toBe(1);
   });
 
+  it("reclaims a stale verifying lease through the normal app-open sweep", async () => {
+    const payment = await fixture({
+      status: "verifying",
+      updatedAt: new Date(NOW.getTime() - 120_000),
+    });
+    const provider = nextpayStub(() => paid(payment.id));
+
+    expect(await settleOpenPayments(h.db, createRouter([provider]), payment.userId, NOW)).toBe(1);
+    expect(provider.verifyCalls).toBe(1);
+    expect(await grantCount(payment.id)).toBe(1);
+  });
+
+  it("reports paid when a stale winner applies before the first Verify releases", async () => {
+    const payment = await fixture();
+    let release!: () => void;
+    let started!: () => void;
+    let invocation = 0;
+    const began = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const provider = nextpayStub(async () => {
+      invocation += 1;
+      if (invocation === 1) {
+        started();
+        await gate;
+        return { result: -42, providerCode: -42, failureKind: "transient_verify" };
+      }
+      return paid(payment.id);
+    });
+    const router = createRouter([provider]);
+
+    const first = callback(payment, provider);
+    await began;
+    const [claimed] = await h.db
+      .select()
+      .from(schema.payments)
+      .where(eq(schema.payments.id, payment.id));
+    expect(await settleOne(h.db, router, claimed!, new Date(NOW.getTime() + 31_000))).toBe(true);
+    release();
+
+    expect((await first).outcome).toBe("paid");
+    expect(provider.verifyCalls).toBe(2);
+    expect(await grantCount(payment.id)).toBe(1);
+  });
+
   it("makes an authoritative terminal failure terminal without granting", async () => {
     const payment = await fixture();
     const provider = nextpayStub(() => ({
@@ -279,6 +382,29 @@ describe("NextPay callback and Verify state machine", () => {
       .where(eq(schema.payments.id, payment.id));
     expect(fresh?.status).toBe("failed");
     expect(fresh?.pspResult).toBe(-2);
+    expect(await grantCount(payment.id)).toBe(0);
+  });
+
+  it("never re-verifies an authoritative terminal failure", async () => {
+    const payment = await fixture();
+    const answers: PspVerifyResult[] = [
+      {
+        result: -2,
+        providerCode: -2,
+        failureKind: "terminal_verify",
+        status: ZIBAL_STATUS.INTERNAL_ERROR,
+      },
+      paid(payment.id),
+    ];
+    const provider = nextpayStub(() => answers.shift()!);
+
+    expect((await callback(payment, provider)).outcome).toBe("failed");
+    const [failed] = await h.db
+      .select()
+      .from(schema.payments)
+      .where(eq(schema.payments.id, payment.id));
+    expect((await callback(failed!, provider)).outcome).toBe("failed");
+    expect(provider.verifyCalls).toBe(1);
     expect(await grantCount(payment.id)).toBe(0);
   });
 

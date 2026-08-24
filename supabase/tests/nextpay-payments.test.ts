@@ -92,6 +92,36 @@ describe("Edge mocked NextPay flow", () => {
     ).toHaveLength(1);
   });
 
+  it("recovers an issued trans_id when an Edge isolate dies before persisting it", async () => {
+    const { access } = await signIn(h);
+    const checkout = await h.call("POST", "/v1/payments/checkout", {
+      headers: auth(access),
+      body: { planId: "m1", attemptId: crypto.randomUUID() },
+    });
+    const body = await checkout.json();
+
+    // Simulate the only crash window: NextPay returned the token, but the Edge
+    // isolate disappeared before Routino stored the provider identity.
+    await h.query(`
+      update payments
+         set status = 'pending', provider = null, provider_ref = null
+       where id = '${body.paymentId}'
+    `);
+
+    const callbackUrl = `/v1/payments/callback?trans_id=${TRANS_ID}&order_id=${body.paymentId}`;
+    expect(await (await h.call("GET", callbackUrl)).text()).toContain("پرداخت موفق");
+    const [stored] = await h.query<{
+      provider: string;
+      provider_ref: string;
+      status: string;
+    }>(`select provider, provider_ref, status from payments where id = '${body.paymentId}'`);
+    expect(stored).toEqual({
+      provider: "nextpay",
+      provider_ref: TRANS_ID,
+      status: "paid",
+    });
+  });
+
   it("keeps a transient Verify result retryable on Edge", async () => {
     provider.answers.push({
       result: -42,

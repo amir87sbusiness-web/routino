@@ -95,7 +95,7 @@ const schema = z.object({
   ZARINPAL_MERCHANT: z.string().default("dev-only-zarinpal-merchant"),
   /** Server-only NextPay API key. There is deliberately no development or
    * repository default; selecting NextPay without it is a startup error. */
-  NEXTPAY_API_KEY: z.string().min(1).optional(),
+  NEXTPAY_API_KEY: z.string().trim().min(1).optional(),
 
   /** Public base URL of THIS server. Zibal redirects a browser here, so it must
    * be reachable from the user's device — `localhost` works for web dev but can

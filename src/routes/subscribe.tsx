@@ -183,7 +183,8 @@ function SubscribePage() {
         err instanceof ApiError &&
         (err.offline ||
           err.code === "payment_network_timeout" ||
-          err.code === "payment_provider_unavailable");
+          err.code === "payment_provider_unavailable" ||
+          err.code === "duplicate_payment_attempt");
       if (!retryable) paymentAttempt.current = null;
 
       if (err instanceof ApiError && err.offline) {

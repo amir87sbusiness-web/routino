@@ -58,6 +58,40 @@ describe("launch schema repairs", () => {
     );
   });
 
+  it("refuses to install grant uniqueness over duplicate financial history", async () => {
+    await h.raw(`
+      drop index grants_payment_id_unique;
+      insert into users (id, phone)
+      values ('11111111-1111-4111-8111-111111111111', '989122211111');
+      insert into payments (
+        id, user_id, plan_id, months, amount_toman, amount_rial, status
+      ) values (
+        '22222222-2222-4222-8222-222222222222',
+        '11111111-1111-4111-8111-111111111111',
+        'm1', 1, 59000, 590000, 'paid'
+      );
+      insert into grants (user_id, source, payment_id) values
+        (
+          '11111111-1111-4111-8111-111111111111',
+          'payment',
+          '22222222-2222-4222-8222-222222222222'
+        ),
+        (
+          '11111111-1111-4111-8111-111111111111',
+          'payment',
+          '22222222-2222-4222-8222-222222222222'
+        );
+    `);
+
+    await expect(h.raw(SCHEMA_SQL)).rejects.toThrow(/duplicate grants\.payment_id/i);
+    expect(
+      await h.query(`
+        select id from grants
+        where payment_id = '22222222-2222-4222-8222-222222222222'
+      `),
+    ).toHaveLength(2);
+  });
+
   it("clears only the retired device-switch lock while retaining a blocked account", async () => {
     await h.raw(`
       insert into users (phone, blocked, security_locked_at, security_lock_reason) values

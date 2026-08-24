@@ -118,6 +118,17 @@ describe("SubscribePage payment attempts", () => {
     expect(secondAttempt).toBe(firstAttempt);
   });
 
+  it("keeps the UUID when the same attempt is still being processed", async () => {
+    payments.checkout
+      .mockRejectedValueOnce(new ApiError(409, "duplicate_payment_attempt", "safe"))
+      .mockResolvedValueOnce({ free: false, paymentId: "payment-1" });
+
+    await click(paymentButton(host));
+    await click(paymentButton(host));
+
+    expect(payments.checkout.mock.calls[1]?.[3]).toBe(payments.checkout.mock.calls[0]?.[3]);
+  });
+
   it("creates a new UUID when the selected plan changes", async () => {
     payments.checkout
       .mockRejectedValueOnce(new ApiError(503, "payment_provider_unavailable", "safe"))

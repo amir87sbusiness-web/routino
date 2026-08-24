@@ -128,6 +128,8 @@ export async function applyPaid(
     result?: number;
     providerCode?: number;
     status?: number;
+    provider?: PspName;
+    providerRef?: string;
   },
   t: Date,
 ): Promise<void> {
@@ -168,6 +170,8 @@ export async function applyPaid(
         cardNumber: v.cardNumber ?? p.cardNumber,
         pspResult: v.providerCode ?? v.result ?? p.pspResult,
         pspStatus: v.status ?? p.pspStatus,
+        provider: v.provider ?? p.provider,
+        providerRef: v.providerRef ?? p.providerRef,
         paidAt: p.paidAt ?? t,
         verifiedAt: t,
         appliedAt: t,
@@ -357,6 +361,14 @@ interface VerifyPaymentOutcome extends CallbackOutcome {
   changed: boolean;
 }
 
+interface VerifyCandidate {
+  provider: PspName;
+  ref: string;
+  /** The callback supplied this reference after a token-persist crash. It is
+   * untrusted until Verify returns the database order and amount. */
+  bindOnSuccess: boolean;
+}
+
 async function readPayment(db: Database, id: string): Promise<PaymentRow | undefined> {
   const [payment] = await db.select().from(payments).where(eq(payments.id, id)).limit(1);
   return payment;
@@ -393,9 +405,14 @@ async function verifyAndApplyPayment(
   psp: PspRouter,
   payment: PaymentRow,
   t: Date,
+  candidate?: VerifyCandidate,
 ): Promise<VerifyPaymentOutcome> {
   if (payment.appliedAt) return { outcome: "paid", payment, changed: false };
-  if (payment.status === "canceled" || payment.status === "verify_failed") {
+  if (
+    payment.status === "canceled" ||
+    payment.status === "failed" ||
+    payment.status === "verify_failed"
+  ) {
     return {
       outcome: payment.status,
       payment,
@@ -403,7 +420,8 @@ async function verifyAndApplyPayment(
     };
   }
 
-  const ref = paymentRef(payment);
+  const provider = candidate?.provider ?? paymentProvider(payment);
+  const ref = candidate?.ref ?? paymentRef(payment);
   if (!ref) return { outcome: "pending", payment, changed: false };
 
   const restoreStatus = payment.status === "verifying" ? "redirected" : payment.status;
@@ -415,7 +433,7 @@ async function verifyAndApplyPayment(
       and(
         eq(payments.id, payment.id),
         isNull(payments.appliedAt),
-        sql`${payments.status} not in ('canceled', 'verify_failed')`,
+        sql`${payments.status} not in ('canceled', 'failed', 'verify_failed')`,
         or(ne(payments.status, "verifying"), lt(payments.updatedAt, staleBefore)),
       ),
     )
@@ -432,18 +450,21 @@ async function verifyAndApplyPayment(
 
   let verified;
   try {
-    verified = await psp.verify(paymentProvider(claimed), ref, claimed.amountRial);
+    verified = await psp.verify(provider, ref, claimed.amountRial);
   } catch (err) {
     console.error("psp verify unreachable", {
       paymentId: claimed.id,
-      provider: paymentProvider(claimed),
+      provider,
       failureKind: err instanceof Error ? err.name : "unknown",
     });
     const fresh = await releaseVerifyLease(db, claimed.id, restoreStatus, t);
-    return { outcome: "pending", payment: fresh, changed: false };
+    return {
+      outcome: fresh?.appliedAt ? "paid" : "pending",
+      payment: fresh,
+      changed: false,
+    };
   }
 
-  const provider = paymentProvider(claimed);
   const paidNow =
     verified.result === ZIBAL_RESULT.OK && verified.status === ZIBAL_STATUS.PAID_VERIFIED;
   const providerAllowsAlreadyVerified =
@@ -454,6 +475,14 @@ async function verifyAndApplyPayment(
       paidNow && (typeof verified.amount !== "number" || verified.amount !== claimed.amountRial);
     const orderMismatch = provider === "nextpay" && verified.orderId !== claimed.id;
     if (amountMismatch || orderMismatch) {
+      if (candidate?.bindOnSuccess) {
+        const fresh = await releaseVerifyLease(db, claimed.id, restoreStatus, t, verified);
+        return {
+          outcome: fresh?.appliedAt ? "paid" : "pending",
+          payment: fresh?.appliedAt ? fresh : undefined,
+          changed: false,
+        };
+      }
       await db
         .update(payments)
         .set({
@@ -483,7 +512,16 @@ async function verifyAndApplyPayment(
       };
     }
 
-    await applyPaid(db, claimed, verified, t);
+    await applyPaid(
+      db,
+      claimed,
+      {
+        ...verified,
+        provider: candidate?.bindOnSuccess ? provider : undefined,
+        providerRef: candidate?.bindOnSuccess ? ref : undefined,
+      },
+      t,
+    );
     const fresh = (await readPayment(db, claimed.id)) ?? claimed;
     return { outcome: "paid", payment: fresh, changed: true };
   }
@@ -494,7 +532,24 @@ async function verifyAndApplyPayment(
     verified.status === ZIBAL_STATUS.PENDING
   ) {
     const fresh = await releaseVerifyLease(db, claimed.id, restoreStatus, t, verified);
-    return { outcome: "pending", payment: fresh, changed: false };
+    return {
+      outcome: fresh?.appliedAt ? "paid" : "pending",
+      payment: fresh,
+      changed: false,
+    };
+  }
+
+  // A callback-supplied reference is not associated with this payment until a
+  // successful Verify returns the stored order and amount. A terminal response
+  // for an unbound candidate may simply describe a forged reference, so it must
+  // not poison the real payment row.
+  if (candidate?.bindOnSuccess) {
+    const fresh = await releaseVerifyLease(db, claimed.id, restoreStatus, t, verified);
+    return {
+      outcome: fresh?.appliedAt ? "paid" : "pending",
+      payment: fresh?.appliedAt ? fresh : undefined,
+      changed: false,
+    };
   }
 
   const canceled = verified.status === ZIBAL_STATUS.CANCELED_BY_USER;
@@ -556,12 +611,35 @@ export async function handlePaymentCallback(
   const nextpayOrderId = q("order_id");
 
   let payment: PaymentRow | undefined;
+  let recoveredNextpayRef: string | undefined;
   if (nextpayTransId) {
     [payment] = await db
       .select()
       .from(payments)
       .where(and(eq(payments.provider, "nextpay"), eq(payments.providerRef, nextpayTransId)))
       .limit(1);
+    if (
+      !payment &&
+      nextpayOrderId &&
+      UUID_RE.test(nextpayOrderId) &&
+      UUID_RE.test(nextpayTransId)
+    ) {
+      const [candidate] = await db
+        .select()
+        .from(payments)
+        .where(eq(payments.id, nextpayOrderId))
+        .limit(1);
+      if (
+        candidate &&
+        candidate.appliedAt == null &&
+        candidate.providerRef == null &&
+        (candidate.provider == null || candidate.provider === "nextpay") &&
+        !["canceled", "failed", "verify_failed"].includes(candidate.status)
+      ) {
+        payment = candidate;
+        recoveredNextpayRef = nextpayTransId;
+      }
+    }
   }
   if (!nextpayTransId && Number.isSafeInteger(trackId) && trackId > 0) {
     [payment] = await db.select().from(payments).where(eq(payments.trackId, trackId)).limit(1);
@@ -595,10 +673,10 @@ export async function handlePaymentCallback(
   // UUID_RE is case-insensitive), so the row above can be found by an upper-cased
   // orderId that would then fail a strict `===` against the canonical lower-case
   // `payment.id` — turning a legitimate caller away.
-  const provider = paymentProvider(payment);
+  const provider = recoveredNextpayRef ? "nextpay" : paymentProvider(payment);
   const proven =
     provider === "nextpay"
-      ? nextpayTransId === payment.providerRef &&
+      ? nextpayTransId === (payment.providerRef ?? recoveredNextpayRef) &&
         nextpayOrderId?.toLowerCase() === payment.id.toLowerCase()
       : orderIdParam?.toLowerCase() === payment.id.toLowerCase() ||
         (!!authorityParam && authorityParam === payment.authority);
@@ -637,7 +715,15 @@ export async function handlePaymentCallback(
     return { outcome: "canceled", payment };
   }
 
-  const result = await verifyAndApplyPayment(db, psp, payment, t);
+  const result = await verifyAndApplyPayment(
+    db,
+    psp,
+    payment,
+    t,
+    recoveredNextpayRef
+      ? { provider: "nextpay", ref: recoveredNextpayRef, bindOnSuccess: true }
+      : undefined,
+  );
   return { outcome: result.outcome, payment: result.payment, message: result.message };
 }
 
@@ -663,6 +749,7 @@ export async function settleOne(
   const unsettled =
     payment.appliedAt == null &&
     payment.status !== "canceled" &&
+    payment.status !== "failed" &&
     payment.status !== "verify_failed";
   if (!unsettled) return false;
   return (await verifyAndApplyPayment(db, psp, payment, t)).changed;
@@ -704,6 +791,7 @@ export async function settleOpenPayments(
   let healed = 0;
 
   try {
+    const staleBefore = new Date(t.getTime() - VERIFY_LEASE_MS);
     const open = await db
       .select()
       .from(payments)
@@ -711,7 +799,10 @@ export async function settleOpenPayments(
         and(
           eq(payments.userId, userId),
           isNull(payments.appliedAt),
-          eq(payments.status, "redirected"),
+          or(
+            eq(payments.status, "redirected"),
+            and(eq(payments.status, "verifying"), lt(payments.updatedAt, staleBefore)),
+          ),
           gt(payments.createdAt, since),
         ),
       )

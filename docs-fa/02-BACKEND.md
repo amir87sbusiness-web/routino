@@ -127,10 +127,10 @@ Fastify رو می‌سازه، CORS و فشرده‌سازی و helmet رو فع
 |---|---|---|
 | `POST /v1/payments/quote` | پیش‌فاکتور: قیمت پایه + بررسی کد تخفیف. کد نامعتبر = «دلیل» برمی‌گرده نه خطا (که UI پیام درست نشون بده) | (مستقیم از `services/pricing.ts`) |
 | `POST /v1/payments/checkout` | ورودی `attemptId` UUID می‌خواهد؛ retry همان خرید همان payment/redirect را می‌گیرد و تماس PSP دوباره ساخته نمی‌شود. مبلغ/ماه/پلن نهایی **سمت سرور** حساب و قبل از I/O ذخیره می‌شوند. سقف ۱۰ خرید در ساعت؛ تخفیف ۱۰۰٪ بدون درگاه | `checkoutPayment` |
-| `GET /v1/payments/callback` | 🌐 callback فقط سرنخ پیدا کردن payment است، نه مدرک پرداخت. تأیید واقعی فقط `psp.verify` سمت سرور است. مبلغ پاسخ با مبلغ DB سنجیده می‌شود؛ برای NextPay، `order_id` پاسخ Verify هم باید با payment ID برابر باشد و مبلغ callback نادیده گرفته می‌شود | `handlePaymentCallback` |
+| `GET /v1/payments/callback` | 🌐 callback فقط سرنخ پیدا کردن payment است، نه مدرک پرداخت. تأیید واقعی فقط `psp.verify` سمت سرور است. مبلغ پاسخ با مبلغ DB سنجیده می‌شود؛ برای NextPay، `order_id` پاسخ Verify هم باید با payment ID برابر باشد و مبلغ callback نادیده گرفته می‌شود. اگر Edge بعد از صدور token و قبل از ذخیرهٔ `trans_id` قطع شود، ref فقط پس از Verify موفقِ همان amount/order داخل transaction پرداخت بازیابی می‌شود | `handlePaymentCallback` |
 | `GET /v1/payments/:id` | استعلام وضعیت برای اپ. **خود-درمانی:** اگه پرداختی در حالت `redirected` گیر کرده (callback هیچ‌وقت نرسیده)، همین‌جا دوباره از درگاه استعلام و در صورت موفقیت فعال می‌شه | `pollPayment` |
 
-**اعطای اتمیک (`applyPaid`):** درج unique در `grants.payment_id`، افزایش entitlement، پرکردن audit grant و `payments.applied_at` داخل یک transaction انجام می‌شوند. شکست هر بخش همه را rollback می‌کند؛ callback/verify/Edge isolate تکراری نمی‌تواند اشتراک را دوباره اضافه کند. Verify هم lease دیتابیسی `verifying` دارد؛ timeout، payload نامعتبر و کدهای موقت NextPay terminal نمی‌شوند و retry بعدی یا lease قدیمی را بازیابی می‌کند.
+**اعطای اتمیک (`applyPaid`):** درج unique در `grants.payment_id`، افزایش entitlement، پرکردن audit grant و `payments.applied_at` داخل یک transaction انجام می‌شوند. شکست هر بخش همه را rollback می‌کند؛ callback/verify/Edge isolate تکراری نمی‌تواند اشتراک را دوباره اضافه کند. Verify هم lease دیتابیسی `verifying` دارد؛ timeout، payload نامعتبر و کدهای موقت NextPay terminal نمی‌شوند و retry بعدی یا sweep عادی app-open lease قدیمی را بازیابی می‌کند. پاسخ terminal واقعاً terminal می‌ماند و دوباره Verify نمی‌شود.
 
 ### `backend/src/routes/subscriptions.ts` — اشتراک
 
