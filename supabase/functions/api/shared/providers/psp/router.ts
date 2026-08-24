@@ -7,6 +7,7 @@ import type {
   PspRouter,
   PspVerifyResult,
 } from "./index.ts";
+import { PspTransportError } from "./index.ts";
 
 /**
  * Multi-gateway router.
@@ -99,7 +100,8 @@ export function createRouter(list: PspProvider[], nowFn: () => number = Date.now
             ok: false,
             provider: p.name,
             result: 0,
-            message: err instanceof Error ? err.message : "psp request threw",
+            failureKind: err instanceof PspTransportError ? err.kind : "unavailable",
+            message: "payment provider unavailable",
           };
         }
       }

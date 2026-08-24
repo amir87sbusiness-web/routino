@@ -65,7 +65,7 @@ const schema = z.object({
    * fastest healthy one per checkout, with automatic failover), set
    * `PSP_PROVIDERS` instead — it overrides this when non-empty.
    */
-  PSP_PROVIDER: z.enum(["fake", "zibal", "zarinpal"]).default("fake"),
+  PSP_PROVIDER: z.enum(["fake", "zibal", "zarinpal", "nextpay"]).default("fake"),
   /**
    * Optional comma-separated gateway list, e.g. `zarinpal,zibal`. When set it
    * defines the active gateways AND their tiebreak order; the router routes each
@@ -93,6 +93,9 @@ const schema = z.object({
   /** ZarinPal merchant id (36-char UUID). No usable sandbox default — required
    * in production only when zarinpal is among the active gateways. */
   ZARINPAL_MERCHANT: z.string().default("dev-only-zarinpal-merchant"),
+  /** Server-only NextPay API key. There is deliberately no development or
+   * repository default; selecting NextPay without it is a startup error. */
+  NEXTPAY_API_KEY: z.string().min(1).optional(),
 
   /** Public base URL of THIS server. Zibal redirects a browser here, so it must
    * be reachable from the user's device — `localhost` works for web dev but can
@@ -139,12 +142,12 @@ export type Env = z.infer<typeof schema>;
  * duplicate names are dropped. */
 export function pspProviderNames(
   env: Pick<Env, "PSP_PROVIDER" | "PSP_PROVIDERS">,
-): ("fake" | "zibal" | "zarinpal")[] {
-  const known = ["fake", "zibal", "zarinpal"] as const;
+): ("fake" | "zibal" | "zarinpal" | "nextpay")[] {
+  const known = ["fake", "zibal", "zarinpal", "nextpay"] as const;
   const raw = env.PSP_PROVIDERS.trim()
     ? env.PSP_PROVIDERS.split(",").map((s) => s.trim())
     : [env.PSP_PROVIDER];
-  const out: ("fake" | "zibal" | "zarinpal")[] = [];
+  const out: ("fake" | "zibal" | "zarinpal" | "nextpay")[] = [];
   for (const name of raw) {
     if (
       (known as readonly string[]).includes(name) &&
@@ -182,6 +185,9 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     if (psps.includes("fake")) throw new Error("the 'fake' gateway is not allowed in production");
     if (psps.includes("zarinpal") && parsed.data.ZARINPAL_MERCHANT.startsWith("dev-only")) {
       throw new Error("ZARINPAL_MERCHANT is required when zarinpal is an active gateway");
+    }
+    if (psps.includes("nextpay") && !parsed.data.NEXTPAY_API_KEY) {
+      throw new Error("NEXTPAY_API_KEY is required when nextpay is an active gateway");
     }
     // Zibal's sandbox is not a distinct host or a distinct flag — it is just the
     // merchant id left at its default. So the ONLY thing standing between "we

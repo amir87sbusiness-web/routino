@@ -47,6 +47,7 @@ export const SHARED_FILES = [
   "providers/psp/index.ts",
   "providers/psp/zibal.ts",
   "providers/psp/zarinpal.ts",
+  "providers/psp/nextpay.ts",
   "providers/psp/fake.ts",
   "providers/psp/router.ts",
 ];

@@ -21,7 +21,10 @@ afterAll(async () => {
 const DAY = 86_400_000;
 
 async function checkout(access: string, body: Record<string, unknown>) {
-  return h.call("POST", "/v1/payments/checkout", { headers: auth(access), body });
+  return h.call("POST", "/v1/payments/checkout", {
+    headers: auth(access),
+    body: { attemptId: crypto.randomUUID(), ...body },
+  });
 }
 
 async function startTrial(access: string) {
@@ -79,6 +82,34 @@ describe("POST /v1/payments/quote", () => {
 });
 
 describe("checkout → gateway → callback", () => {
+  it("requires a checkout attempt UUID on Edge", async () => {
+    const { access } = await signIn(h);
+    const res = await h.call("POST", "/v1/payments/checkout", {
+      headers: auth(access),
+      body: { planId: "m1" },
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "invalid_request" });
+  });
+
+  it("reuses one Edge checkout for a repeated attempt UUID", async () => {
+    const { access, user } = await signIn(h);
+    const attemptId = crypto.randomUUID();
+    const first = await checkout(access, { planId: "m1", attemptId });
+    const second = await checkout(access, { planId: "m1", attemptId });
+    const firstBody = await first.json();
+    const secondBody = await second.json();
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(secondBody.paymentId).toBe(firstBody.paymentId);
+    expect(h.psp._txns.size).toBe(1);
+    expect(
+      await h.query(`select id from payments where user_id = '${user.id}'`),
+    ).toHaveLength(1);
+  });
+
   it("completes a payment and grants the plan exactly once", async () => {
     const { access, user } = await signIn(h);
     const trial = await startTrial(access);

@@ -226,7 +226,7 @@ Run: `npm test -- --maxWorkers=1 src/lib/api/payments.test.ts src/routes/subscri
 - Generate: `supabase/functions/api/shared/providers/psp/nextpay.ts`
 - Generate: other changed `supabase/functions/api/shared/*` through `npm run sync:edge`
 - Generate: `supabase/setup.sql` through `node scripts/gen-setup-sql.mjs`
-- Create: `supabase/migrations/20260824_nextpay_payment_safety.sql` using the repository's exact migration naming convention discovered at implementation time
+- Generate: `supabase/setup.sql` as the repository's existing idempotent migration artifact; do not introduce a second migration system
 - Modify: `docs-fa/02-BACKEND.md`
 - Modify: `docs-fa/03-FRONT-BACK-CONNECTIONS.md`
 - Modify: `docs-fa/DEPLOY-SUPABASE-EDGE.md`
@@ -236,27 +236,27 @@ Run: `npm test -- --maxWorkers=1 src/lib/api/payments.test.ts src/routes/subscri
 - Migration contains nullable columns, duplicate preflight guidance/failure, and the three partial unique indexes; it performs no cleanup.
 - Docs clearly separate code readiness, unapplied migration, unset secret, undeployed functions, and unverified live provider compatibility.
 
-- [ ] **Step 1: Add failing Edge parity and flow tests**
+- [x] **Step 1: Add failing Edge parity and flow tests**
 
 Mirror attempt ID validation, successful mocked NextPay flow, altered amount/order, duplicate callback/Verify, transient retry, and exactly-once grant tests in Edge. Add NextPay to the shared-file parity manifest.
 
-- [ ] **Step 2: Run RED Edge tests**
+- [x] **Step 2: Run RED Edge tests**
 
 Run: `npm run test:edge -- --maxWorkers=1 supabase/tests/payments.test.ts backend/test/edge-parity.test.ts`
 
-- [ ] **Step 3: Add thin Hono/config wiring and migration**
+- [x] **Step 3: Add thin Hono/config wiring and migration**
 
-Keep all business logic in canonical shared services. Add only the Edge-specific route/env constructor wiring required for NextPay. Write the migration with `provider_ref`, `attempt_id`, provider-aware and attempt indexes, and unique `grants.payment_id`. Abort safely when duplicate payment grants already exist; do not mutate those rows.
+Keep all business logic in canonical shared services. Add only the Edge-specific route/env constructor wiring required for NextPay. Regenerate the repository's existing idempotent `supabase/setup.sql` migration artifact with `provider_ref`, `attempt_id`, provider-aware and attempt indexes, and unique `grants.payment_id`. Abort safely when duplicate payment grants already exist; do not mutate those rows.
 
-- [ ] **Step 4: Regenerate shared code and setup SQL**
+- [x] **Step 4: Regenerate shared code and setup SQL**
 
 Run: `npm run sync:edge` then `node scripts/gen-setup-sql.mjs`. Review generated diffs; do not manually patch generated shared files.
 
-- [ ] **Step 5: Update the Persian guides without overwriting unrelated edits**
+- [x] **Step 5: Update the Persian guides without overwriting unrelated edits**
 
 Document the new inactive provider, server-only `NEXTPAY_API_KEY`, exact flow/status rules, database invariants, retry/recovery semantics, migration preflight, functions to deploy later, and controlled activation steps. Explicitly state no deploy/migration/live payment occurred.
 
-- [ ] **Step 6: Run GREEN Edge tests and parity**
+- [x] **Step 6: Run GREEN Edge tests and parity**
 
 Run: `npm run test:edge -- --maxWorkers=1 supabase/tests/payments.test.ts && cd backend && npm test -- --maxWorkers=1 test/edge-parity.test.ts`
 

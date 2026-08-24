@@ -49,7 +49,23 @@ export const ZIBAL_STATUS = {
 } as const;
 
 /** The set of concrete gateway adapters. */
-export type PspName = "fake" | "zibal" | "zarinpal";
+export type PspName = "fake" | "zibal" | "zarinpal" | "nextpay";
+
+export type PspFailureKind =
+  | "invalid_response"
+  | "token_rejected"
+  | "timeout"
+  | "unavailable"
+  | "transient_verify"
+  | "terminal_verify";
+
+export class PspTransportError extends Error {
+  override readonly name = "PspTransportError";
+
+  constructor(readonly kind: Extract<PspFailureKind, "timeout" | "unavailable">) {
+    super(kind === "timeout" ? "payment provider timed out" : "payment provider unavailable");
+  }
+}
 
 export interface PspRequestInput {
   /** RIAL. Zibal bills in Rial; the app prices in Toman. */
@@ -69,6 +85,9 @@ export interface PspRequestResult {
    * passes its `authority`. Present only when `ok`. */
   ref?: string;
   result: number;
+  /** Provider-native code, safe to persist. Never a raw response. */
+  providerCode?: number;
+  failureKind?: PspFailureKind;
   message?: string;
 }
 
@@ -80,6 +99,11 @@ export interface PspVerifyResult {
   refNumber?: string;
   cardNumber?: string;
   paidAt?: string;
+  /** Provider-echoed order identifier. Payment flow compares it with its own
+   * database row before granting. */
+  orderId?: string;
+  providerCode?: number;
+  failureKind?: PspFailureKind;
   message?: string;
 }
 
@@ -123,4 +147,5 @@ export interface PspRouter {
 export { zibalPsp } from "./zibal.ts";
 export { fakePsp } from "./fake.ts";
 export { zarinpalPsp } from "./zarinpal.ts";
+export { nextpayPsp } from "./nextpay.ts";
 export { createRouter } from "./router.ts";

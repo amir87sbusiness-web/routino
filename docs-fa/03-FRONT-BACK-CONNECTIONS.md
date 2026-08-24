@@ -85,6 +85,9 @@
 | `weak_password` / `wrong_password`                                                        | `routes/auth.ts` (ثبت‌نام/تغییر رمز) + `services/admin.ts` | `auth.tsx` و `settings.tsx` ← `explain()` | «رمز ضعیف است» / «رمز عبور فعلی اشتباهه»                                                                               |
 | `blocked`                                                                                 | `routes/auth.ts` / `plugins/auth.ts`                       | `auth.tsx`                                | «این حساب مسدود شده»                                                                                                   |
 | `psp_failed`                                                                              | `routes/payments.ts`                                       | `subscribe.tsx`                           | «درگاه پرداخت در دسترس نیست»                                                                                           |
+| `duplicate_payment_attempt`                                                               | `services/payment-flow.ts`                                 | `subscribe.tsx`                           | «این تلاش قبلاً ثبت شده؛ کمی صبر کن»                                                                                    |
+| `nextpay_token_error`                                                                      | آداپتر/ماشین پرداخت NextPay                                | `subscribe.tsx`                           | پیام امن «درگاه در دسترس نیست»؛ response خام نمایش داده نمی‌شود                                                        |
+| `payment_network_timeout` / `payment_provider_unavailable`                                 | روتر و ماشین پرداخت                                        | `subscribe.tsx`                           | timeout/unavailable امن؛ retry همان `attemptId` را نگه می‌دارد و درخواست تکراری ساخته نمی‌شود                          |
 | `not_signed_in`                                                                           | خود فرانت (`api/auth.ts` وقتی توکن نیست)                   | `subscribe.tsx`                           | کارت «ورود با شماره موبایل»                                                                                            |
 | دلایل رد کد تخفیف: `expired` `exhausted` `already_used` `other_user` `inactive` `unknown` | `services/pricing.ts` ← `checkDiscount`                    | `subscribe.tsx` ← `explainReason()`       | «کد منقضی شده» و...                                                                                                    |
 
@@ -102,10 +105,12 @@
 
 ```
 subscribe.tsx (فرانت)
-  → POST /payments/checkout (بک: payments.ts)
-  → کاربر می‌ره به paymentUrl (صفحه درگاه زیبال/فیک)
-  → درگاه برمی‌گردونه به:  PUBLIC_API_URL/v1/payments/callback?trackId&success&status&orderId
-  → بک تایید سرور-به-سرور می‌کنه و صفحه HTML نتیجه می‌سازه (sendResultPage در payments.ts)
+  → POST /payments/checkout با attemptId ثابت برای همان retry
+  → بک قیمت trusted را ذخیره و provider_ref را قبل از پاسخ redirect ثبت می‌کند
+  → کاربر می‌ره به paymentUrl (زیبال/زرین‌پال/NextPay/فیک)
+  → درگاه برمی‌گردونه به PUBLIC_API_URL/v1/payments/callback
+  → بک با lease دیتابیسی، Verify سرور-به-سرور و تطبیق DB را انجام می‌دهد
+  → grant unique + entitlement + applied_at در یک transaction ثبت می‌شوند
   → اون صفحه کاربر رو می‌فرسته به:
        وب:      PUBLIC_WEB_URL/pay/result?paymentId=…&status=…
        موبایل:  APP_DEEP_LINK (پیش‌فرض routino://pay/result?paymentId=…&status=…)
@@ -119,7 +124,7 @@ subscribe.tsx (فرانت)
 2. فرانت: الگوی `pay/result` در `src/client.tsx`
 3. اندروید: intent-filter در `android/app/src/main/AndroidManifest.xml` (و مشابهش در iOS)
 
-**پارامترهای callback** بسته به درگاه فرق دارن: زیبال `trackId`, `success`, `status`, `orderId` می‌فرسته (درگاه فیک هم عمداً همین رو تقلید می‌کنه)، زرین‌پال `Authority`, `Status=OK|NOK`. روت `callback` هر دو شکل رو می‌شناسه، پرداخت رو با هر توکنی که اومده پیدا می‌کنه، و بعد بر اساس درگاهِ ذخیره‌شده روی سطر پرداخت (`payments.provider`) تأیید می‌کنه.
+**پارامترهای callback** بسته به درگاه فرق دارن: زیبال `trackId`, `success`, `status`, `orderId` (فیک هم همین را تقلید می‌کند)، زرین‌پال `Authority`, `Status`، و NextPay `trans_id`, `order_id`, `amount`. همه untrusted هستند. NextPay فقط با جفت `provider=nextpay` + `provider_ref=trans_id` پیدا می‌شود، callback amount کنار گذاشته می‌شود، و مبلغ/order نهایی از DB و پاسخ Verify سنجیده می‌شوند.
 
 ### 🌍 قرارداد ۶: آدرس‌ها و CORS
 
@@ -172,8 +177,8 @@ subscribe.tsx (فرانت)
 
 1. `subscribe.tsx`: پلن‌ها از `GET /plans` (نبود سرور = نسخه آفلاین presets)
 2. کد تخفیف → `POST /payments/quote` → بک قیمت و دلیل رد/قبول می‌ده
-3. «پرداخت» → `POST /payments/checkout` → بک: قیمت رو **خودش دوباره** حساب می‌کنه، سطر payment می‌سازه، از درگاه `trackId` می‌گیره → فرانت کاربر رو می‌فرسته به `paymentUrl`
-4. درگاه ← callback بک ← تایید سرور-به-سرور + **تطبیق مبلغ** ← فعال‌سازی با قفل `applied_at` ← صفحه نتیجه ← برگشت به اپ (وب یا دیپ‌لینک)
+3. «پرداخت» → فرانت برای همان retry یک `attemptId` UUID نگه می‌دارد → بک قیمت را **خودش** حساب می‌کند، payment را claim می‌کند، `provider_ref` را قبل از redirect ذخیره می‌کند → فرانت به `paymentUrl`
+4. درگاه ← callback untrusted ← Verify سرور-به‌سرور با مبلغ DB (+ `order_id` DB برای NextPay) ← grant/entitlement/applied اتمیک و فقط یک‌بار ← صفحه نتیجه ← برگشت به اپ
 5. `pay.result.tsx`: استعلام `GET /payments/:id` (که پرداخت‌های گم‌شده رو هم خود-درمانی می‌کنه) → کش محلی اشتراک آپدیت → گِیت باز 🎉
 
 ### 📅 سناریو «یه روز عادی بدون اینترنت»

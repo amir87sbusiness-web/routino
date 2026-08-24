@@ -30,6 +30,11 @@ const SETTLED_SOURCES = ["payment", "migration"] as const;
 
 export type GrantSource = "trial" | "payment" | "migration" | "admin";
 
+export interface EntitlementExtension {
+  before: Date | null;
+  after: Date;
+}
+
 export async function readEntitlement(
   db: DatabaseExecutor,
   userId: string,
@@ -49,27 +54,21 @@ export async function readEntitlement(
   };
 }
 
-/**
- * Extends entitlement by a real calendar interval and records the grant.
- *
- * Renewal stacks onto an unexpired plan (`greatest(now, current)`) so paying
- * early never burns the remaining days. Uses `make_interval`, i.e. real calendar
- * months: "1 Year" is 12 months, not the 360 days the old flat-30-day client
- * arithmetic delivered.
- */
-export async function grantInterval(
+/** Extends the materialized entitlement without writing the audit ledger.
+ * Callers must pair this with their own ledger write in the same transaction.
+ * `grantInterval` below remains the safe public path for non-payment grants;
+ * verified payments use this primitive only inside their atomic grant txn.
+ * Renewal stacks onto an unexpired plan with real calendar intervals. */
+export async function extendEntitlement(
   db: DatabaseExecutor,
   userId: string,
   opts: {
     planId: string;
     months?: number;
     days?: number;
-    source: GrantSource;
-    paymentId?: string | null;
-    note?: string | null;
   },
   now: Date,
-): Promise<Entitlement> {
+): Promise<EntitlementExtension> {
   const months = opts.months ?? 0;
   const days = opts.days ?? 0;
   const tIso = now.toISOString();
@@ -111,6 +110,26 @@ export async function grantInterval(
   const before =
     row.before == null ? null : row.before instanceof Date ? row.before : new Date(row.before);
 
+  return { before, after: expiresAt };
+}
+
+export async function grantInterval(
+  db: DatabaseExecutor,
+  userId: string,
+  opts: {
+    planId: string;
+    months?: number;
+    days?: number;
+    source: GrantSource;
+    paymentId?: string | null;
+    note?: string | null;
+  },
+  now: Date,
+): Promise<Entitlement> {
+  const months = opts.months ?? 0;
+  const days = opts.days ?? 0;
+  const extension = await extendEntitlement(db, userId, { ...opts, months, days }, now);
+
   await db.insert(grants).values({
     userId,
     months,
@@ -118,8 +137,8 @@ export async function grantInterval(
     source: opts.source,
     paymentId: opts.paymentId ?? null,
     note: opts.note ?? null,
-    expiresBefore: before,
-    expiresAfter: expiresAt,
+    expiresBefore: extension.before,
+    expiresAfter: extension.after,
     createdAt: now,
   });
 

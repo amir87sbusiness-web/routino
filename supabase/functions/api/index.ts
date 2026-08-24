@@ -19,6 +19,7 @@ import { loadEnv, pspProviderNames, testProviderWarnings } from "./shared/env.ts
 import {
   createRouter,
   fakePsp,
+  nextpayPsp,
   zarinpalPsp,
   zibalPsp,
   type PspProvider,
@@ -59,6 +60,8 @@ const makePsp = (name: ReturnType<typeof pspProviderNames>[number]): PspProvider
       return zibalPsp(env.ZIBAL_MERCHANT);
     case "zarinpal":
       return zarinpalPsp(env.ZARINPAL_MERCHANT);
+    case "nextpay":
+      return nextpayPsp(env.NEXTPAY_API_KEY ?? "");
     case "fake":
       return fakePsp(env.PUBLIC_API_URL);
   }

@@ -36,6 +36,10 @@ secretها با `SMS_PROVIDER=kavenegar`، `PSP_PROVIDER=zibal`، مرچنت غ�
 پرداخت واقعی یا تست اعلان روی گوشی را نمی‌گیرد. گزارش قرارداد فعلی در
 `docs-fa/LAUNCH-READINESS.md` است.
 
+> **NextPay در این تغییر فقط به‌صورت provider جدید آماده شده است.** هیچ deploy،
+> اجرای SQL روی production، تنظیم `NEXTPAY_API_KEY` یا پرداخت واقعی انجام نشده؛
+> `PSP_PROVIDER` زنده هم عوض نشده است. API key تا وقتی تأیید نشده نباید فعال شود.
+
 ---
 
 <details>
@@ -101,6 +105,20 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
 
 بعد از دیپلوی، لاگ تابع **نباید** هیچ خط `[!] TEST MODE` داشته باشد. اگر داشت، یعنی یکی از دو سرویس هنوز تستی است.
 
+**۳) فعال‌سازی کنترل‌شدهٔ NextPay — فقط بعد از تأیید API key و اجازهٔ صریح مالک:**
+
+1. با کلید تأییدشده، یک preflight کنترل‌شدهٔ token-only انجام بده تا پذیرش
+   `application/x-www-form-urlencoded` توسط API زنده قطعی شود؛ وارد صفحه پرداخت نشو.
+2. قبل از SQL، duplicateهای `grants.payment_id` را بررسی کن؛ سپس
+   `supabase/setup.sql` تازه را در SQL Editor اجرا کن.
+3. `NEXTPAY_API_KEY` را در Supabase Secrets بگذار و فقط برای تست کنترل‌شده
+   `PSP_PROVIDER=nextpay` کن؛ مقدار کلید را در فرمان/لاگ مشترک کپی نکن.
+4. Edge Function `api` را deploy و health/log را بررسی کن؛ بعد با حساب مالک یک
+   پرداخت کم‌مبلغ واقعی انجام بده و در DB تطبیق payment، `provider_ref`، یک grant
+   و یک entitlement را ببین.
+5. callback و poll را تکرار کن و قطعی کن grant دوم ساخته نمی‌شود؛ اگر هر ابهامی
+   بود provider فعلی را برگردان و payment را برای recovery نگه دار، نه terminal حدسی.
+
 ### تست محلی (تأییدشده کار می‌کند)
 
 `cd backend && npm run dev` (سرور :3000، sms=console → کد در ترمینال، psp=fake) + `npm run dev` (وب :5180، به :3000 پروکسی می‌شود). کل مسیر آنبوردینگ → ورود OTP → اپ اصلی محلی تست و سالم است.
@@ -156,6 +174,12 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
 
 > **اگر schema دیتابیس عوض شد** (مثل ستون/جدول جدید): اول `node scripts/gen-setup-sql.mjs` را بزن تا `supabase/setup.sql` تازه شود، بعد محتوایش را در Supabase → SQL Editor بچسبان (idempotent است، ضرری به دیتای موجود نمی‌زند). تابعِ Edge خودش migration اجرا نمی‌کند.
 
+برای NextPay، همین artifact موجود migration است و سیستم migration جدا ساخته نشده:
+`payments.attempt_id`، `payments.provider_ref`، uniqueهای partial روی
+`(user_id, attempt_id)` و `(provider, provider_ref)` و unique partial روی
+`grants.payment_id`. قبل از ساخت unique آخر، SQL اگر duplicate تاریخی ببیند عمداً
+متوقف می‌شود؛ هیچ grant مالی را خودکار حذف یا ادغام نمی‌کند.
+
 ### 🔐 ورود با رمز عبور (بعد از افزوده‌شدن این قابلیت — یک‌بار)
 
 ۱) **migration**: `supabase/setup.sql` را دوباره در SQL Editor اجرا کن (ستون‌های `username`/`password_hash` روی `users` + جدول `login_attempts` را می‌سازد).
@@ -187,6 +211,7 @@ npx supabase functions deploy api --no-verify-jwt --project-ref axychfrteevhfdhg
    | `OWNER_PHONE` / `OWNER_PASSWORD` / `OWNER_USERNAME` | اختیاری — بوت‌استرپ حساب صاحب اپ برای ورود با رمز از همان بوت اول (بخش «ورود با رمز عبور» بالا)                                       |
    | `SMS_PROVIDER`                                      | فعلاً `console` (کد ورود در لاگ تابع) → بعداً `kavenegar` + `KAVENEGAR_API_KEY` (+ `KAVENEGAR_TEMPLATE` اگر نام قالب ≠ `routino-otp`) |
    | `PSP_PROVIDER`                                      | فعلاً `zibal` با `ZIBAL_MERCHANT=zibal` (سندباکس) → بعداً مرچنت واقعی / `PSP_PROVIDERS=zarinpal,zibal`                                |
+   | `NEXTPAY_API_KEY`                                   | فقط وقتی بعداً `nextpay` را آگاهانه فعال می‌کنی؛ Secret سمت Edge و بدون مقدار پیش‌فرض. هرگز در فرانت/repository/log قرار نگیرد         |
 
    > وضعیت فعلیِ همین secretها و دستورهای دقیقِ «واقعی‌کردن» در بخش [«📍 وضعیت فعلی لانچ»](#-وضعیت-فعلی-لانچ-به‌روز-۳-مرداد-۱۴۰۵--2026-07-25) بالای همین فایل است.
 

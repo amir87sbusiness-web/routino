@@ -25,6 +25,7 @@ const quoteBody = z.object({
 });
 
 const checkoutBody = quoteBody.extend({
+  attemptId: z.string().uuid(),
   platform: z.enum(["web", "android", "ios"]).optional(),
 });
 
