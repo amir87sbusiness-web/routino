@@ -148,7 +148,9 @@ create table if not exists payments (
   offer_percent integer,
   status text not null default 'pending',
   platform text,
+  attempt_id uuid,
   provider text,
+  provider_ref text,
   track_id bigint unique,
   authority text unique,
   ref_number text,
@@ -161,8 +163,14 @@ create table if not exists payments (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table payments add column if not exists attempt_id uuid;
+alter table payments add column if not exists provider_ref text;
 create index if not exists payments_user on payments (user_id);
 create index if not exists payments_status on payments (status, created_at);
+create unique index if not exists payments_user_attempt_unique
+  on payments (user_id, attempt_id) where attempt_id is not null;
+create unique index if not exists payments_provider_ref_unique
+  on payments (provider, provider_ref) where provider_ref is not null;
 -- A limited discount code counts the checkouts currently in flight against it
 -- (slotsTaken in services/pricing.ts), on the checkout path. Partial, because
 -- most payments carry no code at all.
@@ -181,6 +189,23 @@ create table if not exists grants (
   created_at timestamptz not null default now()
 );
 create index if not exists grants_user on grants (user_id);
+-- Refuse to install the invariant over ambiguous history. Production operators
+-- must inspect duplicate payment grants; startup/migration never deletes money
+-- audit rows or guesses which entitlement extension was intended.
+do $$
+begin
+  if exists (
+    select 1 from grants
+     where payment_id is not null
+     group by payment_id
+    having count(*) > 1
+  ) then
+    raise exception 'duplicate grants.payment_id rows must be resolved before enabling uniqueness';
+  end if;
+end
+$$;
+create unique index if not exists grants_payment_id_unique
+  on grants (payment_id) where payment_id is not null;
 -- settleOpenPayments asks "which paid payments have no grant behind them" on the
 -- boot path, which is a NOT EXISTS against this column. Partial: admin gifts and
 -- trials carry no payment_id and would only bloat it.

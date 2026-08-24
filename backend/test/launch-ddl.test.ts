@@ -19,6 +19,45 @@ afterAll(async () => {
 });
 
 describe("launch schema repairs", () => {
+  it("enforces payment attempt, provider reference, and payment-grant uniqueness", async () => {
+    const columns = await h.query<{ column_name: string }>(`
+      select column_name
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = 'payments'
+        and column_name in ('attempt_id', 'provider_ref')
+      order by column_name
+    `);
+    expect(columns.map((row) => row.column_name)).toEqual(["attempt_id", "provider_ref"]);
+
+    const indexes = await h.query<{ indexname: string; indexdef: string }>(`
+      select indexname, indexdef
+      from pg_indexes
+      where schemaname = 'public'
+        and indexname in (
+          'payments_user_attempt_unique',
+          'payments_provider_ref_unique',
+          'grants_payment_id_unique'
+        )
+      order by indexname
+    `);
+
+    expect(indexes.map((row) => row.indexname)).toEqual([
+      "grants_payment_id_unique",
+      "payments_provider_ref_unique",
+      "payments_user_attempt_unique",
+    ]);
+    expect(indexes.find((row) => row.indexname === "payments_user_attempt_unique")?.indexdef).toMatch(
+      /unique.*\(user_id, attempt_id\).*where \(attempt_id is not null\)/i,
+    );
+    expect(indexes.find((row) => row.indexname === "payments_provider_ref_unique")?.indexdef).toMatch(
+      /unique.*\(provider, provider_ref\).*where \(provider_ref is not null\)/i,
+    );
+    expect(indexes.find((row) => row.indexname === "grants_payment_id_unique")?.indexdef).toMatch(
+      /unique.*\(payment_id\).*where \(payment_id is not null\)/i,
+    );
+  });
+
   it("clears only the retired device-switch lock while retaining a blocked account", async () => {
     await h.raw(`
       insert into users (phone, blocked, security_locked_at, security_lock_reason) values

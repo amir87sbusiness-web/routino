@@ -39,29 +39,29 @@
 - Make `grants(payment_id)` unique where `payment_id is not null`.
 - Produce `applyVerifiedPaymentAtomically(db, paymentId, now)` whose payment claim, payment-linked grant insert, entitlement upsert, and grant audit result are one database transaction/statement.
 
-- [ ] **Step 1: Write failing schema and concurrency tests**
+- [x] **Step 1: Write failing schema and concurrency tests**
 
 Assert the three partial unique indexes exist. Add a pre-migration duplicate detector query for `grants.payment_id`. In the payment atomicity test, race multiple calls for one paid payment and assert exactly one grant, one entitlement extension, one `applied_at`, and stable entitlement dates. Add a rollback test in which the entitlement/grant operation fails and the payment remains unapplied.
 
-- [ ] **Step 2: Run RED tests**
+- [x] **Step 2: Run RED tests**
 
 Run: `cd backend && npm test -- --maxWorkers=1 test/launch-ddl.test.ts test/payment-atomicity.test.ts`
 
 Expected: missing columns/indexes and non-atomic grant behavior fail for the intended assertions.
 
-- [ ] **Step 3: Add schema fields and safe partial indexes**
+- [x] **Step 3: Add schema fields and safe partial indexes**
 
 Define both nullable columns in Drizzle. Add idempotent DDL for the partial unique indexes. The migration must run a read-only duplicate preflight before creating `grants_payment_id_unique`; it must not delete, merge, or rewrite existing production rows.
 
-- [ ] **Step 4: Replace the payment grant split-write path**
+- [x] **Step 4: Replace the payment grant split-write path**
 
 Implement one transactional/CTE-based operation that locks or conditionally claims the payment, inserts `grants.payment_id` once, extends entitlement only for the winning insert, and writes `applied_at` only after the same atomic unit succeeds. A unique-index conflict must be treated as an idempotent replay after rereading state, never as permission to extend entitlement again. Keep non-payment grants on their existing path.
 
-- [ ] **Step 5: Make recovery use the same atomic primitive**
+- [x] **Step 5: Make recovery use the same atomic primitive**
 
 Remove the direct `grantInterval` repair call for paid/unapplied payments. Recovery must call the same atomic payment-grant operation so two Edge isolates cannot double-extend the subscription.
 
-- [ ] **Step 6: Run GREEN tests and existing payment concurrency regressions**
+- [x] **Step 6: Run GREEN tests and existing payment concurrency regressions**
 
 Run: `cd backend && npm test -- --maxWorkers=1 test/launch-ddl.test.ts test/payment-atomicity.test.ts test/payment-burst.test.ts test/payment-recovery.test.ts`
 

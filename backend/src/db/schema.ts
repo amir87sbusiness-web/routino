@@ -256,9 +256,15 @@ export const payments = pgTable(
     /** web | android | ios — decides where the callback page sends the user
      * back to (web URL vs custom-scheme deep link). */
     platform: text("platform"),
+    /** Client-generated idempotency key. It identifies one checkout intent for
+     * one user; retries with the same key must never register twice at a PSP. */
+    attemptId: uuid("attempt_id"),
     /** Which gateway took this payment (fake | zibal | zarinpal). Null until the
      * checkout registers it with a gateway. Verify/callback route back to this. */
     provider: text("provider"),
+    /** Opaque PSP transaction identifier. Its uniqueness is scoped by provider:
+     * two gateways may legitimately issue the same reference. */
+    providerRef: text("provider_ref"),
     /** Numeric gateway token for zibal/fake (Zibal's trackId). Null for zarinpal,
      * which identifies transactions by the string `authority` below. */
     trackId: bigint("track_id", { mode: "number" }).unique(),
@@ -279,7 +285,16 @@ export const payments = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("payments_user").on(t.userId), index("payments_status").on(t.status, t.createdAt)],
+  (t) => [
+    index("payments_user").on(t.userId),
+    index("payments_status").on(t.status, t.createdAt),
+    uniqueIndex("payments_user_attempt_unique")
+      .on(t.userId, t.attemptId)
+      .where(sql`${t.attemptId} is not null`),
+    uniqueIndex("payments_provider_ref_unique")
+      .on(t.provider, t.providerRef)
+      .where(sql`${t.providerRef} is not null`),
+  ],
 );
 
 /**
@@ -312,7 +327,12 @@ export const grants = pgTable(
     expiresAfter: timestamp("expires_after", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("grants_user").on(t.userId)],
+  (t) => [
+    index("grants_user").on(t.userId),
+    uniqueIndex("grants_payment_id_unique")
+      .on(t.paymentId)
+      .where(sql`${t.paymentId} is not null`),
+  ],
 );
 
 /** Materialized current entitlement. `services/entitlement.ts` is its only writer. */

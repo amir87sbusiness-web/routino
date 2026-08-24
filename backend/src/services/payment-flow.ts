@@ -13,13 +13,13 @@
  *    computed server-side and re-asserted against what the gateway charged.
  *  - `success=1` / `Status=OK` in a callback URL is a CLAIM — only a
  *    server-to-server `psp.verify()` can mark a payment paid.
- *  - `payments.applied_at` is claimed with `UPDATE … WHERE applied_at IS NULL
- *    RETURNING`, so however many times a callback fires, the grant happens
- *    exactly once.
+ *  - `grants.payment_id` is unique and the payment grant, entitlement update,
+ *    and `payments.applied_at` write share one transaction, so however many
+ *    callbacks or Edge isolates race, the grant happens exactly once.
  */
 import { and, count, eq, gt, isNull, sql } from "drizzle-orm";
 import { rowsOf, type Database } from "../db/client.js";
-import { payments } from "../db/schema.js";
+import { grants, payments } from "../db/schema.js";
 import { badRequest, notFound, tooMany } from "../lib/http-errors.js";
 import { toLocalPhone } from "../lib/phone.js";
 import {
@@ -28,7 +28,11 @@ import {
   type PspName,
   type PspRouter,
 } from "../providers/psp/index.js";
-import { grantInterval, readEntitlement, type Entitlement } from "./entitlement.js";
+import {
+  extendEntitlement,
+  readEntitlement,
+  type Entitlement,
+} from "./entitlement.js";
 import { quote, redeemDiscount } from "./pricing.js";
 
 export type PaymentRow = typeof payments.$inferSelect;
@@ -52,66 +56,68 @@ function paymentRef(p: PaymentRow): string | undefined {
   return p.authority ?? (p.trackId != null ? String(p.trackId) : undefined);
 }
 
-/** Applies a verified-paid payment exactly once (claim → grant → redeem).
- * If granting fails after the claim, the claim is rolled back so a later
- * callback/refresh can retry — the user has paid; losing the grant is the one
- * unacceptable outcome. */
+/** Applies a verified-paid payment exactly once.
+ *
+ * The unique grant insert, entitlement extension, grant audit fields, and
+ * payment claim share one database transaction. The payment-linked grant is
+ * the idempotency winner: a replay cannot reach the entitlement update. */
 export async function applyPaid(
   db: Database,
   p: PaymentRow,
   v: { refNumber?: string; cardNumber?: string; result?: number; status?: number },
   t: Date,
 ): Promise<void> {
-  const claimed = await db
-    .update(payments)
-    .set({
-      status: "paid",
-      refNumber: v.refNumber ?? p.refNumber,
-      cardNumber: v.cardNumber ?? p.cardNumber,
-      pspResult: v.result ?? p.pspResult,
-      pspStatus: v.status ?? p.pspStatus,
-      paidAt: p.paidAt ?? t,
-      verifiedAt: t,
-      appliedAt: t,
-      updatedAt: t,
-    })
-    .where(and(eq(payments.id, p.id), isNull(payments.appliedAt)))
-    .returning();
-  if (!claimed.length) return; // another callback already applied it
+  const granted = await db.transaction(async (tx) => {
+    const [insertedGrant] = await tx
+      .insert(grants)
+      .values({
+        userId: p.userId,
+        months: p.months,
+        days: 0,
+        source: "payment",
+        paymentId: p.id,
+        expiresBefore: null,
+        expiresAfter: null,
+        createdAt: t,
+      })
+      .onConflictDoNothing()
+      .returning();
+    if (!insertedGrant) return false;
 
-  try {
-    await grantInterval(
-      db,
+    const extension = await extendEntitlement(
+      tx,
       p.userId,
-      { planId: p.planId, months: p.months, source: "payment", paymentId: p.id },
+      { planId: p.planId, months: p.months },
       t,
     );
-  } catch (err) {
-    // Un-claim so the next callback or status poll can retry the grant.
-    //
-    // `status` MUST be restored too. Leaving it on "paid" while `applied_at` is
-    // null used to strand the payment forever: the status poll's recovery branch
-    // only re-verified rows still marked `redirected`, so a user whose grant
-    // failed once showed "paid" and never received the subscription they had
-    // already been charged for.
-    await db
-      .update(payments)
-      .set({ status: p.status, appliedAt: null, updatedAt: t })
-      .where(eq(payments.id, p.id));
-    console.error("grant failed after payment — un-claimed for retry", {
-      paymentId: p.id,
-      userId: p.userId,
-      err,
-    });
-    throw err;
-  }
 
-  // Deliberately OUTSIDE the un-claim above. Marking the discount used is
-  // bookkeeping; the subscription is what the user paid for and it has now
-  // landed. Letting this throw into that catch un-claimed a grant that had
-  // already succeeded, and the retry re-ran `grantInterval` — which is not
-  // idempotent (`grants.payment_id` has no unique constraint), so the user's
-  // expiry was extended a second time for a single payment.
+    await tx
+      .update(grants)
+      .set({ expiresBefore: extension.before, expiresAfter: extension.after })
+      .where(eq(grants.id, insertedGrant.id));
+
+    await tx
+      .update(payments)
+      .set({
+        status: "paid",
+        refNumber: v.refNumber ?? p.refNumber,
+        cardNumber: v.cardNumber ?? p.cardNumber,
+        pspResult: v.result ?? p.pspResult,
+        pspStatus: v.status ?? p.pspStatus,
+        paidAt: p.paidAt ?? t,
+        verifiedAt: t,
+        appliedAt: t,
+        updatedAt: t,
+      })
+      .where(eq(payments.id, p.id));
+
+    return true;
+  });
+
+  if (!granted) return;
+
+  // Deliberately outside the atomic grant transaction. Discount redemption is
+  // bookkeeping; the unique payment grant already makes a replay harmless.
   if (p.discountCode) {
     try {
       await redeemDiscount(db, p.discountCode, p.userId, p.id);
@@ -495,10 +501,9 @@ const SETTLE_MAX = 3;
  * does it cost a gateway round trip, and that round trip is now bounded by
  * PSP_TIMEOUT_MS.
  *
- * Also repairs the one gap `applyPaid` cannot close by itself: it claims the row
- * and THEN grants, so a process killed between the two leaves a payment marked
- * paid with no entitlement behind it. That row is invisible to the sweep above
- * (it is applied), so it is found by asking which paid payments have no grant.
+ * Also repairs legacy rows created before payment application became atomic:
+ * an old process could have marked a payment applied before its grant landed.
+ * New writes cannot create that split state, but the sweep remains for history.
  *
  * Never throws: a sweep failure must not stop someone opening their app.
  */
@@ -549,14 +554,19 @@ export async function settleOpenPayments(
          and not exists (select 1 from grants g where g.payment_id = p.id)
        limit ${SETTLE_MAX}
     `);
-    for (const row of rowsOf<{ id: string; user_id: string; plan_id: string; months: number }>(
-      orphaned,
-    )) {
+    for (const row of rowsOf<{ id: string }>(orphaned)) {
       console.error("payment applied but never granted — repairing", { paymentId: row.id });
-      await grantInterval(
+      const [payment] = await db.select().from(payments).where(eq(payments.id, row.id)).limit(1);
+      if (!payment) continue;
+      await applyPaid(
         db,
-        row.user_id,
-        { planId: row.plan_id, months: Number(row.months), source: "payment", paymentId: row.id },
+        payment,
+        {
+          refNumber: payment.refNumber ?? undefined,
+          cardNumber: payment.cardNumber ?? undefined,
+          result: payment.pspResult ?? undefined,
+          status: payment.pspStatus ?? undefined,
+        },
         t,
       );
       healed += 1;
