@@ -60,17 +60,26 @@ export async function checkout(
   planId: string,
   code: string | undefined,
   platform: "web" | "android" | "ios",
+  attemptId: string,
 ): Promise<CheckoutResult> {
   return authedRequest("/payments/checkout", {
     method: "POST",
-    body: { planId, code: code || undefined, platform },
+    body: { planId, code: code || undefined, platform, attemptId },
   });
 }
 
 export interface PaymentStatus {
   payment: {
     id: string;
-    status: "pending" | "redirected" | "paid" | "failed" | "canceled" | "verify_failed";
+    status:
+      | "pending"
+      | "redirected"
+      | "verifying"
+      | "provider_unknown"
+      | "paid"
+      | "failed"
+      | "canceled"
+      | "verify_failed";
     planId: string;
     months: number;
     amountToman: number;

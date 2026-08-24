@@ -200,19 +200,19 @@ Run the same targeted Verify command.
 - The subscribe screen reuses one attempt ID for transport/retry ambiguity and creates a new one only after a definitive terminal answer or changed immutable checkout selection.
 - A synchronous in-flight guard prevents two clicks before React state renders.
 
-- [ ] **Step 1: Write failing client payload and interaction tests**
+- [x] **Step 1: Write failing client payload and interaction tests**
 
 Assert payload contains `planId`, optional code/platform, and `attemptId`, but never amount or API key. Double-click must make one HTTP request. A retryable timeout/unavailable response must reuse the attempt ID; changing plan/code must create a new attempt ID. Terminal validation/token rejection must safely release the attempt.
 
-- [ ] **Step 2: Run RED frontend tests**
+- [x] **Step 2: Run RED frontend tests**
 
 Run: `npm test -- --maxWorkers=1 src/lib/api/payments.test.ts src/routes/subscribe.test.tsx`
 
-- [ ] **Step 3: Implement stable attempt lifecycle and safe messages**
+- [x] **Step 3: Implement stable attempt lifecycle and safe messages**
 
 Use `crypto.randomUUID()` and refs, not localStorage. Add safe Persian messages for `duplicate_payment_attempt`, `nextpay_token_error`, `payment_network_timeout`, and `payment_provider_unavailable`; never render a raw provider response. Keep current providers and UI behavior otherwise unchanged.
 
-- [ ] **Step 4: Run GREEN frontend tests and typecheck**
+- [x] **Step 4: Run GREEN frontend tests and typecheck**
 
 Run: `npm test -- --maxWorkers=1 src/lib/api/payments.test.ts src/routes/subscribe.test.tsx && npx tsc --noEmit`
 

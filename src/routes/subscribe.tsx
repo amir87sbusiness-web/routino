@@ -10,7 +10,7 @@
 import { Capacitor } from "@capacitor/core";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { BadgeCheck, LogIn, ShieldAlert, Tag, WifiOff } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button, Input, Logo } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
 import { entitlementToSubscription } from "@/lib/api/auth";
@@ -55,6 +55,8 @@ function SubscribePage() {
   const [payError, setPayError] = useState("");
   const [needsLogin, setNeedsLogin] = useState(false);
   const [freeSuccess, setFreeSuccess] = useState(false);
+  const paymentInFlight = useRef(false);
+  const paymentAttempt = useRef<{ id: string; key: string } | null>(null);
 
   // Server catalog. Failure keeps the bundled fallback and flags offline mode.
   useEffect(() => {
@@ -140,14 +142,28 @@ function SubscribePage() {
   };
 
   const pay = async () => {
+    // React state does not disable the button until the next render. This ref is
+    // synchronous, so a double click cannot create two checkout requests.
+    if (paymentInFlight.current) return;
+    paymentInFlight.current = true;
     setPaying(true);
     setPayError("");
     setNeedsLogin(false);
     try {
       const platform = Capacitor.getPlatform() as "web" | "android" | "ios";
-      const res = await checkout(selected, appliedCode?.code, platform);
+      const attemptKey = JSON.stringify([selected, appliedCode?.code ?? null, platform]);
+      if (!paymentAttempt.current || paymentAttempt.current.key !== attemptKey) {
+        paymentAttempt.current = { id: crypto.randomUUID(), key: attemptKey };
+      }
+      const res = await checkout(
+        selected,
+        appliedCode?.code,
+        platform,
+        paymentAttempt.current.id,
+      );
 
       if (res.free && res.entitlement) {
+        paymentAttempt.current = null;
         // 100% discount: granted server-side without a gateway round-trip.
         const sub = entitlementToSubscription(res.entitlement);
         if (sub) {
@@ -163,10 +179,18 @@ function SubscribePage() {
         window.location.href = res.paymentUrl;
         return;
       }
+      paymentAttempt.current = null;
       setPayError(
         t("شروع پرداخت ناموفق بود. دوباره تلاش کن.", "Could not start the payment. Try again."),
       );
     } catch (err) {
+      const retryable =
+        err instanceof ApiError &&
+        (err.offline ||
+          err.code === "payment_network_timeout" ||
+          err.code === "payment_provider_unavailable");
+      if (!retryable) paymentAttempt.current = null;
+
       if (err instanceof ApiError && err.offline) {
         setPayError(t("برای خرید به اینترنت نیاز داری.", "Buying needs an internet connection."));
       } else if (err instanceof ApiError && (err.status === 401 || err.code === "not_signed_in")) {
@@ -176,17 +200,37 @@ function SubscribePage() {
         setPayError(
           t("تلاش زیاد بود؛ کمی بعد دوباره امتحان کن.", "Too many attempts; try again soon."),
         );
-      } else if (err instanceof ApiError && err.code === "psp_failed") {
+      } else if (err instanceof ApiError && err.code === "duplicate_payment_attempt") {
+        setPayError(
+          t(
+            "این تلاش پرداخت قبلاً ثبت شده؛ چند لحظه صبر کن و دوباره وضعیت را بررسی کن.",
+            "This payment attempt is already registered. Wait a moment and check again.",
+          ),
+        );
+      } else if (
+        err instanceof ApiError &&
+        (err.code === "psp_failed" ||
+          err.code === "nextpay_token_error" ||
+          err.code === "payment_provider_unavailable")
+      ) {
         setPayError(
           t(
             "درگاه پرداخت در دسترس نیست. چند دقیقه دیگر تلاش کن.",
             "The gateway is unavailable. Try again shortly.",
           ),
         );
+      } else if (err instanceof ApiError && err.code === "payment_network_timeout") {
+        setPayError(
+          t(
+            "پاسخ درگاه به‌موقع نرسید. دوباره تلاش کن؛ درخواست تکراری ساخته نمی‌شود.",
+            "The gateway did not answer in time. Retry safely; no duplicate request is created.",
+          ),
+        );
       } else {
         setPayError(t("یه مشکلی پیش اومد. دوباره تلاش کن.", "Something went wrong. Try again."));
       }
     } finally {
+      paymentInFlight.current = false;
       setPaying(false);
     }
   };
