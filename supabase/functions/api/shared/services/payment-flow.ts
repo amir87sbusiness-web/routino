@@ -408,9 +408,10 @@ async function verifyAndApplyPayment(
   candidate?: VerifyCandidate,
 ): Promise<VerifyPaymentOutcome> {
   if (payment.appliedAt) return { outcome: "paid", payment, changed: false };
+  const storedProvider = paymentProvider(payment);
   if (
     payment.status === "canceled" ||
-    payment.status === "failed" ||
+    (payment.status === "failed" && storedProvider === "nextpay") ||
     payment.status === "verify_failed"
   ) {
     return {
@@ -433,7 +434,12 @@ async function verifyAndApplyPayment(
       and(
         eq(payments.id, payment.id),
         isNull(payments.appliedAt),
-        sql`${payments.status} not in ('canceled', 'failed', 'verify_failed')`,
+        sql`${payments.status} not in ('canceled', 'verify_failed')`,
+        or(
+          ne(payments.status, "failed"),
+          ne(payments.provider, "nextpay"),
+          isNull(payments.provider),
+        ),
         or(ne(payments.status, "verifying"), lt(payments.updatedAt, staleBefore)),
       ),
     )
@@ -476,7 +482,7 @@ async function verifyAndApplyPayment(
     const orderMismatch = provider === "nextpay" && verified.orderId !== claimed.id;
     if (amountMismatch || orderMismatch) {
       if (candidate?.bindOnSuccess) {
-        const fresh = await releaseVerifyLease(db, claimed.id, restoreStatus, t, verified);
+        const fresh = await releaseVerifyLease(db, claimed.id, restoreStatus, t);
         return {
           outcome: fresh?.appliedAt ? "paid" : "pending",
           payment: fresh?.appliedAt ? fresh : undefined,
@@ -531,7 +537,13 @@ async function verifyAndApplyPayment(
     verified.failureKind === "invalid_response" ||
     verified.status === ZIBAL_STATUS.PENDING
   ) {
-    const fresh = await releaseVerifyLease(db, claimed.id, restoreStatus, t, verified);
+    const fresh = await releaseVerifyLease(
+      db,
+      claimed.id,
+      restoreStatus,
+      t,
+      candidate?.bindOnSuccess ? undefined : verified,
+    );
     return {
       outcome: fresh?.appliedAt ? "paid" : "pending",
       payment: fresh,
@@ -544,7 +556,7 @@ async function verifyAndApplyPayment(
   // for an unbound candidate may simply describe a forged reference, so it must
   // not poison the real payment row.
   if (candidate?.bindOnSuccess) {
-    const fresh = await releaseVerifyLease(db, claimed.id, restoreStatus, t, verified);
+    const fresh = await releaseVerifyLease(db, claimed.id, restoreStatus, t);
     return {
       outcome: fresh?.appliedAt ? "paid" : "pending",
       payment: fresh?.appliedAt ? fresh : undefined,
@@ -749,7 +761,7 @@ export async function settleOne(
   const unsettled =
     payment.appliedAt == null &&
     payment.status !== "canceled" &&
-    payment.status !== "failed" &&
+    !(payment.status === "failed" && paymentProvider(payment) === "nextpay") &&
     payment.status !== "verify_failed";
   if (!unsettled) return false;
   return (await verifyAndApplyPayment(db, psp, payment, t)).changed;

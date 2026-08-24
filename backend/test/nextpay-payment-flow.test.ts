@@ -175,6 +175,7 @@ describe("NextPay callback and Verify state machine", () => {
     expect(result).toEqual({ outcome: "pending" });
     expect(provider.verifyCalls).toBe(1);
     expect(stored).toMatchObject({ status: "pending", provider: null, providerRef: null });
+    expect(stored?.pspResult).toBeNull();
     expect(await grantCount(payment.id)).toBe(0);
   });
 
@@ -406,6 +407,33 @@ describe("NextPay callback and Verify state machine", () => {
     expect((await callback(failed!, provider)).outcome).toBe("failed");
     expect(provider.verifyCalls).toBe(1);
     expect(await grantCount(payment.id)).toBe(0);
+  });
+
+  it("keeps legacy-provider failed rows recoverable without NextPay classifications", async () => {
+    const payment = await fixture({
+      provider: "zibal",
+      providerRef: null,
+      trackId: 345_678,
+      status: "failed",
+    });
+    const provider: PspProvider & { verifyCalls: number } = {
+      name: "zibal",
+      verifyCalls: 0,
+      async request() {
+        return { ok: true, result: ZIBAL_RESULT.OK, ref: "345678" };
+      },
+      async verify() {
+        this.verifyCalls += 1;
+        return paid(payment.id);
+      },
+      startUrl(ref) {
+        return `https://gateway.test/${ref}`;
+      },
+    };
+
+    expect(await settleOne(h.db, createRouter([provider]), payment, NOW)).toBe(true);
+    expect(provider.verifyCalls).toBe(1);
+    expect(await grantCount(payment.id)).toBe(1);
   });
 
   it("does not call NextPay again after local success", async () => {
