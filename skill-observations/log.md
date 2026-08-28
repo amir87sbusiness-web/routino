@@ -336,3 +336,18 @@ existing deployment-provenance observations cover this launch audit. -->
 **Suggested improvement:** Before launching browser OAuth, identify the intended account/profile or provide a copyable authorization URL that the operator can open in the correct profile. Prefer an existing Git-linked deployment or scoped token when that avoids ambiguous interactive login.
 
 **Principle:** Production authentication is not ready until both the service and the intended account context are explicit.
+
+### Observation 23: A gateway redirect is not evidence of payment completion
+
+**Status:** OPEN
+**Date:** 2026-08-28
+**Session context:** Validating a real payment where the hosted gateway opened successfully but the bank payment, callback, provider verification, and entitlement grant had not completed.
+**Skill:** systematic-debugging / verification-before-completion
+**Type:** open-source
+**Phase/Area:** Live payment diagnosis
+
+**Issue:** Treating an operator's "it worked" as payment success skipped the distinction between redirect success and money movement. An older official sample also conflicted with the provider's current SDK, which made an endpoint hypothesis look stronger than the live evidence supported.
+
+**Suggested improvement:** Payment release checklists must record redirect, bank authorization, callback arrival, provider Verify result, local paid marker, grant count, and entitlement as separate gates. Before changing a provider host or wire contract, reconcile current official SDK behavior with current documentation and inspect the specific transaction's live state.
+
+**Principle:** A payment is complete only when provider verification and the local atomic grant agree; opening the hosted gateway proves neither.
