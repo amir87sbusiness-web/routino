@@ -1,199 +1,186 @@
-/**
- * Gateway router + ZarinPal adapter, in isolation (no DB, no network).
- *
- * The money-path integration is covered end-to-end in payments.test.ts against
- * the fake gateway. Here we prove the two NEW pieces on their own: the router's
- * fastest-healthy selection and failover, and that the ZarinPal adapter
- * translates its dialect into the canonical Zibal-coded contract the payment
- * route relies on.
- */
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { PspName, PspProvider, PspRequestInput } from "../src/providers/psp/index.js";
-import { ZIBAL_RESULT, ZIBAL_STATUS } from "../src/providers/psp/index.js";
-import { createRouter } from "../src/providers/psp/router.js";
+import type { PspRequestInput } from "../src/providers/psp/index.js";
+import { ZARINPAL_MIN_AMOUNT_RIAL } from "../src/providers/psp/index.js";
 import { zarinpalPsp } from "../src/providers/psp/zarinpal.js";
 
 const INPUT: PspRequestInput = {
   amountRial: 1_490_000,
-  callbackUrl: "https://api.routino.me/v1/payments/callback",
-  orderId: "order-1",
+  callbackUrl:
+    "https://api.routino.me/v1/payments/callback?paymentId=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+  description: "Routino m3 (3m)",
+  mobile: "09121234567",
 };
 
-/** A provider whose latency and outcome the test controls. `latency` advances
- * the shared clock during request(), so the router measures it as real time. */
-function stub(
-  name: PspName,
-  clock: { t: number },
-  opts: { latency?: number; ok?: boolean; throws?: boolean } = {},
-): PspProvider & { calls: number } {
-  return {
-    name,
-    calls: 0,
-    async request() {
-      this.calls++;
-      clock.t += opts.latency ?? 1;
-      if (opts.throws) throw new Error(`${name} down`);
-      return opts.ok === false
-        ? { ok: false, result: -1, message: "rejected" }
-        : { ok: true, ref: `${name}-ref`, result: ZIBAL_RESULT.OK };
-    },
-    async verify(ref: string) {
-      return {
-        result: ZIBAL_RESULT.OK,
-        status: ZIBAL_STATUS.PAID_VERIFIED,
-        amount: 0,
-        refNumber: `${name}:${ref}`,
-      };
-    },
-    startUrl(ref: string) {
-      return `https://${name}/start/${ref}`;
-    },
-  };
+type FetchCapture = { url?: string; init?: RequestInit; body?: Record<string, unknown> };
+
+function response(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
 }
 
-describe("psp router", () => {
-  it("with a single gateway, always uses it (‘one is enough’)", async () => {
-    const clock = { t: 1000 };
-    const r = createRouter([stub("zibal", clock, { latency: 5 })], () => clock.t);
-    expect(r.providers).toEqual(["zibal"]);
-    const res = await r.request(INPUT);
-    expect(res.ok).toBe(true);
-    expect(res.provider).toBe("zibal");
-    expect(res.ref).toBe("zibal-ref");
-  });
+function mockFetch(result: Response | Error, capture?: FetchCapture) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (capture) {
+        capture.url = url;
+        capture.init = init;
+        capture.body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined;
+      }
+      if (result instanceof Error) throw result;
+      return result;
+    }),
+  );
+}
 
-  it("fails over to the next gateway when the first throws", async () => {
-    const clock = { t: 1000 };
-    const first = stub("zarinpal", clock, { throws: true });
-    const second = stub("zibal", clock, { latency: 5 });
-    const r = createRouter([first, second], () => clock.t);
-    const res = await r.request(INPUT);
-    expect(res.ok).toBe(true);
-    expect(res.provider).toBe("zibal");
-    expect(first.calls).toBe(1);
-    expect(second.calls).toBe(1);
-  });
-
-  it("fails over when the first gateway hard-rejects (ok:false)", async () => {
-    const clock = { t: 1000 };
-    const r = createRouter(
-      [stub("zarinpal", clock, { ok: false }), stub("zibal", clock, { latency: 5 })],
-      () => clock.t,
-    );
-    const res = await r.request(INPUT);
-    expect(res.ok).toBe(true);
-    expect(res.provider).toBe("zibal");
-  });
-
-  it("returns the last failure when every gateway is down", async () => {
-    const clock = { t: 1000 };
-    const r = createRouter(
-      [stub("zarinpal", clock, { throws: true }), stub("zibal", clock, { throws: true })],
-      () => clock.t,
-    );
-    const res = await r.request(INPUT);
-    expect(res.ok).toBe(false);
-  });
-
-  it("converges on the fastest gateway once latencies are known", async () => {
-    const clock = { t: 1000 };
-    // Config order puts the slow one first; the router must still settle on fast.
-    const r = createRouter(
-      [stub("zarinpal", clock, { latency: 80 }), stub("zibal", clock, { latency: 4 })],
-      () => clock.t,
-    );
-    await r.request(INPUT); // samples the first (slow) one
-    await r.request(INPUT); // now the untried fast one wins and is sampled
-    const third = await r.request(INPUT);
-    expect(third.provider).toBe("zibal"); // fastest by measured latency
-  });
-
-  it("routes verify and startUrl to the named provider, not the fastest", async () => {
-    const clock = { t: 1000 };
-    const r = createRouter(
-      [stub("zarinpal", clock, { latency: 4 }), stub("zibal", clock, { latency: 80 })],
-      () => clock.t,
-    );
-    expect(r.startUrl("zibal", "42")).toBe("https://zibal/start/42");
-    const v = await r.verify("zibal", "42", 1000);
-    expect(v.refNumber).toBe("zibal:42");
-  });
-});
-
-describe("zarinpal adapter", () => {
+describe("ZarinPal adapter", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  /** Stubs global fetch and records the last JSON body sent. */
-  function mockFetch(response: unknown, capture?: { body?: unknown; url?: string }) {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string, init: { body: string }) => {
-        if (capture) {
-          capture.url = url;
-          capture.body = JSON.parse(init.body);
-        }
-        return { ok: true, json: async () => response } as Response;
-      }),
-    );
-  }
-
-  it("requests in Rial with an explicit IRR currency and returns the authority as ref", async () => {
-    const cap: { body?: Record<string, unknown> } = {};
+  it("sends the exact production request contract in Rial", async () => {
+    const capture: FetchCapture = {};
     mockFetch(
-      { data: { code: 100, authority: "A00000000000000000000000000abcdef123" }, errors: [] },
-      cap,
+      response({ data: { code: 100, authority: "A000000000000000000000000000001" }, errors: [] }),
+      capture,
     );
-    const res = await zarinpalPsp("merchant-x").request(INPUT);
 
-    expect(res.ok).toBe(true);
-    expect(res.result).toBe(ZIBAL_RESULT.OK);
-    expect(res.ref).toBe("A00000000000000000000000000abcdef123");
-    expect(cap.body).toMatchObject({
-      amount: INPUT.amountRial, // Rial, not Toman
+    const result = await zarinpalPsp("11111111-2222-4333-8444-555555555555").request(INPUT);
+
+    expect(result).toEqual({
+      kind: "issued",
+      authority: "A000000000000000000000000000001",
+      code: 100,
+    });
+    expect(capture.url).toBe("https://payment.zarinpal.com/pg/v4/payment/request.json");
+    expect(capture.init).toMatchObject({
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+    });
+    expect(capture.init?.signal).toBeInstanceOf(AbortSignal);
+    expect(capture.body).toEqual({
+      merchant_id: "11111111-2222-4333-8444-555555555555",
+      amount: 1_490_000,
       currency: "IRR",
-      merchant_id: "merchant-x",
+      callback_url: INPUT.callbackUrl,
+      description: INPUT.description,
+      metadata: { mobile: INPUT.mobile },
     });
   });
 
-  it("treats a non-100 request code as a failure", async () => {
-    mockFetch({ data: [], errors: { code: -9, message: "validation" } });
-    const res = await zarinpalPsp("m").request(INPUT);
-    expect(res.ok).toBe(false);
+  it("rejects an amount below ZarinPal's documented minimum before fetch", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await zarinpalPsp("11111111-2222-4333-8444-555555555555").request({
+      ...INPUT,
+      amountRial: ZARINPAL_MIN_AMOUNT_RIAL - 1,
+    });
+
+    expect(result).toEqual({ kind: "rejected", code: -9 });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("maps a verified payment to the canonical paid-and-verified codes", async () => {
-    const cap: { body?: Record<string, unknown> } = {};
+  it.each([
+    [{ data: [], errors: { code: -9, message: "validation" } }, -9],
+    [{ data: {}, errors: [{ code: -10, message: "merchant" }] }, -10],
+    [{ data: { code: -11, message: "inactive" }, errors: [] }, -11],
+  ])("normalizes an official request rejection without exposing its body", async (body, code) => {
+    mockFetch(response(body));
+    await expect(zarinpalPsp("m").request(INPUT)).resolves.toEqual({
+      kind: "rejected",
+      code,
+    });
+  });
+
+  it.each([
+    ["missing authority", { data: { code: 100 }, errors: [] }],
+    ["missing code", { data: { authority: "A000" }, errors: [] }],
+    ["empty object", {}],
+  ])("keeps a malformed successful request recoverable: %s", async (_name, body) => {
+    mockFetch(response(body));
+    await expect(zarinpalPsp("m").request(INPUT)).resolves.toEqual({ kind: "unknown" });
+  });
+
+  it.each([
+    ["HTTP failure", response({ error: "upstream" }, 502)],
+    ["invalid JSON", new Response("<html>bad gateway</html>", { status: 200 })],
+    ["network failure", new TypeError("fetch failed")],
+    ["timeout", new DOMException("timed out", "TimeoutError")],
+  ])("keeps an ambiguous request recoverable: %s", async (_name, result) => {
+    mockFetch(result);
+    await expect(zarinpalPsp("m").request(INPUT)).resolves.toEqual({ kind: "unknown" });
+  });
+
+  it("verifies with the stored authority and Rial amount", async () => {
+    const capture: FetchCapture = {};
     mockFetch(
-      { data: { code: 100, ref_id: 998877, card_pan: "603799******1234" }, errors: [] },
-      cap,
+      response({
+        data: { code: 100, ref_id: 998877, card_pan: "603799******1234" },
+        errors: [],
+      }),
+      capture,
     );
-    const v = await zarinpalPsp("m").verify("A000", 1_490_000);
 
-    expect(v.result).toBe(ZIBAL_RESULT.OK);
-    expect(v.status).toBe(ZIBAL_STATUS.PAID_VERIFIED);
-    // ZarinPal's verify carries no amount; the adapter echoes the amount we sent
-    // so the payment route's `amount === charged` assertion stays honest.
-    expect(v.amount).toBe(1_490_000);
-    expect(cap.body).toMatchObject({ amount: 1_490_000 });
-    expect(v.refNumber).toBe("998877");
-    expect(v.cardNumber).toBe("603799******1234");
+    const result = await zarinpalPsp("11111111-2222-4333-8444-555555555555").verify(
+      "A000000000000000000000000000001",
+      1_490_000,
+    );
+
+    expect(result).toEqual({
+      kind: "paid",
+      code: 100,
+      refNumber: "998877",
+      cardNumber: "603799******1234",
+    });
+    expect(capture.url).toBe("https://payment.zarinpal.com/pg/v4/payment/verify.json");
+    expect(capture.body).toEqual({
+      merchant_id: "11111111-2222-4333-8444-555555555555",
+      amount: 1_490_000,
+      authority: "A000000000000000000000000000001",
+    });
   });
 
-  it("maps ‘already verified’ (101) to the idempotent ALREADY_VERIFIED code", async () => {
-    mockFetch({ data: { code: 101, ref_id: 1 }, errors: [] });
-    const v = await zarinpalPsp("m").verify("A000", 1000);
-    expect(v.result).toBe(ZIBAL_RESULT.ALREADY_VERIFIED);
+  it("treats code 101 as idempotent success", async () => {
+    mockFetch(response({ data: { code: 101, ref_id: 998877 }, errors: [] }));
+    await expect(zarinpalPsp("m").verify("A000", 590_000)).resolves.toEqual({
+      kind: "already_verified",
+      code: 101,
+      refNumber: "998877",
+      cardNumber: undefined,
+    });
   });
 
-  it("does not report success on a verify mismatch/failure code", async () => {
-    mockFetch({ data: [], errors: { code: -55, message: "amount mismatch" } });
-    const v = await zarinpalPsp("m").verify("A000", 1000);
-    expect(v.result).not.toBe(ZIBAL_RESULT.OK);
-    expect(v.result).not.toBe(ZIBAL_RESULT.ALREADY_VERIFIED);
-    expect(v.status).not.toBe(ZIBAL_STATUS.PAID_VERIFIED);
+  it.each([
+    [-51, "pending"],
+    [-12, "pending"],
+    [-52, "unknown"],
+    [-9, "failed"],
+    [-10, "failed"],
+    [-50, "failed"],
+    [-53, "failed"],
+    [-54, "failed"],
+  ] as const)("classifies verify code %i as %s", async (code, kind) => {
+    mockFetch(response({ data: [], errors: { code, message: "safe provider message" } }));
+    await expect(zarinpalPsp("m").verify("A000", 590_000)).resolves.toEqual({ kind, code });
   });
 
-  it("builds the StartPay URL from the authority", () => {
-    expect(zarinpalPsp("m").startUrl("A000")).toBe("https://payment.zarinpal.com/pg/StartPay/A000");
+  it.each([
+    ["HTTP failure", response({ error: "upstream" }, 503)],
+    ["invalid JSON", new Response("not json", { status: 200 })],
+    ["malformed JSON", response({ data: { ref_id: 1 }, errors: [] })],
+    ["network failure", new TypeError("fetch failed")],
+    ["timeout", new DOMException("timed out", "TimeoutError")],
+  ])("keeps an ambiguous Verify recoverable: %s", async (_name, result) => {
+    mockFetch(result);
+    await expect(zarinpalPsp("m").verify("A000", 590_000)).resolves.toEqual({
+      kind: "unknown",
+    });
+  });
+
+  it("builds the production StartPay URL", () => {
+    expect(zarinpalPsp("m").startUrl("A000")).toBe(
+      "https://payment.zarinpal.com/pg/StartPay/A000",
+    );
   });
 });
