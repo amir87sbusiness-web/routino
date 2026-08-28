@@ -321,3 +321,18 @@ existing deployment-provenance observations cover this launch audit. -->
 **Principle:** A mock verifies the contract the client implements; only a controlled provider preflight verifies an undocumented transport choice is accepted in reality.
 
 <!-- Task-observer checkpoint 2026-08-28: no new reusable skill observations. -->
+
+### Observation 22: Browser-based CLI login must target the intended account profile
+
+**Status:** OPEN
+**Date:** 2026-08-28
+**Session context:** A production deployment CLI opened OAuth in the default browser profile, but the production account belonged to a different profile.
+**Skill:** cloudflare:wrangler / browser control
+**Type:** open-source
+**Phase/Area:** Production authentication and deployment
+
+**Issue:** Automatically opening the default browser can bind a deployment session to the wrong account or interrupt the operator with an irrelevant login flow.
+
+**Suggested improvement:** Before launching browser OAuth, identify the intended account/profile or provide a copyable authorization URL that the operator can open in the correct profile. Prefer an existing Git-linked deployment or scoped token when that avoids ambiguous interactive login.
+
+**Principle:** Production authentication is not ready until both the service and the intended account context are explicit.
