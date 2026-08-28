@@ -70,6 +70,8 @@ npx supabase functions deploy api --no-verify-jwt --project-ref <PROJECT_REF>
    را ببین؛ callback و poll تکراری نباید grant دوم بسازند.
 5. برگشت وب و deep-link را روی گوشی واقعی تست کن. build سبز یا emulator به‌تنهایی
    اثبات delivery در production نیست.
+6. Rate Limiting/WAF سراسری Cloudflare برای OTP و checkout را جدا از محدودیت‌های
+   هر شماره، IP و حساب بررسی کن؛ سقف فعلی SMS حداکثر ۲۰۰۰ درخواست provider در روز است.
 
 هیچ deploy، تغییر secret، اجرای migration production یا تراکنش واقعی از اجرای
 محلی تست‌ها استنتاج نمی‌شود؛ این اقدامات باید روی پروژه/حساب درست و با مجوز مالک

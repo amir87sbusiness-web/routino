@@ -81,7 +81,7 @@
 
 **Status:** OPEN
 **Date:** 2026-08-19
-**Session context:** Diagnosing a legacy PSP allowlist error and designing a low-usage production payment path.
+**Session context:** Diagnosing Zibal result 115 and designing a low-usage production payment path.
 **Skill:** systematic-debugging / verification-before-completion
 **Type:** internal
 **Phase/Area:** Payment infrastructure
@@ -287,17 +287,37 @@
 
 **Principle:** A backup is a release prerequisite only when its creation and recovery path have both been demonstrated in the current environment.
 
-### Observation 20: Idempotency must guard the irreversible side effect
+<!-- 2026-08-24 task-observer checkpoint: no new reusable observation; the
+existing deployment-provenance observations cover this launch audit. -->
+
+### Observation 20: Provider-spend limits need a multi-identity budget gate
 
 **Status:** OPEN
 **Date:** 2026-08-24
-**Session context:** Hardening a payment callback where `payments.applied_at` was claimed before entitlement extension and the payment grant ledger had no unique key.
+**Session context:** Auditing SMS-credit and payment-gateway abuse controls before a public launch.
+**Skill:** New skill candidate: provider spend-limit audit
+**Type:** open-source
+**Phase/Area:** Abuse-resistance verification
+
+**Issue:** Per-identifier and per-IP limits can pass their own tests while an attacker rotates identities or IPs. A large global cap may still allow material provider spend, and a per-user payment-attempt limit does not bound aggregate gateway traffic.
+
+**Suggested improvement:** Add a release checklist that derives the global SMS and payment-request budgets from the actual provider balance and gateway capacity, exercises each cap without provider calls, and verifies an infrastructure-level multi-identity rate limit.
+
+**Principle:** Cost-bearing external calls need both precise per-identity throttles and a deliberately sized aggregate circuit breaker.
+
+### Observation 21: Mocked provider tests cannot close an undocumented wire-contract gap
+
+**Status:** OPEN
+**Date:** 2026-08-24
+**Session context:** Designing a payment-provider adapter from current official documentation while the real credential was intentionally unavailable.
 **Skill:** test-driven-development / verification-before-completion
 **Type:** open-source
-**Phase/Area:** Payment state machines and atomic grants
+**Phase/Area:** External API contract verification
 
-**Issue:** A payment-row flag can suppress ordinary callback replays while still leaving crash windows between the flag, entitlement update, and audit insert. Resetting the flag after a later bookkeeping failure can then replay the entitlement extension.
+**Issue:** The current provider documentation specified endpoints, parameters and result codes but omitted the POST content type, while its linked current code samples returned 404. A mock can prove that the adapter emits the chosen encoding, but cannot prove the provider accepts it.
 
-**Suggested improvement:** Put a unique key on the ledger row that represents the irreversible grant, make its insert the idempotency winner, and run the ledger insert, entitlement mutation, audit fields, and payment application inside one database transaction. Inject a grant failure in tests and assert every related table rolls back.
+**Suggested improvement:** External-provider plans should separate documented facts from wire-format inferences, record broken primary examples, and require one credentialed preflight that stops before redirecting a user whenever mocks cannot validate the live transport contract.
 
-**Principle:** Exactly-once behavior is structural only when the unique guard and the side effect commit atomically.
+**Principle:** A mock verifies the contract the client implements; only a controlled provider preflight verifies an undocumented transport choice is accepted in reality.
+
+<!-- Task-observer checkpoint 2026-08-28: no new reusable skill observations. -->
