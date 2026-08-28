@@ -52,7 +52,7 @@ describe("ZarinPal adapter", () => {
       authority: "A000000000000000000000000000001",
       code: 100,
     });
-    expect(capture.url).toBe("https://payment.zarinpal.com/pg/v4/payment/request.json");
+    expect(capture.url).toBe("https://api.zarinpal.com/pg/v4/payment/request.json");
     expect(capture.init).toMatchObject({
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -133,7 +133,7 @@ describe("ZarinPal adapter", () => {
       refNumber: "998877",
       cardNumber: "603799******1234",
     });
-    expect(capture.url).toBe("https://payment.zarinpal.com/pg/v4/payment/verify.json");
+    expect(capture.url).toBe("https://api.zarinpal.com/pg/v4/payment/verify.json");
     expect(capture.body).toEqual({
       merchant_id: "11111111-2222-4333-8444-555555555555",
       amount: 1_490_000,
