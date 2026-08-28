@@ -3,9 +3,9 @@ begin;
 lock table payments in share row exclusive mode;
 lock table grants in share row exclusive mode;
 
--- Never discard an unsettled legacy-provider payment silently. The project has
--- not launched, so this should find no rows; if it does, migration stops for
--- an explicit financial review.
+-- Never discard an unsettled legacy-provider payment silently. Terminal failed
+-- and canceled attempts carry no recoverable money state and do not block
+-- column cleanup; every other unapplied legacy state requires explicit review.
 do $$
 declare
   has_legacy boolean := false;
@@ -17,7 +17,8 @@ begin
     execute $q$
       select exists (
         select 1 from payments
-        where provider is not null and provider <> 'zarinpal' and applied_at is null
+        where provider is not null and provider <> 'zarinpal'
+          and applied_at is null and status not in ('failed', 'canceled')
       )
     $q$ into has_legacy;
   end if;
@@ -25,7 +26,13 @@ begin
     select 1 from information_schema.columns
     where table_schema = 'public' and table_name = 'payments' and column_name = 'track_id'
   ) then
-    execute 'select exists (select 1 from payments where track_id is not null and applied_at is null)'
+    execute $q$
+      select exists (
+        select 1 from payments
+        where track_id is not null and applied_at is null
+          and status not in ('failed', 'canceled')
+      )
+    $q$
       into has_legacy;
   end if;
   if has_legacy then

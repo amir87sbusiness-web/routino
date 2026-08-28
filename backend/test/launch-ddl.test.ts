@@ -120,8 +120,8 @@ describe("launch schema repairs", () => {
 
   it("refuses to drop legacy gateway columns while an unsettled payment exists", async () => {
     await h.raw(`
-      alter table payments add column provider text;
-      alter table payments add column track_id bigint;
+      alter table payments add column if not exists provider text;
+      alter table payments add column if not exists track_id bigint;
       insert into users (id, phone)
       values ('31111111-1111-4111-8111-111111111111', '989122211112');
       insert into payments (
@@ -144,6 +144,33 @@ describe("launch schema repairs", () => {
       where table_name = 'payments' and column_name in ('provider', 'track_id')
     `);
     expect(columns).toHaveLength(2);
+  });
+
+  it("allows cleanup when every unapplied legacy payment is terminal", async () => {
+    await h.raw(`
+      alter table payments add column if not exists provider text;
+      alter table payments add column if not exists track_id bigint;
+      insert into users (id, phone)
+      values ('41111111-1111-4111-8111-111111111111', '989122211113');
+      insert into payments (
+        user_id, plan_id, months, amount_toman, amount_rial, status, provider, track_id
+      ) values
+        (
+          '41111111-1111-4111-8111-111111111111', 'm1', 1, 59000, 590000,
+          'failed', 'legacy', null
+        ),
+        (
+          '41111111-1111-4111-8111-111111111111', 'm1', 1, 59000, 590000,
+          'canceled', 'legacy', 12346
+        );
+    `);
+
+    await h.raw(ZARINPAL_MIGRATION_SQL);
+    const columns = await h.query<{ column_name: string }>(`
+      select column_name from information_schema.columns
+      where table_name = 'payments' and column_name in ('provider', 'track_id')
+    `);
+    expect(columns).toHaveLength(0);
   });
 
   it("clears only the retired device-switch lock while retaining a blocked account", async () => {
