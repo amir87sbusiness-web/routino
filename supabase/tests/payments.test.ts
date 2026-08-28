@@ -373,6 +373,27 @@ describe("edge: the public callback only acts for a proven caller", () => {
     expect(grants).toHaveLength(1);
   });
 
+  it("rejects duplicated callback keys instead of silently choosing one", async () => {
+    const { access, user } = await signIn(h);
+    const body = (await (await checkout(access, { planId: "m1" })).json()) as {
+      authority: string;
+      paymentId: string;
+    };
+    h.psp._settle(body.authority, "paid");
+
+    const attack = await h.call(
+      "GET",
+      `/v1/payments/callback?paymentId=${body.paymentId}&paymentId=${crypto.randomUUID()}&Authority=${body.authority}&Status=OK`,
+    );
+    expect(attack.status).toBe(200);
+    const html = await attack.text();
+    expect(html).toContain("در حال بررسی");
+    expect(html).not.toContain(body.paymentId);
+    expect(
+      await h.query(`select id from grants where user_id = '${user.id}' and source = 'payment'`),
+    ).toHaveLength(0);
+  });
+
   it("gives a real and a nonexistent authority the identical unproven answer", async () => {
     const { access } = await signIn(h);
     const body = (await (await checkout(access, { planId: "m1" })).json()) as { authority: string };

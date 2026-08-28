@@ -53,7 +53,15 @@ export function paymentRoutes(deps: Deps) {
 
   /** The PSP redirects the user's browser here after the gateway. Public. */
   r.get("/payments/callback", async (c) => {
-    const result = await handlePaymentCallback(db, psp, c.req.query(), now());
+    // Preserve duplicate keys as arrays so the shared callback validator can
+    // reject parameter pollution instead of Hono silently selecting one value.
+    const query: Record<string, unknown> = Object.fromEntries(
+      Object.entries(c.req.queries()).map(([key, values]) => [
+        key,
+        values.length === 1 ? values[0] : values,
+      ]),
+    );
+    const result = await handlePaymentCallback(db, psp, query, now());
     return html(c, renderResultPage(env, result));
   });
 
