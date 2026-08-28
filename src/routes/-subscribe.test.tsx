@@ -144,9 +144,9 @@ describe("SubscribePage payment attempts", () => {
     expect(payments.checkout.mock.calls[1]?.[3]).not.toBe(payments.checkout.mock.calls[0]?.[3]);
   });
 
-  it("releases the UUID after a definitive token rejection", async () => {
+  it("releases the UUID after a definitive ZarinPal rejection", async () => {
     payments.checkout
-      .mockRejectedValueOnce(new ApiError(502, "nextpay_token_error", "safe"))
+      .mockRejectedValueOnce(new ApiError(400, "psp_failed", "safe"))
       .mockResolvedValueOnce({ free: false, paymentId: "payment-3" });
 
     await click(paymentButton(host));

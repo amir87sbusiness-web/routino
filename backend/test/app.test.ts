@@ -77,16 +77,13 @@ describe("production env guards", () => {
     ADMIN_TOKEN: "z".repeat(20),
     SMS_PROVIDER: "kavenegar",
     KAVENEGAR_API_KEY: "k",
-    PSP_PROVIDER: "zibal",
+    PSP_PROVIDER: "zarinpal",
+    ZARINPAL_MERCHANT: "11111111-2222-4333-8444-555555555555",
   } as const;
 
-  it("refuses to start on Zibal's sandbox merchant", () => {
-    // The launch trap this exists for: Zibal's sandbox is not a separate host or
-    // flag — it is the merchant id left at its default. Forget one variable and
-    // the gateway looks real, verify says paid, subscriptions are granted, and
-    // nothing reaches the merchant account. ZarinPal had this guard; Zibal did not.
-    expect(() => loadEnv({ ...prod, ZIBAL_MERCHANT: "zibal" })).toThrow(/sandbox merchant/i);
-    expect(() => loadEnv({ ...prod, ZIBAL_MERCHANT: "real-merchant-id" })).not.toThrow();
+  it("requires a valid ZarinPal merchant UUID", () => {
+    expect(() => loadEnv({ ...prod, ZARINPAL_MERCHANT: "bad" })).toThrow(/ZARINPAL_MERCHANT/);
+    expect(() => loadEnv(prod)).not.toThrow();
   });
 
   it("defaults access tokens to one hour because every protected call rechecks the device row", () => {
@@ -94,28 +91,21 @@ describe("production env guards", () => {
   });
 
   it("refuses to start with console SMS", () => {
-    expect(() =>
-      loadEnv({ ...prod, ZIBAL_MERCHANT: "real-merchant-id", SMS_PROVIDER: "console" }),
-    ).toThrow(/console/i);
+    expect(() => loadEnv({ ...prod, SMS_PROVIDER: "console" })).toThrow(/console/i);
   });
 
-  it("allows staying in test mode only when explicitly told to", () => {
-    const sandbox = { ...prod, ZIBAL_MERCHANT: "zibal", SMS_PROVIDER: "console" };
-    expect(() => loadEnv(sandbox)).toThrow();
-    const env = loadEnv({ ...sandbox, ALLOW_TEST_PROVIDERS: "true" });
-    // ...and then says so, loudly, on every boot.
+  it("allows fake only outside production and warns loudly", () => {
+    const env = loadEnv({ NODE_ENV: "test", PSP_PROVIDER: "fake", SMS_PROVIDER: "console" });
     expect(testProviderWarnings(env)).toHaveLength(2);
   });
 
   it("still rejects dev secrets and the fake gateway", () => {
-    const ok = { ...prod, ZIBAL_MERCHANT: "real-merchant-id" };
+    const ok = prod;
     expect(() =>
       loadEnv({ ...ok, JWT_SECRET: "dev-only-secret-change-me-in-production-32+" }),
     ).toThrow(/JWT_SECRET/);
     expect(() => loadEnv({ ...ok, ADMIN_TOKEN: "dev-only-admin-token" })).toThrow(/ADMIN_TOKEN/);
-    expect(() => loadEnv({ ...ok, PSP_PROVIDER: "fake", ALLOW_TEST_PROVIDERS: "true" })).toThrow(
-      /fake/,
-    );
+    expect(() => loadEnv({ ...ok, PSP_PROVIDER: "fake" })).toThrow(/fake/);
   });
 });
 

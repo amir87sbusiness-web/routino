@@ -1,14 +1,10 @@
 /**
- * The money path, end to end against the fake PSP — which mimics Zibal's
- * contract exactly, so everything asserted here holds against the real gateway
+ * The money path, end to end against a ZarinPal-shaped fake provider.
  * with only an env change.
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { schema } from "../src/db/schema.js";
-import { PspTransportError, type PspProvider } from "../src/providers/psp/index.js";
-import { createRouter } from "../src/providers/psp/router.js";
-import { checkoutPayment } from "../src/services/payment-flow.js";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
 
 let h: Harness;
@@ -58,10 +54,10 @@ async function startTrial(access: string) {
 
 /** Clicks "Pay"/"Cancel" on the fake gateway and follows the redirect into the
  * callback, exactly as a browser would. Returns the callback response. */
-async function settleAndCallback(trackId: number, outcome: "paid" | "canceled") {
+async function settleAndCallback(authority: string, outcome: "paid" | "canceled") {
   const settle = await h.app.inject({
     method: "GET",
-    url: `/v1/dev/gateway/settle?trackId=${trackId}&outcome=${outcome}`,
+    url: `/v1/dev/gateway/settle?Authority=${authority}&outcome=${outcome}`,
   });
   expect(settle.statusCode).toBe(302);
   const location = settle.headers.location as string;
@@ -128,17 +124,13 @@ describe("checkout → gateway → callback", () => {
     expect(h.psp._txns.size).toBe(1);
     const rows = await h.query<{
       attempt_id: string;
-      provider: string;
-      provider_ref: string;
+      authority: string;
       status: string;
-    }>(
-      `select attempt_id, provider, provider_ref, status from payments where user_id = '${user.id}'`,
-    );
+    }>(`select attempt_id, authority, status from payments where user_id = '${user.id}'`);
     expect(rows).toEqual([
       expect.objectContaining({
         attempt_id: attemptId,
-        provider: "fake",
-        provider_ref: expect.any(String),
+        authority: expect.any(String),
         status: "redirected",
       }),
     ]);
@@ -179,68 +171,71 @@ describe("checkout → gateway → callback", () => {
     expect(Number(payment?.amount_rial)).toBe(590_000);
   });
 
-  it.each([
-    {
-      kind: "token_rejected" as const,
-      providerResult: { ok: false as const, result: -4, failureKind: "token_rejected" as const },
-      statusCode: 502,
-      error: "nextpay_token_error",
-      paymentStatus: "failed",
-    },
-    {
-      kind: "timeout" as const,
-      providerResult: new PspTransportError("timeout"),
-      statusCode: 504,
-      error: "payment_network_timeout",
-      paymentStatus: "provider_unknown",
-    },
-    {
-      kind: "unavailable" as const,
-      providerResult: new PspTransportError("unavailable"),
-      statusCode: 503,
-      error: "payment_provider_unavailable",
-      paymentStatus: "provider_unknown",
-    },
-  ])("classifies NextPay $kind without losing the attempt", async (scenario) => {
-    const signed = await signIn(`0912${String(Math.random()).slice(2, 9)}`);
-    const [user] = await h.db
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.id, signed.user.id));
-    if (!user) throw new Error("missing signed-in user");
-
-    const provider: PspProvider = {
-      name: "nextpay",
-      async request() {
-        if (scenario.providerResult instanceof Error) throw scenario.providerResult;
-        return scenario.providerResult;
-      },
-      async verify() {
-        return { result: -2, failureKind: "terminal_verify" };
-      },
-      startUrl(ref) {
-        return `https://nextpay.org/nx/gateway/payment/${ref}`;
-      },
-    };
+  it("parks an ambiguous create without automatically calling ZarinPal twice", async () => {
+    const { access, user } = await signIn();
     const attemptId = crypto.randomUUID();
+    h.psp._setNextRequest("unknown");
 
-    await expect(
-      checkoutPayment(
-        h.db,
-        h.env,
-        createRouter([provider]),
-        user,
-        { planId: "m1", attemptId },
-        new Date(),
-      ),
-    ).rejects.toMatchObject({ statusCode: scenario.statusCode, code: scenario.error });
+    const first = await checkout(access, { planId: "m1", attemptId });
+    const retry = await checkout(access, { planId: "m1", attemptId });
 
-    const [payment] = await h.db
-      .select()
-      .from(schema.payments)
-      .where(eq(schema.payments.attemptId, attemptId));
-    expect(payment?.status).toBe(scenario.paymentStatus);
-    expect(payment?.provider).toBe("nextpay");
+    expect(first.statusCode).toBe(503);
+    expect(first.json()).toMatchObject({ error: "payment_request_unknown" });
+    expect(retry.statusCode).toBe(503);
+    expect(h.psp._txns.size).toBe(0);
+    const [payment] = await h.query<{ status: string; authority: string | null }>(
+      `select status, authority from payments where user_id = '${user.id}'`,
+    );
+    expect(payment).toEqual({ status: "provider_unknown", authority: null });
+
+    const fresh = await checkout(access, { planId: "m1", attemptId: crypto.randomUUID() });
+    expect(fresh.statusCode).toBe(200);
+    expect(h.psp._txns.size).toBe(1);
+  });
+
+  it("recovers when the authority callback arrives after token persistence was interrupted", async () => {
+    const { access, user } = await signIn();
+    const created = await checkout(access, { planId: "m1" });
+    const body = created.json() as { paymentId: string; authority: string };
+    h.psp._settle(body.authority, "paid");
+    await h.raw(
+      `update payments set authority = null, status = 'provider_unknown' where id = '${body.paymentId}'`,
+    );
+
+    const callback = await h.app.inject({
+      method: "GET",
+      url: `/v1/payments/callback?paymentId=${body.paymentId}&Authority=${body.authority}&Status=OK`,
+    });
+    expect(callback.body).toContain("پرداخت موفق");
+    const [payment] = await h.query<{ status: string; authority: string }>(
+      `select status, authority from payments where id = '${body.paymentId}'`,
+    );
+    expect(payment).toEqual({ status: "paid", authority: body.authority });
+    expect(
+      await h.query(`select id from grants where user_id = '${user.id}' and source = 'payment'`),
+    ).toHaveLength(1);
+  });
+
+  it("treats ZarinPal code 101 as success when local delivery still needs applying", async () => {
+    const { access } = await signIn();
+    const body = (await (await checkout(access, { planId: "m1" })).json()) as {
+      paymentId: string;
+      authority: string;
+    };
+    const txn = h.psp._txns.get(body.authority)!;
+    txn.outcome = "paid";
+    txn.verifiedOnce = true;
+
+    const callback = await h.app.inject({
+      method: "GET",
+      url: `/v1/payments/callback?paymentId=${body.paymentId}&Authority=${body.authority}&Status=OK`,
+    });
+    expect(callback.body).toContain("پرداخت موفق");
+    const [payment] = await h.query<{ status: string; applied_at: string | null }>(
+      `select status, applied_at from payments where id = '${body.paymentId}'`,
+    );
+    expect(payment?.status).toBe("paid");
+    expect(payment?.applied_at).not.toBeNull();
   });
 
   it("completes a payment and grants the plan exactly once", async () => {
@@ -251,13 +246,13 @@ describe("checkout → gateway → callback", () => {
     const body = res.json() as {
       free: boolean;
       paymentId: string;
-      trackId: number;
+      authority: string;
       paymentUrl: string;
     };
     expect(body.free).toBe(false);
-    expect(body.paymentUrl).toContain("/v1/dev/gateway?trackId=");
+    expect(body.paymentUrl).toContain("/v1/dev/gateway?Authority=");
 
-    const cb = await settleAndCallback(body.trackId, "paid");
+    const cb = await settleAndCallback(body.authority, "paid");
     expect(cb.statusCode).toBe(200);
     expect(cb.body).toContain("پرداخت موفق");
 
@@ -287,14 +282,13 @@ describe("checkout → gateway → callback", () => {
   it("is idempotent: a replayed callback cannot double-grant", async () => {
     const { access, user } = await signIn();
     const body = (await checkout(access, { planId: "m1" })).json() as {
-      trackId: number;
+      authority: string;
       paymentId: string;
     };
 
-    const first = await settleAndCallback(body.trackId, "paid");
+    const first = await settleAndCallback(body.authority, "paid");
     expect(first.body).toContain("پرداخت موفق");
-    // Replay the exact same callback (user refreshes the page / Zibal retries).
-    const replayUrl = `/v1/payments/callback?trackId=${body.trackId}&success=1&status=2&orderId=${body.paymentId}`;
+    const replayUrl = `/v1/payments/callback?paymentId=${body.paymentId}&Authority=${body.authority}&Status=OK`;
     const second = await h.app.inject({ method: "GET", url: replayUrl });
     expect(second.body).toContain("پرداخت موفق");
 
@@ -307,14 +301,14 @@ describe("checkout → gateway → callback", () => {
   it("never trusts success=1 from the URL: unsettled payment stays ungranted", async () => {
     const { access, user } = await signIn();
     const body = (await checkout(access, { planId: "m1" })).json() as {
-      trackId: number;
+      authority: string;
       paymentId: string;
     };
 
     // Forged callback before the user actually paid at the gateway.
     const forged = await h.app.inject({
       method: "GET",
-      url: `/v1/payments/callback?trackId=${body.trackId}&success=1&status=2&orderId=${body.paymentId}`,
+      url: `/v1/payments/callback?paymentId=${body.paymentId}&Authority=${body.authority}&Status=OK`,
     });
     expect(forged.body).toContain("در حال بررسی"); // pending page, no grant
 
@@ -324,46 +318,46 @@ describe("checkout → gateway → callback", () => {
     expect(grants).toHaveLength(0);
 
     // And the REAL payment still works afterwards — the forgery didn't poison it.
-    const real = await settleAndCallback(body.trackId, "paid");
+    const real = await settleAndCallback(body.authority, "paid");
     expect(real.body).toContain("پرداخت موفق");
   });
 
-  it("cancel at the gateway marks the payment canceled and grants nothing", async () => {
+  it("renders cancellation without making a recoverable payment terminal", async () => {
     const { access, user } = await signIn();
     const body = (await checkout(access, { planId: "m1" })).json() as {
-      trackId: number;
+      authority: string;
       paymentId: string;
     };
 
-    const cb = await settleAndCallback(body.trackId, "canceled");
+    const cb = await settleAndCallback(body.authority, "canceled");
     expect(cb.body).toContain("لغو");
 
     const [p] = await h.query<{ status: string }>(
       `select status from payments where id = '${body.paymentId}'`,
     );
-    expect(p!.status).toBe("canceled");
+    expect(p!.status).toBe("redirected");
     const grants = await h.query(
       `select id from grants where user_id = '${user.id}' and source = 'payment'`,
     );
     expect(grants).toHaveLength(0);
   });
 
-  it("ignores a cancel claim from someone who only guessed the trackId", async () => {
-    // `trackId` is a short sequential integer handed to every paying user, so a
+  it("ignores a cancel claim from someone who only guessed the authority", async () => {
+    // `authority` is a short sequential integer handed to every paying user, so a
     // stranger can guess one. `canceled` is terminal — the status poll never
     // revives it — so honouring an unproven cancel let an attacker strand a
     // payment: the victim paid, their own callback never landed, and the poll
     // refused to heal the row. Money moved, nothing granted.
     const { access, user } = await signIn();
     const body = (await checkout(access, { planId: "m1" })).json() as {
-      trackId: number;
+      authority: string;
       paymentId: string;
     };
 
-    // No auth, no orderId, no Authority — just the guessed trackId.
+    // No auth, no orderId, no Authority — just the guessed authority.
     const attack = await h.app.inject({
       method: "GET",
-      url: `/v1/payments/callback?trackId=${body.trackId}`,
+      url: `/v1/payments/callback?authority=${body.authority}`,
     });
     expect(attack.statusCode).toBe(200);
 
@@ -378,7 +372,7 @@ describe("checkout → gateway → callback", () => {
 
     // The victim really pays, but their browser never makes it back. The poll
     // must still be able to heal it.
-    h.psp._settle(body.trackId, "paid");
+    h.psp._settle(body.authority, "paid");
     const poll = await h.app.inject({
       method: "GET",
       url: `/v1/payments/${body.paymentId}`,
@@ -395,16 +389,16 @@ describe("checkout → gateway → callback", () => {
   it("survives a duplicated query param and stays a neutral page", async () => {
     // A repeated key parses to an ARRAY, not a string. `orderId.toLowerCase()`
     // then threw a TypeError -> 500. Worse, the throw only happened once the
-    // trackId matched a real row, so the 500 was itself an existence oracle.
+    // authority matched a real row, so the 500 was itself an existence oracle.
     const { access } = await signIn();
     const body = (await checkout(access, { planId: "m1" })).json() as {
-      trackId: number;
+      authority: string;
       paymentId: string;
     };
 
     const dup = await h.app.inject({
       method: "GET",
-      url: `/v1/payments/callback?trackId=${body.trackId}&orderId=a&orderId=b`,
+      url: `/v1/payments/callback?paymentId=${body.paymentId}&paymentId=${crypto.randomUUID()}&Authority=${body.authority}&Status=OK`,
     });
     expect(dup.statusCode).toBe(200);
 
@@ -414,36 +408,36 @@ describe("checkout → gateway → callback", () => {
     expect(p!.status).toBe("redirected"); // proved nothing, so nothing was written
   });
 
-  it("gives a real and a nonexistent trackId the identical unproven answer", async () => {
-    // Otherwise the callback is an existence oracle: walking sequential trackIds
+  it("gives a real and a nonexistent authority the identical unproven answer", async () => {
+    // Otherwise the callback is an existence oracle: walking sequential authoritys
     // and diffing the page tells a stranger which ones are real payments, i.e. a
     // live read on sales volume.
     const { access } = await signIn();
-    const body = (await checkout(access, { planId: "m1" })).json() as { trackId: number };
+    const body = (await checkout(access, { planId: "m1" })).json() as { authority: string };
 
     const real = await h.app.inject({
       method: "GET",
-      url: `/v1/payments/callback?trackId=${body.trackId}`,
+      url: `/v1/payments/callback?authority=${body.authority}`,
     });
     const miss = await h.app.inject({
       method: "GET",
-      url: `/v1/payments/callback?trackId=987654321`,
+      url: `/v1/payments/callback?authority=987654321`,
     });
 
     expect(real.statusCode).toBe(miss.statusCode);
     expect(real.body).toBe(miss.body);
   });
 
-  it("does not disclose a stranger's paid payment to a guessed trackId", async () => {
+  it("does not disclose a stranger's paid payment to a guessed authority", async () => {
     // The result page prints the bank tracking code (`refNumber`) on a paid
-    // outcome, and the callback is public. Naming a trackId must not be enough
+    // outcome, and the callback is public. Naming a authority must not be enough
     // to read someone else's payment back.
     const { access } = await signIn();
     const body = (await checkout(access, { planId: "m1" })).json() as {
-      trackId: number;
+      authority: string;
       paymentId: string;
     };
-    await settleAndCallback(body.trackId, "paid"); // genuine callback, carries orderId
+    await settleAndCallback(body.authority, "paid"); // genuine callback, carries orderId
 
     const [paid] = await h.query<{ ref_number: string }>(
       `select ref_number from payments where id = '${body.paymentId}'`,
@@ -451,7 +445,7 @@ describe("checkout → gateway → callback", () => {
 
     const snoop = await h.app.inject({
       method: "GET",
-      url: `/v1/payments/callback?trackId=${body.trackId}&success=1&status=2`,
+      url: `/v1/payments/callback?Authority=${body.authority}&Status=OK`,
     });
     expect(snoop.body).not.toContain(paid!.ref_number);
     expect(snoop.body).not.toContain(body.paymentId);
@@ -460,20 +454,20 @@ describe("checkout → gateway → callback", () => {
   it("refuses to grant when the verified amount differs from what we charged", async () => {
     const { access, user } = await signIn();
     const body = (await checkout(access, { planId: "m12" })).json() as {
-      trackId: number;
+      authority: string;
       paymentId: string;
     };
 
     // Tamper: the gateway "saw" a different amount than our payment row.
-    h.psp._txns.get(body.trackId)!.amountRial = 1_000_000;
-    const cb = await settleAndCallback(body.trackId, "paid");
+    h.psp._txns.get(body.authority)!.amountRial = 1_000_000;
+    const cb = await settleAndCallback(body.authority, "paid");
     expect(cb.statusCode).toBe(200);
     expect(cb.body).not.toContain("پرداخت موفق");
 
     const [p] = await h.query<{ status: string; applied_at: string | null }>(
       `select status, applied_at from payments where id = '${body.paymentId}'`,
     );
-    expect(p!.status).toBe("verify_failed");
+    expect(p!.status).toBe("failed");
     expect(p!.applied_at).toBeNull();
     const grants = await h.query(
       `select id from grants where user_id = '${user.id}' and source = 'payment'`,
@@ -501,7 +495,7 @@ describe("discount redemption", () => {
     const { access, user } = await signIn();
 
     const body = (await checkout(access, { planId: "m3", code: "OFF20" })).json() as {
-      trackId: number;
+      authority: string;
       paymentId: string;
       amountToman: number;
     };
@@ -510,7 +504,7 @@ describe("discount redemption", () => {
     // Not redeemed yet — an abandoned checkout must not burn a use.
     expect(await h.query(`select * from redemptions where user_id = '${user.id}'`)).toHaveLength(0);
 
-    await settleAndCallback(body.trackId, "paid");
+    await settleAndCallback(body.authority, "paid");
 
     const redemptions = await h.query<{ code: string; payment_id: string }>(
       `select code, payment_id from redemptions where user_id = '${user.id}'`,
@@ -541,12 +535,12 @@ describe("discount redemption", () => {
     expect(body.free).toBe(true);
     expect(body.entitlement.status).toBe("active");
 
-    const [p] = await h.query<{ status: string; amount_toman: number; track_id: number | null }>(
-      `select status, amount_toman, track_id from payments where user_id = '${user.id}'`,
+    const [p] = await h.query<{ status: string; amount_toman: number; authority: string | null }>(
+      `select status, amount_toman, authority from payments where user_id = '${user.id}'`,
     );
     expect(p!.status).toBe("paid");
     expect(p!.amount_toman).toBe(0);
-    expect(p!.track_id).toBeNull(); // never went near the PSP
+    expect(p!.authority).toBeNull(); // never went near the PSP
     expect(await h.query(`select * from redemptions where user_id = '${user.id}'`)).toHaveLength(1);
   });
 });
@@ -560,7 +554,7 @@ describe("grant durability", () => {
     await h.raw(`insert into discounts (code, percent) values ('HALF', 50)`);
     const { access, user } = await signIn();
     const body = (await checkout(access, { planId: "m1", code: "HALF" })).json() as {
-      trackId: number;
+      authority: string;
       paymentId: string;
     };
 
@@ -568,7 +562,7 @@ describe("grant durability", () => {
     // grant path at all.
     await h.raw(`delete from discounts where code = 'HALF'`);
 
-    await settleAndCallback(body.trackId, "paid");
+    await settleAndCallback(body.authority, "paid");
 
     const [p] = await h.query<{ status: string; applied_at: string | null }>(
       `select status, applied_at from payments where id = '${body.paymentId}'`,
@@ -595,12 +589,12 @@ describe("GET /v1/payments/:id", () => {
   it("self-heals a paid-but-never-called-back payment", async () => {
     const { access, user } = await signIn();
     const body = (await checkout(access, { planId: "m1" })).json() as {
-      trackId: number;
+      authority: string;
       paymentId: string;
     };
 
     // User paid, then the callback never reached us (closed tab, network).
-    h.psp._settle(body.trackId, "paid");
+    h.psp._settle(body.authority, "paid");
 
     const res = await h.app.inject({
       method: "GET",
@@ -622,10 +616,10 @@ describe("GET /v1/payments/:id", () => {
     // the payment showed "paid" forever with no subscription behind it.
     const { access, user } = await signIn();
     const body = (await checkout(access, { planId: "m1" })).json() as {
-      trackId: number;
+      authority: string;
       paymentId: string;
     };
-    h.psp._settle(body.trackId, "paid");
+    h.psp._settle(body.authority, "paid");
     await h.raw(
       `update payments set status = 'paid', applied_at = null, verified_at = now(), paid_at = now()
        where id = '${body.paymentId}'`,
@@ -650,10 +644,10 @@ describe("GET /v1/payments/:id", () => {
     const { access, user } = await signIn();
     for (const status of ["canceled", "verify_failed"]) {
       const body = (await checkout(access, { planId: "m1" })).json() as {
-        trackId: number;
+        authority: string;
         paymentId: string;
       };
-      h.psp._settle(body.trackId, "paid"); // gateway WOULD say paid if asked
+      h.psp._settle(body.authority, "paid"); // gateway WOULD say paid if asked
       await h.raw(`update payments set status = '${status}' where id = '${body.paymentId}'`);
       const res = await h.app.inject({
         method: "GET",

@@ -16,7 +16,6 @@ import { SCHEMA_SQL } from "../../functions/api/shared/db/ddl.ts";
 import { schema } from "../../functions/api/shared/db/schema.ts";
 import { loadEnv, type Env } from "../../functions/api/shared/env.ts";
 import { fakePsp } from "../../functions/api/shared/providers/psp/fake.ts";
-import { createRouter } from "../../functions/api/shared/providers/psp/router.ts";
 import type { PspProvider } from "../../functions/api/shared/providers/psp/index.ts";
 import type { SmsProvider } from "../../functions/api/shared/providers/sms/index.ts";
 import type { Database } from "../../functions/api/shared/db/client.ts";
@@ -92,7 +91,7 @@ export async function makeHarness(
     db: db as unknown as Database,
     env,
     sms,
-    psp: createRouter([paymentProvider ?? psp]),
+    psp: paymentProvider ?? psp,
     now: () => Date.now(),
   };
   const app = buildApp(deps);

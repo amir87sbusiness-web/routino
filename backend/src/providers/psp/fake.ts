@@ -1,92 +1,76 @@
-import type { PspProvider, PspRequestInput, PspVerifyResult } from "./index.js";
-import { ZIBAL_RESULT, ZIBAL_STATUS } from "./index.js";
+import type { PspProvider, PspRequestInput } from "./index.js";
+import { ZARINPAL_MIN_AMOUNT_RIAL } from "./index.js";
 
-interface FakeTxn {
-  trackId: number;
+export interface FakeTxn {
+  authority: string;
   amountRial: number;
-  orderId: string;
   callbackUrl: string;
-  /** Set by the dev gateway page when the user clicks Pay or Cancel. */
   outcome: "pending" | "paid" | "canceled";
   verifiedOnce: boolean;
 }
 
-/**
- * In-memory gateway that mimics Zibal's contract exactly — same result codes,
- * same status codes, same `201 already verified` on a second verify.
- *
- * Lets the payment state machine, idempotency and the deep-link return be
- * developed and tested with no network. Deliberately mirrors Zibal's quirks
- * rather than being "nice", so code written against it works unchanged against
- * the real gateway.
- */
+/** Test/development-only provider with ZarinPal-shaped callbacks. */
 export function fakePsp(publicApiUrl: string) {
-  const txns = new Map<number, FakeTxn>();
-  // Seed from wall-clock time so a server restart never reuses a trackId that
-  // is already persisted in the dev database (the in-memory counter resets, but
-  // PGlite on disk does not). Real Zibal issues globally-unique trackIds, so
-  // this collision is a fake-gateway-only concern. Tests get a fresh DB, so the
-  // exact value never matters there.
-  let nextTrackId = Date.now();
+  const txns = new Map<string, FakeTxn>();
+  let sequence = 0;
+  let nextRequest: "issued" | "rejected" | "unknown" = "issued";
 
   const provider: PspProvider & {
-    _txns: Map<number, FakeTxn>;
-    _settle(trackId: number, outcome: "paid" | "canceled"): void;
+    _txns: Map<string, FakeTxn>;
+    _settle(authority: string, outcome: "paid" | "canceled"): void;
+    _setNextRequest(outcome: "issued" | "rejected" | "unknown"): void;
   } = {
     name: "fake",
     _txns: txns,
-
-    /** Called by the dev gateway route when the user picks an outcome. */
-    _settle(trackId, outcome) {
-      const t = txns.get(trackId);
-      if (t) t.outcome = outcome;
+    _settle(authority, outcome) {
+      const txn = txns.get(authority);
+      if (txn) txn.outcome = outcome;
     },
-
+    _setNextRequest(outcome) {
+      nextRequest = outcome;
+    },
     async request(input: PspRequestInput) {
-      // Mirror Zibal's real validation so we hit these branches in tests.
-      if (input.amountRial <= 1000) return { ok: false, result: ZIBAL_RESULT.AMOUNT_TOO_LOW };
-      if (!/^https?:\/\//.test(input.callbackUrl))
-        return { ok: false, result: ZIBAL_RESULT.CALLBACK_INVALID };
-
-      const trackId = nextTrackId++;
-      txns.set(trackId, {
-        trackId,
+      const outcome = nextRequest;
+      nextRequest = "issued";
+      if (outcome === "unknown") return { kind: "unknown" };
+      if (outcome === "rejected") return { kind: "rejected", code: -9 };
+      if (
+        !Number.isSafeInteger(input.amountRial) ||
+        input.amountRial < ZARINPAL_MIN_AMOUNT_RIAL ||
+        !/^https?:\/\//.test(input.callbackUrl)
+      ) {
+        return { kind: "rejected", code: -9 };
+      }
+      sequence += 1;
+      const authority = `FAKE-${Date.now()}-${sequence}`;
+      txns.set(authority, {
+        authority,
         amountRial: input.amountRial,
-        orderId: input.orderId,
         callbackUrl: input.callbackUrl,
         outcome: "pending",
         verifiedOnce: false,
       });
-      return { ok: true, ref: String(trackId), result: ZIBAL_RESULT.OK };
+      return { kind: "issued", authority, code: 100 };
     },
-
-    async verify(ref: string): Promise<PspVerifyResult> {
-      const trackId = Number(ref);
-      const t = txns.get(trackId);
-      if (!t) return { result: 203, message: "invalid trackId" };
-      if (t.outcome === "canceled") return { result: 202, status: ZIBAL_STATUS.CANCELED_BY_USER };
-      if (t.outcome === "pending") return { result: 202, status: ZIBAL_STATUS.PENDING };
-
-      if (t.verifiedOnce) {
-        // Zibal returns 201 WITHOUT the amount — which is exactly why an
-        // inquiry endpoint is the only safe way out of an unexpected 201.
-        return { result: ZIBAL_RESULT.ALREADY_VERIFIED };
+    async verify(authority, amountRial) {
+      const txn = txns.get(authority);
+      if (!txn || txn.amountRial !== amountRial) return { kind: "failed", code: -54 };
+      if (txn.outcome === "pending") return { kind: "pending", code: -51 };
+      if (txn.outcome === "canceled") return { kind: "canceled", code: -51 };
+      if (txn.verifiedOnce) {
+        return { kind: "already_verified", code: 101, refNumber: `FAKE-${authority}` };
       }
-      t.verifiedOnce = true;
+      txn.verifiedOnce = true;
       return {
-        result: ZIBAL_RESULT.OK,
-        amount: t.amountRial,
-        status: ZIBAL_STATUS.PAID_VERIFIED,
-        refNumber: `FAKE-${trackId}`,
+        kind: "paid",
+        code: 100,
+        refNumber: `FAKE-${authority}`,
         cardNumber: "621986******1234",
-        paidAt: new Date().toISOString(),
       };
     },
-
-    startUrl(ref: string) {
-      return `${publicApiUrl}/v1/dev/gateway?trackId=${Number(ref)}`;
+    startUrl(authority) {
+      return `${publicApiUrl}/v1/dev/gateway?Authority=${encodeURIComponent(authority)}`;
     },
   };
-
   return provider;
 }

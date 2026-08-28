@@ -69,7 +69,7 @@ export interface Quote {
   discountPercent: number;
   discountCode: string | null;
   finalToman: number;
-  /** What actually goes to the PSP. Zibal bills in Rial. */
+  /** What actually goes to ZarinPal, in Rial. */
   finalRial: number;
 }
 
@@ -143,7 +143,7 @@ export async function quote(
   if (offerPercent > 0) price = Math.round((price * (100 - offerPercent)) / 100);
   if (d.valid) price = Math.round((price * (100 - d.percent)) / 100);
 
-  // Zibal rejects amounts <= 1000 Rial (result 105). A 100% discount would also
+  // ZarinPal has a minimum charge; a 100% discount would also
   // mean "free", which should never reach a payment gateway at all.
   if (price <= 0 && !allowFree)
     throw badRequest("free_plan", "Discounted price is zero; grant directly instead of charging");

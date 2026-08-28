@@ -25,7 +25,25 @@ const native = vi.hoisted(() => ({
 }));
 const navigate = vi.hoisted(() => vi.fn());
 const toast = vi.hoisted(() => ({ error: vi.fn(), warning: vi.fn() }));
-const app = vi.hoisted(() => ({ db: null as Db | null, update: vi.fn() }));
+const app = vi.hoisted(() => ({
+  db: null as Db | null,
+  update: vi.fn(),
+  commitTrialActivation: vi.fn(
+    (subscription: Subscription, habit: Habit | null, category?: Category) => {
+      if (!app.db) return;
+      app.db = {
+        ...app.db,
+        subscription,
+        meta: { ...app.db.meta, tampered: false },
+        categories:
+          category && !app.db.categories.some((existing) => existing.id === category.id)
+            ? [...app.db.categories, category]
+            : app.db.categories,
+        habits: habit ? [...app.db.habits, habit] : app.db.habits,
+      };
+    },
+  ),
+}));
 
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (options: unknown) => options,
@@ -43,23 +61,7 @@ vi.mock("@/state/app", () => ({
     updatePreferences: (patch: Partial<Db["settings"]>) => {
       if (app.db) app.db = { ...app.db, settings: { ...app.db.settings, ...patch } };
     },
-    commitTrialActivation: (
-      subscription: Subscription,
-      habit: Habit | null,
-      category?: Category,
-    ) => {
-      if (!app.db) return;
-      app.db = {
-        ...app.db,
-        subscription,
-        meta: { ...app.db.meta, tampered: false },
-        categories:
-          category && !app.db.categories.some((existing) => existing.id === category.id)
-            ? [...app.db.categories, category]
-            : app.db.categories,
-        habits: habit ? [...app.db.habits, habit] : app.db.habits,
-      };
-    },
+    commitTrialActivation: app.commitTrialActivation,
     t: (fa: string) => fa,
     lang: "fa",
   }),
@@ -83,7 +85,7 @@ function change(input: HTMLInputElement, value: string) {
 const trialEntitlement = {
   status: "active" as const,
   planId: "trial",
-  expiresAt: "2026-08-28T00:00:00.000Z",
+  expiresAt: "2027-08-28T00:00:00.000Z",
   issuedAt: "2026-08-21T00:00:00.000Z",
 };
 
@@ -100,6 +102,7 @@ describe("ActivationPage", () => {
       meta: { ...defaultDb([]).meta, legacyEntitlementMigrationResolved: true },
     };
     app.update.mockReset();
+    app.commitTrialActivation.mockClear();
     api.startTrial.mockReset().mockResolvedValue({ entitlement: trialEntitlement, started: true });
     api.entitlementToSubscription.mockReset().mockReturnValue({
       planId: "trial",
@@ -151,6 +154,7 @@ describe("ActivationPage", () => {
     );
 
     expect(api.startTrial).toHaveBeenCalledTimes(1);
+    expect(app.commitTrialActivation).toHaveBeenCalledTimes(1);
     expect(app.db?.subscription).toMatchObject({ planId: "trial", trial: true });
     expect(app.db?.habits).toEqual([
       expect.objectContaining({

@@ -81,7 +81,7 @@
 
 **Status:** OPEN
 **Date:** 2026-08-19
-**Session context:** Diagnosing Zibal result 115 and designing a low-usage production payment path.
+**Session context:** Diagnosing a legacy PSP allowlist error and designing a low-usage production payment path.
 **Skill:** systematic-debugging / verification-before-completion
 **Type:** internal
 **Phase/Area:** Payment infrastructure

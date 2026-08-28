@@ -30,8 +30,8 @@ describe("GET /v1/subscriptions/me", () => {
       headers: auth(access),
       body: { planId: "m1", attemptId: crypto.randomUUID() },
     });
-    const payment = (await checkout.json()) as { trackId: number };
-    h.psp._settle(payment.trackId, "paid");
+    const payment = (await checkout.json()) as { authority: string };
+    h.psp._settle(payment.authority, "paid");
 
     const res = await h.call("GET", "/v1/subscriptions/me", { headers: auth(access) });
     const { entitlement } = await res.json();

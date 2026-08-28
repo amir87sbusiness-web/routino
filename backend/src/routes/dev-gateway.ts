@@ -1,10 +1,10 @@
 /**
- * Local stand-in for Zibal's hosted payment page. Registered ONLY when the fake
+ * Local stand-in for ZarinPal's hosted payment page. Registered ONLY when fake
  * PSP is active (env.ts already forbids `fake` in production).
  *
  * Mimics the real flow shape exactly: the app redirects the browser here, the
  * user picks Pay or Cancel, and the browser is redirected to the same
- * `/v1/payments/callback?trackId=&success=&status=&orderId=` the real gateway
+ * `/v1/payments/callback?Authority=&Status=` shape ZarinPal uses.
  * would call. The payment state machine cannot tell the difference — which is
  * the point.
  */
@@ -12,13 +12,12 @@ import type { FastifyPluginAsync } from "fastify";
 import type { fakePsp } from "../providers/psp/fake.js";
 
 export const devGatewayRoutes: FastifyPluginAsync = async (app) => {
-  const fake = app.deps.psp.get("fake");
-  if (!fake) return;
-  const psp = fake as ReturnType<typeof fakePsp>;
+  if (app.deps.psp.name !== "fake") return;
+  const psp = app.deps.psp as ReturnType<typeof fakePsp>;
 
   app.get("/dev/gateway", async (req, reply) => {
-    const trackId = Number((req.query as { trackId?: string }).trackId);
-    const txn = psp._txns.get(trackId);
+    const authority = (req.query as { Authority?: string }).Authority ?? "";
+    const txn = psp._txns.get(authority);
     if (!txn)
       return reply.status(404).type("text/html; charset=utf-8").send("<h1>تراکنش پیدا نشد</h1>");
 
@@ -46,9 +45,9 @@ export const devGatewayRoutes: FastifyPluginAsync = async (app) => {
 <div class="card">
   <div class="badge">درگاه شبیه‌سازی‌شده — پولی جابه‌جا نمی‌شود</div>
   <div class="amount">${toman}</div>
-  <div class="unit">تومان (تراکنش ${trackId})</div>
-  <a class="pay" href="/v1/dev/gateway/settle?trackId=${trackId}&outcome=paid">پرداخت موفق</a>
-  <a class="cancel" href="/v1/dev/gateway/settle?trackId=${trackId}&outcome=canceled">انصراف</a>
+  <div class="unit">تومان (تراکنش تستی)</div>
+  <a class="pay" href="/v1/dev/gateway/settle?Authority=${encodeURIComponent(authority)}&outcome=paid">پرداخت موفق</a>
+  <a class="cancel" href="/v1/dev/gateway/settle?Authority=${encodeURIComponent(authority)}&outcome=canceled">انصراف</a>
 </div>
 </body>
 </html>`;
@@ -56,20 +55,19 @@ export const devGatewayRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get("/dev/gateway/settle", async (req, reply) => {
-    const q = req.query as { trackId?: string; outcome?: string };
-    const trackId = Number(q.trackId);
-    const txn = psp._txns.get(trackId);
+    const q = req.query as { Authority?: string; outcome?: string };
+    const authority = q.Authority ?? "";
+    const txn = psp._txns.get(authority);
     if (!txn) return reply.status(404).send({ error: "unknown_track" });
 
     const outcome = q.outcome === "paid" ? "paid" : "canceled";
-    psp._settle(trackId, outcome);
+    psp._settle(authority, outcome);
 
-    // Same query-string contract Zibal uses on its redirect.
+    // Same query-string contract ZarinPal uses on its redirect.
     const sep = txn.callbackUrl.includes("?") ? "&" : "?";
-    const success = outcome === "paid" ? "1" : "0";
-    const status = outcome === "paid" ? "2" : "3"; // 2 = paid-unverified, 3 = canceled
+    const status = outcome === "paid" ? "OK" : "NOK";
     return reply.redirect(
-      `${txn.callbackUrl}${sep}trackId=${trackId}&success=${success}&status=${status}&orderId=${txn.orderId}`,
+      `${txn.callbackUrl}${sep}Authority=${encodeURIComponent(authority)}&Status=${status}`,
     );
   });
 };

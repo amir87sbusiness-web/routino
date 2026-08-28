@@ -15,15 +15,8 @@ import postgres from "postgres";
 import { buildApp } from "./app.ts";
 import type { Database } from "./shared/db/client.ts";
 import { schema } from "./shared/db/schema.ts";
-import { loadEnv, pspProviderNames, testProviderWarnings } from "./shared/env.ts";
-import {
-  createRouter,
-  fakePsp,
-  nextpayPsp,
-  zarinpalPsp,
-  zibalPsp,
-  type PspProvider,
-} from "./shared/providers/psp/index.ts";
+import { loadEnv, testProviderWarnings } from "./shared/env.ts";
+import { fakePsp, zarinpalPsp } from "./shared/providers/psp/index.ts";
 import { consoleSms, kavenegarSms, type SmsProvider } from "./shared/providers/sms/index.ts";
 import { ensureOwner } from "./shared/services/owner-bootstrap.ts";
 
@@ -54,20 +47,10 @@ const sms: SmsProvider =
     ? kavenegarSms(env.KAVENEGAR_API_KEY!, env.KAVENEGAR_TEMPLATE)
     : consoleSms();
 
-const makePsp = (name: ReturnType<typeof pspProviderNames>[number]): PspProvider => {
-  switch (name) {
-    case "zibal":
-      return zibalPsp(env.ZIBAL_MERCHANT);
-    case "zarinpal":
-      return zarinpalPsp(env.ZARINPAL_MERCHANT);
-    case "nextpay":
-      return nextpayPsp(env.NEXTPAY_API_KEY ?? "");
-    case "fake":
-      return fakePsp(env.PUBLIC_API_URL);
-  }
-};
-const pspNames = pspProviderNames(env);
-const psp = createRouter(pspNames.map(makePsp));
+const psp =
+  env.PSP_PROVIDER === "zarinpal"
+    ? zarinpalPsp(env.ZARINPAL_MERCHANT)
+    : fakePsp(env.PUBLIC_API_URL);
 
 const app = buildApp({ db, env, sms, psp, now: () => Date.now() });
 
@@ -83,7 +66,7 @@ try {
   console.error("owner bootstrap failed", err);
 }
 
-console.log(`[api] edge function up (sms=${env.SMS_PROVIDER}, psp=${pspNames.join("+")})`);
+console.log(`[api] edge function up (sms=${env.SMS_PROVIDER}, psp=${psp.name})`);
 
 // Loud, every cold start. "Nobody received the SMS" and "there is no money in
 // the merchant account" should be answered by the log, not by a support ticket.

@@ -179,8 +179,6 @@ describe("ZarinPal adapter", () => {
   });
 
   it("builds the production StartPay URL", () => {
-    expect(zarinpalPsp("m").startUrl("A000")).toBe(
-      "https://payment.zarinpal.com/pg/StartPay/A000",
-    );
+    expect(zarinpalPsp("m").startUrl("A000")).toBe("https://payment.zarinpal.com/pg/StartPay/A000");
   });
 });

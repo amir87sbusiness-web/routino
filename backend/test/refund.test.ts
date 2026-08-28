@@ -48,11 +48,11 @@ async function buyAMonth(access: string) {
     headers: auth(access),
     payload: { planId: "m1", attemptId: crypto.randomUUID() },
   });
-  const { paymentId, trackId } = co.json() as { paymentId: string; trackId: number };
-  h.psp._settle(trackId, "paid");
+  const { paymentId, authority } = co.json() as { paymentId: string; authority: string };
+  h.psp._settle(authority, "paid");
   await h.app.inject({
     method: "GET",
-    url: `/v1/payments/callback?trackId=${trackId}&success=1&status=2&orderId=${paymentId}`,
+    url: `/v1/payments/callback?paymentId=${paymentId}&Authority=${authority}&Status=OK`,
   });
   return paymentId;
 }

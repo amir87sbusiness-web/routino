@@ -18,7 +18,6 @@ import { SCHEMA_SQL } from "../../src/db/ddl.js";
 import { schema } from "../../src/db/schema.js";
 import { loadEnv, type Env } from "../../src/env.js";
 import { fakePsp } from "../../src/providers/psp/fake.js";
-import { createRouter } from "../../src/providers/psp/router.js";
 import type { SmsProvider } from "../../src/providers/sms/index.js";
 
 /** Captures OTP codes so tests can assert on them without a network. */
@@ -84,10 +83,9 @@ export async function makeHarness(overrides: Partial<NodeJS.ProcessEnv> = {}): P
   await seedPlans(db);
 
   const sms = testSms();
-  // Tests drive the fake gateway directly (h.psp._txns/_settle), so expose the
-  // provider itself while the app talks to it through the real router.
+  // Tests drive the fake gateway directly (h.psp._txns/_settle).
   const psp = fakePsp(env.PUBLIC_API_URL);
-  const app = await buildApp({ db, env, sms, psp: createRouter([psp]) });
+  const app = await buildApp({ db, env, sms, psp });
 
   return {
     app,

@@ -60,7 +60,9 @@ export function paymentRoutes(deps: Deps) {
   r.get("/payments/:id", auth, async (c) => {
     const user = requireUser(c);
     const id = c.req.param("id");
-    if (!UUID_RE.test(id)) throw badRequest("bad_id", "Malformed payment id");
+    if (typeof id !== "string" || !UUID_RE.test(id)) {
+      throw badRequest("bad_id", "Malformed payment id");
+    }
     return c.json(await pollPayment(db, psp, user.id, id, now()));
   });
 

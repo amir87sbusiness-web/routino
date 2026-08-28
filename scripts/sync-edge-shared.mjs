@@ -45,11 +45,8 @@ export const SHARED_FILES = [
   "providers/sms/console.ts",
   "providers/sms/kavenegar.ts",
   "providers/psp/index.ts",
-  "providers/psp/zibal.ts",
   "providers/psp/zarinpal.ts",
-  "providers/psp/nextpay.ts",
   "providers/psp/fake.ts",
-  "providers/psp/router.ts",
 ];
 
 export const HEADER =

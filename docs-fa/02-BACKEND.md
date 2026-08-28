@@ -34,7 +34,7 @@ backend/
 تنها جایی که اتصال واقعی دیتابیس ساخته می‌شه. با توجه به env تصمیم می‌گیره:
 - **دیتابیس:** `DB_DRIVER=pglite` (پیش‌فرض توسعه — پستگرس واقعی ولی داخل خود پروسه، بدون نصب هیچی، دیتا در `.pglite-data/`) یا `postgres` (پروداکشن)
 - **پیامک:** `SMS_PROVIDER=console` (چاپ کد در ترمینال) یا `kavenegar` (ارسال واقعی)
-- **درگاه:** `PSP_PROVIDER=fake` (درگاه تقلبی تست) یا یکی از `zibal` / `zarinpal` / `nextpay`. اضافه‌شدن NextPay هیچ درگاه فعلی را حذف یا خودکار جایگزین نمی‌کند.
+- **درگاه:** `PSP_PROVIDER=fake` فقط برای توسعه/تست یا `PSP_PROVIDER=zarinpal` برای production. در production فقط زرین‌پال مجاز است.
 
 موقع بالا آمدن: جدول‌ها رو می‌سازه (اگه نباشن)، پلن‌ها رو seed می‌کنه، و هر ۱ ساعت کدهای پیامکی قدیمی‌تر از ۲۴ ساعت رو پاک می‌کنه.
 
@@ -57,20 +57,16 @@ backend/
 | `SMS_PROVIDER` | `console` | `console` یا `kavenegar` |
 | `KAVENEGAR_API_KEY` | — | کلید API کاوه‌نگار |
 | `KAVENEGAR_TEMPLATE` | `routino-otp` | اسم قالب تاییدشده در پنل کاوه‌نگار |
-| `PSP_PROVIDER` | `fake` | یک درگاه: `fake` / `zibal` / `zarinpal` / `nextpay` |
-| `PSP_PROVIDERS` | — | چند درگاه با کاما، مثل `zarinpal,zibal` (سرور سریع‌ترین سالم رو انتخاب می‌کنه + جایگزینی خودکار). اگه پر باشه جای `PSP_PROVIDER` رو می‌گیره |
-| `ZIBAL_MERCHANT` | `zibal` | مرچنت زیبال (کلمه‌ی `zibal` = حالت سندباکس) |
+| `PSP_PROVIDER` | `fake` | `fake` فقط توسعه/تست؛ `zarinpal` تنها مقدار مجاز production |
 | `ZARINPAL_MERCHANT` | `dev-only-zarinpal-merchant` | مرچنت زرین‌پال (۳۶ نویسه؛ فقط وقتی زرین‌پال فعاله). مقدار پیش‌فرض `dev-only-...` مثل `ADMIN_TOKEN`/`JWT_SECRET` عمداً با محافظ production قاطی می‌شه — باید حتماً قبل لایو رفتن عوض بشه |
-| `NEXTPAY_API_KEY` | — | Secret فقط سمت سرور؛ پیش‌فرض ندارد و وقتی `nextpay` فعال باشد نبودنش باعث توقف امن سرویس می‌شود. نباید وارد فرانت، bundle، localStorage، repository یا log شود |
 | `PUBLIC_API_URL` | `http://localhost:3000` | آدرس عمومی همین سرور (درگاه، مرورگرِ کاربر رو به اینجا برمی‌گردونه — از گوشی باید قابل دسترس باشه) |
 | `PUBLIC_WEB_URL` | `http://localhost:5180` | آدرس نسخه وب اپ (برای برگشت بعد از پرداخت وب) |
 | `APP_DEEP_LINK` | `routino://pay/result` | لینک برگشت به اپ موبایل بعد از پرداخت |
 | `IMPORT_MAX_DAYS` | `400` | سقف روزهای قابل قبول موقع انتقال اشتراک قدیمی |
-| **`ALLOW_TEST_PROVIDERS`** | `false` | ⚠️ اجازه‌ی صریح برای موندن روی **سندباکس زیبال** و/یا **پیامک کنسولی** در پروداکشن. بدون این، سرور با اون تنظیمات بالا نمیاد. وقتی مرچنت واقعی و کاوه‌نگار وصل شد، **حذفش کن** |
 
 **محافظ‌های پروداکشن (خودکار):** اگه `NODE_ENV=production` باشه و secretها `dev-only` مونده باشن، یا `PSP_PROVIDER=fake` باشه، یا `DB_DRIVER=pglite` باشه → سرور **اصلاً بالا نمیاد**. این عمدیه که با تنظیمات تستی نری روی هوا.
 
-از این هم بالا نمیاد (اضافه‌شده): **`ZIBAL_MERCHANT=zibal`** (سندباکس) یا **`SMS_PROVIDER=console`** در پروداکشن — مگه اینکه `ALLOW_TEST_PROVIDERS=true` بذاری. دلیلش: سندباکس زیبال هیچ فرقی در ظاهر نداره؛ کاربر صفحه‌ی درگاه واقعی می‌بینه، «پرداخت موفق» می‌گیره، اشتراک واقعی هم می‌گیره — ولی **یک ریال به حسابت نمی‌رسه**. تنها چیزی که جلوی این رو می‌گیره همین محافظه.
+در production هیچ override برای `fake` یا `SMS_PROVIDER=console` وجود ندارد؛ هر دو باعث توقف امن سرویس می‌شوند. مرچنت زرین‌پال هم باید UUID معتبر ۳۶نویسه‌ای باشد.
 
 هر بار که سرور بالا میاد، اگه چیزی تستی باشه با `[!] TEST MODE — …` توی لاگ چاپ می‌شه.
 
@@ -93,7 +89,7 @@ Fastify رو می‌سازه، CORS و فشرده‌سازی و helmet رو فع
 | `plans` | 💰 پلن‌های فروش: `m1`/`m3`/`m12` با قیمت تومان | قیمت واقعی اپ اینجاست — تغییر قیمت = آپدیت این جدول |
 | `discounts` | کدهای تخفیف: درصد، سقف استفاده، انقضا، محدود به یک شماره | |
 | `redemptions` | کی از چه کدی استفاده کرده | هر کاربر هر کد فقط ۱ بار (کلید ترکیبی) |
-| `payments` | 💳 هر تراکنش: مبلغ trusted، `attempt_id`، درگاه، `provider_ref`، وضعیت (`pending/redirected/verifying/provider_unknown/paid/failed/canceled/verify_failed`)، پلتفرم و **`applied_at`** | `(user_id, attempt_id)` و `(provider, provider_ref)` partial-unique هستند؛ شناسهٔ دو PSP متفاوت مجبور نیست globally unique باشد |
+| `payments` | 💳 هر تراکنش: مبلغ trusted، `attempt_id`، `authority` زرین‌پال، وضعیت (`requesting/redirected/verifying/provider_unknown/paid/failed/canceled`)، پلتفرم و **`applied_at`** | `(user_id, attempt_id)` و `authority` unique هستند |
 | `grants` | 📒 **دفترکل اشتراک** — هر تمدید یک سطر: از کجا (تریال/پرداخت/انتقال/ادمین)، چند ماه/روز، انقضای قبل و بعد | `payment_id` برای grantهای پرداخت partial-unique است؛ یک payment نمی‌تواند دو بار زمان اضافه کند |
 | `entitlements` | جواب فعلی: «این کاربر تا فلان تاریخ دسترسی داره» | فقط `services/entitlement.ts` حق نوشتن توش داره |
 | `feedback` | نظرسنجی‌های کاربرها | |
@@ -127,10 +123,10 @@ Fastify رو می‌سازه، CORS و فشرده‌سازی و helmet رو فع
 |---|---|---|
 | `POST /v1/payments/quote` | پیش‌فاکتور: قیمت پایه + بررسی کد تخفیف. کد نامعتبر = «دلیل» برمی‌گرده نه خطا (که UI پیام درست نشون بده) | (مستقیم از `services/pricing.ts`) |
 | `POST /v1/payments/checkout` | ورودی `attemptId` UUID می‌خواهد؛ retry همان خرید همان payment/redirect را می‌گیرد و تماس PSP دوباره ساخته نمی‌شود. مبلغ/ماه/پلن نهایی **سمت سرور** حساب و قبل از I/O ذخیره می‌شوند. سقف ۱۰ خرید در ساعت؛ تخفیف ۱۰۰٪ بدون درگاه | `checkoutPayment` |
-| `GET /v1/payments/callback` | 🌐 callback فقط سرنخ پیدا کردن payment است، نه مدرک پرداخت. تأیید واقعی فقط `psp.verify` سمت سرور است. مبلغ پاسخ با مبلغ DB سنجیده می‌شود؛ برای NextPay، `order_id` پاسخ Verify هم باید با payment ID برابر باشد و مبلغ callback نادیده گرفته می‌شود. اگر Edge بعد از صدور token و قبل از ذخیرهٔ `trans_id` قطع شود، ref فقط پس از Verify موفقِ همان amount/order داخل transaction پرداخت بازیابی می‌شود | `handlePaymentCallback` |
+| `GET /v1/payments/callback` | 🌐 فقط `paymentId` + `Authority` + `Status` اسکالر را می‌پذیرد؛ callback مدرک پرداخت نیست. تأیید واقعی فقط Verify سرور-به‌سرور با مبلغ ریالی ذخیره‌شده است. اگر ذخیره Authority قطع شده باشد، فقط Verify موفق اجازه bind و grant اتمیک می‌دهد | `handlePaymentCallback` |
 | `GET /v1/payments/:id` | استعلام وضعیت برای اپ. **خود-درمانی:** اگه پرداختی در حالت `redirected` گیر کرده (callback هیچ‌وقت نرسیده)، همین‌جا دوباره از درگاه استعلام و در صورت موفقیت فعال می‌شه | `pollPayment` |
 
-**اعطای اتمیک (`applyPaid`):** درج unique در `grants.payment_id`، افزایش entitlement، پرکردن audit grant و `payments.applied_at` داخل یک transaction انجام می‌شوند. شکست هر بخش همه را rollback می‌کند؛ callback/verify/Edge isolate تکراری نمی‌تواند اشتراک را دوباره اضافه کند. Verify هم lease دیتابیسی `verifying` دارد؛ timeout، payload نامعتبر و کدهای موقت NextPay terminal نمی‌شوند و retry بعدی یا sweep عادی app-open lease قدیمی را بازیابی می‌کند. پاسخ terminal واقعاً terminal می‌ماند و دوباره Verify نمی‌شود.
+**اعطای اتمیک (`applyPaid`):** درج unique در `grants.payment_id`، افزایش entitlement، audit grant و `payments.applied_at` در یک transaction‌اند. Verify lease دیتابیسی دارد؛ timeout، پاسخ malformed و وضعیت نامشخص terminal نمی‌شوند. کدهای ۱۰۰ و ۱۰۱ زرین‌پال هر دو موفق‌اند و callback/poll هم‌زمان فقط یک grant می‌سازند.
 
 ### `backend/src/routes/subscriptions.ts` — اشتراک
 
@@ -211,12 +207,9 @@ Fastify رو می‌سازه، CORS و فشرده‌سازی و helmet رو فع
 |---|---|---|
 | `providers/sms/console.ts` | چاپ کد در ترمینال سرور (توسعه) | خط `[sms:console] OTP for 989... -> 123456` |
 | `providers/sms/kavenegar.ts` | ارسال واقعی با کاوه‌نگار (مسیر `verify/lookup`) | ⚠️ قالب پیامک باید قبلاً در پنل کاوه‌نگار **تایید** شده باشه (چند روز طول می‌کشه — زودتر اقدام کن) |
-| `providers/psp/index.ts` | قرارداد مشترک درگاه (`PspProvider`) + قرارداد روتر (`PspRouter`) + جدول کدهای «متعارف» (`ZIBAL_RESULT`: ۱۰۰=موفق، ۲۰۱=قبلاً تاییدشده / `ZIBAL_STATUS`: ۱=پرداخت تایید، ۳=لغو کاربر، ...) | همه‌ی درگاه‌ها کدشون رو به همین کدها ترجمه می‌کنن |
-| `providers/psp/zibal.ts` | درگاه واقعی زیبال: `request` (ثبت)، `verify` (تایید سرور-به-سرور)، `startUrl` (آدرس صفحه پرداخت) | مرچنت `"zibal"` = سندباکس رایگان |
-| `providers/psp/zarinpal.ts` | درگاه واقعی زرین‌پال (REST v4). توکن تراکنش یک رشته‌ی `authority`ه (نه عدد)؛ مبلغ ریالی با `currency:"IRR"` | کدهای زرین‌پال رو به کدهای متعارف ترجمه می‌کنه |
-| `providers/psp/nextpay.ts` | NextPay nx: ساخت توکن و Verify با `currency=IRT`، تبدیل کنترل‌شدهٔ ریال DB به تومان، redirect با `trans_id` UUID | فقط `code=-1` برای token و `code=0` برای Verify موفق‌اند؛ `auto_verify` ارسال نمی‌شود؛ تا تأیید API key و preflight کنترل‌شده فعال نمی‌شود |
-| `providers/psp/fake.ts` | درگاه تقلبی حافظه‌ای — همون قرارداد زیبال، بدون پول واقعی | کل ماشین پرداخت باهاش تست می‌شه |
-| `providers/psp/router.ts` | روتر چند-درگاهه: سریع‌ترین سالم رو (از روی زمان پاسخ واقعی) انتخاب می‌کنه + جایگزینی خودکار. با یک درگاه فقط رد می‌کنه | درگاهِ هر پرداخت روی سطرش ذخیره میشه تا verify درست برگرده |
+| `providers/psp/index.ts` | قرارداد typed برای create/verify؛ پاسخ خام PSP از این مرز عبور نمی‌کند | production دقیقاً یک adapter می‌سازد |
+| `providers/psp/zarinpal.ts` | زرین‌پال REST v4 با Rial/IRR، timeout، parsing امن و نتیجه‌های typed | فقط کد ۱۰۰/۱۰۱ اجازه grant می‌دهد |
+| `providers/psp/fake.ts` | fake زرین‌پال‌شکل برای تست خودکار و توسعه | production بدون override آن را رد می‌کند |
 
 ---
 
@@ -239,7 +232,6 @@ Fastify رو می‌سازه، CORS و فشرده‌سازی و helmet رو فع
 |---|---|
 | `auth.test.ts` | ورود، سقف پیامک، تریال |
 | `payments.test.ts` | کل ماشین پرداخت (موفق/لغو/جعل/idempotency checkout/دوباره‌گرنت‌نشدن) |
-| `nextpay-payment-flow.test.ts` | callback و Verify نکست‌پی: amount/order دستکاری‌شده، callback/verify تکراری، lease، timeout/transient و grant فقط یک‌بار |
 | `pricing.test.ts` | قیمت و تخفیف‌ها |
 | `entitlement.test.ts` | تمدید و دفترکل |
 | `subscriptions.test.ts` | انتقال اشتراک قدیمی و محدودیت‌هاش |
@@ -247,7 +239,7 @@ Fastify رو می‌سازه، CORS و فشرده‌سازی و helmet رو فع
 | `admin-page.test.ts` | صفحهٔ واقعی پنل ادمین: پاسخ overviewِ ورود فقط یک‌بار گرفته و نمایش داده می‌شود |
 | `phone.parity.test.ts` | ⚠️ **یکسان‌بودن بایت‌به‌بایت `src/lib/phone.ts` و `backend/src/lib/phone.ts`** + بردارهای رفتاری نرمال‌سازی — اگه یکی رو عوض کنی این تست می‌شکنه (عمداً) |
 | `app.test.ts` | ساخت اپ Fastify، health check ها |
-| `psp.test.ts` | درگاه‌های پرداخت (زیبال/زرین‌پال/NextPay/فیک) مستقل از مسیر HTTP؛ NextPay فقط با fetch mock و بدون تراکنش واقعی |
+| `psp.test.ts` | create/verify زرین‌پال، کدهای ۱۰۰/۱۰۱، خطاهای رسمی، timeout/network و پاسخ malformed با fetch mock |
 | `edge-parity.test.ts` | یکسان‌بودن `backend/src` با کپیِ سینک‌شده در `supabase/functions/api/shared/` — اگه فراموش کنی `sync:edge` بزنی این می‌شکنه |
 | `helpers/` | ابزار ساخت اپ تستی |
 
@@ -263,7 +255,7 @@ Fastify رو می‌سازه، CORS و فشرده‌سازی و helmet رو فع
 | 👤 به کاربری اشتراک هدیه بدی | پنل `/admin` ← جستجوی شماره ← دکمه هدیه (یا `POST /v1/admin/users/:id/grant`) |
 | 🚫 کاربری رو بلاک کنی | پنل `/admin` ← کاربر ← بلاک (نشست‌هاش هم قطع می‌شن) |
 | 📲 پیامک واقعی | env: `SMS_PROVIDER=kavenegar` + `KAVENEGAR_API_KEY` + قالب تاییدشده |
-| 💳 درگاه واقعی | env: `PSP_PROVIDER=zibal` + `ZIBAL_MERCHANT` + آدرس‌های عمومی (`PUBLIC_API_URL` و `PUBLIC_WEB_URL`) |
+| 💳 درگاه واقعی | env: `PSP_PROVIDER=zarinpal` + `ZARINPAL_MERCHANT` + آدرس‌های عمومی (`PUBLIC_API_URL` و `PUBLIC_WEB_URL`) |
 | 🔢 سقف پیامک عوض کنی | ثابت `LIMITS` در `services/otp.ts` |
 | ⏱️ عمر توکن/کد عوض کنی | env: `ACCESS_TTL_SECONDS` / `REFRESH_TTL_DAYS` / `OTP_TTL_SECONDS` (اگه access رو عوض کردی فایل ۰۳ بخش توکن رو ببین) |
 | 🗑️ دیتابیس توسعه رو صفر کنی | سرور رو خاموش کن و پوشه `backend/.pglite-data/` رو پاک کن |

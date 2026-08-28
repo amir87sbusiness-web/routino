@@ -50,7 +50,7 @@ export async function fetchQuote(planId: string, code?: string): Promise<QuoteRe
 export interface CheckoutResult {
   free: boolean;
   paymentId: string;
-  trackId?: number;
+  authority?: string;
   paymentUrl?: string;
   amountToman?: number;
   entitlement?: ServerEntitlement;
@@ -73,6 +73,7 @@ export interface PaymentStatus {
     id: string;
     status:
       | "pending"
+      | "requesting"
       | "redirected"
       | "verifying"
       | "provider_unknown"

@@ -37,10 +37,10 @@ async function startTrial(access: string) {
 
 /** Clicks "Pay"/"Cancel" on the fake gateway and follows the redirect into the
  * callback, exactly as a browser would. Returns the callback response. */
-async function settleAndCallback(trackId: number, outcome: "paid" | "canceled") {
+async function settleAndCallback(authority: string, outcome: "paid" | "canceled") {
   const settle = await h.call(
     "GET",
-    `/v1/dev/gateway/settle?trackId=${trackId}&outcome=${outcome}`,
+    `/v1/dev/gateway/settle?Authority=${authority}&outcome=${outcome}`,
   );
   expect(settle.status).toBe(302);
   const location = settle.headers.get("location")!;
@@ -116,13 +116,13 @@ describe("checkout → gateway → callback", () => {
     const body = (await res.json()) as {
       free: boolean;
       paymentId: string;
-      trackId: number;
+      authority: string;
       paymentUrl: string;
     };
     expect(body.free).toBe(false);
-    expect(body.paymentUrl).toContain("/v1/dev/gateway?trackId=");
+    expect(body.paymentUrl).toContain("/v1/dev/gateway?Authority=");
 
-    const cb = await settleAndCallback(body.trackId, "paid");
+    const cb = await settleAndCallback(body.authority, "paid");
     expect(cb.status).toBe(200);
     // Result page must be marked HTML so the Worker renders it (not raw text).
     expect(cb.headers.get("x-routino-html")).toBe("1");
@@ -132,14 +132,10 @@ describe("checkout → gateway → callback", () => {
       status: string;
       applied_at: string | null;
       ref_number: string;
-      provider: string;
-    }>(
-      `select status, applied_at, ref_number, provider from payments where id = '${body.paymentId}'`,
-    );
+    }>(`select status, applied_at, ref_number from payments where id = '${body.paymentId}'`);
     expect(p!.status).toBe("paid");
     expect(p!.applied_at).not.toBeNull();
     expect(p!.ref_number).toContain("FAKE-");
-    expect(p!.provider).toBe("fake");
 
     // 3 calendar months stacked on the trial's remaining days, not replacing them.
     const status = await h.call("GET", `/v1/payments/${body.paymentId}`, { headers: auth(access) });
@@ -156,16 +152,16 @@ describe("checkout → gateway → callback", () => {
   it("is idempotent: a replayed callback cannot double-grant", async () => {
     const { access, user } = await signIn(h);
     const body = (await (await checkout(access, { planId: "m1" })).json()) as {
-      trackId: number;
+      authority: string;
       paymentId: string;
     };
 
-    const first = await settleAndCallback(body.trackId, "paid");
+    const first = await settleAndCallback(body.authority, "paid");
     expect(await first.text()).toContain("پرداخت موفق");
     // Replay the exact same callback (user refreshes the page / gateway retries).
     const second = await h.call(
       "GET",
-      `/v1/payments/callback?trackId=${body.trackId}&success=1&status=2&orderId=${body.paymentId}`,
+      `/v1/payments/callback?paymentId=${body.paymentId}&Authority=${body.authority}&Status=OK`,
     );
     expect(await second.text()).toContain("پرداخت موفق");
 
@@ -178,14 +174,14 @@ describe("checkout → gateway → callback", () => {
   it("never trusts success=1 from the URL: unsettled payment stays ungranted", async () => {
     const { access, user } = await signIn(h);
     const body = (await (await checkout(access, { planId: "m1" })).json()) as {
-      trackId: number;
+      authority: string;
       paymentId: string;
     };
 
     // Forged callback before the user actually paid at the gateway.
     const forged = await h.call(
       "GET",
-      `/v1/payments/callback?trackId=${body.trackId}&success=1&status=2&orderId=${body.paymentId}`,
+      `/v1/payments/callback?paymentId=${body.paymentId}&Authority=${body.authority}&Status=OK`,
     );
     expect(await forged.text()).toContain("در حال بررسی"); // pending page, no grant
 
@@ -195,24 +191,24 @@ describe("checkout → gateway → callback", () => {
     expect(grants).toHaveLength(0);
 
     // And the REAL payment still works afterwards — the forgery didn't poison it.
-    const real = await settleAndCallback(body.trackId, "paid");
+    const real = await settleAndCallback(body.authority, "paid");
     expect(await real.text()).toContain("پرداخت موفق");
   });
 
-  it("cancel at the gateway marks the payment canceled and grants nothing", async () => {
+  it("renders cancellation without making a recoverable payment terminal", async () => {
     const { access, user } = await signIn(h);
     const body = (await (await checkout(access, { planId: "m1" })).json()) as {
-      trackId: number;
+      authority: string;
       paymentId: string;
     };
 
-    const cb = await settleAndCallback(body.trackId, "canceled");
+    const cb = await settleAndCallback(body.authority, "canceled");
     expect(await cb.text()).toContain("لغو");
 
     const [p] = await h.query<{ status: string }>(
       `select status from payments where id = '${body.paymentId}'`,
     );
-    expect(p!.status).toBe("canceled");
+    expect(p!.status).toBe("redirected");
     const grants = await h.query(
       `select id from grants where user_id = '${user.id}' and source = 'payment'`,
     );
@@ -222,20 +218,20 @@ describe("checkout → gateway → callback", () => {
   it("refuses to grant when the verified amount differs from what we charged", async () => {
     const { access, user } = await signIn(h);
     const body = (await (await checkout(access, { planId: "m12" })).json()) as {
-      trackId: number;
+      authority: string;
       paymentId: string;
     };
 
     // Tamper: the gateway "saw" a different amount than our payment row.
-    h.psp._txns.get(body.trackId)!.amountRial = 1_000_000;
-    const cb = await settleAndCallback(body.trackId, "paid");
+    h.psp._txns.get(body.authority)!.amountRial = 1_000_000;
+    const cb = await settleAndCallback(body.authority, "paid");
     expect(cb.status).toBe(200);
     expect(await cb.text()).not.toContain("پرداخت موفق");
 
     const [p] = await h.query<{ status: string; applied_at: string | null }>(
       `select status, applied_at from payments where id = '${body.paymentId}'`,
     );
-    expect(p!.status).toBe("verify_failed");
+    expect(p!.status).toBe("failed");
     expect(p!.applied_at).toBeNull();
     const grants = await h.query(
       `select id from grants where user_id = '${user.id}' and source = 'payment'`,
@@ -265,7 +261,7 @@ describe("discount redemption", () => {
     const { access, user } = await signIn(h);
 
     const body = (await (await checkout(access, { planId: "m3", code: "OFF20" })).json()) as {
-      trackId: number;
+      authority: string;
       paymentId: string;
       amountToman: number;
     };
@@ -274,7 +270,7 @@ describe("discount redemption", () => {
     // Not redeemed yet — an abandoned checkout must not burn a use.
     expect(await h.query(`select * from redemptions where user_id = '${user.id}'`)).toHaveLength(0);
 
-    await settleAndCallback(body.trackId, "paid");
+    await settleAndCallback(body.authority, "paid");
 
     const redemptions = await h.query<{ code: string; payment_id: string }>(
       `select code, payment_id from redemptions where user_id = '${user.id}'`,
@@ -303,12 +299,12 @@ describe("discount redemption", () => {
     expect(body.free).toBe(true);
     expect(body.entitlement.status).toBe("active");
 
-    const [p] = await h.query<{ status: string; amount_toman: number; track_id: number | null }>(
-      `select status, amount_toman, track_id from payments where user_id = '${user.id}'`,
+    const [p] = await h.query<{ status: string; amount_toman: number; authority: string | null }>(
+      `select status, amount_toman, authority from payments where user_id = '${user.id}'`,
     );
     expect(p!.status).toBe("paid");
     expect(p!.amount_toman).toBe(0);
-    expect(p!.track_id).toBeNull(); // never went near the PSP
+    expect(p!.authority).toBeNull(); // never went near the PSP
     expect(await h.query(`select * from redemptions where user_id = '${user.id}'`)).toHaveLength(1);
   });
 });
@@ -317,12 +313,12 @@ describe("GET /v1/payments/:id", () => {
   it("self-heals a paid-but-never-called-back payment", async () => {
     const { access, user } = await signIn(h);
     const body = (await (await checkout(access, { planId: "m1" })).json()) as {
-      trackId: number;
+      authority: string;
       paymentId: string;
     };
 
     // User paid, then the callback never reached us (closed tab, network).
-    h.psp._settle(body.trackId, "paid");
+    h.psp._settle(body.authority, "paid");
 
     const res = await h.call("GET", `/v1/payments/${body.paymentId}`, { headers: auth(access) });
     const out = await res.json();
@@ -349,14 +345,14 @@ describe("edge: the public callback only acts for a proven caller", () => {
   // routes/payments.ts is hand-mirrored from Fastify (only shared/ is generated),
   // and this is the branch's highest-severity fix, so it needs edge coverage of
   // its own rather than relying on the backend suite.
-  it("ignores a cancel claim from someone who only guessed the trackId", async () => {
+  it("ignores a cancel claim from someone who only guessed the authority", async () => {
     const { access, user } = await signIn(h);
     const body = (await (await checkout(access, { planId: "m1" })).json()) as {
-      trackId: number;
+      authority: string;
       paymentId: string;
     };
 
-    const attack = await h.call("GET", `/v1/payments/callback?trackId=${body.trackId}`);
+    const attack = await h.call("GET", `/v1/payments/callback?authority=${body.authority}`);
     expect(attack.status).toBe(200);
     expect(await attack.clone().text()).not.toContain(body.paymentId);
 
@@ -367,7 +363,7 @@ describe("edge: the public callback only acts for a proven caller", () => {
 
     // The victim really paid but their browser never came back: the poll must
     // still heal it.
-    h.psp._settle(body.trackId, "paid");
+    h.psp._settle(body.authority, "paid");
     const poll = await h.call("GET", `/v1/payments/${body.paymentId}`, { headers: auth(access) });
     expect((await poll.json()).payment.status).toBe("paid");
 
@@ -377,12 +373,12 @@ describe("edge: the public callback only acts for a proven caller", () => {
     expect(grants).toHaveLength(1);
   });
 
-  it("gives a real and a nonexistent trackId the identical unproven answer", async () => {
+  it("gives a real and a nonexistent authority the identical unproven answer", async () => {
     const { access } = await signIn(h);
-    const body = (await (await checkout(access, { planId: "m1" })).json()) as { trackId: number };
+    const body = (await (await checkout(access, { planId: "m1" })).json()) as { authority: string };
 
-    const real = await h.call("GET", `/v1/payments/callback?trackId=${body.trackId}`);
-    const miss = await h.call("GET", `/v1/payments/callback?trackId=987654321`);
+    const real = await h.call("GET", `/v1/payments/callback?authority=${body.authority}`);
+    const miss = await h.call("GET", `/v1/payments/callback?authority=987654321`);
 
     expect(real.status).toBe(miss.status);
     expect(await real.text()).toBe(await miss.text());

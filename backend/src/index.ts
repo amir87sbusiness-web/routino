@@ -9,15 +9,9 @@ import { buildApp } from "./app.js";
 import type { Database } from "./db/client.js";
 import { SCHEMA_SQL, SEED_DISCOUNTS_SQL, SEED_PLANS_SQL } from "./db/ddl.js";
 import { schema } from "./db/schema.js";
-import { loadEnv, pspProviderNames, testProviderWarnings } from "./env.js";
+import { loadEnv, testProviderWarnings } from "./env.js";
 import { consoleSms, kavenegarSms, type SmsProvider } from "./providers/sms/index.js";
-import {
-  createRouter,
-  fakePsp,
-  zarinpalPsp,
-  zibalPsp,
-  type PspProvider,
-} from "./providers/psp/index.js";
+import { fakePsp, zarinpalPsp } from "./providers/psp/index.js";
 
 const env = loadEnv();
 
@@ -56,20 +50,10 @@ const sms: SmsProvider =
     ? kavenegarSms(env.KAVENEGAR_API_KEY!, env.KAVENEGAR_TEMPLATE)
     : consoleSms();
 
-// One or more gateways, behind a router that picks the fastest healthy one per
-// checkout and fails over. A single configured gateway is a thin pass-through.
-const makePsp = (name: ReturnType<typeof pspProviderNames>[number]): PspProvider => {
-  switch (name) {
-    case "zibal":
-      return zibalPsp(env.ZIBAL_MERCHANT);
-    case "zarinpal":
-      return zarinpalPsp(env.ZARINPAL_MERCHANT);
-    case "fake":
-      return fakePsp(env.PUBLIC_API_URL);
-  }
-};
-const pspNames = pspProviderNames(env);
-const psp = createRouter(pspNames.map(makePsp));
+const psp =
+  env.PSP_PROVIDER === "zarinpal"
+    ? zarinpalPsp(env.ZARINPAL_MERCHANT)
+    : fakePsp(env.PUBLIC_API_URL);
 
 const app = await buildApp({ db, env, sms, psp });
 
@@ -102,9 +86,7 @@ process.on("SIGTERM", close);
 process.on("SIGINT", close);
 
 await app.listen({ port: env.PORT, host: "0.0.0.0" });
-console.log(
-  `  [api] listening on :${env.PORT}  (sms=${env.SMS_PROVIDER}, psp=${pspNames.join("+")})`,
-);
+console.log(`  [api] listening on :${env.PORT}  (sms=${env.SMS_PROVIDER}, psp=${psp.name})`);
 
 // Loud, every boot, impossible to scroll past. "Nobody received the SMS" and
 // "there is no money in the merchant account" should be answered by the top of

@@ -1,6 +1,6 @@
 # Routino
 
-Persian/English habit-tracker PWA + Capacitor mobile app with a Fastify backend (OTP auth, subscriptions, Zibal payments). User is a non-programmer — explain in plain Persian.
+Persian/English habit-tracker PWA + Capacitor mobile app with a Fastify backend (OTP auth, subscriptions, ZarinPal payments). User is a non-programmer — explain in plain Persian.
 
 **Do NOT re-analyze the repo.** Full Persian docs live in `docs-fa/`. Read ONLY the guide matching the task:
 

@@ -45,13 +45,13 @@ async function checkout(access: string, code?: string) {
     headers: auth(access),
     payload: { planId: "m1", attemptId: crypto.randomUUID(), ...(code ? { code } : {}) },
   });
-  return { status: res.statusCode, body: res.json() as { paymentId: string; trackId: number } };
+  return { status: res.statusCode, body: res.json() as { paymentId: string; authority: string } };
 }
 
-const callback = (paymentId: string, trackId: number) =>
+const callback = (paymentId: string, authority: string) =>
   h.app.inject({
     method: "GET",
-    url: `/v1/payments/callback?trackId=${trackId}&success=1&status=2&orderId=${paymentId}`,
+    url: `/v1/payments/callback?paymentId=${paymentId}&Authority=${authority}&Status=OK`,
   });
 
 const grantCount = async (paymentId: string) => {
@@ -69,10 +69,10 @@ describe("a burst of simultaneous sales", () => {
     const orders = await Promise.all(buyers.map((b) => checkout(b.access)));
     expect(orders.every((o) => o.status === 200)).toBe(true);
 
-    for (const o of orders) h.psp._settle(o.body.trackId, "paid");
+    for (const o of orders) h.psp._settle(o.body.authority, "paid");
 
     // Every callback fires at once, the way 20 browsers coming back would.
-    await Promise.all(orders.map((o) => callback(o.body.paymentId, o.body.trackId)));
+    await Promise.all(orders.map((o) => callback(o.body.paymentId, o.body.authority)));
 
     for (const o of orders) expect(await grantCount(o.body.paymentId)).toBe(1);
 
@@ -88,10 +88,10 @@ describe("a burst of simultaneous sales", () => {
   it("grants once when the same callback is delivered five times at once", async () => {
     const { access } = await signIn("09122100001");
     const { body } = await checkout(access);
-    h.psp._settle(body.trackId, "paid");
+    h.psp._settle(body.authority, "paid");
 
     // A retrying browser, a double-tap, and the gateway's own retry all at once.
-    await Promise.all(Array.from({ length: 5 }, () => callback(body.paymentId, body.trackId)));
+    await Promise.all(Array.from({ length: 5 }, () => callback(body.paymentId, body.authority)));
 
     expect(await grantCount(body.paymentId)).toBe(1);
   });
@@ -99,12 +99,12 @@ describe("a burst of simultaneous sales", () => {
   it("grants once when the callback and the app-open recovery race", async () => {
     const { access } = await signIn("09122100002");
     const { body } = await checkout(access);
-    h.psp._settle(body.trackId, "paid");
+    h.psp._settle(body.authority, "paid");
 
     // The redirect lands at the same moment the user reopens the app on their
     // phone — both paths try to finish the same payment.
     await Promise.all([
-      callback(body.paymentId, body.trackId),
+      callback(body.paymentId, body.authority),
       h.app.inject({ method: "GET", url: "/v1/sync/pull?cursor=0", headers: auth(access) }),
       h.app.inject({ method: "GET", url: `/v1/payments/${body.paymentId}`, headers: auth(access) }),
     ]);
@@ -124,8 +124,8 @@ describe("a burst of simultaneous sales", () => {
     const discounted = results.filter((r) => r.status === 200);
 
     for (const r of discounted) {
-      h.psp._settle(r.body.trackId, "paid");
-      await callback(r.body.paymentId, r.body.trackId);
+      h.psp._settle(r.body.authority, "paid");
+      await callback(r.body.paymentId, r.body.authority);
     }
 
     const rows = await h.query<{ n: number }>(
@@ -141,8 +141,8 @@ describe("a burst of simultaneous sales", () => {
     // separate payments, both genuinely paid.
     const a = await checkout(access);
     const b = await checkout(access);
-    h.psp._settle(a.body.trackId, "paid");
-    h.psp._settle(b.body.trackId, "paid");
+    h.psp._settle(a.body.authority, "paid");
+    h.psp._settle(b.body.authority, "paid");
 
     // Signup deliberately creates no entitlement. Two real payments from a
     // pretrial account must still stack from server now rather than requiring a
@@ -154,8 +154,8 @@ describe("a burst of simultaneous sales", () => {
     const start = Date.now();
 
     await Promise.all([
-      callback(a.body.paymentId, a.body.trackId),
-      callback(b.body.paymentId, b.body.trackId),
+      callback(a.body.paymentId, a.body.authority),
+      callback(b.body.paymentId, b.body.authority),
     ]);
 
     // Two grants, one per payment — neither swallowed the other.

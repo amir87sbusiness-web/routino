@@ -49,6 +49,7 @@ async function post(path: string, payload: unknown): Promise<ProviderBody | unde
 /** Direct REST v4 adapter, dependency-free so it runs in Node and Deno. */
 export function zarinpalPsp(merchant: string): PspProvider {
   return {
+    name: "zarinpal" as const,
     async request(input: PspRequestInput): Promise<PspRequestResult> {
       if (
         !Number.isSafeInteger(input.amountRial) ||
@@ -93,8 +94,7 @@ export function zarinpalPsp(merchant: string): PspProvider {
       const ref = data?.ref_id;
       const card = data?.card_pan;
       const successDetails = {
-        refNumber:
-          typeof ref === "number" || typeof ref === "string" ? String(ref) : undefined,
+        refNumber: typeof ref === "number" || typeof ref === "string" ? String(ref) : undefined,
         cardNumber: typeof card === "string" ? card : undefined,
       };
       if (code === 100) return { kind: "paid", code: 100, ...successDetails };

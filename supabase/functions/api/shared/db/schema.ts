@@ -252,29 +252,21 @@ export const payments = pgTable(
     discountCode: text("discount_code"),
     discountPercent: integer("discount_percent"),
     offerPercent: integer("offer_percent"),
-    /** pending | redirected | paid | failed | canceled | verify_failed */
+    /** requesting | redirected | provider_unknown | verifying | paid | failed | canceled */
     status: text("status").notNull().default("pending"),
     /** web | android | ios — decides where the callback page sends the user
      * back to (web URL vs custom-scheme deep link). */
     platform: text("platform"),
     /** Client-generated idempotency key. It identifies one checkout intent for
      * one user; retries with the same key must never register twice at a PSP. */
-    attemptId: uuid("attempt_id"),
-    /** Which gateway took this payment (fake | zibal | zarinpal). Null until the
-     * checkout registers it with a gateway. Verify/callback route back to this. */
-    provider: text("provider"),
-    /** Opaque PSP transaction identifier. Its uniqueness is scoped by provider:
-     * two gateways may legitimately issue the same reference. */
-    providerRef: text("provider_ref"),
-    /** Numeric gateway token for zibal/fake (Zibal's trackId). Null for zarinpal,
-     * which identifies transactions by the string `authority` below. */
-    trackId: bigint("track_id", { mode: "number" }).unique(),
-    /** ZarinPal's 36-char string transaction token. Null for numeric gateways. */
+    attemptId: uuid("attempt_id").notNull().defaultRandom(),
+    /** ZarinPal authority. It is bound to this server-created payment row. */
     authority: text("authority").unique(),
     refNumber: text("ref_number"),
     cardNumber: text("card_number"),
     pspResult: integer("psp_result"),
-    pspStatus: integer("psp_status"),
+    requestStartedAt: timestamp("request_started_at", { withTimezone: true }),
+    verifyStartedAt: timestamp("verify_started_at", { withTimezone: true }),
     paidAt: timestamp("paid_at", { withTimezone: true }),
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
     /**
@@ -289,12 +281,7 @@ export const payments = pgTable(
   (t) => [
     index("payments_user").on(t.userId),
     index("payments_status").on(t.status, t.createdAt),
-    uniqueIndex("payments_user_attempt_unique")
-      .on(t.userId, t.attemptId)
-      .where(sql`${t.attemptId} is not null`),
-    uniqueIndex("payments_provider_ref_unique")
-      .on(t.provider, t.providerRef)
-      .where(sql`${t.providerRef} is not null`),
+    uniqueIndex("payments_user_attempt_unique").on(t.userId, t.attemptId),
   ],
 );
 

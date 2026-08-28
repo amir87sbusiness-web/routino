@@ -1,122 +1,117 @@
 // AUTO-GENERATED from backend/src — do not edit. Run `node scripts/sync-edge-shared.mjs`.
-import type { PspProvider, PspRequestInput, PspRequestResult, PspVerifyResult } from "./index.ts";
-import { ZIBAL_RESULT, ZIBAL_STATUS } from "./index.ts";
-import { PSP_TIMEOUT_MS } from "./zibal.ts";
+import {
+  ZARINPAL_MIN_AMOUNT_RIAL,
+  type PspProvider,
+  type PspRequestInput,
+  type PspRequestResult,
+  type PspVerifyResult,
+} from "./index.ts";
 
-const BASE = "https://payment.zarinpal.com/pg";
+const BASE = "https://payment.zarinpal.com";
+export const PSP_TIMEOUT_MS = 12_000;
 
-/**
- * ZarinPal gateway (REST API v4).
- *
- * Speaks ZarinPal's dialect on the wire and TRANSLATES to the canonical
- * `ZIBAL_RESULT`/`ZIBAL_STATUS` codes on the way out, so `routes/payments.ts`
- * treats a ZarinPal payment exactly like a Zibal one. The two shapes that differ
- * from Zibal and are handled here:
- *
- *  - Transaction id is a 36-char string `authority` (our generic `ref`), not a
- *    number. `startUrl` and `verify` take it verbatim.
- *  - `amount` is sent in RIAL. We pin `currency: "IRR"` explicitly so the unit
- *    can never depend on the merchant's dashboard default. ZarinPal's *verify*
- *    does NOT return the paid amount — you re-send the amount and the gateway
- *    refuses (non-100) if it does not match what was actually paid. So the
- *    amount check is enforced gateway-side; the adapter echoes the charged
- *    amount back on success to keep the caller's `amount === charged` assertion
- *    truthful for both gateways.
- *
- * NOTE: confirm the Rial unit with the very first real transaction (your own
- * card), per the launch checklist — a unit mistake here is a 10× overcharge.
- *
- * ZarinPal verify codes: 100 = verified now, 101 = already verified (idempotent
- * replay). Anything else is a non-success we do not grant on.
- */
-export function zarinpalPsp(merchant: string): PspProvider {
-  async function post<T>(path: string, body: unknown): Promise<T> {
-    const res = await fetch(`${BASE}/v4/payment/${path}`, {
+type ProviderBody = {
+  data?: unknown;
+  errors?: unknown;
+};
+
+function record(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function providerCode(body: ProviderBody): number | undefined {
+  const dataCode = record(body.data)?.code;
+  if (typeof dataCode === "number" && Number.isInteger(dataCode)) return dataCode;
+  const errors = Array.isArray(body.errors) ? record(body.errors[0]) : record(body.errors);
+  const errorCode = errors?.code;
+  return typeof errorCode === "number" && Number.isInteger(errorCode) ? errorCode : undefined;
+}
+
+/** Returns undefined for every transport/wire ambiguity. The caller deliberately
+ * keeps those outcomes recoverable instead of inventing a provider result. */
+async function post(path: string, payload: unknown): Promise<ProviderBody | undefined> {
+  try {
+    const res = await fetch(`${BASE}/pg/v4/payment/${path}.json`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify(body),
-      // See PSP_TIMEOUT_MS in zibal.ts — an untimed fetch to a gateway behind a
-      // filtered connection pins a function instance until it is killed.
+      body: JSON.stringify(payload),
       signal: AbortSignal.timeout(PSP_TIMEOUT_MS),
     });
-    if (!res.ok) throw new Error(`zarinpal ${path} HTTP ${res.status}`);
-    return (await res.json()) as T;
+    if (!res.ok) return undefined;
+    const body = (await res.json()) as unknown;
+    return record(body) as ProviderBody | undefined;
+  } catch {
+    return undefined;
   }
+}
 
+/** Direct REST v4 adapter, dependency-free so it runs in Node and Deno. */
+export function zarinpalPsp(merchant: string): PspProvider {
   return {
-    name: "zarinpal",
-
+    name: "zarinpal" as const,
     async request(input: PspRequestInput): Promise<PspRequestResult> {
-      const body = await post<{
-        data?: { code?: number; authority?: string; message?: string };
-        errors?: { code?: number; message?: string } | unknown[];
-      }>("request.json", {
+      if (
+        !Number.isSafeInteger(input.amountRial) ||
+        input.amountRial < ZARINPAL_MIN_AMOUNT_RIAL ||
+        !/^https:\/\//i.test(input.callbackUrl)
+      ) {
+        return { kind: "rejected", code: -9 };
+      }
+
+      const body = await post("request", {
         merchant_id: merchant,
         amount: input.amountRial,
         currency: "IRR",
         callback_url: input.callbackUrl,
-        description: input.description ?? "Routino",
+        description: input.description,
         metadata: input.mobile ? { mobile: input.mobile } : undefined,
       });
+      if (!body) return { kind: "unknown" };
 
-      const code = body.data?.code;
-      const authority = body.data?.authority;
-      if (code === 100 && authority) {
-        return { ok: true, ref: authority, result: ZIBAL_RESULT.OK };
+      const code = providerCode(body);
+      const authority = record(body.data)?.authority;
+      if (code === 100) {
+        return typeof authority === "string" && authority.length > 0
+          ? { kind: "issued", authority, code: 100 }
+          : { kind: "unknown" };
       }
-      const errCode = !Array.isArray(body.errors) ? body.errors?.code : undefined;
-      return {
-        ok: false,
-        // Surface ZarinPal's own numeric code for the logs; it is negative, so it
-        // never collides with a canonical Zibal result.
-        result: code ?? errCode ?? 0,
-        message:
-          body.data?.message ?? (!Array.isArray(body.errors) ? body.errors?.message : undefined),
-      };
+      return code === undefined ? { kind: "unknown" } : { kind: "rejected", code };
     },
 
-    async verify(ref: string, amountRial: number): Promise<PspVerifyResult> {
-      const body = await post<{
-        data?: { code?: number; ref_id?: number | string; card_pan?: string; message?: string };
-        errors?: { code?: number; message?: string } | unknown[];
-      }>("verify.json", {
+    async verify(authority: string, amountRial: number): Promise<PspVerifyResult> {
+      const body = await post("verify", {
         merchant_id: merchant,
         amount: amountRial,
-        authority: ref,
+        authority,
       });
+      if (!body) return { kind: "unknown" };
 
-      const code = body.data?.code;
-      if (code === 100) {
-        return {
-          result: ZIBAL_RESULT.OK,
-          status: ZIBAL_STATUS.PAID_VERIFIED,
-          // ZarinPal gives no amount back; echo what we asked for. The gateway
-          // already refused to reach code 100 on a mismatch, so this is safe.
-          amount: amountRial,
-          refNumber: body.data?.ref_id != null ? String(body.data.ref_id) : undefined,
-          cardNumber: body.data?.card_pan,
-        };
-      }
-      if (code === 101) {
-        // Already verified in an earlier callback: same meaning as Zibal's 201.
-        // The amount was asserted the first time; the applied_at guard makes the
-        // re-apply safe.
-        return { result: ZIBAL_RESULT.ALREADY_VERIFIED };
-      }
-      const errCode = !Array.isArray(body.errors) ? body.errors?.code : undefined;
-      // Not verified: user did not complete, amount mismatch (-51/-55), etc.
-      // Report as an internal-error status so the caller marks it failed rather
-      // than granting.
-      return {
-        result: code ?? errCode ?? 0,
-        status: ZIBAL_STATUS.INTERNAL_ERROR,
-        message:
-          body.data?.message ?? (!Array.isArray(body.errors) ? body.errors?.message : undefined),
+      const code = providerCode(body);
+      if (code === undefined) return { kind: "unknown" };
+
+      const data = record(body.data);
+      const ref = data?.ref_id;
+      const card = data?.card_pan;
+      const successDetails = {
+        refNumber: typeof ref === "number" || typeof ref === "string" ? String(ref) : undefined,
+        cardNumber: typeof card === "string" ? card : undefined,
       };
+      if (code === 100) return { kind: "paid", code: 100, ...successDetails };
+      if (code === 101) return { kind: "already_verified", code: 101, ...successDetails };
+
+      // -51 means the payment did not complete. A poll may arrive before the
+      // payer finishes, so it stays retryable. -12 is provider throttling and
+      // -52 is an upstream/provider exception; neither is a terminal business
+      // answer. All other normalized errors are definitive for this authority.
+      if (code === -51 || code === -12) return { kind: "pending", code };
+      if (code === -52) return { kind: "unknown", code };
+      return { kind: "failed", code };
     },
 
-    startUrl(ref: string) {
-      return `${BASE}/StartPay/${ref}`;
+    startUrl(authority: string): string {
+      return `${BASE}/pg/StartPay/${encodeURIComponent(authority)}`;
     },
   };
 }

@@ -15,7 +15,7 @@ describe("payment checkout API", () => {
     });
   });
 
-  it("sends the idempotency key but no amount, entitlement, or NextPay secret", async () => {
+  it("sends the idempotency key but no amount, entitlement, or merchant secret", async () => {
     const attemptId = crypto.randomUUID();
 
     await checkout("m3", "OFF20", "web", attemptId);
@@ -30,6 +30,6 @@ describe("payment checkout API", () => {
       },
     });
     const serialized = JSON.stringify(auth.authedRequest.mock.calls[0]);
-    expect(serialized).not.toMatch(/amount|months|entitlement|NEXTPAY_API_KEY|api_key/i);
+    expect(serialized).not.toMatch(/amount|months|entitlement|merchant|api_key/i);
   });
 });

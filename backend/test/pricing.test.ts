@@ -18,8 +18,7 @@ afterAll(async () => {
 
 describe("tomanToRial", () => {
   it("multiplies by ten and only here", () => {
-    // Zibal bills in Rial; the app prices in Toman. 59,000 T = 590,000 R, which
-    // is above Zibal's >1000 R minimum (result 105).
+    // ZarinPal bills in Rial; the app prices in Toman. 59,000 T = 590,000 R.
     expect(tomanToRial(59000)).toBe(590000);
   });
 });

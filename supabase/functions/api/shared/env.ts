@@ -58,46 +58,13 @@ const schema = z.object({
   KAVENEGAR_API_KEY: z.string().optional(),
   KAVENEGAR_TEMPLATE: z.string().default("routino-otp"),
 
-  /**
-   * Default single gateway. `fake` serves a local gateway page — the whole
-   * payment state machine is testable with no external dependency. For one live
-   * gateway, set this to `zibal` or `zarinpal`. To run BOTH (server picks the
-   * fastest healthy one per checkout, with automatic failover), set
-   * `PSP_PROVIDERS` instead — it overrides this when non-empty.
-   */
-  PSP_PROVIDER: z.enum(["fake", "zibal", "zarinpal", "nextpay"]).default("fake"),
-  /**
-   * Optional comma-separated gateway list, e.g. `zarinpal,zibal`. When set it
-   * defines the active gateways AND their tiebreak order; the router routes each
-   * checkout to the fastest healthy one and fails over. Empty = use
-   * `PSP_PROVIDER` (single gateway).
-   */
-  PSP_PROVIDERS: z.string().default(""),
-  /** Zibal's sandbox merchant is the literal string "zibal". */
-  ZIBAL_MERCHANT: z.string().default("zibal"),
-
-  /**
-   * Explicit, deliberate permission to run TEST providers in production —
-   * Zibal's sandbox merchant and/or console SMS.
-   *
-   * Without it production refuses to boot on either, because both fail in the
-   * one direction nobody notices: sandbox Zibal shows the user a real gateway,
-   * returns "paid", and grants a real subscription while zero Toman reaches the
-   * merchant account. This has to be a decision somebody typed, not a default
-   * somebody forgot. Turn it off the moment the real merchant id is in place.
-   */
-  ALLOW_TEST_PROVIDERS: z
-    .string()
-    .default("false")
-    .transform((v) => v === "true" || v === "1"),
-  /** ZarinPal merchant id (36-char UUID). No usable sandbox default — required
-   * in production only when zarinpal is among the active gateways. */
+  /** Production supports only ZarinPal. Fake is local/test-only and production
+   * rejects it unconditionally. */
+  PSP_PROVIDER: z.enum(["fake", "zarinpal"]).default("fake"),
+  /** ZarinPal merchant id (36-char UUID). */
   ZARINPAL_MERCHANT: z.string().default("dev-only-zarinpal-merchant"),
-  /** Server-only NextPay API key. There is deliberately no development or
-   * repository default; selecting NextPay without it is a startup error. */
-  NEXTPAY_API_KEY: z.string().trim().min(1).optional(),
 
-  /** Public base URL of THIS server. Zibal redirects a browser here, so it must
+  /** Public base URL of THIS server. ZarinPal redirects a browser here, so it must
    * be reachable from the user's device — `localhost` works for web dev but can
    * never work from a phone. Use a tunnel for device testing. */
   PUBLIC_API_URL: z.string().default("http://localhost:3000"),
@@ -137,28 +104,6 @@ const schema = z.object({
 
 export type Env = z.infer<typeof schema>;
 
-/** The active payment gateways, in tiebreak/priority order. `PSP_PROVIDERS`
- * (comma list) wins when set; otherwise the single `PSP_PROVIDER`. Unknown or
- * duplicate names are dropped. */
-export function pspProviderNames(
-  env: Pick<Env, "PSP_PROVIDER" | "PSP_PROVIDERS">,
-): ("fake" | "zibal" | "zarinpal" | "nextpay")[] {
-  const known = ["fake", "zibal", "zarinpal", "nextpay"] as const;
-  const raw = env.PSP_PROVIDERS.trim()
-    ? env.PSP_PROVIDERS.split(",").map((s) => s.trim())
-    : [env.PSP_PROVIDER];
-  const out: ("fake" | "zibal" | "zarinpal" | "nextpay")[] = [];
-  for (const name of raw) {
-    if (
-      (known as readonly string[]).includes(name) &&
-      !out.includes(name as (typeof known)[number])
-    ) {
-      out.push(name as (typeof known)[number]);
-    }
-  }
-  return out;
-}
-
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const parsed = schema.safeParse(source);
   if (!parsed.success) {
@@ -179,37 +124,16 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     if (parsed.data.DB_DRIVER === "pglite")
       throw new Error("DB_DRIVER=pglite is not supported in production");
 
-    const psps = pspProviderNames(parsed.data);
-    if (psps.length === 0)
-      throw new Error("no payment gateway configured (set PSP_PROVIDER or PSP_PROVIDERS)");
-    if (psps.includes("fake")) throw new Error("the 'fake' gateway is not allowed in production");
-    if (psps.includes("zarinpal") && parsed.data.ZARINPAL_MERCHANT.startsWith("dev-only")) {
-      throw new Error("ZARINPAL_MERCHANT is required when zarinpal is an active gateway");
-    }
-    if (psps.includes("nextpay") && !parsed.data.NEXTPAY_API_KEY) {
-      throw new Error("NEXTPAY_API_KEY is required when nextpay is an active gateway");
-    }
-    // Zibal's sandbox is not a distinct host or a distinct flag — it is just the
-    // merchant id left at its default. So the ONLY thing standing between "we
-    // are taking real money" and "we are giving subscriptions away" is this
-    // check. ZarinPal has had the equivalent guard since day one; Zibal did not,
-    // which made forgetting one environment variable a silent revenue hole.
+    if (parsed.data.PSP_PROVIDER !== "zarinpal")
+      throw new Error("PSP_PROVIDER must be zarinpal in production; fake is forbidden");
     if (
-      psps.includes("zibal") &&
-      parsed.data.ZIBAL_MERCHANT === "zibal" &&
-      !parsed.data.ALLOW_TEST_PROVIDERS
-    ) {
-      throw new Error(
-        "ZIBAL_MERCHANT is still the sandbox merchant 'zibal' — no real money would be collected. " +
-          "Set the real merchant id, or set ALLOW_TEST_PROVIDERS=true to stay in sandbox on purpose.",
-      );
-    }
-    if (parsed.data.SMS_PROVIDER === "console" && !parsed.data.ALLOW_TEST_PROVIDERS) {
-      throw new Error(
-        "SMS_PROVIDER=console writes every login code to the server log instead of sending it. " +
-          "Set SMS_PROVIDER=kavenegar, or ALLOW_TEST_PROVIDERS=true to stay in console mode on purpose.",
-      );
-    }
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        parsed.data.ZARINPAL_MERCHANT,
+      )
+    )
+      throw new Error("ZARINPAL_MERCHANT must be a valid 36-character merchant UUID");
+    if (parsed.data.SMS_PROVIDER === "console")
+      throw new Error("SMS_PROVIDER=console is not allowed in production");
   }
   return parsed.data;
 }
@@ -219,11 +143,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
  * answered by the first line of the log rather than by a support ticket. */
 export function testProviderWarnings(env: Env): string[] {
   const out: string[] = [];
-  if (pspProviderNames(env).includes("fake")) out.push("PAYMENTS: fake gateway — no real money.");
-  if (pspProviderNames(env).includes("zibal") && env.ZIBAL_MERCHANT === "zibal")
-    out.push(
-      "PAYMENTS: Zibal SANDBOX merchant — subscriptions are granted, no real money is collected.",
-    );
+  if (env.PSP_PROVIDER === "fake") out.push("PAYMENTS: fake gateway — no real money.");
   if (env.SMS_PROVIDER === "console")
     out.push("SMS: console mode — login codes are printed to this log, not sent to anyone.");
   return out;

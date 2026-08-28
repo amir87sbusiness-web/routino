@@ -86,8 +86,7 @@
 | `blocked`                                                                                 | `routes/auth.ts` / `plugins/auth.ts`                       | `auth.tsx`                                | «این حساب مسدود شده»                                                                                                   |
 | `psp_failed`                                                                              | `routes/payments.ts`                                       | `subscribe.tsx`                           | «درگاه پرداخت در دسترس نیست»                                                                                           |
 | `duplicate_payment_attempt`                                                               | `services/payment-flow.ts`                                 | `subscribe.tsx`                           | «این تلاش قبلاً ثبت شده؛ کمی صبر کن»                                                                                    |
-| `nextpay_token_error`                                                                      | آداپتر/ماشین پرداخت NextPay                                | `subscribe.tsx`                           | پیام امن «درگاه در دسترس نیست»؛ response خام نمایش داده نمی‌شود                                                        |
-| `payment_network_timeout` / `payment_provider_unavailable`                                 | روتر و ماشین پرداخت                                        | `subscribe.tsx`                           | timeout/unavailable امن؛ retry همان `attemptId` را نگه می‌دارد و درخواست تکراری ساخته نمی‌شود                          |
+| `payment_request_unknown`                                                                  | create زرین‌پال با پاسخ timeout/network/malformed          | `subscribe.tsx`                           | درخواست خودکار تکرار نمی‌شود؛ تلاش مبهم برای بررسی باقی می‌ماند                                                        |
 | `not_signed_in`                                                                           | خود فرانت (`api/auth.ts` وقتی توکن نیست)                   | `subscribe.tsx`                           | کارت «ورود با شماره موبایل»                                                                                            |
 | دلایل رد کد تخفیف: `expired` `exhausted` `already_used` `other_user` `inactive` `unknown` | `services/pricing.ts` ← `checkDiscount`                    | `subscribe.tsx` ← `explainReason()`       | «کد منقضی شده» و...                                                                                                    |
 
@@ -106,8 +105,8 @@
 ```
 subscribe.tsx (فرانت)
   → POST /payments/checkout با attemptId ثابت برای همان retry
-  → بک قیمت trusted را ذخیره و provider_ref را قبل از پاسخ redirect ثبت می‌کند
-  → کاربر می‌ره به paymentUrl (زیبال/زرین‌پال/NextPay/فیک)
+  → بک قیمت trusted را ذخیره و فقط یک create زرین‌پال می‌فرستد
+  → کاربر می‌ره به paymentUrl زرین‌پال (fake فقط در تست/توسعه)
   → درگاه برمی‌گردونه به PUBLIC_API_URL/v1/payments/callback
   → بک با lease دیتابیسی، Verify سرور-به-سرور و تطبیق DB را انجام می‌دهد
   → grant unique + entitlement + applied_at در یک transaction ثبت می‌شوند
@@ -124,7 +123,7 @@ subscribe.tsx (فرانت)
 2. فرانت: الگوی `pay/result` در `src/client.tsx`
 3. اندروید: intent-filter در `android/app/src/main/AndroidManifest.xml` (و مشابهش در iOS)
 
-**پارامترهای callback** بسته به درگاه فرق دارن: زیبال `trackId`, `success`, `status`, `orderId` (فیک هم همین را تقلید می‌کند)، زرین‌پال `Authority`, `Status`، و NextPay `trans_id`, `order_id`, `amount`. همه untrusted هستند. NextPay معمولاً فقط با جفت `provider=nextpay` + `provider_ref=trans_id` پیدا می‌شود، callback amount کنار گذاشته می‌شود، و مبلغ/order نهایی از DB و پاسخ Verify سنجیده می‌شوند. تنها استثنا recoveryِ crash بین صدور و ذخیرهٔ token است: payment با `order_id` سروری پیدا می‌شود، ولی `trans_id` فقط وقتی ثبت می‌شود که Verify همان amount/order را برگرداند؛ ref جعلی payment را terminal نمی‌کند.
+**پارامترهای callback** فقط `paymentId` سروری، `Authority` و `Status=OK|NOK` هستند و هر سه untrusted‌اند. مقدار تکراری/آرایه‌ای یا authority ناسازگار پاسخ خنثی می‌گیرد. فقط Verify سرور-به‌سرور با مبلغ DB می‌تواند پرداخت را paid کند؛ در crash بین صدور و ذخیره Authority، bind فقط پس از Verify موفق انجام می‌شود.
 
 ### 🌍 قرارداد ۶: آدرس‌ها و CORS
 
@@ -177,8 +176,8 @@ subscribe.tsx (فرانت)
 
 1. `subscribe.tsx`: پلن‌ها از `GET /plans` (نبود سرور = نسخه آفلاین presets)
 2. کد تخفیف → `POST /payments/quote` → بک قیمت و دلیل رد/قبول می‌ده
-3. «پرداخت» → فرانت برای همان retry یک `attemptId` UUID نگه می‌دارد → بک قیمت را **خودش** حساب می‌کند، payment را claim می‌کند، `provider_ref` را قبل از redirect ذخیره می‌کند → فرانت به `paymentUrl`
-4. درگاه ← callback untrusted ← Verify سرور-به‌سرور با مبلغ DB (+ `order_id` DB برای NextPay) ← grant/entitlement/applied اتمیک و فقط یک‌بار ← صفحه نتیجه ← برگشت به اپ
+3. «پرداخت» → فرانت برای همان retry یک `attemptId` UUID نگه می‌دارد → بک قیمت را **خودش** حساب می‌کند و Authority زرین‌پال را ذخیره می‌کند → فرانت به `paymentUrl`
+4. زرین‌پال ← callback untrusted ← Verify سرور-به‌سرور با مبلغ DB ← grant/entitlement/applied اتمیک و فقط یک‌بار ← صفحه نتیجه ← برگشت به اپ
 5. `pay.result.tsx`: استعلام `GET /payments/:id` (که پرداخت‌های گم‌شده رو هم خود-درمانی می‌کنه) → کش محلی اشتراک آپدیت → گِیت باز 🎉
 
 ### 📅 سناریو «یه روز عادی بدون اینترنت»
@@ -203,4 +202,4 @@ subscribe.tsx (فرانت)
 | `androidScheme` در capacitor.config.ts | `CORS_ORIGINS` بک                                                                                                     |
 | جدول سینک‌شونده جدید                   | `SYNCED_TABLES` (فرانت) + `SYNC_KINDS` و قید `records_kind_valid` (بک)                                                |
 | شکل جواب entitlement                   | `entitlementToSubscription` در `src/lib/api/auth.ts`                                                                  |
-| پارامترهای callback پرداخت             | `dev-gateway.ts` (درگاه فیک باید همچنان زیبال رو تقلید کنه) + `pay.result.tsx`                                        |
+| پارامترهای callback پرداخت             | `dev-gateway.ts` (fake باید شکل زرین‌پال را تقلید کند) + `pay.result.tsx`                                             |

@@ -81,10 +81,10 @@ async function buyPlan(access: string) {
       body: { planId: "m1", platform: "web", attemptId: crypto.randomUUID() },
     }),
   );
-  const payment = (await checkout.json()) as { paymentId: string; trackId: number };
+  const payment = (await checkout.json()) as { paymentId: string; authority: string };
   const settle = await h.call(
     "GET",
-    `/v1/dev/gateway/settle?trackId=${payment.trackId}&outcome=paid`,
+    `/v1/dev/gateway/settle?Authority=${payment.authority}&outcome=paid`,
   );
   await h.follow(settle.headers.get("location")!);
 }

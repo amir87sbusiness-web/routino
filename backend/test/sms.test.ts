@@ -35,7 +35,7 @@ function stubFetch(body: unknown, ok = true, status = 200) {
 describe("kavenegar OTP provider", () => {
   it("sends the number in LOCAL 09… form, not the canonical 98… we store", async () => {
     // We store `989121234567`; Kavenegar's `receptor` is documented in local
-    // form, and the payment path already converts before calling Zibal. Getting
+    // form, and the payment path already converts before calling the gateway. Getting
     // this wrong breaks sign-up for 100% of new users the day console mode is
     // turned off.
     const calls = stubFetch({ return: { status: 200 } });

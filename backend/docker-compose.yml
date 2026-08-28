@@ -49,18 +49,11 @@ services:
       SMS_PROVIDER: ${SMS_PROVIDER:-kavenegar}
       KAVENEGAR_API_KEY: ${KAVENEGAR_API_KEY}
       KAVENEGAR_TEMPLATE: ${KAVENEGAR_TEMPLATE:-routino-otp}
-      PSP_PROVIDER: ${PSP_PROVIDER:-zibal}
-      ZIBAL_MERCHANT: ${ZIBAL_MERCHANT:-zibal}
+      PSP_PROVIDER: ${PSP_PROVIDER:-zarinpal}
+      ZARINPAL_MERCHANT: ${ZARINPAL_MERCHANT:?set ZARINPAL_MERCHANT}
       PUBLIC_API_URL: ${PUBLIC_API_URL:?set PUBLIC_API_URL}
       PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:?set PUBLIC_WEB_URL}
       APP_DEEP_LINK: ${APP_DEEP_LINK:-routino://pay/result}
-      # Optional. Passed through so a STAGING deploy is possible at all: without
-      # it, `env.ts` refuses to boot on the Zibal sandbox merchant or console
-      # SMS — which is correct for production and blocking for a dress
-      # rehearsal. Leave unset in production.
-      ALLOW_TEST_PROVIDERS: ${ALLOW_TEST_PROVIDERS:-}
-      PSP_PROVIDERS: ${PSP_PROVIDERS:-}
-      ZARINPAL_MERCHANT: ${ZARINPAL_MERCHANT:-}
       # First-boot owner account, so you can sign in before SMS is live.
       OWNER_PHONE: ${OWNER_PHONE:-}
       OWNER_PASSWORD: ${OWNER_PASSWORD:-}

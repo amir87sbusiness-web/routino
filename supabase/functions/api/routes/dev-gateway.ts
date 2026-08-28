@@ -1,7 +1,7 @@
 /**
  * Local stand-in for the hosted payment page. Registered ONLY when the fake PSP
  * is active (env.ts already forbids `fake` in production). Mirrors
- * backend/src/routes/dev-gateway.ts — same redirect contract as Zibal.
+ * backend/src/routes/dev-gateway.ts — same redirect contract as ZarinPal.
  */
 import { Hono } from "hono";
 import { html, type AppEnv, type Deps } from "../deps.ts";
@@ -9,13 +9,12 @@ import type { fakePsp } from "../shared/providers/psp/fake.ts";
 
 export function devGatewayRoutes(deps: Deps) {
   const r = new Hono<AppEnv>();
-  const fake = deps.psp.get("fake");
-  if (!fake) return r;
-  const psp = fake as ReturnType<typeof fakePsp>;
+  if (deps.psp.name !== "fake") return r;
+  const psp = deps.psp as ReturnType<typeof fakePsp>;
 
   r.get("/dev/gateway", (c) => {
-    const trackId = Number(c.req.query("trackId"));
-    const txn = psp._txns.get(trackId);
+    const authority = c.req.query("Authority") ?? "";
+    const txn = psp._txns.get(authority);
     if (!txn) return html(c, "<h1>تراکنش پیدا نشد</h1>", 404);
 
     const toman = Math.floor(txn.amountRial / 10).toLocaleString("en-US");
@@ -42,9 +41,9 @@ export function devGatewayRoutes(deps: Deps) {
 <div class="card">
   <div class="badge">درگاه شبیه‌سازی‌شده — پولی جابه‌جا نمی‌شود</div>
   <div class="amount">${toman}</div>
-  <div class="unit">تومان (تراکنش ${trackId})</div>
-  <a class="pay" href="/v1/dev/gateway/settle?trackId=${trackId}&outcome=paid">پرداخت موفق</a>
-  <a class="cancel" href="/v1/dev/gateway/settle?trackId=${trackId}&outcome=canceled">انصراف</a>
+  <div class="unit">تومان (تراکنش تستی)</div>
+  <a class="pay" href="/v1/dev/gateway/settle?Authority=${encodeURIComponent(authority)}&outcome=paid">پرداخت موفق</a>
+  <a class="cancel" href="/v1/dev/gateway/settle?Authority=${encodeURIComponent(authority)}&outcome=canceled">انصراف</a>
 </div>
 </body>
 </html>`;
@@ -52,19 +51,18 @@ export function devGatewayRoutes(deps: Deps) {
   });
 
   r.get("/dev/gateway/settle", (c) => {
-    const trackId = Number(c.req.query("trackId"));
-    const txn = psp._txns.get(trackId);
+    const authority = c.req.query("Authority") ?? "";
+    const txn = psp._txns.get(authority);
     if (!txn) return c.json({ error: "unknown_track" }, 404);
 
     const outcome = c.req.query("outcome") === "paid" ? "paid" : "canceled";
-    psp._settle(trackId, outcome);
+    psp._settle(authority, outcome);
 
-    // Same query-string contract Zibal uses on its redirect.
+    // Same query-string contract ZarinPal uses on its redirect.
     const sep = txn.callbackUrl.includes("?") ? "&" : "?";
-    const success = outcome === "paid" ? "1" : "0";
-    const status = outcome === "paid" ? "2" : "3"; // 2 = paid-unverified, 3 = canceled
+    const status = outcome === "paid" ? "OK" : "NOK";
     return c.redirect(
-      `${txn.callbackUrl}${sep}trackId=${trackId}&success=${success}&status=${status}&orderId=${txn.orderId}`,
+      `${txn.callbackUrl}${sep}Authority=${encodeURIComponent(authority)}&Status=${status}`,
       302,
     );
   });

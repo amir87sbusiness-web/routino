@@ -11,7 +11,7 @@ import { devices, users } from "./shared/db/schema.ts";
 import type { Database } from "./shared/db/client.ts";
 import type { Env } from "./shared/env.ts";
 import { forbidden, unauthorized } from "./shared/lib/http-errors.ts";
-import type { PspRouter } from "./shared/providers/psp/index.ts";
+import type { PspProvider } from "./shared/providers/psp/index.ts";
 import type { SmsProvider } from "./shared/providers/sms/index.ts";
 import { verifyAccessToken } from "./shared/services/tokens.ts";
 
@@ -19,7 +19,7 @@ export interface Deps {
   db: Database;
   env: Env;
   sms: SmsProvider;
-  psp: PspRouter;
+  psp: PspProvider;
   /** Injectable so tests can control time instead of sleeping. */
   now: () => number;
 }

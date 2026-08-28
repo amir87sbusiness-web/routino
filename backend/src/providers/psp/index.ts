@@ -32,6 +32,7 @@ export type PspVerifyResult =
   | { kind: "pending" | "canceled" | "failed" | "unknown"; code?: number };
 
 export interface PspProvider {
+  readonly name: "fake" | "zarinpal";
   request(input: PspRequestInput): Promise<PspRequestResult>;
   /** Verify uses only the authority and amount persisted by Routino. */
   verify(authority: string, amountRial: number): Promise<PspVerifyResult>;

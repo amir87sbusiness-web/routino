@@ -27,7 +27,7 @@ export const Route = createFileRoute("/subscribe")({
 
 // ═══════════════ TEST-ONLY — بعداً حذف شود ═══════════════
 // دکمه‌ی «تمدید تستی» که بدون پرداخت، اشتراک محلی می‌دهد تا بتوانی بقیه‌ی اپ را
-// تست کنی. دکمه‌ی پرداخت واقعی (زیبال/درگاه) دست‌نخورده کنارش می‌ماند.
+// تست کنی. دکمه‌ی پرداخت واقعی زرین‌پال دست‌نخورده کنارش می‌ماند.
 // برای حذف: این ثابت را false کن یا بلاکِ نشان‌دارِ TEST-ONLY در JSX را پاک کن.
 const TEST_GRANT_BUTTON = false;
 
@@ -205,9 +205,7 @@ function SubscribePage() {
         );
       } else if (
         err instanceof ApiError &&
-        (err.code === "psp_failed" ||
-          err.code === "nextpay_token_error" ||
-          err.code === "payment_provider_unavailable")
+        (err.code === "psp_failed" || err.code === "payment_provider_unavailable")
       ) {
         setPayError(
           t(
@@ -215,11 +213,11 @@ function SubscribePage() {
             "The gateway is unavailable. Try again shortly.",
           ),
         );
-      } else if (err instanceof ApiError && err.code === "payment_network_timeout") {
+      } else if (err instanceof ApiError && err.code === "payment_request_unknown") {
         setPayError(
           t(
-            "پاسخ درگاه به‌موقع نرسید. دوباره تلاش کن؛ درخواست تکراری ساخته نمی‌شود.",
-            "The gateway did not answer in time. Retry safely; no duplicate request is created.",
+            "پاسخ زرین‌پال نامشخص بود و درخواست خودکار تکرار نشد. چند دقیقه بعد دوباره تلاش کن.",
+            "ZarinPal's response was uncertain and was not retried automatically. Try again later.",
           ),
         );
       } else {

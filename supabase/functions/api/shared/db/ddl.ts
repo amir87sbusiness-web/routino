@@ -157,15 +157,13 @@ create table if not exists payments (
   offer_percent integer,
   status text not null default 'pending',
   platform text,
-  attempt_id uuid,
-  provider text,
-  provider_ref text,
-  track_id bigint unique,
+  attempt_id uuid not null default gen_random_uuid(),
   authority text unique,
   ref_number text,
   card_number text,
   psp_result integer,
-  psp_status integer,
+  request_started_at timestamptz,
+  verify_started_at timestamptz,
   paid_at timestamptz,
   verified_at timestamptz,
   applied_at timestamptz,
@@ -173,13 +171,47 @@ create table if not exists payments (
   updated_at timestamptz not null default now()
 );
 alter table payments add column if not exists attempt_id uuid;
-alter table payments add column if not exists provider_ref text;
+alter table payments add column if not exists request_started_at timestamptz;
+alter table payments add column if not exists verify_started_at timestamptz;
+update payments set attempt_id = gen_random_uuid() where attempt_id is null;
+alter table payments alter column attempt_id set default gen_random_uuid();
+alter table payments alter column attempt_id set not null;
+do $$
+declare
+  has_legacy boolean := false;
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'payments' and column_name = 'provider'
+  ) then
+    execute $q$
+      select exists (
+        select 1 from payments
+        where provider is not null and provider <> 'zarinpal' and applied_at is null
+      )
+    $q$ into has_legacy;
+  end if;
+  if not has_legacy and exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'payments' and column_name = 'track_id'
+  ) then
+    execute 'select exists (select 1 from payments where track_id is not null and applied_at is null)'
+      into has_legacy;
+  end if;
+  if has_legacy then
+    raise exception 'unsettled legacy-provider payments require review before ZarinPal-only cleanup';
+  end if;
+end
+$$;
+drop index if exists payments_provider_ref_unique;
+alter table payments drop column if exists provider;
+alter table payments drop column if exists provider_ref;
+alter table payments drop column if exists track_id;
+alter table payments drop column if exists psp_status;
 create index if not exists payments_user on payments (user_id);
 create index if not exists payments_status on payments (status, created_at);
 create unique index if not exists payments_user_attempt_unique
-  on payments (user_id, attempt_id) where attempt_id is not null;
-create unique index if not exists payments_provider_ref_unique
-  on payments (provider, provider_ref) where provider_ref is not null;
+  on payments (user_id, attempt_id);
 -- A limited discount code counts the checkouts currently in flight against it
 -- (slotsTaken in services/pricing.ts), on the checkout path. Partial, because
 -- most payments carry no code at all.
@@ -246,9 +278,8 @@ create table if not exists admins (
 -- table if not exists" silently skips existing tables, so new columns must be
 -- added explicitly here.
 alter table payments add column if not exists platform text;
-alter table payments add column if not exists provider text;
 alter table payments add column if not exists authority text;
--- authority is unique per transaction (multiple NULLs allowed for numeric gateways).
+-- ZarinPal authority is unique per transaction (multiple NULLs are allowed).
 create unique index if not exists payments_authority on payments (authority);
 
 -- Password + username sign-in (added after the users table already existed in

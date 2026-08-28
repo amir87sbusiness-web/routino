@@ -49,7 +49,7 @@ src/
   db/          schema.ts (drizzle) + client.ts (تایپ اتحادیه‌ی node-postgres | pglite)
   routes/      health, plans, …
   services/    pricing (قیمت سمت سرور), …
-  providers/   sms/{console,kavenegar}   psp/{fake,zibal}
+  providers/   sms/{console,kavenegar}   psp/{fake,zarinpal}
   lib/         phone.ts  ← باید با src/lib/phone.ts کلاینت یکی بماند
 test/
   helpers/pglite.ts     هارنس: PGlite + اسکیما + پلن‌های seed
@@ -84,14 +84,12 @@ re-dirty می‌شود. یک CHECK این را در سطح دیتابیس تضم
 
 ## پرداخت
 
-`PSP_PROVIDER=fake` یک درگاه محلی با دکمه‌ی پرداخت/انصراف می‌دهد که **قرارداد زیبال
-را عیناً تقلید می‌کند** — همان کدهای نتیجه، همان `201 already verified`. کل ماشین
-حالت بدون وابستگی بیرونی تست می‌شود؛ بعد فقط env عوض می‌شود.
+`PSP_PROVIDER=fake` یک درگاه محلی با callback زرین‌پال‌شکل می‌دهد. فقط در توسعه و
+تست قابل استفاده است و production آن را بدون هیچ override رد می‌کند. در production
+فقط `PSP_PROVIDER=zarinpal` و مرچنت UUID واقعی مجاز است. مبلغ PSP ریال و قیمت اپ
+تومان است؛ تبدیل ×۱۰ فقط در `services/pricing.ts` انجام می‌شود.
 
-سندباکس زیبال با مرچنت `zibal` کار می‌کند (هاست جدا ندارد). **مبلغ‌ها ریال‌اند** و
-قیمت‌های اپ تومان — تبدیل ×۱۰ فقط در `services/pricing.ts` انجام می‌شود.
-
-**`callbackUrl` و `localhost`**: زیبال **مرورگر کاربر** را ریدایرکت می‌کند، پس آدرس
+**`callbackUrl` و `localhost`**: زرین‌پال **مرورگر کاربر** را ریدایرکت می‌کند، پس آدرس
 باید از دستگاه او در دسترس باشد. برای وب لوکال شاید کار کند، ولی **برای گوشی هرگز**
 (`localhost` روی گوشی خودِ گوشی است). برای تست واقعی:
 ```bash

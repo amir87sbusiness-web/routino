@@ -28,8 +28,7 @@ async function paymentFixture() {
       amountToman: 59_000,
       amountRial: 590_000,
       status: "redirected",
-      provider: "fake",
-      trackId: 123_456,
+      authority: "FAKE-ATOMIC-1",
     })
     .returning();
   if (!payment) throw new Error("payment fixture failed");
@@ -37,7 +36,7 @@ async function paymentFixture() {
 }
 
 describe("atomic verified-payment grant", () => {
-  it("scopes PSP reference uniqueness by provider", async () => {
+  it("enforces unique ZarinPal authority", async () => {
     const [user] = await h.db.insert(schema.users).values({ phone: "989121234568" }).returning();
     if (!user) throw new Error("user fixture failed");
     const base = {
@@ -47,16 +46,11 @@ describe("atomic verified-payment grant", () => {
       amountToman: 59_000,
       amountRial: 590_000,
       status: "redirected",
-      providerRef: "same-provider-reference",
+      authority: "same-zarinpal-authority",
     };
 
-    await h.db.insert(schema.payments).values({ ...base, provider: "nextpay" });
-    await expect(
-      h.db.insert(schema.payments).values({ ...base, provider: "zibal" }),
-    ).resolves.toBeDefined();
-    await expect(
-      h.db.insert(schema.payments).values({ ...base, provider: "nextpay" }),
-    ).rejects.toThrow();
+    await h.db.insert(schema.payments).values(base);
+    await expect(h.db.insert(schema.payments).values(base)).rejects.toThrow();
   });
 
   it("rolls back entitlement and payment state when the payment grant cannot be recorded", async () => {
@@ -78,7 +72,7 @@ describe("atomic verified-payment grant", () => {
     `);
 
     await expect(
-      applyPaid(h.db, payment, { result: 100, status: 1, refNumber: "SAFE-REF" }, new Date()),
+      applyPaid(h.db, payment, { kind: "paid", code: 100, refNumber: "SAFE-REF" }, new Date()),
     ).rejects.toThrow();
 
     const [freshPayment] = await h.db
@@ -106,7 +100,7 @@ describe("atomic verified-payment grant", () => {
 
     await Promise.all(
       Array.from({ length: 5 }, () =>
-        applyPaid(h.db, payment, { result: 100, status: 1, refNumber: "SAFE-REF" }, now),
+        applyPaid(h.db, payment, { kind: "paid", code: 100, refNumber: "SAFE-REF" }, now),
       ),
     );
 

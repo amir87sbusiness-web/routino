@@ -41,7 +41,7 @@ async function checkout(access: string) {
     payload: { planId: "m1", attemptId: crypto.randomUUID() },
   });
   expect(res.statusCode).toBe(200);
-  return res.json() as { paymentId: string; trackId: number };
+  return res.json() as { paymentId: string; authority: string };
 }
 
 /** Opening the app: the one request every launch makes. */
@@ -61,10 +61,10 @@ const daysLeft = (iso: string | null) =>
 describe("a payment whose callback never came back", () => {
   it("is finished the next time the user opens the app", async () => {
     const { access } = await signIn("09121110001");
-    const { trackId } = await checkout(access);
+    const { authority } = await checkout(access);
 
     // The bank took the money and the gateway settled...
-    h.psp._settle(trackId, "paid");
+    h.psp._settle(authority, "paid");
     // ...but the redirect never reached us: no callback is invoked at all.
 
     const before = await openApp(access);
@@ -78,8 +78,8 @@ describe("a payment whose callback never came back", () => {
 
   it("does not grant when the user actually cancelled", async () => {
     const { access } = await signIn("09121110002");
-    const { trackId } = await checkout(access);
-    h.psp._settle(trackId, "canceled");
+    const { authority } = await checkout(access);
+    h.psp._settle(authority, "canceled");
 
     const after = await openApp(access);
 
@@ -97,8 +97,8 @@ describe("a payment whose callback never came back", () => {
 
   it("grants exactly once however many times the app is opened", async () => {
     const { access } = await signIn("09121110004");
-    const { trackId } = await checkout(access);
-    h.psp._settle(trackId, "paid");
+    const { authority } = await checkout(access);
+    h.psp._settle(authority, "paid");
 
     await openApp(access);
     const once = await openApp(access);
@@ -110,8 +110,8 @@ describe("a payment whose callback never came back", () => {
 
   it("still settles when the callback arrives later as well", async () => {
     const { access } = await signIn("09121110005");
-    const { paymentId, trackId } = await checkout(access);
-    h.psp._settle(trackId, "paid");
+    const { paymentId, authority } = await checkout(access);
+    h.psp._settle(authority, "paid");
 
     // Recovered on app open first...
     const healed = await openApp(access);
@@ -120,31 +120,10 @@ describe("a payment whose callback never came back", () => {
     // ...and then the user's phone finally delivers the redirect it was holding.
     await h.app.inject({
       method: "GET",
-      url: `/v1/payments/callback?trackId=${trackId}&success=1&status=2&orderId=${paymentId}`,
+      url: `/v1/payments/callback?paymentId=${paymentId}&Authority=${authority}&Status=OK`,
     });
 
     const after = await openApp(access);
     expect(daysLeft(after.entitlement.expiresAt)).toBe(daysLeft(healed.entitlement.expiresAt));
-  });
-
-  it("repairs a payment that was claimed but whose grant never landed", async () => {
-    const { access, user } = await signIn("09121110006");
-    const { paymentId, trackId } = await checkout(access);
-    h.psp._settle(trackId, "paid");
-    await h.app.inject({
-      method: "GET",
-      url: `/v1/payments/callback?trackId=${trackId}&success=1&status=2&orderId=${paymentId}`,
-    });
-
-    // Simulate the one window `applyPaid` cannot close by itself: it claims the
-    // row and THEN grants, so a process killed between the two leaves a payment
-    // marked paid with nothing behind it.
-    await h.raw(`delete from grants where payment_id = '${paymentId}'`);
-    await h.raw(`delete from entitlements where user_id = '${user.id}'`);
-
-    const after = await openApp(access);
-
-    expect(after.entitlement.status).toBe("active");
-    expect(daysLeft(after.entitlement.expiresAt)).toBeGreaterThan(25);
   });
 });
