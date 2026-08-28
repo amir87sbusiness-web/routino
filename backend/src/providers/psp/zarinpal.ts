@@ -6,8 +6,7 @@ import {
   type PspVerifyResult,
 } from "./index.js";
 
-const API_BASE = "https://api.zarinpal.com";
-const GATEWAY_BASE = "https://payment.zarinpal.com";
+const BASE = "https://payment.zarinpal.com";
 export const PSP_TIMEOUT_MS = 12_000;
 
 type ProviderBody = {
@@ -33,7 +32,7 @@ function providerCode(body: ProviderBody): number | undefined {
  * keeps those outcomes recoverable instead of inventing a provider result. */
 async function post(path: string, payload: unknown): Promise<ProviderBody | undefined> {
   try {
-    const res = await fetch(`${API_BASE}/pg/v4/payment/${path}.json`, {
+    const res = await fetch(`${BASE}/pg/v4/payment/${path}.json`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(payload),
@@ -111,7 +110,7 @@ export function zarinpalPsp(merchant: string): PspProvider {
     },
 
     startUrl(authority: string): string {
-      return `${GATEWAY_BASE}/pg/StartPay/${encodeURIComponent(authority)}`;
+      return `${BASE}/pg/StartPay/${encodeURIComponent(authority)}`;
     },
   };
 }
