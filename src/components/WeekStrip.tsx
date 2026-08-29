@@ -175,6 +175,7 @@ export function WeekStrip(props: WeekStripProps) {
   const pendingShiftRef = useRef<-1 | 0 | 1 | null>(null);
   const suppressClickUntil = useRef(0);
   const unlockFrameRef = useRef<number | null>(null);
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const resetTrack = () => {
     const track = trackRef.current;
@@ -193,6 +194,10 @@ export function WeekStrip(props: WeekStripProps) {
   };
 
   const completeSettle = () => {
+    if (settleTimerRef.current !== null) {
+      clearTimeout(settleTimerRef.current);
+      settleTimerRef.current = null;
+    }
     const shift = pendingShiftRef.current;
     pendingShiftRef.current = null;
     resetTrack();
@@ -217,6 +222,7 @@ export function WeekStrip(props: WeekStripProps) {
     track.style.transition = `transform ${SETTLE_MS}ms ${SETTLE_EASING}`;
     track.style.transform =
       dragDirection > 0 ? TRACK_LEFT : dragDirection < 0 ? TRACK_RIGHT : TRACK_CENTER;
+    settleTimerRef.current = setTimeout(completeSettle, SETTLE_MS + 40);
   };
 
   const dragBindings = useHorizontalDrag({
@@ -253,6 +259,7 @@ export function WeekStrip(props: WeekStripProps) {
   useEffect(
     () => () => {
       if (unlockFrameRef.current !== null) cancelAnimationFrame(unlockFrameRef.current);
+      if (settleTimerRef.current !== null) clearTimeout(settleTimerRef.current);
     },
     [],
   );

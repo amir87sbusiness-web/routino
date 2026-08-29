@@ -1,13 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChevronLeft, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
+import { AnimatedCompletionList } from "@/components/AnimatedCompletionList";
 import { AppShell } from "@/components/AppShell";
 import { CelebrationModal, HabitRow, useCelebration } from "@/components/habits";
 import { TodayTodosCard } from "@/components/tasks";
 import { EmptyState, SectionTitle } from "@/components/ui";
 import { WeekStrip } from "@/components/WeekStrip";
 import { faNum, formatDate, todayKey } from "@/lib/dates";
-import { dayScore, dueHabitsOn } from "@/lib/logic";
+import { dayScore, dueHabitsOn, getLog, isCompleted } from "@/lib/logic";
 import { useAppMaybe } from "@/state/app";
 
 export const Route = createFileRoute("/")({
@@ -159,20 +160,24 @@ function TodayPage() {
             </div>
           </div>
         ) : (
-          <div className="flex flex-col gap-2">
-            {due.map((h) => (
+          <AnimatedCompletionList
+            key={dk}
+            items={due}
+            isCompleted={(habit) => isCompleted(habit, getLog(db, habit.id, dk))}
+            className="flex flex-col gap-2"
+            renderItem={(habit, onCompletionChange) => (
               <HabitRow
-                key={h.id}
                 db={db}
-                habit={h}
+                habit={habit}
                 cal={cal}
                 lang={lang}
                 t={t}
                 dk={dk}
                 onUpdate={update}
+                onCompletionChange={onCompletionChange}
               />
-            ))}
-          </div>
+            )}
+          />
         )}
       </section>
 

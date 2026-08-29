@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { CalendarDays, Check, Plus, Settings2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { AnimatedCompletionList } from "@/components/AnimatedCompletionList";
 import { AppShell } from "@/components/AppShell";
 import { addQuickTask, TaskRow } from "@/components/tasks";
 import {
@@ -239,24 +240,30 @@ function TasksPage() {
               text={t("برای این روز کاری ثبت نشده.", "No tasks for this day.")}
             />
           ) : (
-            dayTasks.map((task) => (
-              <TaskRow
-                key={task.id}
-                task={task}
-                settings={db.settings}
-                lang={lang}
-                t={t}
-                onUpdate={(patch) =>
-                  update((d) => ({
-                    ...d,
-                    tasks: d.tasks.map((x) => (x.id === task.id ? { ...x, ...patch } : x)),
-                  }))
-                }
-                onDelete={() =>
-                  update((d) => ({ ...d, tasks: d.tasks.filter((x) => x.id !== task.id) }))
-                }
-              />
-            ))
+            <AnimatedCompletionList
+              key={selectedDay}
+              items={dayTasks}
+              isCompleted={(task) => task.done}
+              className="flex flex-col gap-2"
+              renderItem={(task, onCompletionChange) => (
+                <TaskRow
+                  task={task}
+                  settings={db.settings}
+                  lang={lang}
+                  t={t}
+                  onUpdate={(patch) =>
+                    update((d) => ({
+                      ...d,
+                      tasks: d.tasks.map((x) => (x.id === task.id ? { ...x, ...patch } : x)),
+                    }))
+                  }
+                  onDelete={() =>
+                    update((d) => ({ ...d, tasks: d.tasks.filter((x) => x.id !== task.id) }))
+                  }
+                  onCompletionChange={onCompletionChange}
+                />
+              )}
+            />
           )}
         </div>
       </div>

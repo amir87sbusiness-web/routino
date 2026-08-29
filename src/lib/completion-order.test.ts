@@ -50,12 +50,7 @@ describe("moveCompletionItem", () => {
   });
 
   it("keeps the target id unique after repeated status changes", () => {
-    const reopened = moveCompletionItem(
-      ["b", "a"],
-      "a",
-      false,
-      items(["a", false], ["b", false]),
-    );
+    const reopened = moveCompletionItem(["b", "a"], "a", false, items(["a", false], ["b", false]));
     expect(reopened).toEqual(["b", "a"]);
     expect(new Set(reopened).size).toBe(reopened.length);
   });
@@ -73,10 +68,7 @@ describe("reconcileCompletionOrder", () => {
 
   it("does not move an existing id merely because source completion changed", () => {
     expect(
-      reconcileCompletionOrder(
-        ["a", "b", "c"],
-        items(["a", true], ["b", false], ["c", false]),
-      ),
+      reconcileCompletionOrder(["a", "b", "c"], items(["a", true], ["b", false], ["c", false])),
     ).toEqual(["a", "b", "c"]);
   });
 });

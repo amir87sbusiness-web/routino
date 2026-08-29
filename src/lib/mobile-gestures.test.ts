@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  dragDirectionForWeekShift,
-  resolveWeekSwipe,
-  weekPanelShifts,
-} from "./mobile-gestures";
+import { dragDirectionForWeekShift, resolveWeekSwipe, weekPanelShifts } from "./mobile-gestures";
 
 describe("resolveWeekSwipe", () => {
   it("maps physical drags to the reversed Persian calendar direction", () => {

@@ -1,11 +1,4 @@
-import {
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   initialCompletionOrder,
   moveCompletionItem,
@@ -106,10 +99,7 @@ export function AnimatedCompletionList<T extends { id: string }>({
       if (Math.abs(deltaY) < 0.5) continue;
       animations.push(
         element.animate(
-          [
-            { transform: `translate3d(0, ${deltaY}px, 0)` },
-            { transform: "translate3d(0, 0, 0)" },
-          ],
+          [{ transform: `translate3d(0, ${deltaY}px, 0)` }, { transform: "translate3d(0, 0, 0)" }],
           { duration: REORDER_MOTION_MS, easing: REORDER_EASING },
         ),
       );

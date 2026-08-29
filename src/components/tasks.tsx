@@ -1,6 +1,8 @@
 /** Shared task row + quick "Today's To-dos" card, used on both Home and Tasks pages. */
 import { Bell, Check, ChevronDown, Minus, Plus, Trash2, X } from "lucide-react";
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useRef, useState } from "react";
+import { AnimatedCompletionList } from "@/components/AnimatedCompletionList";
+import { useHorizontalDrag } from "@/components/useHorizontalDrag";
 import { CatIcon, formatDuration, Progress } from "@/components/ui";
 import { faNum, type Lang } from "@/lib/dates";
 import {
@@ -18,6 +20,7 @@ export function TaskRow({
   t,
   onUpdate,
   onDelete,
+  onCompletionChange,
 }: {
   task: Task;
   settings: Pick<Settings, "completionSoundEnabled" | "hapticsEnabled">;
@@ -25,13 +28,14 @@ export function TaskRow({
   t: (fa: string, en: string) => string;
   onUpdate: (patch: Partial<Task>) => boolean;
   onDelete: () => void;
+  onCompletionChange?: (completed: boolean) => void;
 }) {
-  const [dragX, setDragX] = useState(0);
-  const [dragging, setDragging] = useState(false);
   const [justCompleted, setJustCompleted] = useState(false);
   const [rowFlash, setRowFlash] = useState(false);
-  const dragStartX = useRef<number | null>(null);
-  const pointerId = useRef<number | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const doneHintRef = useRef<HTMLSpanElement>(null);
+  const undoHintRef = useRef<HTMLSpanElement>(null);
+  const suppressClickUntil = useRef(0);
   const tint = task.color ?? "var(--primary)";
   const SWIPE_THRESHOLD = 76;
 
@@ -40,6 +44,7 @@ export function TaskRow({
       patch.done ??
       (task.type === "quantity" ? (patch.value ?? task.value) >= task.target : task.done);
     const mutationAccepted = onUpdate(patch);
+    if (mutationAccepted && task.done !== afterCompleted) onCompletionChange?.(afterCompleted);
     if (
       shouldTriggerCompletionFeedback({
         source: "user",
@@ -54,7 +59,8 @@ export function TaskRow({
   };
 
   const toggleDone = (next: boolean) => {
-    commit({ done: next, value: next ? task.target : task.value });
+    const accepted = commit({ done: next, value: next ? task.target : task.value });
+    if (!accepted) return;
     setRowFlash(true);
     setTimeout(() => setRowFlash(false), 300);
     if (next) {
@@ -63,54 +69,78 @@ export function TaskRow({
     }
   };
 
-  const onPointerDown = (e: ReactPointerEvent) => {
-    dragStartX.current = e.clientX;
-    pointerId.current = e.pointerId;
-    setDragging(true);
+  const resetSwipe = () => {
+    const content = contentRef.current;
+    if (content) {
+      content.style.transition = "transform 220ms cubic-bezier(0.22, 1, 0.36, 1)";
+      content.style.transform = "translate3d(0, 0, 0)";
+    }
+    if (doneHintRef.current) doneHintRef.current.style.opacity = "0";
+    if (undoHintRef.current) undoHintRef.current.style.opacity = "0";
   };
-  const onPointerMove = (e: ReactPointerEvent) => {
-    if (dragStartX.current === null || pointerId.current !== e.pointerId) return;
-    setDragX(Math.max(-120, Math.min(120, e.clientX - dragStartX.current)));
-  };
-  const endDrag = () => {
-    if (dragStartX.current === null) return;
-    if (dragX > SWIPE_THRESHOLD && !task.done) toggleDone(true);
-    else if (-dragX > SWIPE_THRESHOLD && task.done) toggleDone(false);
-    dragStartX.current = null;
-    pointerId.current = null;
-    setDragging(false);
-    setDragX(0);
-  };
+
+  const dragBindings = useHorizontalDrag({
+    maxDistance: 120,
+    onStart: () => {
+      const content = contentRef.current;
+      if (!content) return;
+      content.style.transition = "none";
+      content.style.willChange = "transform";
+    },
+    onMove: ({ dx }) => {
+      if (contentRef.current) contentRef.current.style.transform = `translate3d(${dx}px, 0, 0)`;
+      if (doneHintRef.current) {
+        doneHintRef.current.style.opacity = String(dx > 20 ? Math.min(1, dx / SWIPE_THRESHOLD) : 0);
+      }
+      if (undoHintRef.current) {
+        undoHintRef.current.style.opacity = String(
+          -dx > 20 ? Math.min(1, -dx / SWIPE_THRESHOLD) : 0,
+        );
+      }
+    },
+    onEnd: ({ dx, cancelled }) => {
+      suppressClickUntil.current = Date.now() + 300;
+      resetSwipe();
+      if (cancelled) return;
+      if (dx > SWIPE_THRESHOLD && !task.done) toggleDone(true);
+      else if (-dx > SWIPE_THRESHOLD && task.done) toggleDone(false);
+    },
+  });
 
   return (
     <div className="relative overflow-hidden rounded-xl">
       {/* swipe background hints */}
       <div className="absolute inset-0 flex items-center justify-between px-5">
         <span
-          className="flex items-center gap-1 text-xs font-bold text-success transition-opacity"
-          style={{ opacity: dragX > 20 ? Math.min(1, dragX / SWIPE_THRESHOLD) : 0 }}
+          ref={doneHintRef}
+          className="flex items-center gap-1 text-xs font-bold text-success opacity-0"
         >
           <Check className="h-4 w-4" strokeWidth={3} /> {t("انجام شد", "Done")}
         </span>
         <span
-          className="flex items-center gap-1 text-xs font-bold text-destructive transition-opacity"
-          style={{ opacity: -dragX > 20 ? Math.min(1, -dragX / SWIPE_THRESHOLD) : 0 }}
+          ref={undoHintRef}
+          className="flex items-center gap-1 text-xs font-bold text-destructive opacity-0"
         >
           {t("لغو", "Undo")} <X className="h-4 w-4" strokeWidth={3} />
         </span>
       </div>
 
       <div
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={endDrag}
-        onPointerCancel={endDrag}
-        onPointerLeave={() => dragging && endDrag()}
-        className={`card-surface relative touch-pan-y p-3.5 ${dragging ? "" : "transition-all duration-300"} ${rowFlash ? "animate-row-flash" : ""}`}
+        ref={contentRef}
+        {...dragBindings}
+        onClickCapture={(event) => {
+          if (Date.now() >= suppressClickUntil.current) return;
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+        onTransitionEnd={(event) => {
+          if (event.propertyName === "transform") event.currentTarget.style.willChange = "auto";
+        }}
+        className={`swipe-row card-surface relative touch-pan-y p-3.5 ${rowFlash ? "animate-row-flash" : ""}`}
         style={{
           backgroundColor: task.done ? `${tint}22` : undefined,
           borderColor: task.done ? `${tint}55` : undefined,
-          transform: `translateX(${dragX}px)`,
+          transform: "translate3d(0, 0, 0)",
         }}
       >
         <div className="flex items-center gap-3">
@@ -297,24 +327,30 @@ export function TodayTodosCard({
             )}
           </div>
 
-          {dayTasks.map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              settings={db.settings}
-              lang={lang}
-              t={t}
-              onUpdate={(patch) =>
-                onUpdate((d) => ({
-                  ...d,
-                  tasks: d.tasks.map((x) => (x.id === task.id ? { ...x, ...patch } : x)),
-                }))
-              }
-              onDelete={() =>
-                onUpdate((d) => ({ ...d, tasks: d.tasks.filter((x) => x.id !== task.id) }))
-              }
-            />
-          ))}
+          <AnimatedCompletionList
+            key={dateKey}
+            items={dayTasks}
+            isCompleted={(task) => task.done}
+            className="flex flex-col gap-2"
+            renderItem={(task, onCompletionChange) => (
+              <TaskRow
+                task={task}
+                settings={db.settings}
+                lang={lang}
+                t={t}
+                onUpdate={(patch) =>
+                  onUpdate((d) => ({
+                    ...d,
+                    tasks: d.tasks.map((x) => (x.id === task.id ? { ...x, ...patch } : x)),
+                  }))
+                }
+                onDelete={() =>
+                  onUpdate((d) => ({ ...d, tasks: d.tasks.filter((x) => x.id !== task.id) }))
+                }
+                onCompletionChange={onCompletionChange}
+              />
+            )}
+          />
         </div>
       )}
     </div>

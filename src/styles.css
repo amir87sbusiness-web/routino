@@ -147,6 +147,10 @@
   }
 }
 
+.completion-list-item {
+  contain: layout style;
+}
+
 @keyframes pop-in {
   0% {
     opacity: 0;
@@ -210,6 +214,10 @@
 @media (prefers-reduced-motion: reduce) {
   .page-stagger > * {
     animation: none;
+  }
+
+  .swipe-row {
+    transition: none !important;
   }
 }
 

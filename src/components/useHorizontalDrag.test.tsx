@@ -3,6 +3,8 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useHorizontalDrag, type HorizontalDragSample } from "./useHorizontalDrag";
 
+Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
+
 function pointer(type: string, clientX: number, clientY: number, pointerId = 1): Event {
   const event = new MouseEvent(type, { bubbles: true, clientX, clientY });
   Object.defineProperty(event, "pointerId", { value: pointerId });
@@ -61,6 +63,7 @@ describe("useHorizontalDrag", () => {
     expect(renders).toBe(1);
 
     act(() => surface.dispatchEvent(pointer("pointerup", 42, 12)));
+    expect(moves).toEqual([32]);
     expect(endings).toHaveLength(1);
     expect(endings[0]?.dx).toBe(32);
     expect(renders).toBe(1);

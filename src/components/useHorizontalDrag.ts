@@ -61,6 +61,7 @@ export function useHorizontalDrag(options: HorizontalDragOptions): HorizontalDra
   };
 
   const deliverLatest = () => {
+    if (frameRef.current === null) return;
     cancelFrame();
     const sample = latestRef.current;
     if (sample) optionsRef.current.onMove(sample);
