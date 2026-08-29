@@ -30,6 +30,8 @@ describe("WeekStrip settling", () => {
       );
     });
 
+    expect(host.querySelector(".select-none")?.getAttribute("dir")).toBe("ltr");
+
     act(() => host.querySelector<HTMLButtonElement>('[aria-label="next-week"]')!.click());
     expect(onSelect).not.toHaveBeenCalled();
 

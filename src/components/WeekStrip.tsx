@@ -284,6 +284,7 @@ export function WeekStrip(props: WeekStripProps) {
       <div
         ref={viewportRef}
         {...dragBindings}
+        dir="ltr"
         className="min-w-0 flex-1 touch-pan-y overflow-hidden select-none"
       >
         <div
