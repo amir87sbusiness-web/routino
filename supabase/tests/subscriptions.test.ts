@@ -127,11 +127,11 @@ describe("POST /v1/subscriptions/trial/start", () => {
   });
 
   it("starts once and cannot be stacked by concurrent requests", async () => {
-    const firstDevice = await signIn(h, "09123334444", "edge-trial-device-a");
+    const firstSession = await signIn(h, "09123334444");
     await h.raw(`delete from otp_codes`);
-    const secondDevice = await signIn(h, "09123334444", "edge-trial-device-b");
+    const secondSession = await signIn(h, "09123334444");
     const responses = await Promise.all(
-      [firstDevice.access, secondDevice.access, firstDevice.access, secondDevice.access].map(
+      [firstSession.access, secondSession.access, firstSession.access, secondSession.access].map(
         (access) => h.call("POST", "/v1/subscriptions/trial/start", { headers: auth(access) }),
       ),
     );
@@ -140,10 +140,7 @@ describe("POST /v1/subscriptions/trial/start", () => {
     expect(new Set(bodies.map((body) => body.entitlement.expiresAt)).size).toBe(1);
     expect((Date.parse(bodies[0].entitlement.expiresAt) - Date.now()) / DAY).toBeCloseTo(7, 1);
     expect(
-      await h.query(`select id from grants where user_id = '${firstDevice.user.id}'`),
+      await h.query(`select id from grants where user_id = '${firstSession.user.id}'`),
     ).toHaveLength(1);
-    expect(
-      await h.query(`select id from devices where user_id = '${firstDevice.user.id}'`),
-    ).toHaveLength(2);
   });
 });

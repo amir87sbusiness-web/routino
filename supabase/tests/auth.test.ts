@@ -1,4 +1,4 @@
-/** OTP sign-in, token rotation and guards — against the deployed edge app. */
+/** OTP sign-in, stateless token shape and guards — against the Edge app. */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { auth, makeHarness, signIn, type Harness } from "./helpers/harness.ts";
 
@@ -48,12 +48,18 @@ describe("POST /v1/auth/otp/request", () => {
 describe("POST /v1/auth/otp/verify", () => {
   it("creates the account on first use with no entitlement or grant", async () => {
     const out = await signIn(h);
+    expect(out.access).toEqual(expect.any(String));
+    expect(out).not.toHaveProperty("refresh");
+    expect(out).not.toHaveProperty("deviceId");
     expect(out.isNew).toBe(true);
     expect(out.user.phone).toBe("989123334444");
     expect(out.entitlement).toMatchObject({ status: "none", planId: null, expiresAt: null });
 
     const grants = await h.query<{ source: string }>(`select source from grants`);
     expect(grants).toEqual([]);
+    expect(
+      await h.query(`select table_name from information_schema.tables where table_name = 'devices'`),
+    ).toHaveLength(0);
   });
 
   it("rejects a wrong code and burns attempts", async () => {
@@ -70,32 +76,15 @@ describe("POST /v1/auth/otp/verify", () => {
     // Clear the OTP ledger so the second request isn't per-minute rate-limited —
     // in reality the second sign-in happens days later.
     await h.raw(`delete from otp_codes`);
-    await signIn(h); // same phone, new device
+    await signIn(h); // same phone, another sign-in
     const grants = await h.query(`select id from grants`);
     expect(grants).toHaveLength(0);
   });
 
-  it("resets the password and keeps only the SMS-verified device signed in", async () => {
+  it("resets the password without revoking an existing stateless access token", async () => {
     const victim = await signIn(h);
-    await h.raw(`update users set max_active_devices = 3`);
     await h.raw(`delete from otp_codes`);
 
-    await h.call("POST", "/v1/auth/otp/request", { body: { phone: victim.user.phone } });
-    const otherResponse = await h.call("POST", "/v1/auth/otp/verify", {
-      body: {
-        phone: victim.user.phone,
-        code: h.sms.last()!.code,
-        device: {
-          installationKey: "edge-other-device",
-          name: "Other browser",
-          platform: "web",
-        },
-      },
-    });
-    expect(otherResponse.status).toBe(200);
-    const other = (await otherResponse.json()) as { refresh: string };
-
-    await h.raw(`delete from otp_codes`);
     await h.call("POST", "/v1/auth/otp/request", { body: { phone: victim.user.phone } });
     const resetResponse = await h.call("POST", "/v1/auth/otp/verify", {
       body: {
@@ -103,57 +92,23 @@ describe("POST /v1/auth/otp/verify", () => {
         code: h.sms.last()!.code,
         intent: "password_reset",
         newPassword: "Naghmeh@1405",
-        device: {
-          installationKey: "edge-recovery-device",
-          name: "Recovery browser",
-          platform: "web",
-        },
       },
     });
     expect(resetResponse.status).toBe(200);
-    const recovered = (await resetResponse.json()) as { refresh: string };
-
     expect(
-      (await h.call("POST", "/v1/auth/token/refresh", { body: { refresh: other.refresh } })).status,
-    ).toBe(401);
-    expect(
-      (await h.call("POST", "/v1/auth/token/refresh", { body: { refresh: recovered.refresh } }))
-        .status,
+      (await h.call("GET", "/v1/subscriptions/me", { headers: auth(victim.access) })).status,
     ).toBe(200);
   });
 });
 
-describe("token refresh + logout", () => {
-  it("rotates the refresh token; the old one dies immediately", async () => {
-    const { refresh } = await signIn(h);
-
-    const first = await h.call("POST", "/v1/auth/token/refresh", { body: { refresh } });
-    expect(first.status).toBe(200);
-    const rotated = (await first.json()) as { access: string; refresh: string };
-    expect(rotated.refresh).not.toBe(refresh);
-
-    // Old token replay → 401, never a silent re-issue.
-    const replay = await h.call("POST", "/v1/auth/token/refresh", { body: { refresh } });
-    expect(replay.status).toBe(401);
-
-    // The rotated one works.
-    const next = await h.call("POST", "/v1/auth/token/refresh", {
-      body: { refresh: rotated.refresh },
-    });
-    expect(next.status).toBe(200);
-  });
-
-  it("logout revokes the device; refresh stops working, and is idempotent", async () => {
-    const { refresh } = await signIn(h);
-    const out = await h.call("POST", "/v1/auth/logout", { body: { refresh } });
-    expect(out.status).toBe(200);
-
-    const replay = await h.call("POST", "/v1/auth/token/refresh", { body: { refresh } });
-    expect(replay.status).toBe(401);
-
-    // Logging out again with the same (now unknown) token is still a 200.
-    const again = await h.call("POST", "/v1/auth/logout", { body: { refresh } });
-    expect(again.status).toBe(200);
+describe("removed session endpoints", () => {
+  it("does not register refresh or server logout", async () => {
+    expect(
+      (await h.call("POST", "/v1/auth/token/refresh", { body: { refresh: "legacy" } })).status,
+    ).toBe(404);
+    expect((await h.call("POST", "/v1/auth/logout", { body: { refresh: "legacy" } })).status).toBe(
+      404,
+    );
   });
 });
 
@@ -167,18 +122,5 @@ describe("authenticated route guard", () => {
         })
       ).status,
     ).toBe(401);
-  });
-
-  it("a blocked user is rejected within the access-token TTL", async () => {
-    const { access, user } = await signIn(h);
-    expect((await h.call("GET", "/v1/subscriptions/me", { headers: auth(access) })).status).toBe(
-      200,
-    );
-
-    await h.raw(`update users set blocked = true where id = '${user.id}'`);
-    // Same still-valid JWT — but the per-request user re-read catches the block.
-    const res = await h.call("GET", "/v1/subscriptions/me", { headers: auth(access) });
-    expect(res.status).toBe(403);
-    expect((await res.json()).error).toBe("blocked");
   });
 });

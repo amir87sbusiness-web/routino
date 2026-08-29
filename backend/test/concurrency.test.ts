@@ -30,11 +30,10 @@ const auth = (access: string) => ({ authorization: `Bearer ${access}` });
 
 interface Session {
   access: string;
-  refresh: string;
   user: { id: string };
 }
 
-/** A fresh sign-in. Each call is a new DEVICE on the same account. */
+/** A fresh stateless sign-in on the same account. */
 async function signIn(phone: string): Promise<Session> {
   await h.raw(`update otp_codes set consumed_at = null, created_at = now() - interval '2 minutes'`);
   await h.app.inject({ method: "POST", url: "/v1/auth/otp/request", payload: { phone } });
@@ -129,15 +128,13 @@ describe("one account, several devices at once", () => {
   });
 });
 
-describe("sign-in and sign-out racing each other", () => {
-  it("keeps every simultaneous valid installation session", async () => {
+describe("simultaneous stateless sign-in", () => {
+  it("returns a valid access token for every concurrent password sign-in", async () => {
     const phone = "09130000004";
     const first = await signIn(phone);
 
     // Password sign-in, not OTP: a code is single-use and only the newest is
-    // accepted, so four SIMULTANEOUS OTP sign-ins are impossible by design.
-    // Password is also what the app actually offers by default, which makes it
-    // the path four devices really would arrive on together.
+    // accepted, so four simultaneous OTP sign-ins are impossible by design.
     await h.app.inject({
       method: "POST",
       url: "/v1/auth/password",
@@ -145,88 +142,24 @@ describe("sign-in and sign-out racing each other", () => {
       payload: { newPassword: "Routino!2026" },
     });
 
-    const login = (installationKey: string) =>
+    const login = () =>
       h.app.inject({
         method: "POST",
         url: "/v1/auth/password/login",
-        payload: {
-          identifier: phone,
-          password: "Routino!2026",
-          device: { installationKey, name: installationKey, platform: "web" },
-        },
+        payload: { identifier: phone, password: "Routino!2026" },
       });
 
-    // Four devices, all at the same moment. Each has its own installation key.
-    const logins = await Promise.all([
-      login("racing-device-a"),
-      login("racing-device-b"),
-      login("racing-device-c"),
-      login("racing-device-d"),
-    ]);
-    for (const r of logins) expect(r.statusCode).toBe(200);
-
-    const [row] = await h.query<{ n: number }>(
-      `select count(*)::int as n from devices d
-        join users u on u.id = d.user_id
-       where u.phone = '98${phone.slice(1)}' and d.revoked_at is null`,
-    );
-    expect(Number(row!.n)).toBe(5);
-  });
-
-  it("refuses to let one refresh token be spent twice", async () => {
-    const s = await signIn("09130000005");
-
-    // The same refresh token submitted five times at once: a flaky connection
-    // retrying, or two tabs waking together. Rotation means exactly one may win;
-    // if more did, an old token would stay valid forever.
-    const results = await Promise.all(
-      Array.from({ length: 5 }, () =>
-        h.app.inject({
-          method: "POST",
-          url: "/v1/auth/token/refresh",
-          payload: { refresh: s.refresh },
-        }),
-      ),
-    );
-    const ok = results.filter((r) => r.statusCode === 200);
-    expect(ok).toHaveLength(1);
-    for (const r of results.filter((x) => x.statusCode !== 200)) {
-      expect(r.statusCode).toBe(401);
+    const logins = await Promise.all(Array.from({ length: 4 }, () => login()));
+    for (const response of logins) {
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as Record<string, unknown> & { access: string };
+      expect(body.access).toEqual(expect.any(String));
+      expect(body).not.toHaveProperty("refresh");
+      expect(body).not.toHaveProperty("deviceId");
     }
-  });
-
-  it("does not let a signed-out device keep working", async () => {
-    const s = await signIn("09130000006");
-    await h.app.inject({ method: "POST", url: "/v1/auth/logout", payload: { refresh: s.refresh } });
-
-    // The access token is short-lived and still technically valid, but the
-    // refresh must be dead immediately — that is what makes sign-out mean
-    // something.
-    const again = await h.app.inject({
-      method: "POST",
-      url: "/v1/auth/token/refresh",
-      payload: { refresh: s.refresh },
-    });
-    expect(again.statusCode).toBe(401);
-  });
-
-  it("survives a sign-out landing while the same account signs in elsewhere", async () => {
-    const phone = "09130000007";
-    const first = await signIn(phone);
-
-    const [, second] = await Promise.all([
-      h.app.inject({ method: "POST", url: "/v1/auth/logout", payload: { refresh: first.refresh } }),
-      signIn(phone),
-    ]);
-
-    // The new device must be usable; the old one must not.
-    expect((await pull(second.access, 0)).statusCode).toBe(200);
-    const dead = await h.app.inject({
-      method: "POST",
-      url: "/v1/auth/token/refresh",
-      payload: { refresh: first.refresh },
-    });
-    expect(dead.statusCode).toBe(401);
+    expect(
+      await h.query(`select table_name from information_schema.tables where table_name = 'devices'`),
+    ).toHaveLength(0);
   });
 });
 

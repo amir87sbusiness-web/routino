@@ -11,7 +11,6 @@ const mocks = vi.hoisted(() => ({
   hydrate: vi.fn(),
   importSubscription: vi.fn(),
   markEntitlementChecked: vi.fn(),
-  pingDevice: vi.fn(),
   reconcileNativeReminders: vi.fn(),
   requestNativePermission: vi.fn(),
   saveLocal: vi.fn(),
@@ -38,8 +37,6 @@ vi.mock("@/lib/api/auth", () => ({
   importSubscription: mocks.importSubscription,
   loadTokens: vi.fn(() => ({
     access: "access",
-    refresh: "refresh",
-    deviceId: "device",
     accessExpiresAt: Date.now() + 60_000,
     lastServerConfirmedAt: Date.now(),
     lastEntitlementCheckedAt: Date.now(),
@@ -47,7 +44,6 @@ vi.mock("@/lib/api/auth", () => ({
   markEntitlementChecked: mocks.markEntitlementChecked,
   sessionUserId: mocks.sessionUserId,
 }));
-vi.mock("@/lib/api/devices", () => ({ pingDevice: mocks.pingDevice }));
 vi.mock("@/lib/db/hydrate", () => ({ hydrate: mocks.hydrate }));
 vi.mock("@/lib/db/persist", () => ({ applyChanges: mocks.applyChanges }));
 vi.mock("@/lib/db/local", () => ({
@@ -130,7 +126,6 @@ describe("AppProvider sync lifecycle", () => {
     mocks.hydrate.mockReset().mockResolvedValue({ db: initial, local: {}, migrated: false });
     mocks.importSubscription.mockReset();
     mocks.markEntitlementChecked.mockReset();
-    mocks.pingDevice.mockReset().mockResolvedValue({ ok: true });
     mocks.reconcileNativeReminders
       .mockReset()
       .mockResolvedValue({ status: "scheduled", scheduled: 0 });
@@ -171,7 +166,6 @@ describe("AppProvider sync lifecycle", () => {
   });
 
   it("starts the existing engine with canonical userId after authenticated boot", () => {
-    expect(mocks.pingDevice).toHaveBeenCalledTimes(1);
     expect(mocks.syncNow).toHaveBeenCalledWith("user-1");
   });
 
@@ -541,16 +535,20 @@ describe("AppProvider sync lifecycle", () => {
     expect(app!.db?.subscription?.expiresAt).toBe(Date.parse(expiresAt));
   });
 
-  it("keeps the 60-second security check separate from the ten-minute data fallback", async () => {
-    mocks.pingDevice.mockClear();
+  it("syncs on lifecycle events without any visible polling interval", async () => {
     mocks.syncNow.mockClear();
 
-    await act(async () => vi.advanceTimersByTime(60_000));
+    await act(async () => vi.advanceTimersByTime(10 * 60_000));
     await settle();
-    expect(mocks.pingDevice).toHaveBeenCalledTimes(1);
     expect(mocks.syncNow).not.toHaveBeenCalled();
 
-    await act(async () => vi.advanceTimersByTime(9 * 60_000));
+    window.dispatchEvent(new Event("online"));
+    await settle();
+    expect(mocks.syncNow).toHaveBeenCalledTimes(1);
+    expect(mocks.syncNow).toHaveBeenCalledWith("user-1");
+
+    mocks.syncNow.mockClear();
+    document.dispatchEvent(new Event("visibilitychange"));
     await settle();
     expect(mocks.syncNow).toHaveBeenCalledTimes(1);
     expect(mocks.syncNow).toHaveBeenCalledWith("user-1");

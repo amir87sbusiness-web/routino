@@ -23,9 +23,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import {
-  clearTokens,
   fetchEntitlement,
-  hasSession,
   importSubscription,
   loadTokens,
   markEntitlementChecked,
@@ -33,7 +31,6 @@ import {
   type ServerEntitlement,
 } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
-import { pingDevice } from "@/lib/api/devices";
 import { todayKey, type Calendar, type Lang } from "@/lib/dates";
 import { diffDb } from "@/lib/db/diff";
 import { hydrate } from "@/lib/db/hydrate";
@@ -57,7 +54,7 @@ import { productWriteAllowed } from "@/lib/access-state";
 import { isNativeRuntime, reconcileNativeReminders } from "@/lib/native-notifications";
 import { syncNativeBars } from "@/lib/native";
 import { loginAs, wipeContent } from "@/lib/wipe";
-import { decideSession, isSessionRevocationReason } from "@/lib/security-session";
+import { decideSession } from "@/lib/security-session";
 import { subscriptionReminderEvents } from "@/lib/subscription-reminders";
 import { shouldRefreshEntitlement } from "@/lib/entitlement-refresh";
 import { syncNow } from "@/lib/sync/engine";
@@ -178,7 +175,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
     owner: string;
     entitlement: ServerEntitlement;
   } | null>(null);
-  const checkSessionRef = useRef<(() => Promise<void>) | null>(null);
   const sessionGateRef = useRef(sessionGate);
   sessionGateRef.current = sessionGate;
 
@@ -437,12 +433,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     (owner: string, delayMs = 0, force = true) => {
       const start = () => {
         void syncAccount(owner, force).catch((err) => {
-          // A real 401 follows the existing ping/session-revocation path. The
-          // local session_changed guard only means an account switch won a race.
+          // A rejected stateless token is cleared by the API client. Reflect
+          // that locally; offline/timeout leaves dirty rows and the cursor intact.
           if (err instanceof ApiError && err.status === 401 && err.code !== "session_changed") {
-            void checkSessionRef.current?.();
+            setDb((prev) => (prev ? { ...prev, auth: null } : prev));
+            setSessionGate("ready");
           }
-          // Offline/timeout is normal. Dirty rows and the cursor remain intact.
         });
       };
 
@@ -489,19 +485,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
           (subscription) => importSubscription(subscription, user.id),
         );
         const next = loginAs(resolved, user.phone, resolved.subscription, Date.now(), user.id);
-        next.notifications = [
-          {
-            id: uid(),
-            title: next.settings.lang === "fa" ? "ورود امن ثبت شد" : "Secure sign-in recorded",
-            body:
-              next.settings.lang === "fa"
-                ? "ورود این دستگاه به حسابت ثبت شد. اگر این دستگاه را نمی‌شناسی به @routino_support پیام بده."
-                : "This device signed in to your account. If you do not recognize it, message @routino_support.",
-            at: Date.now(),
-            read: false,
-          },
-          ...next.notifications,
-        ].slice(0, 100);
         saveLocal(toLocalState(next));
         mutationRevision.current += 1;
         lastPersisted.current = next;
@@ -609,11 +592,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [db, requestSync]);
 
-  const checkingSession = useRef(false);
-  const checkSession = useCallback(
-    async (triggerDataSync = false) => {
+  const syncLifecycle = useCallback(
+    async (owner: string) => {
       const current = dbRef.current;
-      if (!current?.auth || checkingSession.current) return;
+      if (!current?.auth || syncOwnerOf(current) !== owner) return;
       const tokens = loadTokens();
       if (!tokens) {
         setDb((prev) => (prev ? { ...prev, auth: null } : prev));
@@ -637,12 +619,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
           : "ready",
       );
 
-      checkingSession.current = true;
       try {
-        await pingDevice();
+        if (!navigator.onLine) return;
+        const syncResult = await syncAccount(owner, true);
         setSessionGate("ready");
-        const owner = syncOwnerOf(current);
-        const syncResult = triggerDataSync && owner ? await syncAccount(owner, true) : null;
         const latest = loadTokens() ?? tokens;
         if (
           !syncResult?.entitlementChecked &&
@@ -660,83 +640,50 @@ export function AppProvider({ children }: { children: ReactNode }) {
             })
             .catch(() => undefined);
         }
-      } catch (err) {
-        const code = err instanceof ApiError ? err.code : "";
-        if (isSessionRevocationReason(code)) {
-          clearTokens();
-          toast.error(
-            current.settings.lang === "fa"
-              ? "برای امنیت حسابت، نشست این دستگاه پایان یافت. اطلاعاتت پاک نشده؛ برای راهنمایی به @routino_support پیام بده."
-              : "For account security, this device session ended. Your data was not deleted; message @routino_support for help.",
-            { duration: 15_000 },
-          );
-          setDb((prev) => {
-            if (!prev) return prev;
-            const fa = prev.settings.lang === "fa";
-            return {
-              ...prev,
-              auth: null,
-              notifications: [
-                {
-                  id: uid(),
-                  title: fa ? "بررسی امنیت حساب" : "Account security check",
-                  body: fa
-                    ? "نشست این دستگاه پایان یافت. اطلاعاتت روی این دستگاه باقی مانده؛ برای راهنمایی به @routino_support پیام بده."
-                    : "This device session ended. Your local data is still here; message @routino_support for help.",
-                  at: Date.now(),
-                  read: false,
-                },
-                ...prev.notifications,
-              ].slice(0, 100),
-            };
-          });
+      } catch {
+        const latest = loadTokens();
+        if (!latest) {
+          setDb((prev) => (prev ? { ...prev, auth: null } : prev));
           setSessionGate("ready");
           return;
         }
-        const latest = loadTokens() ?? tokens;
         const decision = decideSession({
           now: Date.now(),
           lastServerConfirmedAt: latest.lastServerConfirmedAt,
           online: navigator.onLine,
         });
         setSessionGate(decision.kind === "needs-online-confirmation" ? "needs-online" : "ready");
-      } finally {
-        checkingSession.current = false;
       }
     },
     [applyEntitlementToLiveState, syncAccount],
   );
-  checkSessionRef.current = () => checkSession(false);
 
-  // Validate on boot, immediately when connectivity returns, whenever the app
-  // comes to the foreground, and once a minute while it is visible. A closed web
-  // app cannot execute code; the next open performs the same check before data UI.
+  // Boot, online and foreground events all use the normal account sync. A
+  // closed web app cannot execute code; the next open performs the boot sync.
   const sessionOwner = syncOwnerOf(db);
   useEffect(() => {
     if (!sessionOwner) {
       setSessionGate("ready");
       return;
     }
-    void checkSession(true);
-    const onOnline = () => void checkSession(true);
+    void syncLifecycle(sessionOwner);
+    const onOnline = () => void syncLifecycle(sessionOwner);
     const onVisibility = () => {
-      if (document.visibilityState === "visible") void checkSession(true);
+      if (document.visibilityState === "visible") void syncLifecycle(sessionOwner);
     };
     window.addEventListener("online", onOnline);
     document.addEventListener("visibilitychange", onVisibility);
-    const interval = setInterval(() => {
-      if (document.visibilityState === "visible") void checkSession(false);
-    }, 60_000);
-    const visibleSyncInterval = setInterval(() => {
-      if (document.visibilityState === "visible") requestSync(sessionOwner, 0, false);
-    }, VISIBLE_SYNC_INTERVAL_MS);
     return () => {
       window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVisibility);
-      clearInterval(interval);
-      clearInterval(visibleSyncInterval);
     };
-  }, [sessionOwner, checkSession, requestSync]);
+  }, [sessionOwner, syncLifecycle]);
+
+  const retrySession = useCallback(async () => {
+    const owner = syncOwnerOf(dbRef.current);
+    if (owner) await syncLifecycle(owner);
+    else setSessionGate("ready");
+  }, [syncLifecycle]);
 
   useEffect(
     () => () => {
@@ -1007,7 +954,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       clearWriteBlocked,
       switchAccount,
       sessionGate,
-      retrySession: checkSession,
+      retrySession,
       lang,
       cal,
       t,
@@ -1029,7 +976,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       clearWriteBlocked,
       switchAccount,
       sessionGate,
-      checkSession,
+      retrySession,
       lang,
       cal,
       t,

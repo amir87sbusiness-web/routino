@@ -21,6 +21,16 @@
 
 ### Task 1: Stateless Token Service and Middleware
 
+> **Atomic execution note:** Tasks 1 through 3 are one reviewable delivery. The new
+> `AuthedUser = { id }` contract cannot typecheck while the old auth routes still
+> read `deviceId`, and the stateless client cannot work while those routes still
+> require device descriptors. Device/admin routes also consume the revoke services,
+> so they must disappear in the same commit. One implementer must complete all three
+> briefs, update `supabase/functions/api/deps.ts`, run `npm run sync:edge` to regenerate
+> shared Edge sources, run every focused suite and both typechecks, then create one
+> commit. Review the combined diff against all three task briefs before marking them
+> complete. Generated files must never be edited by hand.
+
 **Files:**
 - Modify: `backend/src/services/tokens.ts`
 - Modify: `backend/src/plugins/auth.ts`
@@ -200,9 +210,9 @@ Expected: FAIL while routes, UI, and ping behavior still exist.
 
 Remove the Settings device-management card, admin device table, block toggle/button, `adminSetBlocked`, and device data joins. Keep account credential, subscription, payment, and grant administration unchanged.
 
-- [ ] **Step 4: Remove session polling from `AppProvider`**
+- [ ] **Step 4: Remove session polling from `AppProvider` without creating a boot-sync gap**
 
-Delete `pingDevice`, `checkSessionRef`, the one-minute interval, device-revocation error handling, and the old session-security gate. Boot/online/foreground account-state checks will be supplied by the sync plan; local token expiry still routes to sign-in.
+Delete `pingDevice`, `checkSessionRef`, the one-minute interval, and device-revocation error handling. Keep boot, online, and foreground meaningful by calling the existing `syncAccount(owner, true)` directly; keep `sessionGate` only for local token/offline-expiry UX. Do not add a replacement interval. The later sync plan will move these lifecycle calls into the dedicated scheduler, but this commit must remain runnable and type-correct by itself.
 
 - [ ] **Step 5: Run focused tests and commit**
 

@@ -6,21 +6,16 @@
  * a second writer there would be a lost update — and the symptom would be
  * random sign-outs.
  *
- * The rule that matters most here: **being signed in is not the same as holding
- * a valid token.** The app gates on `db.auth`, which is device-local and set at
- * sign-in. A failed refresh, an expired token, or a dead backend must never sign
- * anyone out — offline has to be indistinguishable from online.
+ * The app gates on `db.auth`, which is device-local and set at sign-in. The
+ * signed access token is the complete server session and expires after 30 days.
  */
 import { apiRequest, ApiError } from "./client";
-import { getOrCreateDeviceDescriptor, type DeviceDescriptor } from "../device-identity";
 
 const TOKEN_KEY = "routino:auth:v1";
 
 export interface Tokens {
   access: string;
-  refresh: string;
-  deviceId: string;
-  /** Epoch ms when `access` expires, so we can refresh proactively. */
+  /** Epoch ms when `access` expires. */
   accessExpiresAt: number;
   /** Last successful authenticated server response. Drives the 15-day offline lease. */
   lastServerConfirmedAt: number;
@@ -35,8 +30,6 @@ export interface ServerEntitlement {
   issuedAt: string;
 }
 
-/** Refresh a little early to avoid a guaranteed 401 at the boundary. */
-const REFRESH_SKEW_MS = 60_000;
 const FALLBACK_ACCESS_TTL_MS = 60 * 60_000;
 
 function accessPayload(access: string): { exp?: unknown; sub?: unknown } | null {
@@ -60,7 +53,7 @@ export interface TrialStartResult {
 export function accessExpiryAt(access: string, now = Date.now()): number {
   const payload = accessPayload(access);
   if (typeof payload?.exp === "number" && Number.isFinite(payload.exp)) return payload.exp * 1000;
-  // Old/corrupt tokens still get one server attempt; a 401 triggers refresh.
+  // Old/corrupt tokens get one bounded server attempt; a 401 clears storage.
   return now + FALLBACK_ACCESS_TTL_MS;
 }
 
@@ -78,12 +71,24 @@ export function loadTokens(): Tokens | null {
   try {
     const raw = localStorage.getItem(TOKEN_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as Tokens;
-    if (!parsed.lastServerConfirmedAt) {
-      parsed.lastServerConfirmedAt = Date.now();
-      saveTokens(parsed);
-    }
-    return parsed;
+    const parsed = JSON.parse(raw) as Partial<Tokens>;
+    if (typeof parsed.access !== "string" || !parsed.access) return null;
+    const migrated: Tokens = {
+      access: parsed.access,
+      accessExpiresAt:
+        typeof parsed.accessExpiresAt === "number"
+          ? parsed.accessExpiresAt
+          : accessExpiryAt(parsed.access),
+      lastServerConfirmedAt:
+        typeof parsed.lastServerConfirmedAt === "number"
+          ? parsed.lastServerConfirmedAt
+          : Date.now(),
+      ...(typeof parsed.lastEntitlementCheckedAt === "number"
+        ? { lastEntitlementCheckedAt: parsed.lastEntitlementCheckedAt }
+        : {}),
+    };
+    if (JSON.stringify(parsed) !== JSON.stringify(migrated)) saveTokens(migrated);
+    return migrated;
   } catch {
     return null;
   }
@@ -108,15 +113,13 @@ export function clearTokens(): void {
 /** Picks only the token fields: callers pass whole API responses, and the store
  * must not accumulate a stale copy of `entitlement`/`user` alongside them. */
 const withExpiry = (
-  t: { access: string; refresh: string; deviceId: string },
+  t: { access: string },
   previous?: Pick<Tokens, "lastEntitlementCheckedAt">,
   entitlementCheckedAt?: number,
 ): Tokens => {
   const now = Date.now();
   return {
     access: t.access,
-    refresh: t.refresh,
-    deviceId: t.deviceId,
     accessExpiresAt: accessExpiryAt(t.access, now),
     lastServerConfirmedAt: now,
     lastEntitlementCheckedAt: entitlementCheckedAt ?? previous?.lastEntitlementCheckedAt,
@@ -141,8 +144,6 @@ export async function requestOtp(phone: string): Promise<{ ok: boolean; retryAft
 
 export interface VerifyResult {
   access: string;
-  refresh: string;
-  deviceId: string;
   user: { id: string; phone: string };
   entitlement: ServerEntitlement;
   isNew: boolean;
@@ -151,7 +152,6 @@ export interface VerifyResult {
 export interface VerifyOtpOptions {
   intent?: "signup" | "password_reset";
   newPassword?: string;
-  device?: DeviceDescriptor;
 }
 
 export async function verifyOtp(
@@ -159,13 +159,11 @@ export async function verifyOtp(
   code: string,
   options: VerifyOtpOptions = {},
 ): Promise<VerifyResult> {
-  const descriptor = options.device ?? (await getOrCreateDeviceDescriptor());
   const res = await apiRequest<VerifyResult>("/auth/otp/verify", {
     method: "POST",
     body: {
       phone,
       code,
-      device: descriptor,
       ...(options.intent ? { intent: options.intent, newPassword: options.newPassword } : {}),
     },
   });
@@ -179,12 +177,10 @@ export async function verifyOtp(
 export async function passwordLogin(
   identifier: string,
   password: string,
-  device?: DeviceDescriptor,
 ): Promise<VerifyResult> {
-  const descriptor = device ?? (await getOrCreateDeviceDescriptor());
   const res = await apiRequest<VerifyResult>("/auth/password/login", {
     method: "POST",
-    body: { identifier, password, device: descriptor },
+    body: { identifier, password },
   });
   saveTokens(withExpiry(res, undefined, Date.now()));
   return res;
@@ -245,59 +241,17 @@ export async function startTrial(): Promise<TrialStartResult> {
 }
 
 export async function logout(): Promise<void> {
-  const tokens = loadTokens();
   clearTokens();
-  if (!tokens) return;
-  try {
-    await apiRequest("/auth/logout", { method: "POST", body: { refresh: tokens.refresh } });
-  } catch {
-    // Local sign-out already happened; the server-side revoke is best-effort.
-  }
 }
 
 /* ---------------- authed requests ---------------- */
-
-/** Single-flight: concurrent 401s must not each rotate the refresh token —
- * rotation invalidates the previous one, so parallel refreshes would race and
- * all but one would fail. */
-let refreshing: Promise<Tokens | null> | null = null;
-
-async function refreshTokens(): Promise<Tokens | null> {
-  const current = loadTokens();
-  if (!current) return null;
-
-  refreshing ??= (async () => {
-    try {
-      const res = await apiRequest<{ access: string; refresh: string; deviceId: string }>(
-        "/auth/token/refresh",
-        {
-          method: "POST",
-          body: { refresh: current.refresh },
-        },
-      );
-      const next = withExpiry(res, current);
-      saveTokens(next);
-      return next;
-    } catch (err) {
-      // Only a definitive rejection means the session is dead. Offline must NOT
-      // clear tokens — the user is still signed in, just unreachable.
-      if (err instanceof ApiError && !err.offline && err.status === 401) clearTokens();
-      return null;
-    } finally {
-      refreshing = null;
-    }
-  })();
-
-  return refreshing;
-}
-
-/** A request that carries the access token, refreshing once if it has expired. */
+/** A request that carries the stored access token exactly once. */
 export async function authedRequest<T>(
   path: string,
   opts: { method?: "GET" | "POST"; body?: unknown; expectedUserId?: string } = {},
 ): Promise<T> {
   const { expectedUserId, ...requestOptions } = opts;
-  let tokens = loadTokens();
+  const tokens = loadTokens();
   if (!tokens) throw new ApiError(401, "not_signed_in", "No session on this device");
 
   const assertExpectedOwner = (access: string) => {
@@ -307,9 +261,9 @@ export async function authedRequest<T>(
   };
   assertExpectedOwner(tokens.access);
 
-  if (Date.now() >= tokens.accessExpiresAt - REFRESH_SKEW_MS) {
-    tokens = (await refreshTokens()) ?? tokens; // fall through and let the server decide
-    assertExpectedOwner(tokens.access);
+  if (Date.now() >= tokens.accessExpiresAt) {
+    clearTokens();
+    throw new ApiError(401, "not_signed_in", "The access token expired");
   }
 
   try {
@@ -318,13 +272,7 @@ export async function authedRequest<T>(
     return result;
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {
-      const next = await refreshTokens();
-      if (next) {
-        assertExpectedOwner(next.access);
-        const result = await apiRequest<T>(path, { ...requestOptions, token: next.access });
-        markServerConfirmed();
-        return result;
-      }
+      clearTokens();
     }
     throw err;
   }

@@ -4,13 +4,11 @@
  * plugins (`plugins/auth.ts`, TRUST_PROXY handling) — the business logic itself
  * lives in `shared/` and is byte-identical to the tested backend.
  */
-import { and, eq } from "drizzle-orm";
 import type { Context, Next } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import { devices, users } from "./shared/db/schema.ts";
 import type { Database } from "./shared/db/client.ts";
 import type { Env } from "./shared/env.ts";
-import { forbidden, unauthorized } from "./shared/lib/http-errors.ts";
+import { unauthorized } from "./shared/lib/http-errors.ts";
 import type { PspProvider } from "./shared/providers/psp/index.ts";
 import type { SmsProvider } from "./shared/providers/sms/index.ts";
 import { verifyAccessToken } from "./shared/services/tokens.ts";
@@ -26,8 +24,6 @@ export interface Deps {
 
 export interface AuthedUser {
   id: string;
-  phone: string;
-  deviceId: string;
 }
 
 /** Hono generics: what handlers may read from context. */
@@ -80,9 +76,7 @@ export function clientIp(c: Context, env: Env): string | null {
 /**
  * Bearer auth middleware.
  *
- * Re-reads the user row on every request rather than trusting the JWT alone —
- * that's what makes blocking take effect within the access-token TTL instead of
- * whenever the token happens to expire. (Same contract as the Fastify plugin.)
+ * Signature, expiry, and subject are the complete authentication boundary.
  */
 export function makeAuthenticate(deps: Deps) {
   return async (c: Context<AppEnv>, next: Next) => {
@@ -91,28 +85,7 @@ export function makeAuthenticate(deps: Deps) {
       throw unauthorized("missing_token", "Authorization header required");
 
     const claims = await verifyAccessToken(deps.env, header.slice(7));
-    const [row] = await deps.db.select().from(users).where(eq(users.id, claims.sub)).limit(1);
-
-    if (!row) throw unauthorized("unknown_user", "User no longer exists");
-    if (row.blocked) throw forbidden("blocked", "Account is blocked");
-    const [device] = await deps.db
-      .select()
-      .from(devices)
-      .where(and(eq(devices.id, claims.did), eq(devices.userId, row.id)))
-      .limit(1);
-    if (!device) throw unauthorized("device_revoked", "This device session no longer exists");
-    if (device.revokedAt) {
-      throw unauthorized(
-        device.revocationReason === "replaced" ? "device_replaced" : "device_revoked",
-        "This device session is no longer active",
-      );
-    }
-    const t = new Date(deps.now());
-    if (!device.lastSeenAt || t.getTime() - device.lastSeenAt.getTime() >= 5 * 60_000) {
-      await deps.db.update(devices).set({ lastSeenAt: t }).where(eq(devices.id, device.id));
-    }
-
-    c.set("user", { id: row.id, phone: row.phone, deviceId: claims.did });
+    c.set("user", { id: claims.sub });
     await next();
   };
 }

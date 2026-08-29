@@ -53,11 +53,10 @@ describe("admin page", () => {
     }
   });
 
-  it("shows session visibility without retired device quota controls", async () => {
+  it("shows account history without device or blocking controls", async () => {
     const detail = {
-      user: { phone: "989123334444", blocked: false, createdAt: new Date().toISOString() },
+      user: { phone: "989123334444", createdAt: new Date().toISOString() },
       entitlement: { planId: "trial", expiresAt: new Date().toISOString() },
-      devices: [],
       payments: [],
       grants: [],
     };
@@ -84,7 +83,8 @@ describe("admin page", () => {
       expect(dom.window.document.querySelector("#maxDevices")).toBeNull();
       expect(dom.window.document.querySelector("#devicePolicyGo")).toBeNull();
       expect(dom.window.document.querySelector("#resetSwitchGo")).toBeNull();
-      expect(dom.window.document.querySelector("#userDlg")?.textContent).toContain("دستگاه‌ها");
+      expect(dom.window.document.querySelector("#bGo")).toBeNull();
+      expect(dom.window.document.querySelector("#userDlg")?.textContent).not.toContain("دستگاه‌ها");
     } finally {
       dom.window.close();
     }

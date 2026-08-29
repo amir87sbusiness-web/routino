@@ -12,10 +12,12 @@
  *   GET  /payments/:id        status poll for the app after returning (authed)
  */
 import type { FastifyPluginAsync } from "fastify";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
+import { users } from "../db/schema.js";
 import { renderResultPage } from "../lib/pay-result-page.js";
 import { requireUser } from "../plugins/auth.js";
-import { badRequest } from "../plugins/errors.js";
+import { badRequest, unauthorized } from "../plugins/errors.js";
 import {
   checkoutPayment,
   handlePaymentCallback,
@@ -37,11 +39,21 @@ const checkoutBody = quoteBody.extend({
 export const paymentRoutes: FastifyPluginAsync = async (app) => {
   const { db, env, psp } = app.deps;
   const now = () => new Date(app.deps.now());
+  const paymentUser = async (id: string) => {
+    const [user] = await db
+      .select({ id: users.id, phone: users.phone })
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
+    if (!user) throw unauthorized("unknown_user", "User no longer exists");
+    return user;
+  };
 
   /** Price preview. Invalid codes come back as a reason, not an error — the UI
    * shows "کد منقضی شده" instead of a failed request. */
   app.post("/payments/quote", { preHandler: app.authenticate }, async (req) => {
-    const user = requireUser(req);
+    const auth = requireUser(req);
+    const user = await paymentUser(auth.id);
     const body = quoteBody.parse(req.body);
     const t = now();
     const q = await quote(db, body.planId, body.code ?? null, user.id, user.phone, t, 0, true);
@@ -50,7 +62,8 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.post("/payments/checkout", { preHandler: app.authenticate }, async (req) => {
-    const user = requireUser(req);
+    const auth = requireUser(req);
+    const user = await paymentUser(auth.id);
     const body = checkoutBody.parse(req.body);
     return checkoutPayment(db, env, psp, user, body, now());
   });

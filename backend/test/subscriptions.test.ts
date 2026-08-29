@@ -11,12 +11,12 @@ afterAll(async () => {
   await h?.close();
 });
 
-async function signIn(phone = "09123334444", deviceName?: string) {
+async function signIn(phone = "09123334444") {
   await h.app.inject({ method: "POST", url: "/v1/auth/otp/request", payload: { phone } });
   const res = await h.app.inject({
     method: "POST",
     url: "/v1/auth/otp/verify",
-    payload: { phone, code: h.sms.last()!.code, deviceName },
+    payload: { phone, code: h.sms.last()!.code },
   });
   return res.json() as { access: string; user: { id: string }; entitlement: { expiresAt: string } };
 }
@@ -228,13 +228,13 @@ describe("POST /v1/subscriptions/trial/start", () => {
     expect(await h.query(`select id from grants where user_id = '${user.id}'`)).toHaveLength(1);
   });
 
-  it("lets concurrent devices produce only one trial grant", async () => {
-    const firstDevice = await signIn("09123334444", "First device");
+  it("lets concurrent sessions produce only one trial grant", async () => {
+    const firstSession = await signIn("09123334444");
     await h.raw(`delete from otp_codes`);
-    const secondDevice = await signIn("09123334444", "Second device");
+    const secondSession = await signIn("09123334444");
     const results = await Promise.all([
-      startTrial(firstDevice.access),
-      startTrial(secondDevice.access),
+      startTrial(firstSession.access),
+      startTrial(secondSession.access),
     ]);
     const bodies = results.map((response) => response.json()) as Array<{
       started: boolean;
@@ -243,10 +243,7 @@ describe("POST /v1/subscriptions/trial/start", () => {
     expect(bodies.filter((body) => body.started)).toHaveLength(1);
     expect(new Set(bodies.map((body) => body.entitlement.expiresAt)).size).toBe(1);
     expect(
-      await h.query(`select id from grants where user_id = '${firstDevice.user.id}'`),
+      await h.query(`select id from grants where user_id = '${firstSession.user.id}'`),
     ).toHaveLength(1);
-    expect(
-      await h.query(`select id from devices where user_id = '${firstDevice.user.id}'`),
-    ).toHaveLength(2);
   });
 });

@@ -20,7 +20,7 @@ async function signIn(phone = "09123334444") {
     url: "/v1/auth/otp/verify",
     payload: { phone, code: h.sms.last()!.code },
   });
-  return res.json() as { access: string; refresh: string; user: { id: string } };
+  return res.json() as { access: string; user: { id: string } };
 }
 
 describe("admin auth", () => {
@@ -114,8 +114,8 @@ describe("admin endpoints", () => {
     expect(users[0]!.subscriptionActive).toBe(false); // pre-activation account
   });
 
-  it("blocking a user revokes every session immediately", async () => {
-    const { user, access, refresh } = await signIn();
+  it("does not expose account blocking", async () => {
+    const { user, access } = await signIn();
 
     const res = await h.app.inject({
       method: "POST",
@@ -123,22 +123,13 @@ describe("admin endpoints", () => {
       headers: admin,
       payload: { blocked: true },
     });
-    expect(res.json().ok).toBe(true);
-
-    // Access token dies at the auth plugin (fresh user-row read)…
+    expect(res.statusCode).toBe(404);
     const me = await h.app.inject({
       method: "GET",
       url: "/v1/subscriptions/me",
       headers: { authorization: `Bearer ${access}` },
     });
-    expect(me.statusCode).toBe(403);
-    // …and the refresh token was revoked, so no new session can be minted.
-    const rotated = await h.app.inject({
-      method: "POST",
-      url: "/v1/auth/token/refresh",
-      payload: { refresh },
-    });
-    expect(rotated.statusCode).toBe(401);
+    expect(me.statusCode).toBe(200);
   });
 
   it("manual grant extends entitlement and lands in the ledger", async () => {

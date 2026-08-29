@@ -136,29 +136,4 @@ describe("money that comes back", () => {
     });
     expect(res.statusCode).toBeGreaterThanOrEqual(400);
   });
-
-  it("lets the owner block a refunding user, which also kicks every device", async () => {
-    const { access, user } = await signIn("09137770004");
-    await buyAMonth(access);
-
-    // The blunt remedy, for an abusive case rather than an honest refund. Worth
-    // asserting that it revokes devices too: the app is offline-first and reads
-    // a cached subscription, so without that it would keep working for a while.
-    const blocked = await h.app.inject({
-      method: "POST",
-      url: `/v1/admin/users/${user.id}/block`,
-      headers: adminAuth(),
-      payload: { blocked: true },
-    });
-    expect(blocked.statusCode).toBe(200);
-
-    const rows = await h.query<{ blocked: boolean; devices: number }>(
-      `select u.blocked,
-              (select count(*)::int from devices d
-                where d.user_id = u.id and d.revoked_at is null) as devices
-         from users u where u.id = '${user.id}'`,
-    );
-    expect(rows[0]!.blocked).toBe(true);
-    expect(Number(rows[0]!.devices)).toBe(0);
-  });
 });

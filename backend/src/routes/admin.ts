@@ -20,7 +20,6 @@ import {
   adminListPayments,
   adminListUsers,
   adminOverview,
-  adminSetBlocked,
   adminSetPassword,
   adminUpdateDiscount,
   adminUserDetail,
@@ -53,7 +52,6 @@ const grantBody = z.object({
   note: z.string().max(500).optional(),
 });
 
-const blockBody = z.object({ blocked: z.boolean() });
 const setPasswordBody = z.object({
   phone: z.string().min(1).max(32),
   password: z.string().min(1).max(128),
@@ -119,14 +117,6 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.get("/admin/users/:id", opts, async (req) => {
     const { id } = req.params as { id: string };
     return adminUserDetail(db, id, now());
-  });
-
-  app.post("/admin/users/:id/block", opts, async (req) => {
-    const { id } = req.params as { id: string };
-    const { blocked } = blockBody.parse(req.body);
-    const res = await adminSetBlocked(db, id, blocked, now());
-    req.log.info({ userId: id, blocked }, "admin block toggle");
-    return res;
   });
 
   app.post("/admin/users/:id/grant", opts, async (req) => {

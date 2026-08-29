@@ -43,10 +43,8 @@ const schema = z.object({
   ADMIN_TOKEN: z.string().min(12).default("dev-only-admin-token"),
 
   JWT_SECRET: z.string().min(32).default("dev-only-secret-change-me-in-production-32+"),
-  // Every protected request rechecks the user and device rows, so revocation is
-  // immediate even with a longer JWT. One hour avoids needless refresh calls.
-  ACCESS_TTL_SECONDS: z.coerce.number().default(3600),
-  REFRESH_TTL_DAYS: z.coerce.number().default(180),
+  // Stateless access tokens expire after exactly 30 days and cannot be revoked early.
+  ACCESS_TTL_SECONDS: z.coerce.number().default(2_592_000),
 
   /** Mixed into the OTP hash so a DB leak alone can't reverse 4-digit codes. */
   OTP_PEPPER: z.string().min(16).default("dev-only-otp-pepper-change-me"),

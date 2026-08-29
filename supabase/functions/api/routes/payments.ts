@@ -6,10 +6,12 @@
  * shared/lib/pay-result-page.ts. If you are changing payment behaviour, you are
  * in the wrong file.
  */
+import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { html, makeAuthenticate, readJson, requireUser, type AppEnv, type Deps } from "../deps.ts";
-import { badRequest } from "../shared/lib/http-errors.ts";
+import { users } from "../shared/db/schema.ts";
+import { badRequest, unauthorized } from "../shared/lib/http-errors.ts";
 import { renderResultPage } from "../shared/lib/pay-result-page.ts";
 import {
   checkoutPayment,
@@ -34,10 +36,20 @@ export function paymentRoutes(deps: Deps) {
   const now = () => new Date(deps.now());
   const auth = makeAuthenticate(deps);
   const r = new Hono<AppEnv>();
+  const paymentUser = async (id: string) => {
+    const [user] = await db
+      .select({ id: users.id, phone: users.phone })
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
+    if (!user) throw unauthorized("unknown_user", "User no longer exists");
+    return user;
+  };
 
   /** Price preview. Invalid codes come back as a reason, not an error. */
   r.post("/payments/quote", auth, async (c) => {
-    const user = requireUser(c);
+    const authenticated = requireUser(c);
+    const user = await paymentUser(authenticated.id);
     const body = quoteBody.parse(await readJson(c));
     const t = now();
     const q = await quote(db, body.planId, body.code ?? null, user.id, user.phone, t, 0, true);
@@ -46,7 +58,8 @@ export function paymentRoutes(deps: Deps) {
   });
 
   r.post("/payments/checkout", auth, async (c) => {
-    const user = requireUser(c);
+    const authenticated = requireUser(c);
+    const user = await paymentUser(authenticated.id);
     const body = checkoutBody.parse(await readJson(c));
     return c.json(await checkoutPayment(db, env, psp, user, body, now()));
   });

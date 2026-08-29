@@ -10,7 +10,6 @@
 import { and, count, desc, eq, gt, ilike, sql } from "drizzle-orm";
 import type { Database } from "../db/client.js";
 import {
-  devices,
   discounts,
   entitlements,
   grants,
@@ -22,7 +21,6 @@ import { badRequest, notFound } from "../lib/http-errors.js";
 import { normalizePhone, toAsciiDigits } from "../lib/phone.js";
 import { grantInterval, listGrants, readEntitlement } from "./entitlement.js";
 import { hashPassword, validatePassword } from "./password.js";
-import { revokeAllDevices } from "./tokens.js";
 
 const DAY_MS = 86_400_000;
 
@@ -76,7 +74,6 @@ export async function adminListUsers(
     .select({
       id: users.id,
       phone: users.phone,
-      blocked: users.blocked,
       createdAt: users.createdAt,
       planId: entitlements.planId,
       expiresAt: entitlements.expiresAt,
@@ -102,8 +99,7 @@ export async function adminUserDetail(db: Database, id: string, now: Date) {
   const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
   if (!user) throw notFound("unknown_user", "No such user");
 
-  const [userDevices, userPayments, userGrants, entitlement] = await Promise.all([
-    db.select().from(devices).where(eq(devices.userId, id)).orderBy(desc(devices.createdAt)),
+  const [userPayments, userGrants, entitlement] = await Promise.all([
     db.select().from(payments).where(eq(payments.userId, id)).orderBy(desc(payments.createdAt)),
     listGrants(db, id),
     readEntitlement(db, id, now),
@@ -113,34 +109,12 @@ export async function adminUserDetail(db: Database, id: string, now: Date) {
     user: {
       id: user.id,
       phone: user.phone,
-      blocked: user.blocked,
       createdAt: user.createdAt,
     },
     entitlement,
-    devices: userDevices.map((d) => ({
-      id: d.id,
-      name: d.name,
-      platform: d.platform,
-      browser: d.browser,
-      os: d.os,
-      lastSeenAt: d.lastSeenAt,
-      revokedAt: d.revokedAt,
-      revocationReason: d.revocationReason,
-      createdAt: d.createdAt,
-    })),
     payments: userPayments,
     grants: userGrants,
   };
-}
-
-export async function adminSetBlocked(db: Database, id: string, blocked: boolean, now: Date) {
-  if (!UUID_RE.test(id)) throw badRequest("bad_id", "Malformed user id");
-  const [user] = await db.update(users).set({ blocked }).where(eq(users.id, id)).returning();
-  if (!user) throw notFound("unknown_user", "No such user");
-  // Blocking must also kill sessions, or the user keeps access until their
-  // refresh token dies of old age.
-  if (blocked) await revokeAllDevices(db, id, now);
-  return { ok: true as const, blocked: user.blocked };
 }
 
 export async function adminGrant(
@@ -196,12 +170,6 @@ export async function adminSetPassword(
   let created = false;
   if (user) {
     await db.update(users).set({ passwordHash }).where(eq(users.id, user.id));
-    // This button is what support uses when a user reports someone got into
-    // their account, so leaving that someone signed in defeats the whole point:
-    // refresh tokens live 180 days and rotate silently. Unlike the user-facing
-    // password change there is no caller device to preserve — the admin is
-    // acting on someone else's account — so every device goes.
-    await revokeAllDevices(db, user.id, now);
   } else {
     [user] = await db.insert(users).values({ phone, passwordHash, createdAt: now }).returning();
     created = true;

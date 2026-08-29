@@ -95,8 +95,8 @@ describe("edge admin set-password", () => {
   });
 });
 
-describe("edge: changing a password evicts other sessions", () => {
-  it("revokes every other device's refresh token but keeps the caller signed in", async () => {
+describe("edge stateless password sessions", () => {
+  it("keeps already-issued access tokens valid after a password change", async () => {
     // The edge function is what production actually runs, and its routes/ files
     // are hand-mirrored from the Fastify ones (only shared/ is generated), so
     // this fix needs its own coverage here rather than relying on parity.
@@ -109,12 +109,9 @@ describe("edge: changing a password evicts other sessions", () => {
         })
       ).status,
     ).toBe(200);
-    await h.raw(`update users set max_active_devices = 2 where id = '${victim.user.id}'`);
-
-    // Intruder signs in with the leaked password on their own device.
     const intruder = (await login("09123334444", "Amir@1387")).clone();
-    const intruderRefresh = (await intruder.json()).refresh as string;
-    expect(intruderRefresh).toBeTruthy();
+    const intruderAccess = (await intruder.json()).access as string;
+    expect(intruderAccess).toBeTruthy();
 
     // Victim changes the password from the device in their hand.
     expect(
@@ -126,16 +123,11 @@ describe("edge: changing a password evicts other sessions", () => {
       ).status,
     ).toBe(200);
 
-    // Intruder is out.
-    const stolen = await h.call("POST", "/v1/auth/token/refresh", {
-      body: { refresh: intruderRefresh },
-    });
-    expect(stolen.status).toBe(401);
-
-    // Victim is not signed out of their own device.
-    const own = await h.call("POST", "/v1/auth/token/refresh", {
-      body: { refresh: victim.refresh },
-    });
-    expect(own.status).toBe(200);
+    expect(
+      (await h.call("GET", "/v1/subscriptions/me", { headers: auth(intruderAccess) })).status,
+    ).toBe(200);
+    expect(
+      (await h.call("GET", "/v1/subscriptions/me", { headers: auth(victim.access) })).status,
+    ).toBe(200);
   });
 });

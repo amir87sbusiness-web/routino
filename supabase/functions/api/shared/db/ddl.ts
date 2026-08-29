@@ -20,25 +20,16 @@ create table if not exists users (
   password_hash text,
   seq bigint not null default 0,
   gc_seq bigint not null default 0,
-  blocked boolean not null default false,
-  -- Deprecated compatibility column only; no runtime device limit reads it.
-  max_active_devices integer not null default 1 check (max_active_devices between 1 and 10),
-  security_locked_at timestamptz,
-  security_lock_reason text,
-  device_switch_reset_at timestamptz,
   created_at timestamptz not null default now()
 );
--- Keep old databases structurally compatible until a reviewed drop migration.
-alter table users add column if not exists max_active_devices integer not null default 1 check (max_active_devices between 1 and 10);
-alter table users add column if not exists security_locked_at timestamptz;
-alter table users add column if not exists security_lock_reason text;
-alter table users add column if not exists device_switch_reset_at timestamptz;
--- Device switching no longer locks an account. Repair only rows created by the
--- retired policy; other security investigations and blocked accounts stay untouched.
-update users
-set security_locked_at = null,
-    security_lock_reason = null
-where security_lock_reason = 'device_switch_limit';
+-- Pre-launch cleanup: these fields and tables are no longer part of the product.
+drop table if exists device_security_events;
+drop table if exists devices;
+alter table users drop column if exists blocked;
+alter table users drop column if exists max_active_devices;
+alter table users drop column if exists security_locked_at;
+alter table users drop column if exists security_lock_reason;
+alter table users drop column if exists device_switch_reset_at;
 
 create table if not exists records (
   user_id uuid not null references users(id) on delete cascade,
@@ -53,44 +44,6 @@ create table if not exists records (
     ('categories','habits','logs','tasks','timerSessions','journal','settings'))
 );
 create index if not exists records_pull on records (user_id, seq);
-
-create table if not exists devices (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references users(id) on delete cascade,
-  refresh_hash text not null,
-  installation_key_hash text,
-  name text,
-  platform text,
-  browser text,
-  os text,
-  last_seen_at timestamptz,
-  revoked_at timestamptz,
-  revocation_reason text,
-  created_at timestamptz not null default now()
-);
-alter table devices add column if not exists installation_key_hash text;
-alter table devices add column if not exists platform text;
-alter table devices add column if not exists browser text;
-alter table devices add column if not exists os text;
-alter table devices add column if not exists revocation_reason text;
-create index if not exists devices_user on devices (user_id);
-create unique index if not exists devices_installation on devices (user_id, installation_key_hash);
--- Every token refresh looks a device up by refresh_hash — roughly once per
--- active user per access-token lifetime (15 min), forever. Without this it is a
--- full scan of a table that only ever grows: one row per sign-in per device,
--- revoked rows included. Fine at a hundred users, not at ten thousand.
-create index if not exists devices_refresh on devices (refresh_hash);
-
-create table if not exists device_security_events (
-  id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references users(id) on delete cascade,
-  device_id uuid references devices(id) on delete set null,
-  replaced_device_id uuid references devices(id) on delete set null,
-  kind text not null,
-  created_at timestamptz not null default now()
-);
-create index if not exists device_security_events_user_time
-  on device_security_events (user_id, created_at);
 
 create table if not exists otp_codes (
   id uuid primary key default gen_random_uuid(),

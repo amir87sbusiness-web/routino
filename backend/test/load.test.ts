@@ -29,7 +29,7 @@ describe("bounded launch load", () => {
       ...Array.from({ length: 50 }, () => h.app.inject({ method: "GET", url: "/health" })),
       ...Array.from({ length: 50 }, () => h.app.inject({ method: "GET", url: "/v1/plans" })),
       ...Array.from({ length: 50 }, () =>
-        h.app.inject({ method: "GET", url: "/v1/devices/ping", headers: auth() }),
+        h.app.inject({ method: "GET", url: "/v1/subscriptions/me", headers: auth() }),
       ),
       ...Array.from({ length: 20 }, () =>
         h.app.inject({ method: "GET", url: "/v1/subscriptions/me", headers: auth() }),
@@ -37,7 +37,7 @@ describe("bounded launch load", () => {
       ...Array.from({ length: 30 }, () =>
         h.app.inject({
           method: "GET",
-          url: "/v1/devices/ping",
+          url: "/v1/subscriptions/me",
           headers: { authorization: "Bearer invalid" },
         }),
       ),

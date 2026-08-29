@@ -81,8 +81,6 @@ function AuthPage() {
           "رمز باید حداقل ۸ کاراکتر و شامل حرف و عدد باشد.",
           "Password must be 8+ characters and include a letter and a number.",
         );
-      case "blocked":
-        return t("این حساب مسدود شده.", "This account is blocked.");
     }
     // A gateway failure returns no JSON body, so `err.message` falls back to the
     // bare status line and the user was shown the literal text "HTTP 502" — in

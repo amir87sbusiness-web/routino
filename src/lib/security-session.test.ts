@@ -34,18 +34,4 @@ describe("15-day offline security lease", () => {
       }),
     ).toEqual({ kind: "valid" });
   });
-
-  it.each(["device_replaced", "device_revoked"] as const)(
-    "locks credentials on a definitive %s response without a data-wipe instruction",
-    (reason) => {
-      expect(
-        decideSession({
-          now: confirmedAt + 1,
-          lastServerConfirmedAt: confirmedAt,
-          online: true,
-          revokedReason: reason,
-        }),
-      ).toEqual({ kind: "revoked", reason });
-    },
-  );
 });

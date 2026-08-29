@@ -18,7 +18,6 @@ import {
   adminListPayments,
   adminListUsers,
   adminOverview,
-  adminSetBlocked,
   adminSetPassword,
   adminUpdateDiscount,
   adminUserDetail,
@@ -41,7 +40,6 @@ const grantBody = z.object({
   note: z.string().max(500).optional(),
 });
 
-const blockBody = z.object({ blocked: z.boolean() });
 const setPasswordBody = z.object({
   phone: z.string().min(1).max(32),
   password: z.string().min(1).max(128),
@@ -115,13 +113,6 @@ export function adminRoutes(deps: Deps) {
   r.get("/admin/users/:id", async (c) =>
     c.json(await adminUserDetail(db, c.req.param("id"), now())),
   );
-
-  r.post("/admin/users/:id/block", async (c) => {
-    const { blocked } = blockBody.parse(await readJson(c));
-    const res = await adminSetBlocked(db, c.req.param("id"), blocked, now());
-    console.info("admin block toggle", { userId: c.req.param("id"), blocked });
-    return c.json(res);
-  });
 
   r.post("/admin/users/:id/grant", async (c) => {
     const body = grantBody.parse(await readJson(c));

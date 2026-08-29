@@ -27,7 +27,6 @@ async function signIn(phone = "09123334444") {
   const res = await verify(phone, code);
   return res.json() as {
     access: string;
-    refresh: string;
     user: { id: string; phone: string };
     entitlement: { status: string; planId: string | null; expiresAt: string | null };
     isNew: boolean;
@@ -88,6 +87,20 @@ describe("POST /v1/auth/otp/request", () => {
 });
 
 describe("POST /v1/auth/otp/verify", () => {
+  it("returns one access token without refresh or device fields", async () => {
+    const body = await signIn();
+
+    expect(body).toMatchObject({
+      access: expect.any(String),
+      user: { id: expect.any(String), phone: "989123334444" },
+    });
+    expect(body).not.toHaveProperty("refresh");
+    expect(body).not.toHaveProperty("deviceId");
+    expect(
+      await h.query(`select table_name from information_schema.tables where table_name = 'devices'`),
+    ).toHaveLength(0);
+  });
+
   it("creates the account with no entitlement or automatic grant", async () => {
     const body = await signIn();
     expect(body.isNew).toBe(true);
@@ -183,11 +196,8 @@ describe("POST /v1/auth/otp/verify", () => {
     expect(rows[0]!.n).toBe(1); // one human, one account
   });
 
-  it("keeps the recovery device but revokes the other device sessions", async () => {
-    const victim = await signIn("09123334444");
-    await h.raw(`update users set max_active_devices = 2`);
-    await h.raw(`update otp_codes set created_at = now() - interval '2 minutes'`);
-    const other = await signIn("09123334444");
+  it("password recovery does not invalidate an existing access token", async () => {
+    const existing = await signIn("09123334444");
     await h.raw(`update otp_codes set created_at = now() - interval '2 minutes'`);
     await request("09123334444");
 
@@ -203,21 +213,12 @@ describe("POST /v1/auth/otp/verify", () => {
       },
     });
     expect(reset.statusCode).toBe(200);
-    const recovered = reset.json() as { refresh: string };
-
-    const otherRefresh = await h.app.inject({
-      method: "POST",
-      url: "/v1/auth/token/refresh",
-      payload: { refresh: other.refresh },
+    const protectedResponse = await h.app.inject({
+      method: "GET",
+      url: "/v1/subscriptions/me",
+      headers: { authorization: `Bearer ${existing.access}` },
     });
-    expect(otherRefresh.statusCode).toBe(401);
-    const recoveryRefresh = await h.app.inject({
-      method: "POST",
-      url: "/v1/auth/token/refresh",
-      payload: { refresh: recovered.refresh },
-    });
-    expect(recoveryRefresh.statusCode).toBe(200);
-    expect(victim.refresh).toBeTruthy();
+    expect(protectedResponse.statusCode).toBe(200);
   });
 });
 
@@ -244,73 +245,24 @@ describe("tokens", () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it("rotates the refresh token and kills the old one", async () => {
-    const { refresh } = await signIn();
-    const res = await h.app.inject({
-      method: "POST",
-      url: "/v1/auth/token/refresh",
-      payload: { refresh },
-    });
-    expect(res.statusCode).toBe(200);
-    const next = res.json() as { access: string; refresh: string };
-    expect(next.refresh).not.toBe(refresh);
-
-    // The old token is dead the moment a new one is issued.
-    const replay = await h.app.inject({
-      method: "POST",
-      url: "/v1/auth/token/refresh",
-      payload: { refresh },
-    });
-    expect(replay.statusCode).toBe(401);
-  });
-
-  it("gives each device its own refresh token", async () => {
-    const a = await signIn();
-    await h.raw(
-      `update otp_codes set consumed_at = null, created_at = now() - interval '2 minutes'`,
-    );
-    const b = await signIn();
-    expect(a.refresh).not.toBe(b.refresh);
-
-    // Signing out one device must not sign out the other.
-    await h.app.inject({ method: "POST", url: "/v1/auth/logout", payload: { refresh: a.refresh } });
+  it("does not register refresh or logout endpoints", async () => {
     expect(
       (
         await h.app.inject({
           method: "POST",
           url: "/v1/auth/token/refresh",
-          payload: { refresh: a.refresh },
+          payload: { refresh: "legacy-refresh-token" },
         })
       ).statusCode,
-    ).toBe(401);
+    ).toBe(404);
     expect(
       (
         await h.app.inject({
           method: "POST",
-          url: "/v1/auth/token/refresh",
-          payload: { refresh: b.refresh },
+          url: "/v1/auth/logout",
+          payload: { refresh: "legacy-refresh-token" },
         })
       ).statusCode,
-    ).toBe(200);
-  });
-
-  it("refuses a blocked account", async () => {
-    const { access, user } = await signIn();
-    await h.raw(`update users set blocked = true where id = '${user.id}'`);
-    // Re-read per request, so blocking takes effect inside the access TTL
-    // rather than whenever the token happens to expire.
-    const res = await h.app.inject({
-      method: "GET",
-      url: "/v1/subscriptions/me",
-      headers: { authorization: `Bearer ${access}` },
-    });
-    expect(res.statusCode).toBe(403);
-  });
-
-  it("stores refresh tokens hashed, never in plaintext", async () => {
-    const { refresh } = await signIn();
-    const rows = await h.query<{ refresh_hash: string }>(`select refresh_hash from devices`);
-    expect(rows[0]!.refresh_hash).not.toBe(refresh);
-    expect(rows[0]!.refresh_hash).toMatch(/^[0-9a-f]{64}$/);
+    ).toBe(404);
   });
 });

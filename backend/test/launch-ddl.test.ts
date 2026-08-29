@@ -173,37 +173,47 @@ describe("launch schema repairs", () => {
     expect(columns).toHaveLength(0);
   });
 
-  it("clears only the retired device-switch lock while retaining a blocked account", async () => {
+  it("removes the retired device and blocking schema from an existing database", async () => {
     await h.raw(`
+      alter table users add column blocked boolean not null default false;
+      alter table users add column max_active_devices integer not null default 1;
+      alter table users add column security_locked_at timestamptz;
+      alter table users add column security_lock_reason text;
+      alter table users add column device_switch_reset_at timestamptz;
+      create table devices (
+        id uuid primary key default gen_random_uuid(),
+        user_id uuid not null references users(id) on delete cascade,
+        refresh_hash text not null
+      );
+      create table device_security_events (
+        id uuid primary key default gen_random_uuid(),
+        user_id uuid not null references users(id) on delete cascade,
+        device_id uuid references devices(id) on delete set null
+      );
       insert into users (phone, blocked, security_locked_at, security_lock_reason) values
         ('989122200001', true, now(), 'device_switch_limit'),
         ('989122200002', false, now(), 'manual_investigation');
+      insert into devices (user_id, refresh_hash)
+      select id, 'old-refresh' from users where phone = '989122200001';
     `);
 
     await h.raw(SCHEMA_SQL);
 
-    const rows = await h.query<{
-      phone: string;
-      blocked: boolean;
-      security_locked_at: string | null;
-      security_lock_reason: string | null;
-    }>(
-      `select phone, blocked, security_locked_at, security_lock_reason from users where phone like '9891222%' order by phone`,
-    );
-    expect(rows).toEqual([
-      {
-        phone: "989122200001",
-        blocked: true,
-        security_locked_at: null,
-        security_lock_reason: null,
-      },
-      {
-        phone: "989122200002",
-        blocked: false,
-        security_locked_at: expect.any(Date),
-        security_lock_reason: "manual_investigation",
-      },
-    ]);
+    const columns = await h.query<{ column_name: string }>(`
+      select column_name from information_schema.columns
+      where table_name = 'users' and column_name in (
+        'blocked', 'max_active_devices', 'security_locked_at',
+        'security_lock_reason', 'device_switch_reset_at'
+      )
+    `);
+    expect(columns).toHaveLength(0);
+
+    const tables = await h.query<{ table_name: string }>(`
+      select table_name from information_schema.tables
+      where table_schema = 'public'
+        and table_name in ('devices', 'device_security_events')
+    `);
+    expect(tables).toHaveLength(0);
   });
 
   it("generates zero-policy RLS lockdown for every server-owned table", () => {
@@ -213,8 +223,6 @@ describe("launch schema repairs", () => {
     for (const table of [
       "users",
       "records",
-      "devices",
-      "device_security_events",
       "otp_codes",
       "login_attempts",
       "plans",
@@ -231,13 +239,11 @@ describe("launch schema repairs", () => {
     expect(sql).not.toContain("create policy");
   });
 
-  it("generates valid dollar-quoted SQL for the device purge cron job", () => {
+  it("does not generate the retired device purge job", () => {
     execFileSync(process.execPath, ["scripts/gen-setup-sql.mjs"], { cwd: root, stdio: "pipe" });
     const sql = readFileSync(resolve(root, "supabase/setup.sql"), "utf8");
 
-    expect(sql).toContain(
-      "$$delete from devices where revoked_at is not null and revoked_at < now() - interval '30 days'$$",
-    );
-    expect(sql).not.toContain("\n  $delete from devices");
+    expect(sql).not.toContain("routino-devices-purge");
+    expect(sql).not.toContain("delete from devices");
   });
 });

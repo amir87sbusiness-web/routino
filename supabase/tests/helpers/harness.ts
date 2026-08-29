@@ -126,7 +126,7 @@ export async function makeHarness(
     },
     async truncate() {
       await db.execute(sql`
-        truncate users, records, devices, device_security_events, otp_codes, login_attempts, discounts,
+        truncate users, records, otp_codes, login_attempts, discounts,
                  redemptions, payments, grants, entitlements, feedback, admins
         restart identity cascade
       `);
@@ -144,26 +144,15 @@ export async function makeHarness(
 export async function signIn(
   h: Harness,
   phone = "09123334444",
-  installationKey = `edge-test-${phone}`,
 ) {
   await h.call("POST", "/v1/auth/otp/request", { body: { phone } });
   const code = h.sms.last()!.code;
   const res = await h.call("POST", "/v1/auth/otp/verify", {
-    body: {
-      phone,
-      code,
-      device: {
-        installationKey,
-        name: "Edge test browser",
-        platform: "web",
-      },
-    },
+    body: { phone, code },
   });
   if (res.status !== 200) throw new Error(`signIn failed: ${res.status} ${await res.text()}`);
   return (await res.json()) as {
     access: string;
-    refresh: string;
-    deviceId: string;
     user: { id: string; phone: string };
     entitlement: { status: string; expiresAt: string };
     isNew: boolean;

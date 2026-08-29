@@ -802,8 +802,7 @@ function SettingsPage() {
               className="flex-1"
               onClick={() => {
                 setSignOutOpen(false);
-                // Clears tokens locally first, then revokes the device server-side
-                // on a best-effort basis — signing out must work offline too.
+                // Stateless sign-out is local-only and always works offline.
                 void logout();
                 signOutLocal();
                 navigate({ to: "/auth" });

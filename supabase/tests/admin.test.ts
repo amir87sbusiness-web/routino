@@ -1,4 +1,4 @@
-/** Admin API on the edge app: token guard, grants, block-revokes-sessions,
+/** Admin API on the edge app: token guard, grants, user support detail,
  * discounts. Mirrors the critical assertions of backend/test/admin.test.ts. */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { auth, makeHarness, signIn, type Harness } from "./helpers/harness.ts";
@@ -118,7 +118,7 @@ describe("manual grant", () => {
 });
 
 describe("user detail", () => {
-  it("returns devices, payments, grants and entitlement for support", async () => {
+  it("returns payments, grants and entitlement without device or blocking state", async () => {
     const { user, access } = await signIn(h);
     await h.call("POST", "/v1/payments/checkout", {
       headers: auth(access),
@@ -129,8 +129,9 @@ describe("user detail", () => {
       await h.call("GET", `/v1/admin/users/${user.id}`, { headers: admin() })
     ).json();
     expect(d.user.phone).toBe("989123334444");
+    expect(d.user).not.toHaveProperty("blocked");
     expect(d.entitlement).toMatchObject({ status: "none", planId: null, expiresAt: null });
-    expect(d.devices).toHaveLength(1); // the sign-in device
+    expect(d).not.toHaveProperty("devices");
     expect(d.grants).toHaveLength(0);
     expect(d.payments).toHaveLength(1); // the pending checkout
   });
@@ -160,23 +161,17 @@ describe("device policy", () => {
   });
 });
 
-describe("block", () => {
-  it("blocking revokes every session, and the user is locked out", async () => {
-    const { user, access, refresh } = await signIn(h);
+describe("retired device and blocking routes", () => {
+  it("does not register device or user-block routes", async () => {
+    const { user, access } = await signIn(h);
 
-    const res = await h.call("POST", `/v1/admin/users/${user.id}/block`, {
+    const block = await h.call("POST", `/v1/admin/users/${user.id}/block`, {
       headers: admin(),
       body: { blocked: true },
     });
-    expect((await res.json()).blocked).toBe(true);
-
-    // Refresh dies instantly; the access token dies at the auth guard.
-    expect((await h.call("POST", "/v1/auth/token/refresh", { body: { refresh } })).status).toBe(
-      401,
-    );
-    expect((await h.call("GET", "/v1/subscriptions/me", { headers: auth(access) })).status).toBe(
-      403,
-    );
+    expect(block.status).toBe(404);
+    expect((await h.call("GET", "/v1/devices", { headers: auth(access) })).status).toBe(404);
+    expect((await h.call("GET", "/v1/devices/ping", { headers: auth(access) })).status).toBe(404);
   });
 });
 

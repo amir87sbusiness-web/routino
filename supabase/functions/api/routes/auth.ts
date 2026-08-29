@@ -37,21 +37,7 @@ import {
   validateUsername,
   verifyPassword,
 } from "../shared/services/password.ts";
-import {
-  issueForDevice,
-  revokeOtherDevices,
-  revokeRefresh,
-  rotateRefresh,
-} from "../shared/services/tokens.ts";
-import type { DeviceDescriptor } from "../shared/services/tokens.ts";
-
-const deviceDescriptorBody = z.object({
-  installationKey: z.string().min(8).max(256),
-  name: z.string().min(1).max(64),
-  platform: z.enum(["web", "pwa", "android", "ios"]),
-  browser: z.string().max(32).optional(),
-  os: z.string().max(32).optional(),
-});
+import { issueAccessToken } from "../shared/services/tokens.ts";
 
 const requestBody = z.object({ phone: z.string().min(1).max(32) });
 const verifyBody = z.object({
@@ -59,34 +45,16 @@ const verifyBody = z.object({
   code: z.string().min(4).max(8),
   intent: z.enum(["signup", "password_reset"]).optional(),
   newPassword: z.string().min(1).max(128).optional(),
-  deviceName: z.string().max(64).optional(),
-  device: deviceDescriptorBody.optional(),
 });
-const refreshBody = z.object({ refresh: z.string().min(16).max(256) });
 const passwordLoginBody = z.object({
   identifier: z.string().min(1).max(64),
   password: z.string().min(1).max(128),
-  deviceName: z.string().max(64).optional(),
-  device: deviceDescriptorBody.optional(),
 });
 const setUsernameBody = z.object({ username: z.string().min(1).max(64) });
 const setPasswordBody = z.object({
   newPassword: z.string().min(1).max(128),
   currentPassword: z.string().max(128).optional(),
 });
-
-function deviceDescriptor(
-  device: DeviceDescriptor | undefined,
-  legacyName: string | undefined,
-): DeviceDescriptor {
-  if (device) return device;
-  const name = legacyName?.trim() || "Web browser";
-  return {
-    installationKey: `legacy:${name}`,
-    name,
-    platform: "web",
-  };
-}
 
 export function authRoutes(deps: Deps) {
   const { db, env, sms } = deps;
@@ -144,14 +112,7 @@ export function authRoutes(deps: Deps) {
    * Account creation authenticates only. Entitlement is activated separately.
    */
   r.post("/auth/otp/verify", async (c) => {
-    const {
-      phone: raw,
-      code,
-      intent,
-      newPassword,
-      deviceName,
-      device,
-    } = verifyBody.parse(await readJson(c));
+    const { phone: raw, code, intent, newPassword } = verifyBody.parse(await readJson(c));
     const phone = normalizePhone(raw);
     if (!phone) throw badRequest("invalid_phone", "Enter a valid Iranian mobile number");
 
@@ -177,8 +138,6 @@ export function authRoutes(deps: Deps) {
       isNew = true;
     }
     if (!user) throw new Error("failed to create user");
-    if (user.blocked) throw unauthorized("blocked", "Account is blocked");
-
     if (intent === "password_reset" || (intent === "signup" && isNew)) {
       await db
         .update(users)
@@ -186,16 +145,11 @@ export function authRoutes(deps: Deps) {
         .where(eq(users.id, user.id));
     }
 
-    const tokens = await issueForDevice(db, env, user.id, deviceDescriptor(device, deviceName), t);
-    if (intent === "password_reset") {
-      await revokeOtherDevices(db, user.id, tokens.deviceId, t);
-    }
+    const tokens = await issueAccessToken(env, user.id, t);
     const entitlement = await readEntitlement(db, user.id, t);
 
     return c.json({
       access: tokens.access,
-      refresh: tokens.refresh,
-      deviceId: tokens.deviceId,
       user: { id: user.id, phone: user.phone },
       entitlement,
       isNew,
@@ -210,7 +164,7 @@ export function authRoutes(deps: Deps) {
    * missing account still pays a hash-verify cost, so it cannot enumerate users.
    */
   r.post("/auth/password/login", async (c) => {
-    const { identifier, password, deviceName, device } = passwordLoginBody.parse(await readJson(c));
+    const { identifier, password } = passwordLoginBody.parse(await readJson(c));
     const t = now();
     const ip = clientIp(c, env);
 
@@ -237,16 +191,12 @@ export function authRoutes(deps: Deps) {
         throw tooMany("Too many attempts. Try again later.", verdict.retryAfter);
       throw unauthorized("bad_credentials", "Wrong phone/username or password");
     }
-    if (user.blocked) throw unauthorized("blocked", "Account is blocked");
-
     await clearLoginFailures(db, key);
-    const tokens = await issueForDevice(db, env, user.id, deviceDescriptor(device, deviceName), t);
+    const tokens = await issueAccessToken(env, user.id, t);
     const entitlement = await readEntitlement(db, user.id, t);
 
     return c.json({
       access: tokens.access,
-      refresh: tokens.refresh,
-      deviceId: tokens.deviceId,
       user: { id: user.id, phone: user.phone },
       entitlement,
       isNew: false,
@@ -317,26 +267,6 @@ export function authRoutes(deps: Deps) {
       .set({ passwordHash: await hashPassword(newPassword) })
       .where(eq(users.id, u.id));
 
-    // Changing a password is how a user evicts someone who got in. Refresh
-    // tokens live 180 days and rotate silently, so leaving other devices signed
-    // in would make the change cosmetic — the intruder simply keeps refreshing.
-    // The caller's own device is kept so they aren't signed out of the phone
-    // they just set the password on.
-    await revokeOtherDevices(db, u.id, u.deviceId, now());
-    return c.json({ ok: true });
-  });
-
-  /** Rotates the refresh token. The old one dies immediately. */
-  r.post("/auth/token/refresh", async (c) => {
-    const { refresh } = refreshBody.parse(await readJson(c));
-    const tokens = await rotateRefresh(db, env, refresh, now());
-    return c.json({ access: tokens.access, refresh: tokens.refresh, deviceId: tokens.deviceId });
-  });
-
-  /** Signs one device out. Idempotent: an unknown token is still a 200. */
-  r.post("/auth/logout", async (c) => {
-    const { refresh } = refreshBody.parse(await readJson(c));
-    await revokeRefresh(db, refresh, now());
     return c.json({ ok: true });
   });
 

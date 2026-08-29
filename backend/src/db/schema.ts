@@ -67,17 +67,8 @@ export const users = pgTable(
      * missed a tombstone that has since been purged, so it must full-resync or it
      * would resurrect deleted records. */
     gcSeq: bigint("gc_seq", { mode: "number" }).notNull().default(0),
-    blocked: boolean("blocked").notNull().default(false),
-    /** Deprecated compatibility column from the retired device quota. No runtime
-     * path reads or enforces it; keep it mapped until a reviewed DB migration
-     * removes the physical production column. */
-    maxActiveDevices: integer("max_active_devices").notNull().default(1),
-    securityLockedAt: timestamp("security_locked_at", { withTimezone: true }),
-    securityLockReason: text("security_lock_reason"),
-    deviceSwitchResetAt: timestamp("device_switch_reset_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [check("users_max_active_devices_valid", sql`${t.maxActiveDevices} between 1 and 10`)],
 );
 
 export const records = pgTable(
@@ -108,50 +99,6 @@ export const records = pgTable(
       sql`${t.kind} IN ('categories','habits','logs','tasks','timerSessions','journal','settings')`,
     ),
   ],
-);
-
-export const devices = pgTable(
-  "devices",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    /** sha256 of the refresh token. Never store the token itself. */
-    refreshHash: text("refresh_hash").notNull(),
-    /** Hash of a random installation key generated on the device. IP/VPN and
-     * user-agent changes must never manufacture a new device. */
-    installationKeyHash: text("installation_key_hash"),
-    name: text("name"),
-    platform: text("platform"),
-    browser: text("browser"),
-    os: text("os"),
-    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
-    revokedAt: timestamp("revoked_at", { withTimezone: true }),
-    revocationReason: text("revocation_reason"),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    index("devices_user").on(t.userId),
-    uniqueIndex("devices_installation").on(t.userId, t.installationKeyHash),
-  ],
-);
-
-export const deviceSecurityEvents = pgTable(
-  "device_security_events",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
-    deviceId: uuid("device_id").references(() => devices.id, { onDelete: "set null" }),
-    replacedDeviceId: uuid("replaced_device_id").references(() => devices.id, {
-      onDelete: "set null",
-    }),
-    kind: text("kind").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [index("device_security_events_user_time").on(t.userId, t.createdAt)],
 );
 
 export const otpCodes = pgTable(
@@ -350,7 +297,6 @@ export const admins = pgTable("admins", {
 });
 
 export const usersRelations = relations(users, ({ many, one }) => ({
-  devices: many(devices),
   records: many(records),
   grants: many(grants),
   entitlement: one(entitlements),
@@ -359,8 +305,6 @@ export const usersRelations = relations(users, ({ many, one }) => ({
 export const schema = {
   users,
   records,
-  devices,
-  deviceSecurityEvents,
   otpCodes,
   loginAttempts,
   plans,

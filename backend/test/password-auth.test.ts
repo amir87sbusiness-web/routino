@@ -15,29 +15,23 @@ afterAll(async () => {
 
 const ADMIN = "dev-only-admin-token";
 
-/** OTP sign-in, returning the tokens. */
-const device = (installationKey: string) => ({
-  installationKey,
-  name: installationKey,
-  platform: "web",
-});
-
-async function otpSignIn(phone = "09123334444", installationKey = "otp-device") {
+/** OTP sign-in, returning the access token. */
+async function otpSignIn(phone = "09123334444") {
   await h.app.inject({ method: "POST", url: "/v1/auth/otp/request", payload: { phone } });
   const code = h.sms.last()!.code;
   const res = await h.app.inject({
     method: "POST",
     url: "/v1/auth/otp/verify",
-    payload: { phone, code, device: device(installationKey) },
+    payload: { phone, code },
   });
   return res.json() as { access: string; user: { id: string; phone: string } };
 }
 
-const login = (identifier: string, password: string, installationKey = "password-device") =>
+const login = (identifier: string, password: string) =>
   h.app.inject({
     method: "POST",
     url: "/v1/auth/password/login",
-    payload: { identifier, password, device: device(installationKey) },
+    payload: { identifier, password },
   });
 
 const setPw = (access: string, newPassword: string, currentPassword?: string) =>
@@ -89,6 +83,8 @@ describe("setting a password then signing in with it", () => {
     };
     expect(body.user.phone).toBe("989123334444");
     expect(body.access).toBeTruthy();
+    expect(body).not.toHaveProperty("refresh");
+    expect(body).not.toHaveProperty("deviceId");
   });
 
   it("accepts any input format of the phone as the identifier", async () => {
@@ -308,34 +304,6 @@ describe("admin set-password", () => {
     expect((await login("09138982893", "OldPass11")).statusCode).toBe(401);
   });
 
-  it("signs every existing device out when an admin resets the password", async () => {
-    // Support presses this button precisely when a user reports someone got
-    // into their account. Refresh tokens live 180 days and rotate silently, so
-    // if they survive the reset the intruder simply keeps refreshing.
-    await h.app.inject({
-      method: "POST",
-      url: "/v1/auth/otp/request",
-      payload: { phone: "09138982893" },
-    });
-    const intruder = (
-      await h.app.inject({
-        method: "POST",
-        url: "/v1/auth/otp/verify",
-        payload: { phone: "09138982893", code: h.sms.last()!.code },
-      })
-    ).json() as { refresh: string };
-    expect(intruder.refresh).toBeTruthy();
-
-    expect((await adminSetPw("09138982893", "Amir@1387")).statusCode).toBe(200);
-
-    const stolen = await h.app.inject({
-      method: "POST",
-      url: "/v1/auth/token/refresh",
-      payload: { refresh: intruder.refresh },
-    });
-    expect(stolen.statusCode).toBe(401);
-  });
-
   it("needs a valid admin token", async () => {
     const res = await h.app.inject({
       method: "POST",
@@ -383,54 +351,19 @@ describe("brute-force throttling", () => {
   });
 });
 
-describe("changing a password evicts other sessions", () => {
-  it("revokes every other device's refresh token but keeps the caller signed in", async () => {
-    // A password change is how a user throws out someone who got into their
-    // account. Refresh tokens live 180 days and rotate silently, so if they
-    // survive the change the intruder simply keeps refreshing and the new
-    // password protects nothing.
-    await h.app.inject({
-      method: "POST",
-      url: "/v1/auth/otp/request",
-      payload: { phone: "09123334444" },
+describe("changing a password with stateless access tokens", () => {
+  it("does not invalidate an already-issued access token", async () => {
+    const first = await otpSignIn("09123334444");
+    expect((await setPw(first.access, "Amir@1387")).statusCode).toBe(200);
+    const other = (await login("09123334444", "Amir@1387")).json() as { access: string };
+
+    expect((await setPw(first.access, "Naghmeh@1405", "Amir@1387")).statusCode).toBe(200);
+
+    const protectedResponse = await h.app.inject({
+      method: "GET",
+      url: "/v1/subscriptions/me",
+      headers: { authorization: `Bearer ${other.access}` },
     });
-    const victim = (
-      await h.app.inject({
-        method: "POST",
-        url: "/v1/auth/otp/verify",
-        payload: {
-          phone: "09123334444",
-          code: h.sms.last()!.code,
-          device: device("victim-device"),
-        },
-      })
-    ).json() as { access: string; refresh: string };
-    expect((await setPw(victim.access, "Amir@1387")).statusCode).toBe(200);
-    await h.raw(`update users set max_active_devices = 2`);
-
-    // The intruder signs in with the leaked password on their own device.
-    const intruder = (await login("09123334444", "Amir@1387", "intruder-device")).json() as {
-      refresh: string;
-    };
-    expect(intruder.refresh).toBeTruthy();
-
-    // The victim changes the password from the device they are holding.
-    expect((await setPw(victim.access, "Naghmeh@1405", "Amir@1387")).statusCode).toBe(200);
-
-    // The intruder is out: their refresh token no longer rotates.
-    const stolen = await h.app.inject({
-      method: "POST",
-      url: "/v1/auth/token/refresh",
-      payload: { refresh: intruder.refresh },
-    });
-    expect(stolen.statusCode).toBe(401);
-
-    // ...and the victim is NOT signed out of the phone they just used.
-    const own = await h.app.inject({
-      method: "POST",
-      url: "/v1/auth/token/refresh",
-      payload: { refresh: victim.refresh },
-    });
-    expect(own.statusCode).toBe(200);
+    expect(protectedResponse.statusCode).toBe(200);
   });
 });
