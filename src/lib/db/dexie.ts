@@ -56,11 +56,6 @@ export function nextSeq(): number {
   return ++seqCounter;
 }
 
-/** A single settings field. Settings are stored per-field rather than as one
- * object because whole-object LWW silently eats concurrent edits: theme changed
- * on the phone at t=10 and language on the laptop at t=11 would drop the theme. */
-export type SettingRow = RecordRow<{ value: unknown }>;
-
 /** Tables that sync. `feedback` is push-only (it never comes back to a device)
  * but lives here so it survives being offline. */
 export type SyncedTable =
@@ -70,7 +65,6 @@ export type SyncedTable =
   | "tasks"
   | "timerSessions"
   | "journal"
-  | "settings"
   | "feedback";
 
 export const SYNCED_TABLES: SyncedTable[] = [
@@ -80,7 +74,6 @@ export const SYNCED_TABLES: SyncedTable[] = [
   "tasks",
   "timerSessions",
   "journal",
-  "settings",
   "feedback",
 ];
 
@@ -112,7 +105,6 @@ export class RoutinoDexie extends Dexie {
   tasks!: Table<RecordRow<Task>, string>;
   timerSessions!: Table<RecordRow<TimerSession>, string>;
   journal!: Table<RecordRow<JournalEntry>, string>;
-  settings!: Table<SettingRow, string>;
   feedback!: Table<RecordRow<Feedback>, string>;
   syncMeta!: Table<SyncMetaRow, string>;
 
@@ -134,6 +126,9 @@ export class RoutinoDexie extends Dexie {
     // Dexie's `.stores()` is a DELTA: only the changed table is named, the eight
     // above are inherited untouched. Adding a store needs no upgrade function.
     this.version(2).stores({ syncMeta: "key" });
+    // Settings are entirely device-local and live as one tiny localStorage
+    // object. Dropping this obsolete store guarantees they cannot enter sync.
+    this.version(3).stores({ settings: null });
   }
 }
 

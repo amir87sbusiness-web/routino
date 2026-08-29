@@ -34,7 +34,7 @@ import { ApiError } from "@/lib/api/client";
 import { todayKey, type Calendar, type Lang } from "@/lib/dates";
 import { diffDb } from "@/lib/db/diff";
 import { hydrate } from "@/lib/db/hydrate";
-import { loadLocal, localChanged, mergeSettings, saveLocal, toLocalState } from "@/lib/db/local";
+import { loadLocal, localChanged, saveLocal, toLocalState } from "@/lib/db/local";
 import { applyChanges } from "@/lib/db/persist";
 import { switchOwnerVault } from "@/lib/db/vault";
 import { resolveServerEntitlement } from "@/lib/entitlement-migration";
@@ -534,7 +534,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         const fresh = defaultDb(DEFAULT_CATEGORIES);
         apply({
           ...fresh,
-          settings: mergeSettings({}, local, fresh.settings),
+          settings: local.settings,
           auth: local.auth,
           subscription: local.subscription,
           notifications: local.notifications,

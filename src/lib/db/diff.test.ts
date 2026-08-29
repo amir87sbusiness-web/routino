@@ -107,45 +107,24 @@ describe("diffDb", () => {
   });
 
   describe("settings", () => {
-    it("emits one row per changed field, not the whole object", () => {
-      const db = seed();
-      const next: Db = { ...db, settings: { ...db.settings, lang: "en" } };
-      const changes = diffDb(db, next);
-      expect(changes).toEqual([
-        { table: "settings", key: "lang", data: { value: "en" }, deleted: false },
-      ]);
-    });
-
-    it("ignores device-local fields", () => {
-      // Device preferences must never follow an account onto another device.
+    it("keeps every setting out of the sync outbox", () => {
       const db = seed();
       const next: Db = {
         ...db,
         settings: {
           ...db.settings,
+          lang: "en",
+          calendar: "gregorian",
           theme: "dark",
+          brandColor: "#123456",
+          onboarded: true,
+          journalReminder: null,
           notificationsEnabled: false,
           completionSoundEnabled: false,
           hapticsEnabled: false,
         },
       };
       expect(diffDb(db, next)).toEqual([]);
-    });
-
-    it("syncs onboarded so a second device skips onboarding", () => {
-      const db = seed();
-      const next: Db = { ...db, settings: { ...db.settings, onboarded: true } };
-      expect(diffDb(db, next)).toEqual([
-        { table: "settings", key: "onboarded", data: { value: true }, deleted: false },
-      ]);
-    });
-
-    it("emits journalReminder when cleared to null", () => {
-      const db = seed();
-      const next: Db = { ...db, settings: { ...db.settings, journalReminder: null } };
-      expect(diffDb(db, next)).toEqual([
-        { table: "settings", key: "journalReminder", data: { value: null }, deleted: false },
-      ]);
     });
   });
 
@@ -155,7 +134,7 @@ describe("diffDb", () => {
     expect(forTable(changes, "habits")).toHaveLength(2);
     expect(forTable(changes, "logs")).toHaveLength(30);
     expect(forTable(changes, "categories")).toHaveLength(DEFAULT_CATEGORIES.length);
-    expect(forTable(changes, "settings")).toHaveLength(5); // synced fields only
+    expect(forTable(changes, "settings")).toHaveLength(0);
     expect(changes.every((c) => !c.deleted)).toBe(true);
   });
 

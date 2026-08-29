@@ -11,7 +11,7 @@
  * genuinely dangerous case) belongs with auth, and is not attempted here.
  */
 import { db as idb, primeSeq, type RecordRow } from "./dexie";
-import { saveLocal, SYNCED_SETTING_KEYS, type LocalState } from "./local";
+import { defaultLocal, saveLocal, type LocalState } from "./local";
 import type { Db } from "../store";
 
 const LEGACY_KEY = "routino:v1";
@@ -130,25 +130,11 @@ export async function migrateLegacyBlob(now = Date.now()): Promise<boolean> {
     await idb.logs.bulkPut(rowsOfRecord(legacy.logs ?? {}, () => now));
     await idb.journal.bulkPut(rowsOfRecord(legacy.journal ?? {}, (j) => j.updatedAt));
 
-    if (legacy.settings) {
-      // Only keys the blob actually carries. Writing every key unconditionally
-      // stored `{ value: undefined }` for fields the old install predated, and
-      // those rows then overrode the real defaults on hydrate.
-      await idb.settings.bulkPut(
-        SYNCED_SETTING_KEYS.filter((k) => legacy.settings[k] !== undefined).map((k) => ({
-          key: k,
-          data: { value: legacy.settings[k] },
-          updatedAt: now,
-          deleted: 0 as const,
-          dirty: 1 as const,
-          seq: ++seqCursor,
-        })),
-      );
-    }
   });
   primeSeq(seqCursor);
 
   // Device-local half goes to its own store, not IndexedDB.
+  const defaults = defaultLocal();
   const local: LocalState = {
     auth: legacy.auth ?? null,
     // Carrying this across is what stops every existing user — trial or paid —
@@ -156,10 +142,7 @@ export async function migrateLegacyBlob(now = Date.now()): Promise<boolean> {
     subscription: legacy.subscription ?? null,
     notifications: legacy.notifications ?? [],
     meta: legacy.meta,
-    theme: legacy.settings?.theme ?? "light",
-    notificationsEnabled: legacy.settings?.notificationsEnabled ?? false,
-    completionSoundEnabled: legacy.settings?.completionSoundEnabled ?? true,
-    hapticsEnabled: legacy.settings?.hapticsEnabled ?? true,
+    settings: { ...defaults.settings, ...legacy.settings },
   };
   saveLocal(local);
 

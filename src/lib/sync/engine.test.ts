@@ -368,8 +368,7 @@ describe("multi-device acceptance", () => {
     saveLocal({
       ...defaultLocal(),
       auth: { userId: OWNER, phone: "989120000001", verifiedAt: 1 },
-      theme: "dark",
-      notificationsEnabled: false,
+      settings: { ...defaultLocal().settings, theme: "dark", notificationsEnabled: false },
       notifications: [{ id: "local", title: "Local", body: "Keep", at: 1, read: false }],
     });
     await idb.habits.put({

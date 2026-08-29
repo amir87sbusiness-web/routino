@@ -146,16 +146,8 @@ describe("migrateLegacyBlob", () => {
     expect(local.auth?.phone).toBe("989123334444");
     expect(local.meta.sessions).toBe(42);
     expect(local.meta.celebrated).toEqual(["h1|2026-07-01|70"]);
-    expect(local.theme).toBe("dark");
-    expect(local.notificationsEnabled).toBe(false);
-    expect(local.completionSoundEnabled).toBe(true);
-    expect(local.hapticsEnabled).toBe(true);
-
-    // theme/notificationsEnabled must not have leaked into the synced settings.
-    const keys = (await idb.settings.toArray()).map((r) => r.key);
-    expect(keys).not.toContain("theme");
-    expect(keys).not.toContain("notificationsEnabled");
-    expect(keys.sort()).toEqual(["brandColor", "calendar", "journalReminder", "lang", "onboarded"]);
+    expect(local.settings).toEqual(legacyBlob().settings);
+    expect(idb.tables.map((table) => table.name)).not.toContain("settings");
   });
 
   it("defaults a legacy blob with no notification preference to off", async () => {
@@ -165,7 +157,7 @@ describe("migrateLegacyBlob", () => {
 
     await migrateLegacyBlob();
 
-    expect(loadLocal().notificationsEnabled).toBe(false);
+    expect(loadLocal().settings.notificationsEnabled).toBe(false);
   });
 
   it("defaults new device feedback preferences on for an older local install", async () => {
@@ -176,8 +168,8 @@ describe("migrateLegacyBlob", () => {
 
     await migrateLegacyBlob();
 
-    expect(loadLocal().completionSoundEnabled).toBe(true);
-    expect(loadLocal().hapticsEnabled).toBe(true);
+    expect(loadLocal().settings.completionSoundEnabled).toBe(true);
+    expect(loadLocal().settings.hapticsEnabled).toBe(true);
   });
 
   it("keeps an existing user's explicit feedback choices", async () => {
@@ -188,8 +180,8 @@ describe("migrateLegacyBlob", () => {
 
     await migrateLegacyBlob();
 
-    expect(loadLocal().completionSoundEnabled).toBe(false);
-    expect(loadLocal().hapticsEnabled).toBe(false);
+    expect(loadLocal().settings.completionSoundEnabled).toBe(false);
+    expect(loadLocal().settings.hapticsEnabled).toBe(false);
   });
 
   it("stamps updatedAt from the entity's own timestamp, not the import time", async () => {
@@ -259,18 +251,12 @@ describe("hydrate after migration", () => {
     expect(db.habits.map((h) => h.id)).toEqual(["zzz", "aaa"]); // insertion order, not sorted
   });
 
-  it("reassembles settings from both halves", async () => {
+  it("restores the complete local settings object", async () => {
     const blob = legacyBlob();
     localStorage.setItem(LEGACY_KEY, JSON.stringify(blob));
     const { db } = await hydrate();
 
-    expect(db.settings.lang).toBe("en"); // synced
-    expect(db.settings.calendar).toBe("gregorian"); // synced
-    expect(db.settings.onboarded).toBe(true); // synced
-    expect(db.settings.theme).toBe("dark"); // device-local
-    expect(db.settings.notificationsEnabled).toBe(false); // device-local
-    expect(db.settings.completionSoundEnabled).toBe(true); // device-local
-    expect(db.settings.hapticsEnabled).toBe(true); // device-local
+    expect(db.settings).toEqual(blob.settings);
   });
 
   it("gives a fresh install seeded categories rather than an empty list", async () => {
@@ -284,7 +270,8 @@ describe("hydrate after migration", () => {
   });
 
   it("retains an existing device preference that explicitly enabled notifications", async () => {
-    saveLocal({ ...defaultLocal(), notificationsEnabled: true });
+    const local = defaultLocal();
+    saveLocal({ ...local, settings: { ...local.settings, notificationsEnabled: true } });
 
     const { db } = await hydrate();
 

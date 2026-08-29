@@ -11,7 +11,6 @@
  * never lands.
  */
 import type { Db } from "../store";
-import { SYNCED_SETTING_KEYS } from "./local";
 import type { SyncedTable } from "./dexie";
 
 export interface Change {
@@ -55,14 +54,6 @@ function diffByKey<T>(
   for (const key of prevKeys) out.push({ table, key, deleted: true });
 }
 
-function diffSettings(prev: Db | null, next: Db, out: Change[]): void {
-  if (prev && prev.settings === next.settings) return;
-  for (const k of SYNCED_SETTING_KEYS) {
-    if (prev && Object.is(prev.settings[k], next.settings[k])) continue;
-    out.push({ table: "settings", key: k, data: { value: next.settings[k] }, deleted: false });
-  }
-}
-
 /**
  * Returns the writes needed to bring storage from `prev` to `next`.
  * Pass `prev = null` on first persist to emit everything.
@@ -90,6 +81,5 @@ export function diffDb(prev: Db | null, next: Db): Change[] {
   // `dateKey`), which makes them the best-behaved entities in the sync design.
   diffByKey("logs", prev?.logs, next.logs, out);
   diffByKey("journal", prev?.journal, next.journal, out);
-  diffSettings(prev, next, out);
   return out;
 }

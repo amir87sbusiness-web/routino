@@ -32,8 +32,12 @@ create table if not exists records (
   seq bigint not null,
   primary key (user_id, kind, id),
   constraint records_kind_valid check (kind in
-    ('categories','habits','logs','tasks','timerSessions','journal','settings'))
+    ('categories','habits','logs','tasks','timerSessions','journal'))
 );
+delete from records where kind = 'settings';
+alter table records drop constraint if exists records_kind_valid;
+alter table records add constraint records_kind_valid check (kind in
+  ('categories','habits','logs','tasks','timerSessions','journal'));
 create index if not exists records_pull on records (user_id, seq);
 
 create table if not exists otp_codes (

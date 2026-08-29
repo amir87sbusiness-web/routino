@@ -36,7 +36,6 @@ export const SYNC_KINDS = [
   "tasks",
   "timerSessions",
   "journal",
-  "settings",
 ] as const;
 export type SyncKind = (typeof SYNC_KINDS)[number];
 
@@ -80,7 +79,7 @@ export const records = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     kind: text("kind").notNull(),
     /** Client-generated: `uid()`, or a natural composite (`habitId|dateKey`,
-     * `dateKey`, or a settings field name). Validated against a strict pattern
+     * `dateKey`). Validated against a strict pattern
      * on push — a malicious client must not be able to send a 10MB id. */
     id: text("id").notNull(),
     data: jsonb("data"),
@@ -97,7 +96,7 @@ export const records = pgTable(
     index("records_pull").on(t.userId, t.seq),
     check(
       "records_kind_valid",
-      sql`${t.kind} IN ('categories','habits','logs','tasks','timerSessions','journal','settings')`,
+      sql`${t.kind} IN ('categories','habits','logs','tasks','timerSessions','journal')`,
     ),
   ],
 );

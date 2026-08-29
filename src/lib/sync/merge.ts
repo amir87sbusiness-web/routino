@@ -10,7 +10,6 @@
  * cannot park a record at the top of every comparison here.
  */
 import type { RecordRow, SyncedTable } from "../db/dexie";
-import { SYNCED_SETTING_KEYS } from "../db/local";
 import type { RemoteRecord } from "../api/sync";
 
 /** Server-side kinds, mirrored from `SYNC_KINDS` in backend/src/db/schema.ts.
@@ -25,7 +24,6 @@ export const SYNCABLE_TABLES = [
   "tasks",
   "timerSessions",
   "journal",
-  "settings",
 ] as const satisfies readonly SyncedTable[];
 
 export type SyncableTable = (typeof SYNCABLE_TABLES)[number];
@@ -36,19 +34,11 @@ const isSyncable = (t: string): t is SyncableTable =>
 /**
  * True when a remote record may be accepted at all.
  *
- * The settings check is the load-bearing one. `theme` and `notificationsEnabled`
- * are device-local by design (a phone at night and a laptop in daylight are
- * different contexts; and pulling `notificationsEnabled: true` would fire an
- * unprompted OS permission dialog on a device the other one cannot grant for).
- * Nothing should ever write them into the synced `settings` table — but this is
- * the boundary where a stale or hostile row would arrive, so it is checked here
- * rather than assumed upstream.
+ * Settings are absent from the allow-list, so stale or hostile legacy rows are
+ * ignored at the boundary instead of being written to any local table.
  */
 export function acceptsRemote(record: RemoteRecord): boolean {
   if (!isSyncable(record.kind)) return false;
-  if (record.kind === "settings") {
-    return (SYNCED_SETTING_KEYS as readonly string[]).includes(record.id);
-  }
   return true;
 }
 

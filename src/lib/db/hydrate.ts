@@ -13,12 +13,11 @@ import {
   type Habit,
   type HabitLog,
   type JournalEntry,
-  type Settings,
   type Task,
   type TimerSession,
 } from "../store";
 import { db as idb, primeSeq, type RecordRow } from "./dexie";
-import { loadLocal, mergeSettings, type LocalState } from "./local";
+import { loadLocal, type LocalState } from "./local";
 import { migrateLegacyBlob } from "./migrate";
 import { activateStoredVault } from "./vault";
 
@@ -114,7 +113,7 @@ export async function hydrate(now = Date.now()): Promise<HydrateResult> {
   const local = loadLocal();
   await seedIfEmpty();
 
-  const [categories, habits, logs, tasks, timerSessions, journal, settingRows, feedback] =
+  const [categories, habits, logs, tasks, timerSessions, journal, feedback] =
     await Promise.all([
       idb.categories.toArray(),
       idb.habits.toArray(),
@@ -122,28 +121,14 @@ export async function hydrate(now = Date.now()): Promise<HydrateResult> {
       idb.tasks.toArray(),
       idb.timerSessions.toArray(),
       idb.journal.toArray(),
-      idb.settings.toArray(),
       idb.feedback.toArray(),
     ]);
 
   // Continue the ordering sequence rather than restarting it, so records added
   // this session sort after everything already stored.
-  primeSeq(maxSeq(categories, habits, logs, tasks, timerSessions, journal, settingRows, feedback));
+  primeSeq(maxSeq(categories, habits, logs, tasks, timerSessions, journal, feedback));
 
   const fresh = defaultDb(DEFAULT_CATEGORIES);
-
-  const syncedSettings: Partial<Settings> = {};
-  for (const r of settingRows) {
-    if (r.deleted) continue;
-    // Skip undefined, do not merely copy it. `mergeSettings` spreads this over
-    // the defaults, and a spread copies a key even when its value is undefined
-    // — so one stored `{ value: undefined }` row silently replaced a real
-    // default with nothing. That is how an install upgrading from a blob that
-    // predated `journalReminder` ended up with journalReminder = undefined
-    // instead of "22:00", and its journal reminder quietly stopped firing.
-    if (r.data.value === undefined) continue;
-    (syncedSettings as Record<string, unknown>)[r.key] = r.data.value;
-  }
 
   return {
     db: {
@@ -155,7 +140,7 @@ export async function hydrate(now = Date.now()): Promise<HydrateResult> {
       timerSessions: liveNewestFirst<TimerSession>(timerSessions, (s) => s.endedAt),
       journal: keyed<JournalEntry>(journal),
       feedback: live<Feedback>(feedback),
-      settings: mergeSettings(syncedSettings, local, fresh.settings),
+      settings: local.settings,
       auth: local.auth,
       subscription: local.subscription,
       notifications: local.notifications,

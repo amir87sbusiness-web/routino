@@ -50,7 +50,6 @@ vi.mock("@/lib/db/local", () => ({
   SYNCED_SETTING_KEYS: ["lang", "calendar", "brandColor", "onboarded", "journalReminder"],
   loadLocal: vi.fn(() => ({})),
   localChanged: vi.fn(() => false),
-  mergeSettings: (_synced: unknown, _local: unknown, fallback: unknown) => fallback,
   saveLocal: mocks.saveLocal,
   toLocalState: vi.fn((db: Db) => db),
 }));
