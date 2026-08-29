@@ -9,7 +9,14 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
-import type { PullResponse, PushResponse, RemoteRecord, SyncRecord } from "../api/sync";
+import type {
+  ExchangeRequest,
+  ExchangeResponse,
+  PullResponse,
+  PushResponse,
+  RemoteRecord,
+  SyncRecord,
+} from "../api/sync";
 import { defaultLocal, saveLocal } from "../db/local";
 import { hydrate } from "../db/hydrate";
 import { activateVault, LEGACY_VAULT_ID } from "../db/vault";
@@ -20,6 +27,7 @@ const server = {
   log: [] as RemoteRecord[],
   seq: 0,
   resetNextPull: false,
+  exchanges: [] as ExchangeRequest[],
   /** ids the server permanently refuses, e.g. an oversized journal entry. */
   refuse: new Set<string>(),
   /** Writes rows at the next sequence numbers, newest-wins per (kind, id). */
@@ -51,10 +59,17 @@ const server = {
       reset: false,
     };
   },
+  exchange(request: ExchangeRequest): ExchangeResponse {
+    this.exchanges.push(structuredClone(request));
+    const pushed = this.push(request.records);
+    const pulled = this.pull(request.cursor);
+    return { ...pulled, applied: pushed.applied, skipped: pushed.skipped };
+  },
   reset() {
     this.log = [];
     this.seq = 0;
     this.resetNextPull = false;
+    this.exchanges = [];
     this.refuse.clear();
   },
 };
@@ -63,9 +78,10 @@ vi.mock("../api/auth", () => ({ hasSession: () => true }));
 vi.mock("../api/sync", () => ({
   pushRecords: (records: SyncRecord[]) => Promise.resolve(server.push(records)),
   pullRecords: (cursor: number) => Promise.resolve(server.pull(cursor)),
+  exchangeRecords: (request: ExchangeRequest) => Promise.resolve(server.exchange(request)),
 }));
 
-const { clearSyncState, syncNow } = await import("./engine");
+const { clearSyncState, hasPendingChanges, syncNow } = await import("./engine");
 
 const OWNER = "user-1";
 
@@ -111,6 +127,34 @@ const localHabitNames = async () =>
   (await idb.table("habits").toArray()).map((r) => (r.data as { name: string } | null)?.name);
 
 describe("sync engine, two devices on one account", () => {
+  it("uses one exchange for the common one-chunk sync", async () => {
+    await localDirtyHabit("h1", "ورزش");
+
+    await syncNow(OWNER);
+
+    expect(server.exchanges).toHaveLength(1);
+    expect(server.exchanges[0]).toMatchObject({
+      cursor: 0,
+      records: [expect.objectContaining({ id: "h1" })],
+    });
+  });
+
+  it("does not send an empty ordinary background exchange", async () => {
+    expect(await hasPendingChanges()).toBe(false);
+
+    const outcome = await syncNow(OWNER, { pullRequired: false });
+
+    expect(outcome).toMatchObject({ pushed: 0, pulled: 0 });
+    expect(server.exchanges).toHaveLength(0);
+  });
+
+  it("reports a durable outbox before scheduling a request", async () => {
+    await localDirtyHabit("h1", "ورزش");
+    expect(await hasPendingChanges()).toBe(true);
+    await syncNow(OWNER, { pullRequired: false });
+    expect(await hasPendingChanges()).toBe(false);
+  });
+
   it("pulls the other device's change even when this one also has changes", async () => {
     // The laptop synced first: its habit sits at a LOW sequence number.
     server.push([

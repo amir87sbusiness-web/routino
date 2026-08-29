@@ -9,7 +9,7 @@
  * offline-first app, not an error to report: the outbox simply stays full and
  * the next attempt drains it.
  */
-import { pullRecords, pushRecords, type RemoteRecord, type SyncRecord } from "../api/sync";
+import { exchangeRecords, type ExchangeResponse, type RemoteRecord, type SyncRecord } from "../api/sync";
 import { ApiError } from "../api/client";
 import { hasSession, type ServerEntitlement } from "../api/auth";
 import { db as idb, nextSeq, type RecordRow, type SyncMetaRow } from "../db/dexie";
@@ -194,33 +194,55 @@ export interface SyncOutcome {
   entitlement?: ServerEntitlement;
 }
 
+export interface SyncOptions {
+  includeAccountState?: boolean;
+  keepalive?: boolean;
+  /** Send an empty exchange when there is no outbox. Boot/foreground use this;
+   * ordinary edit batching does not need an empty request. */
+  pullRequired?: boolean;
+}
+
 /** Concurrent callers share one run. The app triggers sync from several places
  * (boot, visibility change, a debounce after edits) and two overlapping runs
  * would push the same rows twice and fight over the cursor. */
 interface RunningSync {
   owner: string;
+  options: SyncOptions;
   promise: Promise<SyncOutcome>;
 }
 
 let running: RunningSync | null = null;
 
-export function syncNow(owner: string): Promise<SyncOutcome> {
-  if (running?.owner === owner) return running.promise;
+export function syncNow(owner: string, options: SyncOptions = {}): Promise<SyncOutcome> {
+  if (running?.owner === owner) {
+    const followUpNeeded =
+      (options.includeAccountState === true && running.options.includeAccountState !== true) ||
+      (options.pullRequired !== false && running.options.pullRequired === false);
+    if (!followUpNeeded) return running.promise;
+    return running.promise.then(
+      () => syncNow(owner, options),
+      () => syncNow(owner, options),
+    );
+  }
   if (running) {
     return running.promise.then(
-      () => syncNow(owner),
-      () => syncNow(owner),
+      () => syncNow(owner, options),
+      () => syncNow(owner, options),
     );
   }
 
-  const promise = run(owner).finally(() => {
+  const promise = run(owner, options).finally(() => {
     if (running?.promise === promise) running = null;
   });
-  running = { owner, promise };
+  running = { owner, options, promise };
   return promise;
 }
 
-async function run(owner: string): Promise<SyncOutcome> {
+export async function hasPendingChanges(): Promise<boolean> {
+  return (await collectOutbox()).length > 0;
+}
+
+async function run(owner: string, options: SyncOptions): Promise<SyncOutcome> {
   if (!hasSession()) return { pushed: 0, pulled: 0, rejected: 0, remoteChanged: false };
 
   let state = await loadSyncState(owner);
@@ -229,15 +251,53 @@ async function run(owner: string): Promise<SyncOutcome> {
   let resetApplied = false;
   let entitlement: ServerEntitlement | undefined;
 
-  // ---- push ----
   const outbox = await collectOutbox();
+  const batches = chunk(outbox);
   let rejected = 0;
-  for (const batch of chunk(outbox)) {
-    let res;
+  let exchanged = false;
+  let accountStateReceived = false;
+
+  const applyPage = async (page: ExchangeResponse): Promise<void> => {
+    if (page.reset) {
+      await wipeSyncedTables();
+      resetApplied = true;
+      state = { ...state, owner, cursor: 0 };
+      await saveSyncState(state);
+      return;
+    }
+    pulled += await applyRemote(page.records);
+    state = { ...state, owner, cursor: page.cursor };
+    if (page.entitlement !== undefined) {
+      entitlement = page.entitlement;
+      accountStateReceived = true;
+    }
+  };
+
+  const exchangePage = async (
+    batch: (typeof outbox),
+    includeAccountState: boolean,
+  ): Promise<ExchangeResponse> => {
+    const page = await exchangeRecords(
+      {
+        cursor: state.cursor,
+        records: batch.map(({ table, row }) => toWire(table, row)),
+        includeAccountState,
+      },
+      owner,
+      options.keepalive,
+    );
+    exchanged = true;
+    await applyPage(page);
+    return page;
+  };
+
+  for (let index = 0; index < batches.length; index += 1) {
+    const batch = batches[index]!;
+    let page: ExchangeResponse;
     try {
-      res = await pushRecords(
-        batch.map(({ table, row }) => toWire(table, row)),
-        owner,
+      page = await exchangePage(
+        batch,
+        options.includeAccountState === true && index === batches.length - 1,
       );
     } catch (err) {
       // A 4xx is the server's permanent judgement on THESE rows — an oversized
@@ -263,42 +323,27 @@ async function run(owner: string): Promise<SyncOutcome> {
       throw err;
     }
     await clearDirty(batch);
-    pushed += res.applied;
-    // The cursor is deliberately NOT advanced here. A push returns the log
-    // position AFTER its own rows, and everything below that position includes
-    // whatever the user's OTHER devices wrote since this one last pulled.
-    // Adopting it therefore skips those rows permanently — the laptop's habit
-    // simply never arrives on the phone. Re-downloading this device's own
-    // writes on the next pull is the price, and it is nearly free: `mergeRemote`
-    // drops them on the `local.updatedAt >= remote.updatedAt` tie, so they cost
-    // bandwidth and nothing else.
+    pushed += page.applied;
+
+    let guard = 0;
+    while (page.reset || page.hasMore) {
+      if (++guard > 200) break;
+      page = await exchangePage([], options.includeAccountState === true);
+    }
   }
 
-  // ---- pull ----
-  let guard = 0;
-  for (;;) {
-    // A malformed server answer that always reports `hasMore` would spin here
-    // forever and pin a phone's CPU. 200 pages is ~100k records — far past any
-    // real account, and a bound is cheaper than trusting the peer.
-    if (++guard > 200) break;
-
-    const page = await pullRecords(state.cursor, undefined, owner);
-
-    if (page.reset) {
-      // This device sat below the tombstone purge line, so it cannot be brought
-      // up to date incrementally without risking resurrected records. Start over.
-      await wipeSyncedTables();
-      resetApplied = true;
-      state = { ...state, cursor: 0 };
-      await saveSyncState({ ...state, owner });
-      continue;
-    }
-
-    pulled += await applyRemote(page.records);
-    state = { ...state, owner, cursor: page.cursor };
-    if (!page.hasMore) {
-      entitlement = page.entitlement;
-      break;
+  // No outbox means no request unless a lifecycle trigger explicitly needs a
+  // pull/account refresh. If the final batch was permanently rejected, an
+  // account-state request still gets one empty exchange.
+  if (
+    (!exchanged && (options.pullRequired !== false || options.includeAccountState)) ||
+    (options.includeAccountState && !accountStateReceived)
+  ) {
+    let page = await exchangePage([], options.includeAccountState === true);
+    let guard = 0;
+    while (page.reset || page.hasMore) {
+      if (++guard > 200) break;
+      page = await exchangePage([], options.includeAccountState === true);
     }
   }
 
