@@ -12,6 +12,7 @@ import { settleOpenPayments } from "../shared/services/payment-flow.ts";
 import {
   MAX_PUSH_RECORDS,
   PULL_PAGE_SIZE,
+  exchangeRecords,
   pullRecords,
   pushRecords,
   type PushRecord,
@@ -36,11 +37,34 @@ const pullQuery = z.object({
   limit: z.coerce.number().int().positive().max(PULL_PAGE_SIZE).default(PULL_PAGE_SIZE),
 });
 
+const exchangeBody = pushBody.extend({
+  cursor: z.number().int().nonnegative().default(0),
+  limit: z.number().int().positive().max(PULL_PAGE_SIZE).default(PULL_PAGE_SIZE),
+  includeAccountState: z.boolean().default(false),
+});
+
 export function syncRoutes(deps: Deps) {
   const { db, psp } = deps;
   const now = () => new Date(deps.now());
   const auth = makeAuthenticate(deps);
   const r = new Hono<AppEnv>();
+
+  r.post("/sync/exchange", auth, async (c) => {
+    const user = requireUser(c);
+    const input = exchangeBody.parse(await readJson(c));
+    const t = now();
+    const page = await exchangeRecords(
+      db,
+      user.id,
+      input.cursor,
+      input.records as PushRecord[],
+      t,
+      input.limit,
+    );
+    if (!input.includeAccountState || page.hasMore || page.reset) return c.json(page);
+    await settleOpenPayments(db, psp, user.id, t);
+    return c.json({ ...page, entitlement: await readEntitlement(db, user.id, t) });
+  });
 
   r.post("/sync/push", auth, async (c) => {
     const user = requireUser(c);

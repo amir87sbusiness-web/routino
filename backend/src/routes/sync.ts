@@ -16,6 +16,7 @@ import { settleOpenPayments } from "../services/payment-flow.js";
 import {
   MAX_PUSH_RECORDS,
   PULL_PAGE_SIZE,
+  exchangeRecords,
   pullRecords,
   pushRecords,
   type PushRecord,
@@ -41,9 +42,32 @@ const pullQuery = z.object({
   limit: z.coerce.number().int().positive().max(PULL_PAGE_SIZE).default(PULL_PAGE_SIZE),
 });
 
+const exchangeBody = pushBody.extend({
+  cursor: z.number().int().nonnegative().default(0),
+  limit: z.number().int().positive().max(PULL_PAGE_SIZE).default(PULL_PAGE_SIZE),
+  includeAccountState: z.boolean().default(false),
+});
+
 export const syncRoutes: FastifyPluginAsync = async (app) => {
   const { db, psp } = app.deps;
   const now = () => new Date(app.deps.now());
+
+  app.post("/sync/exchange", { preHandler: app.authenticate }, async (req) => {
+    const user = requireUser(req);
+    const input = exchangeBody.parse(req.body);
+    const t = now();
+    const page = await exchangeRecords(
+      db,
+      user.id,
+      input.cursor,
+      input.records as PushRecord[],
+      t,
+      input.limit,
+    );
+    if (!input.includeAccountState || page.hasMore || page.reset) return page;
+    await settleOpenPayments(db, psp, user.id, t);
+    return { ...page, entitlement: await readEntitlement(db, user.id, t) };
+  });
 
   /**
    * Uploads this device's pending changes.

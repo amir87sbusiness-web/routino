@@ -30,6 +30,21 @@ const habit = (id: string, name: string, updatedAt = 1000) => ({
 });
 
 describe("edge sync", () => {
+  it("exchanges local and remote changes in one authenticated invocation", async () => {
+    const { access } = await signIn(h, "09120001123");
+    const response = await h.call("POST", "/v1/sync/exchange", {
+      headers: auth(access),
+      body: { cursor: 0, records: [habit("h1", "ورزش")], includeAccountState: false },
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      applied: 1,
+      skipped: 0,
+      records: [expect.objectContaining({ id: "h1" })],
+    });
+  });
+
   it("keeps authenticated personal sync available", async () => {
     const localOnly = await makeHarness();
     try {

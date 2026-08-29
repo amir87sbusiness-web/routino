@@ -248,7 +248,12 @@ export async function logout(): Promise<void> {
 /** A request that carries the stored access token exactly once. */
 export async function authedRequest<T>(
   path: string,
-  opts: { method?: "GET" | "POST"; body?: unknown; expectedUserId?: string } = {},
+  opts: {
+    method?: "GET" | "POST";
+    body?: unknown;
+    expectedUserId?: string;
+    keepalive?: boolean;
+  } = {},
 ): Promise<T> {
   const { expectedUserId, ...requestOptions } = opts;
   const tokens = loadTokens();

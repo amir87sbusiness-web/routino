@@ -37,6 +37,9 @@ export interface RequestOptions {
   token?: string | null;
   signal?: AbortSignal;
   timeoutMs?: number;
+  /** Lets a small web request continue while the page is being hidden. Native
+   * HTTP has its own lifecycle and ignores this browser-only hint. */
+  keepalive?: boolean;
 }
 
 interface RawResponse {
@@ -97,6 +100,7 @@ async function webRequest(
       headers,
       body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
       signal: controller.signal,
+      keepalive: opts.keepalive,
     });
     const text = await res.text();
     const body: unknown = text ? JSON.parse(text) : null;

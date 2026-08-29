@@ -30,6 +30,31 @@ export interface PullResponse {
   entitlement?: ServerEntitlement;
 }
 
+export interface ExchangeRequest {
+  cursor: number;
+  records: SyncRecord[];
+  includeAccountState?: boolean;
+  limit?: number;
+}
+
+export interface ExchangeResponse extends PullResponse {
+  applied: number;
+  skipped: number;
+}
+
+export function exchangeRecords(
+  request: ExchangeRequest,
+  expectedUserId?: string,
+  keepalive = false,
+): Promise<ExchangeResponse> {
+  return authedRequest("/sync/exchange", {
+    method: "POST",
+    body: request,
+    expectedUserId,
+    keepalive,
+  });
+}
+
 export function pushRecords(records: SyncRecord[], expectedUserId?: string): Promise<PushResponse> {
   return authedRequest("/sync/push", { method: "POST", body: { records }, expectedUserId });
 }

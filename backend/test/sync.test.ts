@@ -46,6 +46,21 @@ function pull(access: string, cursor = 0, limit?: number) {
   return h.app.inject({ method: "GET", url: `/v1/sync/pull${q}`, headers: auth(access) });
 }
 
+function exchange(
+  access: string,
+  cursor: number,
+  records: unknown[],
+  includeAccountState = false,
+  limit?: number,
+) {
+  return h.app.inject({
+    method: "POST",
+    url: "/v1/sync/exchange",
+    headers: auth(access),
+    payload: { cursor, records, includeAccountState, ...(limit ? { limit } : {}) },
+  });
+}
+
 const habit = (id: string, name: string, updatedAt = 1000) => ({
   kind: "habits",
   id,
@@ -55,6 +70,29 @@ const habit = (id: string, name: string, updatedAt = 1000) => ({
 });
 
 describe("sync", () => {
+  it("pushes then pulls from the caller's original cursor in one exchange", async () => {
+    const { access } = await signIn("09120000020");
+
+    const response = await exchange(access, 0, [habit("h1", "ورزش")]);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      applied: 1,
+      skipped: 0,
+      records: [expect.objectContaining({ id: "h1" })],
+      hasMore: false,
+      reset: false,
+    });
+    expect(response.json()).not.toHaveProperty("entitlement");
+  });
+
+  it("includes account state only when explicitly requested", async () => {
+    const { access } = await signIn("09120000021");
+    const response = await exchange(access, 0, [], true);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ entitlement: { status: "none" } });
+  });
+
   it("gives a second device what the first one pushed", async () => {
     const { access } = await signIn("09120000001");
 

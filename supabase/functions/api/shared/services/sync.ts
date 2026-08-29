@@ -96,6 +96,11 @@ export interface PullResult {
   reset: boolean;
 }
 
+export interface ExchangeResult extends PullResult {
+  applied: number;
+  skipped: number;
+}
+
 function validate(rows: PushRecord[]): void {
   if (rows.length > MAX_PUSH_RECORDS) {
     throw badRequest("too_many_records", `Send at most ${MAX_PUSH_RECORDS} records per push`);
@@ -276,6 +281,25 @@ export async function pullRecords(
     hasMore,
     reset: false,
   };
+}
+
+/** Applies this device's outbox and reads changes from its ORIGINAL cursor.
+ * Keeping the original cursor is essential: adopting the push cursor would
+ * skip rows another device committed before this request. Empty exchanges skip
+ * the push query entirely. */
+export async function exchangeRecords(
+  db: Database,
+  userId: string,
+  cursor: number,
+  incoming: PushRecord[],
+  now: Date,
+  limit = PULL_PAGE_SIZE,
+): Promise<ExchangeResult> {
+  const pushed = incoming.length
+    ? await pushRecords(db, userId, incoming, now)
+    : { applied: 0, skipped: 0 };
+  const pulled = await pullRecords(db, userId, cursor, limit);
+  return { ...pulled, applied: pushed.applied, skipped: pushed.skipped };
 }
 
 /**
