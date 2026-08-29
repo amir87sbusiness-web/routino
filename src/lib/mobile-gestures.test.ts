@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { resolveWeekSwipe, weekPanelShifts } from "./mobile-gestures";
+import {
+  dragDirectionForWeekShift,
+  resolveWeekSwipe,
+  weekPanelShifts,
+} from "./mobile-gestures";
 
 describe("resolveWeekSwipe", () => {
   it("maps physical drags to the reversed Persian calendar direction", () => {
@@ -28,5 +32,17 @@ describe("weekPanelShifts", () => {
 
   it("places the next English week on the physical right", () => {
     expect(weekPanelShifts("en")).toEqual([-1, 0, 1]);
+  });
+});
+
+describe("dragDirectionForWeekShift", () => {
+  it("settles next-week buttons toward the physical left in Persian", () => {
+    expect(dragDirectionForWeekShift(1, "fa")).toBe(1);
+    expect(dragDirectionForWeekShift(-1, "fa")).toBe(-1);
+  });
+
+  it("settles next-week buttons toward the physical right in English", () => {
+    expect(dragDirectionForWeekShift(1, "en")).toBe(-1);
+    expect(dragDirectionForWeekShift(-1, "en")).toBe(1);
   });
 });

@@ -22,3 +22,8 @@ export function resolveWeekSwipe({ dx, velocityX, width, lang }: WeekSwipeInput)
 export function weekPanelShifts(lang: Lang): readonly [-1 | 1, 0, -1 | 1] {
   return lang === "fa" ? [1, 0, -1] : [-1, 0, 1];
 }
+
+/** Physical drag sign that reveals a semantic previous/next week panel. */
+export function dragDirectionForWeekShift(shift: -1 | 1, lang: Lang): -1 | 1 {
+  return (lang === "fa" ? shift : -shift) as -1 | 1;
+}
