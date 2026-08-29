@@ -4,7 +4,14 @@
  * Stays in localStorage: it's tiny, it's read once on boot, and synchronous
  * access keeps the reminder scheduler simple. The bulk data lives in IndexedDB.
  */
-import { defaultDb, type AppNotification, type Auth, type Db, type Settings, type Subscription } from "../store";
+import {
+  defaultDb,
+  type AppNotification,
+  type Auth,
+  type Db,
+  type Settings,
+  type Subscription,
+} from "../store";
 import { getActiveVaultId, LEGACY_VAULT_ID } from "./vault";
 
 const LOCAL_KEY = "routino:local:v1";

@@ -22,7 +22,7 @@ describe("local diagnostics", () => {
   });
 
   it("prunes entries older than seven days", () => {
-    recordDiagnostic({ name: "api_offline", meta: { path: "/devices/ping" } }, 1);
+    recordDiagnostic({ name: "api_offline", meta: { path: "/sync/exchange" } }, 1);
     recordDiagnostic({ name: "api_offline", meta: { path: "/plans" } }, 8 * day);
     expect(readDiagnostics(8 * day)).toHaveLength(1);
   });

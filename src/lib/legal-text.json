@@ -27,8 +27,8 @@
           "Sign-in is via your mobile number or username with a password, or a one-time SMS code. You are responsible for keeping your password, keeping access to your number, and preventing others from using your account."
         ],
         [
-          "برای تعداد دستگاه‌های احراز‌شدهٔ یک حساب محدودیت محصولی وجود ندارد. هر نصب، نشست امنیتی جداگانه دارد و شما یا مدیر سرویس می‌توانید یک نشست مشخص را در صورت گم‌شدن دستگاه یا ورود ناشناس باطل کنید.",
-          "There is no product-level limit on authenticated devices for an account. Each installation has its own security session, and you or the service administrator can revoke an individual session if a device is lost or a sign-in is unfamiliar."
+          "می‌توانید بدون محدودیت تعداد دستگاه وارد حساب شوید. روتینو فهرست دستگاه‌ها یا نشست قابل‌ابطالِ جداگانه نگه نمی‌دارد؛ خروج فقط اطلاعات ورود همان دستگاه را پاک می‌کند و توکن امضاشده حداکثر ۳۰ روز اعتبار دارد.",
+          "You may sign in on any number of devices. Routino does not keep a device list or separately revocable device sessions; signing out clears credentials only on that device, and the signed token is valid for at most 30 days."
         ]
       ]
     },
@@ -58,8 +58,8 @@
       "title": ["۶. مسئولیت‌های کاربر", "6. User responsibilities"],
       "paras": [
         [
-          "استفاده از روتینو باید قانونی و مطابق مقررات باشد. تلاش برای اخلال در سرویس یا دسترسی غیرمجاز مجاز نیست. اگر ورود ناشناسی دیدید، نشست آن دستگاه را باطل کنید و فوراً به @routino_support پیام دهید.",
-          "Use of Routino must be lawful. Attempts to disrupt the service or gain unauthorized access are not permitted. If you see an unfamiliar sign-in, revoke that device session and contact @routino_support immediately."
+          "استفاده از روتینو باید قانونی و مطابق مقررات باشد. تلاش برای اخلال در سرویس یا دسترسی غیرمجاز مجاز نیست. رمز عبور و دسترسی به شمارهٔ خود را امن نگه دارید و در صورت احتمال دسترسی غیرمجاز فوراً به @routino_support پیام دهید.",
+          "Use of Routino must be lawful. Attempts to disrupt the service or gain unauthorized access are not permitted. Keep your password and mobile number secure, and contact @routino_support immediately if you suspect unauthorized access."
         ]
       ]
     },
@@ -157,8 +157,8 @@
       "title": ["۶. امنیت", "6. Security"],
       "paras": [
         [
-          "کدهای ورود به‌صورت هش‌شده نگهداری و پس از مدت کوتاهی منقضی می‌شوند. توکن تمدید هنگام استفاده چرخش می‌کند، تغییر رمز نشست‌های دیگر را می‌بندد و هر نشست دستگاه قابل ابطال است. با این حال هیچ سیستمی صددرصد ایمن نیست و روتینو رمزنگاری سرتاسریِ محتوای همگام‌شده را ادعا نمی‌کند.",
-          "Login codes are stored as hashes and expire quickly. Refresh tokens rotate on use, password changes revoke other sessions, and each device session can be revoked. No system is 100% secure, and Routino does not claim end-to-end encryption for synced content."
+          "کدهای ورود به‌صورت هش‌شده نگهداری و پس از مدت کوتاهی منقضی می‌شوند. ورود موفق یک توکن امضاشده با اعتبار حداکثر ۳۰ روز می‌سازد و توکن یا مشخصات دستگاه در دیتابیس نگهداری نمی‌شود. تغییر رمز، توکن‌های صادرشدهٔ قبلی را پیش از انقضا باطل نمی‌کند. هیچ سیستمی صددرصد ایمن نیست و روتینو رمزنگاری سرتاسریِ محتوای همگام‌شده را ادعا نمی‌کند.",
+          "Login codes are stored as hashes and expire quickly. A successful sign-in creates a signed token valid for at most 30 days; the token and device details are not stored in the database. Changing a password does not invalidate previously issued tokens before they expire. No system is 100% secure, and Routino does not claim end-to-end encryption for synced content."
         ]
       ]
     },

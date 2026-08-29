@@ -174,10 +174,7 @@ export async function verifyOtp(
 /** Password sign-in. `identifier` is a phone number OR a username; the server
  * decides which. Returns the same shape as OTP verify, so callers reuse the
  * same post-login flow. */
-export async function passwordLogin(
-  identifier: string,
-  password: string,
-): Promise<VerifyResult> {
+export async function passwordLogin(identifier: string, password: string): Promise<VerifyResult> {
   const res = await apiRequest<VerifyResult>("/auth/password/login", {
     method: "POST",
     body: { identifier, password },

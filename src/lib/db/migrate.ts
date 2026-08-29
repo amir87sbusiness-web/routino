@@ -129,7 +129,6 @@ export async function migrateLegacyBlob(now = Date.now()): Promise<boolean> {
     );
     await idb.logs.bulkPut(rowsOfRecord(legacy.logs ?? {}, () => now));
     await idb.journal.bulkPut(rowsOfRecord(legacy.journal ?? {}, (j) => j.updatedAt));
-
   });
   primeSeq(seqCursor);
 

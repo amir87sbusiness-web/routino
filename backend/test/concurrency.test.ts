@@ -158,7 +158,9 @@ describe("simultaneous stateless sign-in", () => {
       expect(body).not.toHaveProperty("deviceId");
     }
     expect(
-      await h.query(`select table_name from information_schema.tables where table_name = 'devices'`),
+      await h.query(
+        `select table_name from information_schema.tables where table_name = 'devices'`,
+      ),
     ).toHaveLength(0);
   });
 });

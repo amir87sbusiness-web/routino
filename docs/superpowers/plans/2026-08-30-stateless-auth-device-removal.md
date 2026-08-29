@@ -32,6 +32,7 @@
 > complete. Generated files must never be edited by hand.
 
 **Files:**
+
 - Modify: `backend/src/services/tokens.ts`
 - Modify: `backend/src/plugins/auth.ts`
 - Modify: `backend/src/env.ts`
@@ -39,6 +40,7 @@
 - Create: `backend/test/tokens.test.ts`
 
 **Interfaces:**
+
 - Produces: `issueAccessToken(env: Env, userId: string, now: Date): Promise<{ access: string }>`.
 - Produces: `verifyAccessToken(env: Env, token: string): Promise<{ sub: string }>`.
 - Produces: `AuthedUser = { id: string }` with no `deviceId` or phone lookup.
@@ -70,7 +72,9 @@ Expected: FAIL because tokens contain `did`, expire in one hour, and middleware 
 - [ ] **Step 3: Reduce `tokens.ts` to stateless issue/verify functions and set the default TTL to `2_592_000` seconds**
 
 ```ts
-export interface AccessClaims { sub: string }
+export interface AccessClaims {
+  sub: string;
+}
 export async function issueAccessToken(env: Env, userId: string, now: Date) {
   return { access: await signAccessToken(env, { sub: userId }, now) };
 }
@@ -94,6 +98,7 @@ git commit -m "refactor: make authentication stateless"
 ### Task 2: Simplify Auth Routes and Client Token Storage
 
 **Files:**
+
 - Modify: `backend/src/routes/auth.ts`
 - Modify: `supabase/functions/api/routes/auth.ts`
 - Modify: `src/lib/api/auth.ts`
@@ -107,6 +112,7 @@ git commit -m "refactor: make authentication stateless"
 - Test: `src/routes/-auth.test.tsx`
 
 **Interfaces:**
+
 - Auth response: `{ access: string; user: { id: string; phone: string }; entitlement: ServerEntitlement; isNew: boolean }`.
 - Client `Tokens`: `{ access; accessExpiresAt; lastServerConfirmedAt; lastEntitlementCheckedAt? }`.
 - `logout(): Promise<void>` clears local token storage and performs no HTTP request.
@@ -168,6 +174,7 @@ git commit -m "refactor: remove device-bound login sessions"
 ### Task 3: Remove Device and Blocking Surfaces
 
 **Files:**
+
 - Delete: `backend/src/routes/devices.ts`
 - Delete: `supabase/functions/api/routes/devices.ts`
 - Delete: `src/lib/api/devices.ts`
@@ -186,6 +193,7 @@ git commit -m "refactor: remove device-bound login sessions"
 - Test: `src/state/app-sync.test.tsx`
 
 **Interfaces:**
+
 - Admin user detail contains user, entitlement, payments, and grants; it contains no devices or blocked flag.
 - No `/v1/devices*` or `/admin/users/:id/block` route is registered.
 
@@ -193,7 +201,9 @@ git commit -m "refactor: remove device-bound login sessions"
 
 ```ts
 expect((await h.call("GET", "/v1/devices", { headers: auth(access) })).status).toBe(404);
-expect((await h.admin("POST", `/admin/users/${user.id}/block`, { blocked: true })).status).toBe(404);
+expect((await h.admin("POST", `/admin/users/${user.id}/block`, { blocked: true })).status).toBe(
+  404,
+);
 expect(detail).not.toHaveProperty("devices");
 expect(detail.user).not.toHaveProperty("blocked");
 ```
@@ -229,6 +239,7 @@ git commit -m "refactor: remove device and account blocking"
 ### Task 4: Remove Device Schema and Generate a Reviewed Migration
 
 **Files:**
+
 - Modify: `backend/src/db/schema.ts`
 - Modify: `backend/src/db/ddl.ts`
 - Modify: `scripts/gen-setup-sql.mjs`
@@ -238,6 +249,7 @@ git commit -m "refactor: remove device and account blocking"
 - Create: `supabase/tests/schema.test.ts`
 
 **Interfaces:**
+
 - Runtime schema exports no `devices` or `deviceSecurityEvents` table and no user blocking/device-limit columns.
 - Migration is source-only and is never executed in this task.
 
@@ -288,6 +300,7 @@ git commit -m "chore: retire device session schema"
 ### Task 5: Edge Parity and Auth Regression Gate
 
 **Files:**
+
 - Regenerate: `supabase/functions/api/shared/`
 - Modify: `docs-fa/01-FRONTEND.md`
 - Modify: `docs-fa/02-BACKEND.md`
@@ -295,6 +308,7 @@ git commit -m "chore: retire device session schema"
 - Modify: `docs-fa/CODEBASE_GUIDE.md`
 
 **Interfaces:**
+
 - Node and Edge use the same stateless token/schema/services.
 - Documentation states the 30-day non-revocable token trade-off explicitly.
 

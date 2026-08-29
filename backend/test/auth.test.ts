@@ -97,7 +97,9 @@ describe("POST /v1/auth/otp/verify", () => {
     expect(body).not.toHaveProperty("refresh");
     expect(body).not.toHaveProperty("deviceId");
     expect(
-      await h.query(`select table_name from information_schema.tables where table_name = 'devices'`),
+      await h.query(
+        `select table_name from information_schema.tables where table_name = 'devices'`,
+      ),
     ).toHaveLength(0);
   });
 

@@ -25,27 +25,25 @@
 
 ## ۲. جدول کامل تماس‌ها — کی، به کجا، از کجا
 
-| #    | فرانت (کی صدا می‌زنه)                                        | تابع فرانت (`src/lib/api/`)                            | آدرس API                                                                     | بک‌اند (کی جواب می‌ده)                                                              |
-| ---- | ------------------------------------------------------------ | ------------------------------------------------------ | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| ۱    | `routes/auth.tsx` — ثبت‌نام یا «فراموشی رمز عبور»            | `auth.ts` ← `requestOtp`                               | `POST /v1/auth/otp/request`                                                  | `backend/src/routes/auth.ts`                                                        |
-| ۲    | `routes/auth.tsx` — تایید کد ۴ رقمی و ثبت رمز                | `auth.ts` ← `verifyOtp`                                | `POST /v1/auth/otp/verify`                                                   | `backend/src/routes/auth.ts`                                                        |
-| ۳    | خودکار — وقتی توکن رو به انقضاست یا ۴۰۱ خورد                 | `auth.ts` ← `refreshTokens`                            | `POST /v1/auth/token/refresh`                                                | `backend/src/routes/auth.ts`                                                        |
-| ۲ب   | `routes/auth.tsx` — دکمه «ورود» (پیش‌فرض)                    | `auth.ts` ← `passwordLogin`                            | `POST /v1/auth/password/login`                                               | `backend/src/routes/auth.ts`                                                        |
-| ۲ج   | `routes/settings.tsx` — کارت «نام کاربری و رمز عبور»         | `auth.ts` ← `fetchAccount`/`setUsername`/`setPassword` | `GET /v1/auth/account` · `POST /v1/auth/username` · `POST /v1/auth/password` | `backend/src/routes/auth.ts`                                                        |
-| ۴    | `routes/settings.tsx` — دکمه «خروج»                          | `auth.ts` ← `logout`                                   | `POST /v1/auth/logout`                                                       | `backend/src/routes/auth.ts`                                                        |
-| ۵    | `state/app.tsx` — هر ۶ ساعت؛ در سه روز پایانی هر ۱ ساعت      | `auth.ts` ← `fetchEntitlement`                         | `GET /v1/subscriptions/me`                                                   | `backend/src/routes/subscriptions.ts`؛ پرداخت callback‌گم‌شده را هم ترمیم می‌کند    |
-| ۵الف | `state/app.tsx` — boot/online/foreground و هر دقیقهٔ visible | `devices.ts` ← `pingDevice`                            | `GET /v1/devices/ping`                                                       | فقط اعتبار کاربر/دستگاه؛ پاسخ کوچک `{ok:true}`                                      |
-| ۵ب   | (فقط پنل ادمین/دیباگ)                                        | —                                                      | `GET /v1/subscriptions/grants`                                               | `backend/src/routes/subscriptions.ts` — دفترکل تمدیدهای یک کاربر                    |
-| ۵ج   | `routes/activation.tsx` — بعد از آماده‌کردن عادت اول         | `auth.ts` ← `startTrial`                               | `POST /v1/subscriptions/trial/start`                                         | `services/entitlement.ts` — تریال ۷روزهٔ فقط یک‌باره با transaction و قفل ردیف user |
-| ۶    | `routes/auth.tsx` — بعد از ورود، اگه اشتراک قدیمی محلی باشه  | `auth.ts` ← `importSubscription`                       | `POST /v1/subscriptions/import`                                              | `backend/src/routes/subscriptions.ts`                                               |
-| ۷    | `routes/subscribe.tsx` — موقع باز شدن صفحه                   | `payments.ts` ← `fetchPlans`                           | `GET /v1/plans`                                                              | `backend/src/routes/plans.ts`                                                       |
-| ۸    | `routes/subscribe.tsx` — دکمه «اعمال» کد تخفیف               | `payments.ts` ← `fetchQuote`                           | `POST /v1/payments/quote`                                                    | `backend/src/routes/payments.ts`                                                    |
-| ۹    | `routes/subscribe.tsx` — دکمه «پرداخت»                       | `payments.ts` ← `checkout`                             | `POST /v1/payments/checkout`                                                 | `backend/src/routes/payments.ts`                                                    |
-| ۱۰   | `routes/pay.result.tsx` — هر ۲.۵ ثانیه تا مشخص‌شدن نتیجه     | `payments.ts` ← `fetchPayment`                         | `GET /v1/payments/:id`                                                       | `backend/src/routes/payments.ts`                                                    |
-| ۱۱   | — (مرورگر، نه اپ) درگاه کاربر رو برمی‌گردونه                 | —                                                      | `GET /v1/payments/callback`                                                  | `backend/src/routes/payments.ts`                                                    |
-| ۱۲   | — (مرورگر ادمین)                                             | —                                                      | `GET /admin` + `/v1/admin/*`                                                 | `backend/src/routes/admin-panel.ts` و `admin.ts`                                    |
+| #   | فرانت (کی صدا می‌زنه)                                       | تابع فرانت (`src/lib/api/`)                            | آدرس API                                                                     | بک‌اند (کی جواب می‌ده)                                                              |
+| --- | ----------------------------------------------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| ۱   | `routes/auth.tsx` — ثبت‌نام یا «فراموشی رمز عبور»           | `auth.ts` ← `requestOtp`                               | `POST /v1/auth/otp/request`                                                  | `backend/src/routes/auth.ts`                                                        |
+| ۲   | `routes/auth.tsx` — تایید کد ۴ رقمی و ثبت رمز               | `auth.ts` ← `verifyOtp`                                | `POST /v1/auth/otp/verify`                                                   | `backend/src/routes/auth.ts`                                                        |
+| ۲ب  | `routes/auth.tsx` — دکمه «ورود» (پیش‌فرض)                   | `auth.ts` ← `passwordLogin`                            | `POST /v1/auth/password/login`                                               | `backend/src/routes/auth.ts`                                                        |
+| ۲ج  | `routes/settings.tsx` — کارت «نام کاربری و رمز عبور»        | `auth.ts` ← `fetchAccount`/`setUsername`/`setPassword` | `GET /v1/auth/account` · `POST /v1/auth/username` · `POST /v1/auth/password` | `backend/src/routes/auth.ts`                                                        |
+| ۴   | `routes/settings.tsx` — دکمه «خروج»                         | `auth.ts` ← `logout`                                   | بدون API؛ پاک‌کردن توکن محلی                                                 | نشست سروری یا دستگاه ذخیره نمی‌شود                                                  |
+| ۵   | `state/app.tsx` — boot، foreground و تغییرهای محصول         | `sync.ts` ← `exchangeSync`                             | `POST /v1/sync/exchange`                                                     | push و pull را در یک invocation انجام می‌دهد؛ فقط boot وضعیت اشتراک را هم می‌گیرد   |
+| ۵ب  | (فقط پنل ادمین/دیباگ)                                       | —                                                      | `GET /v1/subscriptions/grants`                                               | `backend/src/routes/subscriptions.ts` — دفترکل تمدیدهای یک کاربر                    |
+| ۵ج  | `routes/activation.tsx` — بعد از آماده‌کردن عادت اول        | `auth.ts` ← `startTrial`                               | `POST /v1/subscriptions/trial/start`                                         | `services/entitlement.ts` — تریال ۷روزهٔ فقط یک‌باره با transaction و قفل ردیف user |
+| ۶   | `routes/auth.tsx` — بعد از ورود، اگه اشتراک قدیمی محلی باشه | `auth.ts` ← `importSubscription`                       | `POST /v1/subscriptions/import`                                              | `backend/src/routes/subscriptions.ts`                                               |
+| ۷   | `routes/subscribe.tsx` — موقع باز شدن صفحه                  | `payments.ts` ← `fetchPlans`                           | `GET /v1/plans`                                                              | `backend/src/routes/plans.ts`                                                       |
+| ۸   | `routes/subscribe.tsx` — دکمه «اعمال» کد تخفیف              | `payments.ts` ← `fetchQuote`                           | `POST /v1/payments/quote`                                                    | `backend/src/routes/payments.ts`                                                    |
+| ۹   | `routes/subscribe.tsx` — دکمه «پرداخت»                      | `payments.ts` ← `checkout`                             | `POST /v1/payments/checkout`                                                 | `backend/src/routes/payments.ts`                                                    |
+| ۱۰  | `routes/pay.result.tsx` — هر ۲.۵ ثانیه تا مشخص‌شدن نتیجه    | `payments.ts` ← `fetchPayment`                         | `GET /v1/payments/:id`                                                       | `backend/src/routes/payments.ts`                                                    |
+| ۱۱  | — (مرورگر، نه اپ) درگاه کاربر رو برمی‌گردونه                | —                                                      | `GET /v1/payments/callback`                                                  | `backend/src/routes/payments.ts`                                                    |
+| ۱۲  | — (مرورگر ادمین)                                            | —                                                      | `GET /admin` + `/v1/admin/*`                                                 | `backend/src/routes/admin-panel.ts` و `admin.ts`                                    |
 
-> مسیرهای ۱، ۲، ۲ب، ۳، ۴، ۷، ۱۱ عمومی‌اند؛ بقیه (از جمله ۲ج: account/username/password) توکن ورود می‌خوان (هدر `Authorization: Bearer ...`).
+> مسیرهای ۱، ۲، ۲ب، ۷ و ۱۱ عمومی‌اند؛ خروجِ ۴ اصلاً درخواست ندارد. بقیه (از جمله ۲ج: account/username/password) توکن ورود می‌خواهند (هدر `Authorization: Bearer ...`)؛ پنل ادمین هم توکن جداگانهٔ خودش را دارد.
 
 ---
 
@@ -83,10 +81,9 @@
 | `bad_credentials`                                                                         | `routes/auth.ts` (ورود با رمز)                             | `auth.tsx` ← `explain()`                  | «شماره/نام‌کاربری یا رمز عبور اشتباهه» — عمداً برای هر سه حالتِ «حساب نیست/رمز ندارد/رمز غلط» یکسان (ضد شناسایی کاربر) |
 | `invalid_username` / `username_taken`                                                     | `routes/auth.ts` (تنظیم نام کاربری)                        | `settings.tsx` ← `explain()`              | «نام کاربری نامعتبر» / «قبلاً گرفته شده»                                                                               |
 | `weak_password` / `wrong_password`                                                        | `routes/auth.ts` (ثبت‌نام/تغییر رمز) + `services/admin.ts` | `auth.tsx` و `settings.tsx` ← `explain()` | «رمز ضعیف است» / «رمز عبور فعلی اشتباهه»                                                                               |
-| `blocked`                                                                                 | `routes/auth.ts` / `plugins/auth.ts`                       | `auth.tsx`                                | «این حساب مسدود شده»                                                                                                   |
 | `psp_failed`                                                                              | `routes/payments.ts`                                       | `subscribe.tsx`                           | «درگاه پرداخت در دسترس نیست»                                                                                           |
-| `duplicate_payment_attempt`                                                               | `services/payment-flow.ts`                                 | `subscribe.tsx`                           | «این تلاش قبلاً ثبت شده؛ کمی صبر کن»                                                                                    |
-| `payment_request_unknown`                                                                  | create زرین‌پال با پاسخ timeout/network/malformed          | `subscribe.tsx`                           | درخواست خودکار تکرار نمی‌شود؛ تلاش مبهم برای بررسی باقی می‌ماند                                                        |
+| `duplicate_payment_attempt`                                                               | `services/payment-flow.ts`                                 | `subscribe.tsx`                           | «این تلاش قبلاً ثبت شده؛ کمی صبر کن»                                                                                   |
+| `payment_request_unknown`                                                                 | create زرین‌پال با پاسخ timeout/network/malformed          | `subscribe.tsx`                           | درخواست خودکار تکرار نمی‌شود؛ تلاش مبهم برای بررسی باقی می‌ماند                                                        |
 | `not_signed_in`                                                                           | خود فرانت (`api/auth.ts` وقتی توکن نیست)                   | `subscribe.tsx`                           | کارت «ورود با شماره موبایل»                                                                                            |
 | دلایل رد کد تخفیف: `expired` `exhausted` `already_used` `other_user` `inactive` `unknown` | `services/pricing.ts` ← `checkDiscount`                    | `subscribe.tsx` ← `explainReason()`       | «کد منقضی شده» و...                                                                                                    |
 
@@ -138,21 +135,21 @@ subscribe.tsx (فرانت)
 
 ### 🔐 قرارداد ۷: عمر توکن‌ها
 
-| طرف       | کجا                        | مقدار                                                            |
-| --------- | -------------------------- | ---------------------------------------------------------------- |
-| بک (مرجع) | env ← `ACCESS_TTL_SECONDS` | ۳۶۰۰ ثانیه (۱ ساعت)                                              |
-| فرانت     | `src/lib/api/auth.ts`      | زمان واقعی `exp` را از JWT می‌خواند و ۱ دقیقه زودتر تمدید می‌کند |
+| طرف       | کجا                        | مقدار                               |
+| --------- | -------------------------- | ----------------------------------- |
+| بک (مرجع) | env ← `ACCESS_TTL_SECONDS` | ۲۵۹۲۰۰۰ ثانیه (۳۰ روز)              |
+| فرانت     | `src/lib/api/auth.ts`      | زمان واقعی `exp` را از JWT می‌خواند |
 
-اگر توکن قدیمی/خراب `exp` نداشته باشد، فرانت فقط به‌عنوان fallback یک ساعت فرض می‌کند. هر درخواست خصوصی همچنان وضعیت کاربر و دستگاه را از سرور می‌سنجد؛ در نتیجه revoke منتظر انقضای JWT نمی‌ماند.
+احراز هویت stateless است: سرور فقط امضا و انقضای JWT را بررسی می‌کند و برای هر درخواست سراغ جدول کاربر/دستگاه نمی‌رود. خروج فقط توکن محلی را پاک می‌کند؛ تغییر رمز هم JWTهای صادرشدهٔ قبلی را باطل نمی‌کند و آن‌ها حداکثر تا پایان ۳۰ روز معتبر می‌مانند.
 
 ### 🔒 قرارداد ۸: دیتای شخصی local-first و cloud-synced — ✅ سیاست لانچ
 
-- عادت، لاگ، کار، ژورنال، تایمر، دسته و تنظیمات syncable ابتدا در IndexedDB همان مرورگر/WebView ذخیره می‌شوند؛ UI آفلاین از همان منبع محلی کار می‌کند.
-- `state/app.tsx` engine را بعد از boot معتبر، online، foreground، پایان تعویض vault، و با debounce کوتاه بعد از persist موفق تغییر syncable اجرا می‌کند؛ fallback اپ visible هر ۱۰ دقیقه است و ping امنیتی یک‌دقیقه‌ای data sync راه نمی‌اندازد. قبل از شبکه `persistQueue` flush می‌شود. اگر pull/reset IndexedDB را تغییر بدهد، hydrate فقط با owner و revision ثابت پذیرفته می‌شود تا ویرایش هم‌زمان React overwrite نشود. endpointهای `POST /v1/sync/push` و `GET /v1/sync/pull` در production فعال و فقط auth-gated هستند؛ sync اشتراک فعال نمی‌خواهد.
+- عادت، لاگ، کار، ژورنال، تایمر و دسته ابتدا در IndexedDB همان مرورگر/WebView ذخیره می‌شوند؛ همهٔ تنظیمات مثل تم، زبان و اعلان فقط روی همان دستگاه در localStorage می‌مانند و هرگز sync نمی‌شوند.
+- `state/app.tsx` تغییرهای محصول را ۱۰ ثانیه بعد از آخرین ویرایش batch می‌کند. در hidden/pagehide و رفتن اپ نیتیو به پس‌زمینه، outbox را فوری و best-effort با `keepalive` می‌فرستد؛ boot، ورود تازه و foreground نیز pull می‌کنند. poll دوره‌ای و ping امنیتی وجود ندارد. `POST /v1/sync/exchange` push و pull را در یک invocation انجام می‌دهد و فقط auth می‌خواهد؛ boot همان پاسخ را برای وضعیت اشتراک هم استفاده می‌کند.
 - جدول `records` منبع عمومی سرور برای delta sync است؛ cursor، LWW، tombstone و reset watermark جلوی گم‌شدن/زنده‌شدن دوبارهٔ دادهٔ حذف‌شده را می‌گیرند.
 - هر حساب روی این مرورگر یک vault جدا دارد (`src/lib/db/vault.ts`)؛ A→B→A هیچ دیتایی را حذف یا قاطی نمی‌کند.
 - Export همیشه فعال است. Import در `src/lib/import-policy.ts` فقط برای اشتراک پولی فعال است و هم قبل از file picker و هم قبل از commit دوباره چک می‌شود.
-- سرور علاوه بر داده‌های حساب/ورود، دستگاه، اشتراک و پرداخت، رکوردهای syncable محصول را در جدول عمومی `records` نگه می‌دارد. PostgREST با RLS بدون policy بسته است و فرانت فقط از Edge API احراز‌شده استفاده می‌کند.
+- سرور علاوه بر داده‌های حساب/ورود، اشتراک و پرداخت، فقط شش نوع رکورد اصلی محصول را در جدول عمومی `records` نگه می‌دارد. هیچ دستگاه یا تنظیماتی روی سرور ذخیره نمی‌شود. PostgREST با RLS بدون policy بسته است و فرانت فقط از Edge API احراز‌شده استفاده می‌کند.
 
 ### 🎁 قرارداد ۹: دوره آزمایشی و گِیت اشتراک
 
@@ -169,8 +166,8 @@ subscribe.tsx (فرانت)
 
 1. کاربر «ثبت‌نام» یا «فراموشی رمز عبور» را می‌زند، شماره می‌نویسد → `auth.tsx` ← `normalizePhone` (فرانت `phone.ts`) → `POST /auth/otp/request`
 2. بک: `normalizePhone` (بک `phone.ts` — همون جواب!) → سقف‌ها (`services/otp.ts`) → ساخت کد → پیامک (`providers/sms/*`؛ در توسعه: چاپ در ترمینال بک)
-3. کاربر کد ۴ رقمی و رمز جدید را می‌زند → `POST /auth/otp/verify` با `intent` → بک: چک کد → ثبت‌نامِ حساب تازه یا تغییر رمز (و بستن نشست‌های دیگر در بازیابی) → توکن‌ها + entitlement (برای حساب تازه: `none`)
-4. فرانت: توکن‌ها به localStorage (`routino:auth:v1`) → vault همان user باز می‌شود → اگر legacy فعال و مهاجرت حل‌نشده باشد `POST /subscriptions/import` یک‌باره امتحان می‌شود → پاسخ قطعی سرور در `db.subscription` کش می‌شود؛ حساب تازه به `/activation` می‌رود، عادت اول را آماده می‌کند و فقط CTA صریح `POST /subscriptions/trial/start` را می‌زند
+3. کاربر کد ۴ رقمی و رمز جدید را می‌زند → `POST /auth/otp/verify` با `intent` → بک: چک کد → ثبت‌نامِ حساب تازه یا تغییر رمز → JWT سی‌روزه + entitlement (برای حساب تازه: `none`)
+4. فرانت: توکن به localStorage (`routino:auth:v1`) → vault همان user باز می‌شود → یک `sync/exchange` اولیه دادهٔ دستگاه‌های دیگر و وضعیت اشتراک را می‌گیرد؛ برای ورود تازه یک pull محدود دیگر پس از ۲ ثانیه انجام می‌شود تا تغییر هم‌زمان دستگاه قبلی سریع برسد
 
 ### 💳 سناریو «خرید»
 

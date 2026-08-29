@@ -141,10 +141,7 @@ export async function makeHarness(
 }
 
 /** Signs a user in through the real OTP flow; returns tokens + entitlement. */
-export async function signIn(
-  h: Harness,
-  phone = "09123334444",
-) {
+export async function signIn(h: Harness, phone = "09123334444") {
   await h.call("POST", "/v1/auth/otp/request", { body: { phone } });
   const code = h.sms.last()!.code;
   const res = await h.call("POST", "/v1/auth/otp/verify", {

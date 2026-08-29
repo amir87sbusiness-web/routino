@@ -10,8 +10,8 @@
 - روتینو local-first و cloud-synced است: UI از Dexie/IndexedDB می‌خواند و همان
   رکوردهای syncable با جدول عمومی `records` و API احراز‌شده بین دستگاه‌ها جابه‌جا
   می‌شوند. فرانت به Supabase/PostgREST دسترسی مستقیم ندارد.
-- تعداد نصب‌های احراز‌شده محدودیت محصولی ندارد. revoke دستی نشست، چرخش refresh،
-  بستن نشست‌های دیگر بعد از تغییر رمز و block ادمین همچنان فعال‌اند.
+- تعداد نصب‌های احراز‌شده محدودیت محصولی ندارد و دستگاه/نشست سروری ذخیره نمی‌شود.
+  ورود با JWT سی‌روزهٔ stateless است؛ خروج محلی و تغییر رمز بدون revoke توکن قبلی است.
 - ساخت حساب هیچ trialای نمی‌دهد. trial هفت‌روزه فقط بعد از فعال‌سازی معنادار و
   ساخت اولین عادت، یک‌بار برای کل حساب و با تصمیم authoritative سرور شروع می‌شود.
 - پلن رایگان دائمی وجود ندارد. بعد از انقضا، محتوای موجود، تاریخچه، آنالیز، Export،
@@ -32,10 +32,10 @@
 - تنها مسیر عمومی تغییر محتوای محصول `AppProvider.update` است. bypassهای داخلی به
   عملیات نام‌دار و ممیزی‌شدهٔ entitlement، activation، preference، account/session،
   feedback و reset محدود شده‌اند.
-- احراز هویت همان custom JWT + refresh token چرخشی + device session است؛ Supabase
-  Auth وارد معماری نشده است.
-- هر ۱۴ جدول فعلی برنامه، از جمله `device_security_events`، در setup تولیدشده RLS
-  فعال و صفر policy دارند؛ Edge با Postgres مستقیم کار می‌کند.
+- احراز هویت همان custom JWT stateless است؛ Supabase Auth وارد معماری نشده و
+  middleware احراز هویت برای هر درخواست query دیتابیس اجرا نمی‌کند.
+- همهٔ جدول‌های برنامه در setup تولیدشده RLS فعال و صفر policy دارند؛ جدول‌های
+  دستگاه و رویداد امنیتی حذف شده‌اند و Edge با Postgres مستقیم کار می‌کند.
 - `backend/src/` منبع canonical است. `supabase/functions/api/shared/` فقط با
   `npm run sync:edge` تولید می‌شود و parity test اختلاف را رد می‌کند.
 

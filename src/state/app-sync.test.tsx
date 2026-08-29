@@ -48,7 +48,6 @@ vi.mock("@/lib/api/auth", () => ({
 vi.mock("@/lib/db/hydrate", () => ({ hydrate: mocks.hydrate }));
 vi.mock("@/lib/db/persist", () => ({ applyChanges: mocks.applyChanges }));
 vi.mock("@/lib/db/local", () => ({
-  SYNCED_SETTING_KEYS: ["lang", "calendar", "brandColor", "onboarded", "journalReminder"],
   loadLocal: vi.fn(() => ({})),
   localChanged: vi.fn(() => false),
   saveLocal: mocks.saveLocal,

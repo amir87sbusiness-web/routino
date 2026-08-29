@@ -39,37 +39,34 @@ export const SYNC_KINDS = [
 ] as const;
 export type SyncKind = (typeof SYNC_KINDS)[number];
 
-export const users = pgTable(
-  "users",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    /** Canonical `989xxxxxxxxx`. MUST be produced by the same normalizePhone as
-     * the client — a divergence forks one human into two accounts. */
-    phone: text("phone").notNull().unique(),
-    /** Optional login handle, stored lowercased. Lets a user sign in with a name
-     * instead of a phone number. NULL for accounts that never set one; Postgres
-     * allows many NULLs under a unique index. Always starts with a letter, so it
-     * can never be mistaken for a phone number at login. */
-    username: text("username").unique(),
-    /** scrypt hash (`scrypt$N$r$p$saltB64$hashB64`), or NULL for OTP-only accounts.
-     * The raw password is never stored, logged, or returned. */
-    passwordHash: text("password_hash"),
-    /**
-     * Per-user monotonic change counter. Incremented with
-     * `UPDATE users SET seq = seq + $n ... RETURNING seq`, which takes a row lock
-     * and thereby serialises this user's writes — guaranteeing seq order matches
-     * commit order. A plain SEQUENCE cannot: a slower txn can grab a lower seq and
-     * commit AFTER a reader has already advanced past it, hiding that row from
-     * that device forever.
-     */
-    seq: bigint("seq", { mode: "number" }).notNull().default(0),
-    /** Watermark for tombstone GC. A device whose cursor is below this may have
-     * missed a tombstone that has since been purged, so it must full-resync or it
-     * would resurrect deleted records. */
-    gcSeq: bigint("gc_seq", { mode: "number" }).notNull().default(0),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-);
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  /** Canonical `989xxxxxxxxx`. MUST be produced by the same normalizePhone as
+   * the client — a divergence forks one human into two accounts. */
+  phone: text("phone").notNull().unique(),
+  /** Optional login handle, stored lowercased. Lets a user sign in with a name
+   * instead of a phone number. NULL for accounts that never set one; Postgres
+   * allows many NULLs under a unique index. Always starts with a letter, so it
+   * can never be mistaken for a phone number at login. */
+  username: text("username").unique(),
+  /** scrypt hash (`scrypt$N$r$p$saltB64$hashB64`), or NULL for OTP-only accounts.
+   * The raw password is never stored, logged, or returned. */
+  passwordHash: text("password_hash"),
+  /**
+   * Per-user monotonic change counter. Incremented with
+   * `UPDATE users SET seq = seq + $n ... RETURNING seq`, which takes a row lock
+   * and thereby serialises this user's writes — guaranteeing seq order matches
+   * commit order. A plain SEQUENCE cannot: a slower txn can grab a lower seq and
+   * commit AFTER a reader has already advanced past it, hiding that row from
+   * that device forever.
+   */
+  seq: bigint("seq", { mode: "number" }).notNull().default(0),
+  /** Watermark for tombstone GC. A device whose cursor is below this may have
+   * missed a tombstone that has since been purged, so it must full-resync or it
+   * would resurrect deleted records. */
+  gcSeq: bigint("gc_seq", { mode: "number" }).notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const records = pgTable(
   "records",

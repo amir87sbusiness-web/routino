@@ -633,9 +633,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const { App: CapApp } = await import("@capacitor/app");
       const listener = await CapApp.addListener("appStateChange", ({ isActive }) => {
         if (!isActive) {
-          void scheduler
-            .flushNow(sessionOwner, { pullRequired: false })
-            .catch(handleSyncError);
+          void scheduler.flushNow(sessionOwner, { pullRequired: false }).catch(handleSyncError);
         }
       });
       if (cancelled) await listener.remove();
@@ -660,8 +658,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         includeAccountState: true,
         pullRequired: true,
       });
-    }
-    else setSessionGate("ready");
+    } else setSessionGate("ready");
   }, []);
 
   // heartbeat: keep lastSeen fresh so the clock-tampering guard stays accurate.

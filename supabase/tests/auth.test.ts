@@ -58,7 +58,9 @@ describe("POST /v1/auth/otp/verify", () => {
     const grants = await h.query<{ source: string }>(`select source from grants`);
     expect(grants).toEqual([]);
     expect(
-      await h.query(`select table_name from information_schema.tables where table_name = 'devices'`),
+      await h.query(
+        `select table_name from information_schema.tables where table_name = 'devices'`,
+      ),
     ).toHaveLength(0);
   });
 

@@ -109,6 +109,23 @@ describe("owner-bound authenticated requests", () => {
     expect(localStorage.getItem("routino:auth:v1")).toBeNull();
   });
 
+  it("passes the keepalive hint to a background sync request", async () => {
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ records: [], cursor: 0 }), { status: 200 }));
+
+    await authedRequest("/sync/exchange", {
+      method: "POST",
+      body: { cursor: 0, records: [] },
+      keepalive: true,
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "/v1/sync/exchange",
+      expect.objectContaining({ method: "POST", keepalive: true }),
+    );
+  });
+
   it("logs out locally without making an HTTP request", async () => {
     const fetch = vi.spyOn(globalThis, "fetch");
 

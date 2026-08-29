@@ -9,7 +9,12 @@
  * offline-first app, not an error to report: the outbox simply stays full and
  * the next attempt drains it.
  */
-import { exchangeRecords, type ExchangeResponse, type RemoteRecord, type SyncRecord } from "../api/sync";
+import {
+  exchangeRecords,
+  type ExchangeResponse,
+  type RemoteRecord,
+  type SyncRecord,
+} from "../api/sync";
 import { ApiError } from "../api/client";
 import { hasSession, type ServerEntitlement } from "../api/auth";
 import { db as idb, nextSeq, type RecordRow, type SyncMetaRow } from "../db/dexie";
@@ -274,7 +279,7 @@ async function run(owner: string, options: SyncOptions): Promise<SyncOutcome> {
   };
 
   const exchangePage = async (
-    batch: (typeof outbox),
+    batch: typeof outbox,
     includeAccountState: boolean,
   ): Promise<ExchangeResponse> => {
     const page = await exchangeRecords(

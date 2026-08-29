@@ -59,13 +59,7 @@ export function nextSeq(): number {
 /** Tables that sync. `feedback` is push-only (it never comes back to a device)
  * but lives here so it survives being offline. */
 export type SyncedTable =
-  | "categories"
-  | "habits"
-  | "logs"
-  | "tasks"
-  | "timerSessions"
-  | "journal"
-  | "feedback";
+  "categories" | "habits" | "logs" | "tasks" | "timerSessions" | "journal" | "feedback";
 
 export const SYNCED_TABLES: SyncedTable[] = [
   "categories",

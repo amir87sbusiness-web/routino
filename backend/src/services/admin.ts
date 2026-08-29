@@ -9,14 +9,7 @@
  */
 import { and, count, desc, eq, gt, ilike, sql } from "drizzle-orm";
 import type { Database } from "../db/client.js";
-import {
-  discounts,
-  entitlements,
-  grants,
-  otpCodes,
-  payments,
-  users,
-} from "../db/schema.js";
+import { discounts, entitlements, grants, otpCodes, payments, users } from "../db/schema.js";
 import { badRequest, notFound } from "../lib/http-errors.js";
 import { normalizePhone, toAsciiDigits } from "../lib/phone.js";
 import { grantInterval, listGrants, readEntitlement } from "./entitlement.js";
