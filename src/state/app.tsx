@@ -23,9 +23,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import {
-  fetchEntitlement,
   importSubscription,
-  loadTokens,
   markEntitlementChecked,
   sessionUserId,
   type ServerEntitlement,
@@ -54,10 +52,9 @@ import { productWriteAllowed } from "@/lib/access-state";
 import { isNativeRuntime, reconcileNativeReminders } from "@/lib/native-notifications";
 import { syncNativeBars } from "@/lib/native";
 import { loginAs, wipeContent } from "@/lib/wipe";
-import { decideSession } from "@/lib/security-session";
 import { subscriptionReminderEvents } from "@/lib/subscription-reminders";
-import { shouldRefreshEntitlement } from "@/lib/entitlement-refresh";
-import { syncNow } from "@/lib/sync/engine";
+import { hasPendingChanges, syncNow, type SyncOptions } from "@/lib/sync/engine";
+import { createSyncScheduler, type SyncScheduler } from "@/lib/sync/scheduler";
 
 type Updater = (fn: (db: Db) => Db) => boolean;
 type PreferencePatch = Partial<
@@ -131,8 +128,6 @@ export function useAppMaybe() {
  * defence; this is only a local tripwire.
  */
 const TAMPER_TOLERANCE = 6 * 60 * 60 * 1000;
-const SYNC_DEBOUNCE_MS = 600;
-const VISIBLE_SYNC_INTERVAL_MS = 10 * 60_000;
 const RECONCILE_ATTEMPTS = 2;
 
 function syncOwnerOf(value: Db | null): string | null {
@@ -149,6 +144,7 @@ interface AppSyncResult {
 
 interface ActiveAppSync {
   owner: string;
+  options: SyncOptions;
   promise: Promise<AppSyncResult>;
 }
 
@@ -169,8 +165,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const switchingVault = useRef(false);
   const mutationRevision = useRef(0);
   const activeSync = useRef<ActiveAppSync | null>(null);
-  const lastSyncAt = useRef(new Map<string, number>());
-  const syncDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncSchedulerRef = useRef<SyncScheduler | null>(null);
+  const freshLoginOwner = useRef<string | null>(null);
   const pendingReconcile = useRef<{
     owner: string;
     entitlement: ServerEntitlement;
@@ -370,27 +366,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
 
   const syncAccount = useCallback(
-    function run(owner: string, force = false): Promise<AppSyncResult> {
+    function run(owner: string, options: SyncOptions = {}): Promise<AppSyncResult> {
       const current = activeSync.current;
-      if (current?.owner === owner) return current.promise;
+      if (current?.owner === owner) {
+        const followUpNeeded =
+          (options.includeAccountState === true && current.options.includeAccountState !== true) ||
+          (options.pullRequired !== false && current.options.pullRequired === false);
+        if (!followUpNeeded) return current.promise;
+        return current.promise.then(
+          () => run(owner, options),
+          () => run(owner, options),
+        );
+      }
       if (current) {
         return current.promise.then(
-          () => run(owner, force),
-          () => run(owner, force),
+          () => run(owner, options),
+          () => run(owner, options),
         );
       }
 
       const promise = (async (): Promise<AppSyncResult> => {
         if (switchingVault.current || syncOwnerOf(dbRef.current) !== owner) {
-          return { entitlementChecked: false };
-        }
-
-        const last = lastSyncAt.current.get(owner) ?? 0;
-        const pending = pendingReconcile.current;
-        if (!force && Date.now() - last < VISIBLE_SYNC_INTERVAL_MS) {
-          if (pending?.owner === owner) {
-            await reconcileRemote(owner, pending.entitlement);
-          }
           return { entitlementChecked: false };
         }
 
@@ -401,8 +397,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           return { entitlementChecked: false };
         }
 
-        const outcome = await syncNow(owner);
-        lastSyncAt.current.set(owner, Date.now());
+        const outcome = await syncNow(owner, options);
         const entitlementChecked = outcome.entitlement !== undefined;
         if (entitlementChecked) markEntitlementChecked();
 
@@ -422,39 +417,24 @@ export function AppProvider({ children }: { children: ReactNode }) {
       })().finally(() => {
         if (activeSync.current?.promise === promise) activeSync.current = null;
       });
-      const entry = { owner, promise };
+      const entry = { owner, options, promise };
       activeSync.current = entry;
       return promise;
     },
     [applyEntitlementToLiveState, reconcileRemote],
   );
 
-  const requestSync = useCallback(
-    (owner: string, delayMs = 0, force = true) => {
-      const start = () => {
-        void syncAccount(owner, force).catch((err) => {
-          // A rejected stateless token is cleared by the API client. Reflect
-          // that locally; offline/timeout leaves dirty rows and the cursor intact.
-          if (err instanceof ApiError && err.status === 401 && err.code !== "session_changed") {
-            setDb((prev) => (prev ? { ...prev, auth: null } : prev));
-            setSessionGate("ready");
-          }
-        });
-      };
-
-      if (syncDebounce.current) clearTimeout(syncDebounce.current);
-      syncDebounce.current = null;
-      if (delayMs <= 0) start();
-      else syncDebounce.current = setTimeout(start, delayMs);
-    },
-    [syncAccount],
-  );
+  if (!syncSchedulerRef.current) {
+    syncSchedulerRef.current = createSyncScheduler({
+      flush: syncAccount,
+      hasPending: hasPendingChanges,
+    });
+  }
 
   const switchAccount = useCallback(
     async (user: { id: string; phone: string }, entitlement: ServerEntitlement) => {
       switchingVault.current = true;
-      if (syncDebounce.current) clearTimeout(syncDebounce.current);
-      syncDebounce.current = null;
+      syncSchedulerRef.current?.dispose();
       const current = dbRef.current;
       try {
         if (current) {
@@ -491,12 +471,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         dbRef.current = next;
         setDb(next);
         setSessionGate("ready");
+        freshLoginOwner.current = user.id;
       } finally {
         switchingVault.current = false;
       }
-      requestSync(user.id, 0, true);
     },
-    [requestSync],
+    [],
   );
 
   // Hydrate on mount (client only). AppShell already renders a splash while
@@ -584,113 +564,105 @@ export function AppProvider({ children }: { children: ReactNode }) {
       void write.then(
         () => {
           if (owner && syncOwnerOf(dbRef.current) === owner) {
-            requestSync(owner, SYNC_DEBOUNCE_MS, true);
+            syncSchedulerRef.current?.markDirty(owner);
           }
         },
         () => undefined,
       );
     }
-  }, [db, requestSync]);
+  }, [db]);
 
-  const syncLifecycle = useCallback(
-    async (owner: string) => {
-      const current = dbRef.current;
-      if (!current?.auth || syncOwnerOf(current) !== owner) return;
-      const tokens = loadTokens();
-      if (!tokens) {
-        setDb((prev) => (prev ? { ...prev, auth: null } : prev));
-        setSessionGate("ready");
-        return;
-      }
+  const handleSyncError = useCallback((error: unknown) => {
+    // Offline/timeout leaves the durable outbox untouched. A definitive 401 is
+    // the only response that ends the local session.
+    if (error instanceof ApiError && error.status === 401 && error.code !== "session_changed") {
+      setDb((prev) => (prev ? { ...prev, auth: null } : prev));
+    }
+    setSessionGate("ready");
+  }, []);
 
-      // Do not hold the local UI behind a slow or half-connected network. A valid
-      // lease opens immediately; server verification continues in the background.
-      // Only an already-expired lease needs a successful online answer first.
-      const localDecision = decideSession({
-        now: Date.now(),
-        lastServerConfirmedAt: tokens.lastServerConfirmedAt,
-        online: navigator.onLine,
-      });
-      setSessionGate(
-        localDecision.kind === "needs-online-confirmation"
-          ? navigator.onLine
-            ? "checking"
-            : "needs-online"
-          : "ready",
-      );
-
-      try {
-        if (!navigator.onLine) return;
-        const syncResult = await syncAccount(owner, true);
-        setSessionGate("ready");
-        const latest = loadTokens() ?? tokens;
-        if (
-          !syncResult?.entitlementChecked &&
-          shouldRefreshEntitlement({
-            now: Date.now(),
-            lastCheckedAt: latest.lastEntitlementCheckedAt,
-            expiresAt: current.subscription?.expiresAt,
-            force: localDecision.kind === "needs-online-confirmation",
-          })
-        ) {
-          void fetchEntitlement()
-            .then(({ entitlement }) => {
-              const owner = syncOwnerOf(dbRef.current);
-              if (owner) void applyEntitlementToLiveState(owner, entitlement);
-            })
-            .catch(() => undefined);
-        }
-      } catch {
-        const latest = loadTokens();
-        if (!latest) {
-          setDb((prev) => (prev ? { ...prev, auth: null } : prev));
-          setSessionGate("ready");
-          return;
-        }
-        const decision = decideSession({
-          now: Date.now(),
-          lastServerConfirmedAt: latest.lastServerConfirmedAt,
-          online: navigator.onLine,
-        });
-        setSessionGate(decision.kind === "needs-online-confirmation" ? "needs-online" : "ready");
-      }
-    },
-    [applyEntitlementToLiveState, syncAccount],
-  );
-
-  // Boot, online and foreground events all use the normal account sync. A
-  // closed web app cannot execute code; the next open performs the boot sync.
+  // Boot pulls account data/state once. Edits use a trailing 10-second window;
+  // hidden/pagehide/native background override it so a quick phone edit is
+  // available when the laptop opens. There is no periodic network timer.
   const sessionOwner = syncOwnerOf(db);
   useEffect(() => {
     if (!sessionOwner) {
       setSessionGate("ready");
       return;
     }
-    void syncLifecycle(sessionOwner);
-    const onOnline = () => void syncLifecycle(sessionOwner);
+    const scheduler = syncSchedulerRef.current!;
+    setSessionGate("ready");
+    void scheduler
+      .flushNow(sessionOwner, { includeAccountState: true, pullRequired: true })
+      .catch(handleSyncError);
+
+    let catchUp: ReturnType<typeof setTimeout> | null = null;
+    if (freshLoginOwner.current === sessionOwner) {
+      freshLoginOwner.current = null;
+      // One bounded race-catcher for a second device that was closing at the
+      // same moment this login completed. Login is rare; no repeating timer.
+      catchUp = setTimeout(() => {
+        void scheduler.onForeground(sessionOwner).catch(handleSyncError);
+      }, 2_000);
+    }
+
+    const onOnline = () => void scheduler.onOnline(sessionOwner).catch(handleSyncError);
     const onVisibility = () => {
-      if (document.visibilityState === "visible") void syncLifecycle(sessionOwner);
+      if (document.visibilityState === "hidden") {
+        void scheduler
+          .flushNow(sessionOwner, { keepalive: true, pullRequired: false })
+          .catch(handleSyncError);
+      } else {
+        void scheduler.onForeground(sessionOwner).catch(handleSyncError);
+      }
+    };
+    const onPageHide = () => {
+      void scheduler
+        .flushNow(sessionOwner, { keepalive: true, pullRequired: false })
+        .catch(handleSyncError);
     };
     window.addEventListener("online", onOnline);
+    window.addEventListener("pagehide", onPageHide);
     document.addEventListener("visibilitychange", onVisibility);
+
+    let cancelled = false;
+    let removeNativeListener: (() => Promise<void>) | null = null;
+    void (async () => {
+      const { Capacitor } = await import("@capacitor/core");
+      if (cancelled || !Capacitor.isNativePlatform()) return;
+      const { App: CapApp } = await import("@capacitor/app");
+      const listener = await CapApp.addListener("appStateChange", ({ isActive }) => {
+        if (!isActive) {
+          void scheduler
+            .flushNow(sessionOwner, { pullRequired: false })
+            .catch(handleSyncError);
+        }
+      });
+      if (cancelled) await listener.remove();
+      else removeNativeListener = () => listener.remove();
+    })();
+
     return () => {
+      cancelled = true;
+      if (catchUp) clearTimeout(catchUp);
       window.removeEventListener("online", onOnline);
+      window.removeEventListener("pagehide", onPageHide);
       document.removeEventListener("visibilitychange", onVisibility);
+      void removeNativeListener?.();
+      scheduler.dispose();
     };
-  }, [sessionOwner, syncLifecycle]);
+  }, [sessionOwner, handleSyncError]);
 
   const retrySession = useCallback(async () => {
     const owner = syncOwnerOf(dbRef.current);
-    if (owner) await syncLifecycle(owner);
+    if (owner) {
+      await syncSchedulerRef.current?.flushNow(owner, {
+        includeAccountState: true,
+        pullRequired: true,
+      });
+    }
     else setSessionGate("ready");
-  }, [syncLifecycle]);
-
-  useEffect(
-    () => () => {
-      if (syncDebounce.current) clearTimeout(syncDebounce.current);
-    },
-    [],
-  );
+  }, []);
 
   // heartbeat: keep lastSeen fresh so the clock-tampering guard stays accurate.
   // `meta` is device-local, so this touches localStorage only — it no longer

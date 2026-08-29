@@ -8,6 +8,7 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const mocks = vi.hoisted(() => ({
   applyChanges: vi.fn(),
   fetchEntitlement: vi.fn(),
+  hasPendingChanges: vi.fn(),
   hydrate: vi.fn(),
   importSubscription: vi.fn(),
   markEntitlementChecked: vi.fn(),
@@ -60,7 +61,10 @@ vi.mock("@/lib/native-notifications", () => ({
   reconcileNativeReminders: mocks.reconcileNativeReminders,
   requestNativePermission: mocks.requestNativePermission,
 }));
-vi.mock("@/lib/sync/engine", () => ({ syncNow: mocks.syncNow }));
+vi.mock("@/lib/sync/engine", () => ({
+  hasPendingChanges: mocks.hasPendingChanges,
+  syncNow: mocks.syncNow,
+}));
 
 import { AppProvider, useAppMaybe } from "./app";
 
@@ -122,6 +126,7 @@ describe("AppProvider sync lifecycle", () => {
     };
     mocks.applyChanges.mockReset().mockResolvedValue(undefined);
     mocks.fetchEntitlement.mockReset().mockResolvedValue({ entitlement: { status: "none" } });
+    mocks.hasPendingChanges.mockReset().mockResolvedValue(false);
     mocks.hydrate.mockReset().mockResolvedValue({ db: initial, local: {}, migrated: false });
     mocks.importSubscription.mockReset();
     mocks.markEntitlementChecked.mockReset();
@@ -165,7 +170,10 @@ describe("AppProvider sync lifecycle", () => {
   });
 
   it("starts the existing engine with canonical userId after authenticated boot", () => {
-    expect(mocks.syncNow).toHaveBeenCalledWith("user-1");
+    expect(mocks.syncNow).toHaveBeenCalledWith("user-1", {
+      includeAccountState: true,
+      pullRequired: true,
+    });
   });
 
   it("reconciles native reminders on boot without requesting OS permission", () => {
@@ -227,11 +235,12 @@ describe("AppProvider sync lifecycle", () => {
       }),
     );
     mocks.syncNow.mockClear();
+    mocks.hasPendingChanges.mockResolvedValue(true);
 
     window.dispatchEvent(new Event("online"));
     await settle();
 
-    expect(mocks.syncNow).toHaveBeenCalledWith("user-1");
+    expect(mocks.syncNow).toHaveBeenCalledWith("user-1", { pullRequired: false });
   });
 
   it("boots a fresh expired vault with restored history, sync enabled, and writes locked", async () => {
@@ -262,7 +271,10 @@ describe("AppProvider sync lifecycle", () => {
     await settle();
 
     expect(app!.db?.habits.map((item) => item.id)).toContain("cloud-history");
-    expect(mocks.syncNow).toHaveBeenCalledWith("user-1");
+    expect(mocks.syncNow).toHaveBeenCalledWith("user-1", {
+      includeAccountState: true,
+      pullRequired: true,
+    });
     expect(app!.update((db) => ({ ...db, habits: [...db.habits, habit("blocked")] }))).toBe(false);
   });
 
@@ -285,10 +297,10 @@ describe("AppProvider sync lifecycle", () => {
     );
     write.resolve();
     await settle();
-    await act(async () => vi.advanceTimersByTime(800));
+    await act(async () => vi.advanceTimersByTime(10_000));
     await settle();
 
-    expect(mocks.syncNow).toHaveBeenCalledWith("user-1");
+    expect(mocks.syncNow).toHaveBeenCalledWith("user-1", { pullRequired: false });
   });
 
   it("reconciles task changes and foreground without action-specific scheduling", async () => {
@@ -344,10 +356,10 @@ describe("AppProvider sync lifecycle", () => {
     await settle();
     expect(mocks.syncNow).not.toHaveBeenCalled();
 
-    await act(async () => vi.advanceTimersByTime(800));
+    await act(async () => vi.advanceTimersByTime(10_000));
     await settle();
     expect(mocks.syncNow).toHaveBeenCalledTimes(1);
-    expect(mocks.syncNow).toHaveBeenCalledWith("user-1");
+    expect(mocks.syncNow).toHaveBeenCalledWith("user-1", { pullRequired: false });
   });
 
   it("persists a first habit through the normal local-first sync path", async () => {
@@ -362,9 +374,9 @@ describe("AppProvider sync lifecycle", () => {
 
     expect(app!.db?.habits).toEqual([expect.objectContaining({ id: "first-habit" })]);
     expect(mocks.applyChanges).toHaveBeenCalledTimes(1);
-    await act(async () => vi.advanceTimersByTime(800));
+    await act(async () => vi.advanceTimersByTime(10_000));
     await settle();
-    expect(mocks.syncNow).toHaveBeenCalledWith("user-1");
+    expect(mocks.syncNow).toHaveBeenCalledWith("user-1", { pullRequired: false });
   });
 
   it("allows normal product mutations during an active trial", async () => {
@@ -525,6 +537,7 @@ describe("AppProvider sync lifecycle", () => {
         issuedAt: new Date().toISOString(),
       },
     });
+    mocks.hasPendingChanges.mockResolvedValue(true);
 
     window.dispatchEvent(new Event("online"));
     await settle();
@@ -536,6 +549,7 @@ describe("AppProvider sync lifecycle", () => {
 
   it("syncs on lifecycle events without any visible polling interval", async () => {
     mocks.syncNow.mockClear();
+    mocks.hasPendingChanges.mockResolvedValue(true);
 
     await act(async () => vi.advanceTimersByTime(10 * 60_000));
     await settle();
@@ -544,13 +558,22 @@ describe("AppProvider sync lifecycle", () => {
     window.dispatchEvent(new Event("online"));
     await settle();
     expect(mocks.syncNow).toHaveBeenCalledTimes(1);
-    expect(mocks.syncNow).toHaveBeenCalledWith("user-1");
+    expect(mocks.syncNow).toHaveBeenCalledWith("user-1", { pullRequired: false });
 
     mocks.syncNow.mockClear();
     document.dispatchEvent(new Event("visibilitychange"));
     await settle();
     expect(mocks.syncNow).toHaveBeenCalledTimes(1);
-    expect(mocks.syncNow).toHaveBeenCalledWith("user-1");
+    expect(mocks.syncNow).toHaveBeenCalledWith("user-1", { pullRequired: true });
+
+    mocks.syncNow.mockClear();
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" });
+    document.dispatchEvent(new Event("visibilitychange"));
+    await settle();
+    expect(mocks.syncNow).toHaveBeenCalledWith("user-1", {
+      keepalive: true,
+      pullRequired: false,
+    });
   });
 
   it("selects and hydrates the new vault before syncing the new account", async () => {
@@ -573,7 +596,10 @@ describe("AppProvider sync lifecycle", () => {
 
     expect(mocks.switchOwnerVault).toHaveBeenCalledWith("user-b", { claimCurrent: false });
     expect(app!.db?.auth?.userId).toBe("user-b");
-    expect(mocks.syncNow).toHaveBeenCalledWith("user-b");
+    expect(mocks.syncNow).toHaveBeenCalledWith("user-b", {
+      includeAccountState: true,
+      pullRequired: true,
+    });
     expect(mocks.hydrate.mock.invocationCallOrder.at(-1)).toBeLessThan(
       mocks.syncNow.mock.invocationCallOrder.at(-1)!,
     );
@@ -631,6 +657,7 @@ describe("AppProvider sync lifecycle", () => {
         issuedAt: new Date().toISOString(),
       },
     });
+    mocks.hasPendingChanges.mockResolvedValue(true);
 
     window.dispatchEvent(new Event("online"));
     await settle();
@@ -717,6 +744,7 @@ describe("AppProvider sync lifecycle", () => {
         issuedAt: new Date().toISOString(),
       },
     });
+    mocks.hasPendingChanges.mockResolvedValue(true);
 
     window.dispatchEvent(new Event("online"));
     await settle();
@@ -740,7 +768,7 @@ describe("AppProvider sync lifecycle", () => {
       await Promise.resolve();
     });
     await settle();
-    await act(async () => vi.advanceTimersByTime(800));
+    await act(async () => vi.advanceTimersByTime(10_000));
     await settle();
     expect(mocks.syncNow).toHaveBeenCalledTimes(1);
 
