@@ -107,6 +107,38 @@ const month = (
 };
 
 describe("sync", () => {
+  it("returns a bounded per-record quota refusal and keeps the rolled-back batch pullable", async () => {
+    const { access, user } = await signIn("09120000027");
+    await h.raw(`
+      update users set sync_record_count = 49999 where id = '${user.id}'
+    `);
+
+    const response = await exchange(access, 0, [
+      habit("quota-h1", "اول"),
+      habit("quota-h2", "دوم"),
+    ]);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      applied: 0,
+      skipped: 0,
+      records: [],
+      rejectedRecords: [
+        { kind: "habits", id: "quota-h1", code: "account_quota_exceeded" },
+        { kind: "habits", id: "quota-h2", code: "account_quota_exceeded" },
+      ],
+    });
+    const [state] = await h.query<{ n: number; seq: number; sync_record_count: number }>(`
+      select count(r.*)::integer as n, u.seq, u.sync_record_count
+        from users u left join records r on r.user_id = u.id
+       where u.id = '${user.id}'
+       group by u.id
+    `);
+    expect(Number(state!.n)).toBe(0);
+    expect(Number(state!.seq)).toBe(0);
+    expect(Number(state!.sync_record_count)).toBe(49999);
+  });
+
   it("accepts valid rows even when another row in the exchange is rejected", async () => {
     const { access } = await signIn("09120000019");
     const privateText = "private:" + "x".repeat(4_001);

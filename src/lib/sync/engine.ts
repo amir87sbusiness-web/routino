@@ -263,6 +263,10 @@ export interface SyncOutcome {
    * but they are the reason a device can be online and still not fully synced,
    * so the count is surfaced rather than hidden inside a console warning. */
   rejected: number;
+  /** At least one otherwise-valid packet was refused by the account-wide
+   * storage ceiling. The durable rows remain dirty; callers may surface this
+   * exceptional state without inspecting private record metadata. */
+  quotaExceeded: boolean;
   /** True only when remote/reset data changed product rows in IndexedDB. */
   remoteChanged: boolean;
   /**
@@ -325,7 +329,9 @@ export async function hasPendingChanges(): Promise<boolean> {
 }
 
 async function run(owner: string, options: SyncOptions): Promise<SyncOutcome> {
-  if (!hasSession()) return { pushed: 0, pulled: 0, rejected: 0, remoteChanged: false };
+  if (!hasSession()) {
+    return { pushed: 0, pulled: 0, rejected: 0, quotaExceeded: false, remoteChanged: false };
+  }
 
   let state = await loadSyncState(owner);
   let pushed = 0;
@@ -336,6 +342,7 @@ async function run(owner: string, options: SyncOptions): Promise<SyncOutcome> {
   const outbox = await collectOutbox();
   const batches = chunk(outbox);
   let rejected = 0;
+  let quotaExceeded = false;
   let exchanged = false;
   let accountStateReceived = false;
 
@@ -354,6 +361,8 @@ async function run(owner: string, options: SyncOptions): Promise<SyncOutcome> {
       accountStateReceived = true;
     }
     rejected += page.rejectedRecords?.length ?? 0;
+    quotaExceeded ||=
+      page.rejectedRecords?.some((record) => record.code === "account_quota_exceeded") ?? false;
   };
 
   const exchangePage = async (
@@ -412,5 +421,12 @@ async function run(owner: string, options: SyncOptions): Promise<SyncOutcome> {
   }
 
   await saveSyncState({ ...state, owner, lastSyncedAt: Date.now() });
-  return { pushed, pulled, rejected, remoteChanged: resetApplied || pulled > 0, entitlement };
+  return {
+    pushed,
+    pulled,
+    rejected,
+    quotaExceeded,
+    remoteChanged: resetApplied || pulled > 0,
+    entitlement,
+  };
 }

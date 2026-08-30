@@ -47,6 +47,31 @@ export const MAX_PUSH_RECORDS = 200;
  * so pulling is paged and the client loops until `hasMore` is false. */
 export const PULL_PAGE_SIZE = 500;
 
+const SYNC_QUOTA_CONSTRAINTS = new Set([
+  "users_sync_record_count_bounds",
+  "users_sync_data_bytes_bounds",
+]);
+
+/** Drizzle preserves the native Postgres error either directly or as `cause`,
+ * depending on the driver. Match only SQLSTATE 23514 plus our named checks: an
+ * unrelated database failure must remain loud instead of being mislabeled as a
+ * harmless quota refusal. */
+function isAccountQuotaError(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 3 && current && typeof current === "object"; depth += 1) {
+    const candidate = current as { code?: unknown; constraint?: unknown; cause?: unknown };
+    if (
+      candidate.code === "23514" &&
+      typeof candidate.constraint === "string" &&
+      SYNC_QUOTA_CONSTRAINTS.has(candidate.constraint)
+    ) {
+      return true;
+    }
+    current = candidate.cause;
+  }
+  return false;
+}
+
 export interface PullRecord {
   kind: string;
   id: string;
@@ -229,14 +254,16 @@ export async function pushRecords(
   // does not land. Equal timestamps also lose, which keeps a device replaying
   // its outbox from churning `seq` — and therefore from waking every other
   // device up for a row that did not change.
-  const res = await db.execute(sql`
-    with bump as (
+  let res: Awaited<ReturnType<Database["execute"]>>;
+  try {
+    res = await db.execute(sql`
+      with bump as (
       update users set seq = seq + ${all.length} where id = ${userId} returning seq
-    ),
-    incoming (kind, id, data, updated_at, deleted, ord) as (
+      ),
+      incoming (kind, id, data, updated_at, deleted, ord) as (
       values ${sql.join(values, sql`, `)}
-    ),
-    upserted as (
+      ),
+      upserted as (
       insert into records (user_id, kind, id, data, updated_at, deleted, seq)
       select ${userId}::uuid, i.kind, i.id, i.data, i.updated_at, i.deleted,
              b.seq - ${all.length} + 1 + i.ord
@@ -291,9 +318,29 @@ export async function pushRecords(
           else records.updated_at < excluded.updated_at
         end
       returning 1 as ok
-    )
-    select (select seq from bump) as cursor, (select count(*) from upserted) as applied
-  `);
+      )
+      select (select seq from bump) as cursor, (select count(*) from upserted) as applied
+    `);
+  } catch (error) {
+    if (!isAccountQuotaError(error)) throw error;
+    // The single write statement has already rolled back both its seq bump and
+    // every record. Return bounded metadata only; private payloads never echo.
+    const [u] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    return {
+      cursor: Number(u?.seq ?? 0),
+      applied: 0,
+      skipped: 0,
+      rejectedRecords: [
+        ...rejectedRecords,
+        ...valid.map((record) => ({
+          kind: record.kind,
+          id: record.id,
+          updatedAt: record.updatedAt,
+          code: "account_quota_exceeded" as const,
+        })),
+      ],
+    };
+  }
 
   const [row] = rowsOf<{ cursor: string | number; applied: string | number }>(res);
   if (!row) throw new Error("sync push produced no result row");

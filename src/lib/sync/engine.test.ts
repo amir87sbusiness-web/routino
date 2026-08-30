@@ -15,6 +15,7 @@ import type {
   PushResponse,
   RemoteRecord,
   SyncRecord,
+  SyncRejectionCode,
 } from "../api/sync";
 import { defaultLocal, saveLocal } from "../db/local";
 import { hydrate } from "../db/hydrate";
@@ -29,6 +30,7 @@ const server = {
   exchanges: [] as ExchangeRequest[],
   /** ids the server permanently refuses, e.g. an oversized journal entry. */
   refuse: new Set<string>(),
+  refuseCode: "record_too_large" as SyncRejectionCode,
   afterExchange: null as null | (() => Promise<void>),
   /** Writes rows at the next sequence numbers, newest-wins per (kind, id). */
   push(records: SyncRecord[]): PushResponse & {
@@ -41,7 +43,7 @@ const server = {
         kind: record.kind,
         id: record.id,
         updatedAt: record.updatedAt,
-        code: "record_too_large" as const,
+        code: this.refuseCode,
       }));
     let applied = 0;
     for (const r of accepted) {
@@ -89,6 +91,7 @@ const server = {
     this.resetNextPull = false;
     this.exchanges = [];
     this.refuse.clear();
+    this.refuseCode = "record_too_large";
     this.afterExchange = null;
   },
 };
@@ -208,6 +211,17 @@ describe("sync engine, two devices on one account", () => {
 
     expect(outcome.rejected).toBe(1);
     expect(await idb.logs.where("dirty").equals(1).count()).toBe(2);
+  });
+
+  it("reports account quota refusal without clearing the durable outbox", async () => {
+    await localDirtyHabit("quota-habit", "پیاده‌روی");
+    server.refuse.add("quota-habit");
+    server.refuseCode = "account_quota_exceeded";
+
+    const outcome = await syncNow(OWNER);
+
+    expect(outcome).toMatchObject({ rejected: 1, quotaExceeded: true });
+    expect((await idb.habits.get("quota-habit"))?.dirty).toBe(1);
   });
 
   it("expands a pulled server month into the unchanged local daily rows", async () => {

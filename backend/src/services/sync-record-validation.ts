@@ -181,7 +181,12 @@ export interface PushRecord {
 }
 
 export type SyncRejectionCode =
-  "bad_kind" | "bad_id" | "bad_updated_at" | "invalid_record" | "record_too_large";
+  | "bad_kind"
+  | "bad_id"
+  | "bad_updated_at"
+  | "invalid_record"
+  | "record_too_large"
+  | "account_quota_exceeded";
 
 export type RecordValidation =
   { ok: true; record: PushRecord } | { ok: false; code: SyncRejectionCode };
