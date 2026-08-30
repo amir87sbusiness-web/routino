@@ -15,6 +15,10 @@ const HABIT_MONTH_MIGRATION_SQL = readFileSync(
   resolve(root, "supabase/migrations/20260831120000_compact_habit_logs_by_month.sql"),
   "utf8",
 );
+const ACCOUNT_SYNC_BUDGET_MIGRATION_SQL = readFileSync(
+  resolve(root, "supabase/migrations/20260831130000_account_sync_budgets.sql"),
+  "utf8",
+);
 
 let h: Harness;
 
@@ -27,6 +31,60 @@ afterAll(async () => {
 });
 
 describe("launch schema repairs", () => {
+  it("backfills exact account usage before enabling sync storage budgets", async () => {
+    await h.raw(`
+      drop trigger records_sync_usage_after_insert on records;
+      drop trigger records_sync_usage_after_update on records;
+      drop trigger records_sync_usage_after_delete on records;
+      alter table users drop constraint users_sync_record_count_bounds;
+      alter table users drop constraint users_sync_data_bytes_bounds;
+      alter table users drop column sync_record_count;
+      alter table users drop column sync_data_bytes;
+
+      insert into users (id, phone) values
+        ('71111111-1111-4111-8111-111111111111', '989122211116');
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq) values
+        (
+          '71111111-1111-4111-8111-111111111111', 'habits', 'h1',
+          '{"id":"h1","name":"walk"}', 1, false, 1
+        ),
+        (
+          '71111111-1111-4111-8111-111111111111', 'journal', '2026-08-31',
+          null, 2, true, 2
+        );
+    `);
+
+    await h.raw(ACCOUNT_SYNC_BUDGET_MIGRATION_SQL);
+
+    const [usage] = await h.query<{
+      sync_record_count: number;
+      sync_data_bytes: number;
+      actual_bytes: number;
+    }>(`
+      select u.sync_record_count,
+             u.sync_data_bytes,
+             coalesce(sum(octet_length(r.data::text)), 0)::bigint as actual_bytes
+        from users u left join records r on r.user_id = u.id
+       where u.id = '71111111-1111-4111-8111-111111111111'
+       group by u.id
+    `);
+    expect(Number(usage!.sync_record_count)).toBe(2);
+    expect(Number(usage!.sync_data_bytes)).toBe(Number(usage!.actual_bytes));
+
+    await h.raw(`
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      values (
+        '71111111-1111-4111-8111-111111111111', 'habits', 'h2',
+        '{"id":"h2"}', 3, false, 3
+      )
+    `);
+    const [after] = await h.query<{ sync_record_count: number }>(`
+      select sync_record_count from users
+       where id = '71111111-1111-4111-8111-111111111111'
+    `);
+    expect(Number(after!.sync_record_count)).toBe(3);
+  });
+
   it("compacts legacy daily habit logs without losing cells or tombstones", async () => {
     await h.raw(`
       alter table records drop constraint records_kind_valid;

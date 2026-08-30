@@ -38,6 +38,10 @@ export const SYNC_KINDS = [
 ] as const;
 export type SyncKind = (typeof SYNC_KINDS)[number];
 
+/** `sync_record_count` and `sync_data_bytes` deliberately stay DB-only. Keeping
+ * them out of Drizzle's broad `select().from(users)` projection lets the new
+ * Edge code run against the old schema during the pre-migration smoke window;
+ * DDL/migrations/triggers remain the sole owners of those accounting fields. */
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   /** Canonical `989xxxxxxxxx`. MUST be produced by the same normalizePhone as
