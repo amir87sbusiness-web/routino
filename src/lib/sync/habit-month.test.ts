@@ -43,8 +43,8 @@ describe("habit-month wire codec", () => {
         habitId: "h1",
         monthKey: "2026-08",
         cells: {
-          "2026-08-01": { data: rows[0]!.data, updatedAt: 100, deleted: false },
-          "2026-08-02": { data: null, updatedAt: 200, deleted: true },
+          "01": { value: 1, done: true, updatedAt: 100, deleted: false },
+          "02": { updatedAt: 200, deleted: true },
         },
       },
       updatedAt: 200,
@@ -105,12 +105,13 @@ describe("habit-month wire codec", () => {
       habitId: "h1",
       monthKey: "2026-08",
       cells: {
-        "2026-08-01": {
-          data: { habitId: "h1", dateKey: "2026-08-01", value: 1, done: true },
+        "01": {
+          value: 1,
+          done: true,
           updatedAt: 100,
           deleted: false,
         },
-        "2026-08-02": { data: null, updatedAt: 200, deleted: true },
+        "02": { updatedAt: 200, deleted: true },
       },
     };
 
@@ -127,7 +128,7 @@ describe("habit-month wire codec", () => {
       {
         kind: "logs",
         id: "h1|2026-08-01",
-        data: data.cells["2026-08-01"]!.data,
+        data: { habitId: "h1", dateKey: "2026-08-01", value: 1, done: true },
         updatedAt: 100,
         deleted: false,
         seq: 9,

@@ -32,12 +32,12 @@ create table if not exists records (
   seq bigint not null,
   primary key (user_id, kind, id),
   constraint records_kind_valid check (kind in
-    ('categories','habits','logs','tasks','timerSessions','journal'))
+    ('categories','habits','habitMonths','tasks','timerSessions','journal'))
 );
 delete from records where kind = 'settings';
 alter table records drop constraint if exists records_kind_valid;
 alter table records add constraint records_kind_valid check (kind in
-  ('categories','habits','logs','tasks','timerSessions','journal'));
+  ('categories','habits','habitMonths','tasks','timerSessions','journal'));
 create index if not exists records_pull on records (user_id, seq);
 
 create table if not exists otp_codes (
@@ -245,11 +245,9 @@ alter table users add column if not exists password_hash text;
 create unique index if not exists users_username on users (username);
 
 -- records_habit indexed (data->>'habitId') for a query that was never written:
--- the habit-delete cascade matches on the id prefix (habitId|dateKey) instead,
--- see childLogIds in services/sync.ts. An unused index is not free — logs is
--- the highest-volume table in the product and every synced tick paid to maintain
--- this. Dropped rather than left "just in case"; re-add it WITH the query that
--- uses it if that ever changes.
+-- the habit-delete cascade matches the month id prefix (habitId|YYYY-MM), see
+-- childMonthIds in services/sync.ts. An unused index is not free; dropped rather
+-- than left "just in case". Re-add it WITH the query that uses it if that changes.
 drop index if exists records_habit;
 
 insert into plans (id, name_fa, name_en, months, price_toman) values

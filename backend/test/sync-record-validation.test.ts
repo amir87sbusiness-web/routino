@@ -41,15 +41,11 @@ const valid = {
     habitId: "h1",
     monthKey: "2026-08",
     cells: {
-      "2026-08-31": {
-        data: {
-          habitId: "h1",
-          dateKey: "2026-08-31",
-          value: 30,
-          done: true,
-          note: "انجام شد",
-          mood: "🙂",
-        },
+      "31": {
+        value: 30,
+        done: true,
+        note: "انجام شد",
+        mood: "🙂",
         updatedAt: 1_000,
         deleted: false,
       },
@@ -179,12 +175,9 @@ describe("validateSyncRecord", () => {
         data: {
           ...valid.habitMonths.data,
           cells: {
-            "2026-08-31": {
-              ...valid.habitMonths.data.cells["2026-08-31"],
-              data: {
-                ...valid.habitMonths.data.cells["2026-08-31"].data,
-                note: "x".repeat(4_001),
-              },
+            "31": {
+              ...valid.habitMonths.data.cells["31"],
+              note: "x".repeat(4_001),
             },
           },
         },
@@ -199,7 +192,7 @@ describe("validateSyncRecord", () => {
     const tooManyCells = Object.fromEntries(
       Array.from({ length: 32 }, (_, index) => {
         const day = String((index % 31) + 1).padStart(2, "0");
-        return [`2026-08-${day}-${index}`, { data: null, updatedAt: index, deleted: true }];
+        return [`${day}-${index}`, { updatedAt: index, deleted: true }];
       }),
     );
     expect(
@@ -215,7 +208,7 @@ describe("validateSyncRecord", () => {
         data: {
           ...valid.habitMonths.data,
           cells: {
-            "2026-07-31": valid.habitMonths.data.cells["2026-08-31"],
+            "32": valid.habitMonths.data.cells["31"],
           },
         },
       }),
@@ -227,8 +220,9 @@ describe("validateSyncRecord", () => {
         data: {
           ...valid.habitMonths.data,
           cells: {
-            "2026-08-31": {
-              data: valid.habitMonths.data.cells["2026-08-31"].data,
+            "31": {
+              value: 30,
+              done: true,
               updatedAt: 1_000,
               deleted: true,
             },

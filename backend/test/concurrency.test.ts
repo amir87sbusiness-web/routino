@@ -82,8 +82,9 @@ const monthCell = (habitId: string, dateKey: string, updatedAt: number) => ({
     habitId,
     monthKey: dateKey.slice(0, 7),
     cells: {
-      [dateKey]: {
-        data: { habitId, dateKey, value: 1, done: true },
+      [dateKey.slice(8, 10)]: {
+        value: 1,
+        done: true,
         updatedAt,
         deleted: false,
       },
@@ -167,7 +168,7 @@ describe("one account, several devices at once", () => {
       records: { kind: string; data: { cells: Record<string, unknown> } }[];
     };
     const stored = body.records.find((record) => record.kind === "habitMonths")!;
-    expect(Object.keys(stored.data.cells).sort()).toEqual(["2026-08-01", "2026-08-02"]);
+    expect(Object.keys(stored.data.cells).sort()).toEqual(["01", "02"]);
   });
 });
 

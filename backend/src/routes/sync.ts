@@ -43,6 +43,7 @@ const pullQuery = z.object({
 });
 
 const exchangeBody = pushBody.extend({
+  protocolVersion: z.literal(2),
   cursor: z.number().int().nonnegative().default(0),
   limit: z.number().int().positive().max(PULL_PAGE_SIZE).default(PULL_PAGE_SIZE),
   includeAccountState: z.boolean().default(false),

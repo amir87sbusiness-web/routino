@@ -6,9 +6,12 @@ export const MAX_HABIT_MONTH_CELLS = 31;
 export const MAX_HABIT_MONTH_PACKET_BYTES = 40 * 1024;
 
 export interface HabitMonthCell {
-  data: HabitLog | null;
   updatedAt: number;
   deleted: boolean;
+  value?: number;
+  done?: boolean;
+  note?: string;
+  mood?: string;
 }
 
 export interface HabitMonthData {
@@ -37,11 +40,17 @@ function packetFor(
   let updatedAt = 0;
   for (const row of rows) {
     const dateKey = row.key.slice(row.key.lastIndexOf("|") + 1);
-    cells[dateKey] = {
-      data: row.deleted ? null : row.data,
-      updatedAt: row.updatedAt,
-      deleted: row.deleted === 1,
-    };
+    const day = dateKey.slice(8, 10);
+    cells[day] = row.deleted
+      ? { updatedAt: row.updatedAt, deleted: true }
+      : {
+          updatedAt: row.updatedAt,
+          deleted: false,
+          value: row.data.value,
+          done: row.data.done,
+          ...(row.data.note === undefined ? {} : { note: row.data.note }),
+          ...(row.data.mood === undefined ? {} : { mood: row.data.mood }),
+        };
     updatedAt = Math.max(updatedAt, row.updatedAt);
   }
   return {
@@ -115,12 +124,24 @@ export function expandHabitMonthRecord(record: RemoteRecord): RemoteRecord[] {
   const month = record.data as HabitMonthData;
   return Object.entries(month.cells)
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([dateKey, cell]) => ({
-      kind: "logs",
-      id: `${month.habitId}|${dateKey}`,
-      data: cell.deleted ? null : cell.data,
-      updatedAt: cell.updatedAt,
-      deleted: cell.deleted,
-      seq: record.seq,
-    }));
+    .map(([day, cell]) => {
+      const dateKey = `${month.monthKey}-${day}`;
+      return {
+        kind: "logs",
+        id: `${month.habitId}|${dateKey}`,
+        data: cell.deleted
+          ? null
+          : {
+              habitId: month.habitId,
+              dateKey,
+              value: cell.value,
+              done: cell.done,
+              ...(cell.note === undefined ? {} : { note: cell.note }),
+              ...(cell.mood === undefined ? {} : { mood: cell.mood }),
+            },
+        updatedAt: cell.updatedAt,
+        deleted: cell.deleted,
+        seq: record.seq,
+      };
+    });
 }

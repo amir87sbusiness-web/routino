@@ -57,7 +57,13 @@ function exchange(
     method: "POST",
     url: "/v1/sync/exchange",
     headers: auth(access),
-    payload: { cursor, records, includeAccountState, ...(limit ? { limit } : {}) },
+    payload: {
+      protocolVersion: 2,
+      cursor,
+      records,
+      includeAccountState,
+      ...(limit ? { limit } : {}),
+    },
   });
 }
 
@@ -85,12 +91,10 @@ const month = (
 ) => {
   const cells = Object.fromEntries(
     days.map(({ dateKey, updatedAt = 1000, done = true, deleted = false }) => [
-      dateKey,
-      {
-        data: deleted ? null : { habitId, dateKey, value: done ? 1 : 0, done },
-        updatedAt,
-        deleted,
-      },
+      dateKey.slice(8, 10),
+      deleted
+        ? { updatedAt, deleted: true }
+        : { value: done ? 1 : 0, done, updatedAt, deleted: false },
     ]),
   );
   return {
@@ -156,6 +160,17 @@ describe("sync", () => {
       reset: false,
     });
     expect(response.json()).not.toHaveProperty("entitlement");
+  });
+
+  it("rejects an exchange that does not declare protocol v2", async () => {
+    const { access } = await signIn("09120000026");
+    const response = await h.app.inject({
+      method: "POST",
+      url: "/v1/sync/exchange",
+      headers: auth(access),
+      payload: { cursor: 0, records: [] },
+    });
+    expect(response.statusCode).toBe(400);
   });
 
   it("includes account state only when explicitly requested", async () => {
@@ -267,7 +282,7 @@ describe("sync", () => {
       records: { kind: string; data: { cells: Record<string, { updatedAt: number }> } }[];
     };
     const stored = body.records.find((record) => record.kind === "habitMonths")!;
-    expect(stored.data.cells["2026-08-01"]!.updatedAt).toBeLessThan(Date.now() + 120_000);
+    expect(stored.data.cells["01"]!.updatedAt).toBeLessThan(Date.now() + 120_000);
   });
 
   it("merges different days independently even when the later packet has an older envelope", async () => {
@@ -282,7 +297,7 @@ describe("sync", () => {
       records: { kind: string; data: { cells: Record<string, unknown> } }[];
     };
     const stored = body.records.find((record) => record.kind === "habitMonths")!;
-    expect(Object.keys(stored.data.cells).sort()).toEqual(["2026-08-01", "2026-08-02"]);
+    expect(Object.keys(stored.data.cells).sort()).toEqual(["01", "02"]);
   });
 
   it("uses per-day LWW and does not churn the stored row on an idempotent replay", async () => {
@@ -305,11 +320,10 @@ describe("sync", () => {
     );
     expect(after[0]!.seq).toBe(before[0]!.seq);
     const body = (await pull(access, 0)).json() as {
-      records: { kind: string; data: { cells: Record<string, { data: { done: boolean } }> } }[];
+      records: { kind: string; data: { cells: Record<string, { done: boolean }> } }[];
     };
     expect(
-      body.records.find((record) => record.kind === "habitMonths")!.data.cells["2026-08-01"]!.data
-        .done,
+      body.records.find((record) => record.kind === "habitMonths")!.data.cells["01"]!.done,
     ).toBe(true);
   });
 

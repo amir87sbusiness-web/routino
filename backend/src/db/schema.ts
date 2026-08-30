@@ -74,8 +74,8 @@ export const records = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     kind: text("kind").notNull(),
-    /** Client-generated: `uid()`, or a natural composite (`habitId|dateKey`,
-     * `dateKey`). Validated against a strict pattern
+    /** Client-generated: `uid()`, or a natural composite (`habitId|monthKey`,
+     * journal `dateKey`). Validated against a strict pattern
      * on push — a malicious client must not be able to send a 10MB id. */
     id: text("id").notNull(),
     data: jsonb("data"),

@@ -253,11 +253,9 @@ alter table users add column if not exists password_hash text;
 create unique index if not exists users_username on users (username);
 
 -- records_habit indexed (data->>'habitId') for a query that was never written:
--- the habit-delete cascade matches on the id prefix (habitId|dateKey) instead,
--- see childLogIds in services/sync.ts. An unused index is not free — logs is
--- the highest-volume table in the product and every synced tick paid to maintain
--- this. Dropped rather than left "just in case"; re-add it WITH the query that
--- uses it if that ever changes.
+-- the habit-delete cascade matches the month id prefix (habitId|YYYY-MM), see
+-- childMonthIds in services/sync.ts. An unused index is not free; dropped rather
+-- than left "just in case". Re-add it WITH the query that uses it if that changes.
 drop index if exists records_habit;
 `;
 

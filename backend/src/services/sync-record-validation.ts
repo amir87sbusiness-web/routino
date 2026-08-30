@@ -75,10 +75,10 @@ const habitSchema = z
   })
   .strict();
 
-const habitLogSchema = z
+const liveHabitMonthCellSchema = z
   .object({
-    habitId: entityId,
-    dateKey,
+    updatedAt: epochMs,
+    deleted: z.literal(false),
     value: finiteAmount,
     done: z.boolean(),
     note,
@@ -86,14 +86,17 @@ const habitLogSchema = z
   })
   .strict();
 
-const habitMonthCellSchema = z
+const deletedHabitMonthCellSchema = z
   .object({
-    data: habitLogSchema.nullable(),
     updatedAt: epochMs,
-    deleted: z.boolean(),
+    deleted: z.literal(true),
   })
-  .strict()
-  .refine((cell) => cell.deleted === (cell.data === null));
+  .strict();
+
+const habitMonthCellSchema = z.discriminatedUnion("deleted", [
+  liveHabitMonthCellSchema,
+  deletedHabitMonthCellSchema,
+]);
 
 const habitMonthSchema = z
   .object({
@@ -107,13 +110,9 @@ const habitMonthSchema = z
     if (cells.length === 0 || cells.length > 31) {
       ctx.addIssue({ code: "custom", message: "habit month must contain 1..31 cells" });
     }
-    for (const [day, cell] of cells) {
-      if (!isDateKey(day) || day.slice(0, 7) !== month.monthKey) {
+    for (const [day] of cells) {
+      if (!/^\d{2}$/.test(day) || !isDateKey(`${month.monthKey}-${day}`)) {
         ctx.addIssue({ code: "custom", message: "cell date is outside month" });
-        continue;
-      }
-      if (!cell.deleted && (cell.data?.habitId !== month.habitId || cell.data?.dateKey !== day)) {
-        ctx.addIssue({ code: "custom", message: "cell payload does not match key" });
       }
     }
   });

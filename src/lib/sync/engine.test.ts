@@ -190,8 +190,8 @@ describe("sync engine, two devices on one account", () => {
           habitId: "h1",
           monthKey: "2026-08",
           cells: expect.objectContaining({
-            "2026-08-01": expect.objectContaining({ updatedAt: 100 }),
-            "2026-08-02": expect.objectContaining({ updatedAt: 200 }),
+            "01": expect.objectContaining({ updatedAt: 100 }),
+            "02": expect.objectContaining({ updatedAt: 200 }),
           }),
         }),
       }),
@@ -219,12 +219,13 @@ describe("sync engine, two devices on one account", () => {
           habitId: "h1",
           monthKey: "2026-08",
           cells: {
-            "2026-08-01": {
-              data: { habitId: "h1", dateKey: "2026-08-01", value: 1, done: true },
+            "01": {
+              value: 1,
+              done: true,
               updatedAt: 100,
               deleted: false,
             },
-            "2026-08-02": { data: null, updatedAt: 200, deleted: true },
+            "02": { updatedAt: 200, deleted: true },
           },
         },
         updatedAt: 200,

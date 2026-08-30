@@ -11,6 +11,10 @@ const ZARINPAL_MIGRATION_SQL = readFileSync(
   resolve(root, "supabase/migrations/20260828120000_zarinpal_only_payments.sql"),
   "utf8",
 );
+const HABIT_MONTH_MIGRATION_SQL = readFileSync(
+  resolve(root, "supabase/migrations/20260831120000_compact_habit_logs_by_month.sql"),
+  "utf8",
+);
 
 let h: Harness;
 
@@ -23,6 +27,102 @@ afterAll(async () => {
 });
 
 describe("launch schema repairs", () => {
+  it("compacts legacy daily habit logs without losing cells or tombstones", async () => {
+    await h.raw(`
+      alter table records drop constraint records_kind_valid;
+      alter table records add constraint records_kind_valid check (kind in
+        ('categories','habits','logs','habitMonths','tasks','timerSessions','journal'));
+      insert into users (id, phone, seq) values
+        ('51111111-1111-4111-8111-111111111111', '989122211114', 4);
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq) values
+        (
+          '51111111-1111-4111-8111-111111111111', 'logs', 'h1|2026-08-01',
+          '{"habitId":"h1","dateKey":"2026-08-01","value":1,"done":true}',
+          1000, false, 1
+        ),
+        (
+          '51111111-1111-4111-8111-111111111111', 'logs', 'h1|2026-08-02',
+          null, 2000, true, 2
+        ),
+        (
+          '51111111-1111-4111-8111-111111111111', 'logs', 'h1|2026-09-01',
+          '{"habitId":"h1","dateKey":"2026-09-01","value":0,"done":false}',
+          3000, false, 3
+        ),
+        (
+          '51111111-1111-4111-8111-111111111111', 'habits', 'h1',
+          '{"id":"h1"}', 4000, false, 4
+        );
+    `);
+
+    await h.raw(HABIT_MONTH_MIGRATION_SQL);
+
+    const rows = await h.query<{
+      id: string;
+      data: {
+        cells: Record<
+          string,
+          { value?: number; done?: boolean; updatedAt: number; deleted: boolean }
+        >;
+      };
+    }>(`
+      select id, data from records
+       where user_id = '51111111-1111-4111-8111-111111111111'
+         and kind = 'habitMonths'
+       order by id
+    `);
+    expect(rows.map((row) => row.id)).toEqual(["h1|2026-08", "h1|2026-09"]);
+    expect(rows[0]!.data.cells["01"]).toMatchObject({
+      value: 1,
+      done: true,
+      updatedAt: 1000,
+      deleted: false,
+    });
+    expect(rows[0]!.data.cells["02"]).toEqual({
+      updatedAt: 2000,
+      deleted: true,
+    });
+    expect(await h.query(`select 1 from records where kind = 'logs'`)).toHaveLength(0);
+
+    const [user] = await h.query<{ seq: string; gc_seq: string }>(`
+      select seq::text, gc_seq::text from users
+       where id = '51111111-1111-4111-8111-111111111111'
+    `);
+    expect(Number(user!.seq)).toBe(6);
+    expect(Number(user!.gc_seq)).toBe(4);
+    await expect(
+      h.raw(`
+        insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+        values (
+          '51111111-1111-4111-8111-111111111111', 'logs', 'h1|2026-10-01',
+          '{}', 1, false, 7
+        )
+      `),
+    ).rejects.toThrow(/records_kind_valid/i);
+  });
+
+  it("rolls back month compaction instead of guessing over malformed history", async () => {
+    await h.raw(`
+      alter table records drop constraint records_kind_valid;
+      alter table records add constraint records_kind_valid check (kind in
+        ('categories','habits','logs','habitMonths','tasks','timerSessions','journal'));
+      insert into users (id, phone, seq) values
+        ('61111111-1111-4111-8111-111111111111', '989122211115', 1);
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      values (
+        '61111111-1111-4111-8111-111111111111', 'logs', 'h1|2026-08-01',
+        '{"habitId":"other","dateKey":"2026-08-01","value":1,"done":true}',
+        1000, false, 1
+      );
+    `);
+
+    await expect(h.raw(HABIT_MONTH_MIGRATION_SQL)).rejects.toThrow(/malformed legacy habit logs/i);
+    await h.raw("rollback");
+
+    expect(await h.query(`select 1 from records where kind = 'logs'`)).toHaveLength(1);
+    expect(await h.query(`select 1 from records where kind = 'habitMonths'`)).toHaveLength(0);
+  });
+
   it("applies the production ZarinPal-only migration to the current schema", async () => {
     await h.raw(ZARINPAL_MIGRATION_SQL);
 

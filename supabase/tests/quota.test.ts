@@ -1,9 +1,9 @@
 /**
  * Supabase budget guard for the local-first, cloud-synced launch architecture.
  *
- * Personal rows live in the generic `records` log. The model below writes a
- * modest quarter of small records per account, while account/session and
- * subscription rows remain bounded separately.
+ * Daily habit facts are packed into one row per habit-month. This fixture stores
+ * more than a thousand real days per account and asserts the physical row slope
+ * is habits × months rather than habits × days.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { auth, makeHarness, type Harness } from "./helpers/harness.ts";
@@ -14,7 +14,12 @@ const FREE_FUNCTION_INVOCATIONS = 500_000;
 const USERS = 120;
 const HALF = USERS / 2;
 const PAYING = 36;
-const RECORDS_PER_USER = 48;
+const HABITS_PER_USER = 4;
+const MONTHS_PER_HABIT = 12;
+const DAYS_PER_MONTH = 28;
+const MONTH_ROWS_PER_USER = HABITS_PER_USER * MONTHS_PER_HABIT;
+const DAILY_FACTS_PER_USER = MONTH_ROWS_PER_USER * DAYS_PER_MONTH;
+const SEED_CHUNK = 8;
 
 const PERMANENT = [
   "users",
@@ -50,25 +55,49 @@ async function signUp(index: number) {
     }),
   );
   const session = (await login.json()) as { access: string };
-  const seed = await h.call("POST", "/v1/sync/exchange", {
-    headers: auth(session.access),
-    body: {
-      cursor: 0,
-      records: Array.from({ length: RECORDS_PER_USER }, (_, recordIndex) => {
-        const habitId = `habit-${index}-${recordIndex}`;
-        const dateKey = `2026-08-${String((recordIndex % 28) + 1).padStart(2, "0")}`;
-        return {
-          kind: "logs",
-          id: `${habitId}|${dateKey}`,
-          data: { habitId, dateKey, value: 1, done: recordIndex % 2 === 0 },
-          updatedAt: index * 10_000 + recordIndex,
-          deleted: false,
-        };
+  const months = Array.from({ length: MONTH_ROWS_PER_USER }, (_, recordIndex) => {
+    const habitIndex = Math.floor(recordIndex / MONTHS_PER_HABIT);
+    const monthIndex = recordIndex % MONTHS_PER_HABIT;
+    const habitId = `habit-${index}-${habitIndex}`;
+    const monthKey = `2026-${String(monthIndex + 1).padStart(2, "0")}`;
+    const cells = Object.fromEntries(
+      Array.from({ length: DAYS_PER_MONTH }, (_, dayIndex) => {
+        const dateKey = `${monthKey}-${String(dayIndex + 1).padStart(2, "0")}`;
+        const updatedAt = index * 1_000_000 + recordIndex * 100 + dayIndex;
+        return [
+          String(dayIndex + 1).padStart(2, "0"),
+          {
+            value: 1,
+            done: dayIndex % 2 === 0,
+            updatedAt,
+            deleted: false,
+          },
+        ];
       }),
-      includeAccountState: false,
-    },
+    );
+    return {
+      kind: "habitMonths",
+      id: `${habitId}|${monthKey}`,
+      data: { habitId, monthKey, cells },
+      updatedAt: Math.max(...Object.values(cells).map((cell) => cell.updatedAt)),
+      deleted: false,
+    };
   });
-  const seeded = (await seed.json()) as { cursor: number };
+
+  let cursor = 0;
+  for (let offset = 0; offset < months.length; offset += SEED_CHUNK) {
+    const seed = await h.call("POST", "/v1/sync/exchange", {
+      headers: auth(session.access),
+      body: {
+        protocolVersion: 2,
+        cursor,
+        records: months.slice(offset, offset + SEED_CHUNK),
+        includeAccountState: false,
+      },
+    });
+    expect(seed.status).toBe(200);
+    cursor = ((await seed.json()) as { cursor: number }).cursor;
+  }
 
   // A normal changed session sends a tiny delta and receives it back in the
   // same invocation. An app boot is one empty exchange with account state.
@@ -77,18 +106,25 @@ async function signUp(index: number) {
     await h.call("POST", "/v1/sync/exchange", {
       headers: auth(session.access),
       body: {
-        cursor: seeded.cursor,
+        protocolVersion: 2,
+        cursor,
         records: [
           {
-            kind: "logs",
-            id: `habit-${index}-0|2026-08-01`,
+            kind: "habitMonths",
+            id: `habit-${index}-0|2026-01`,
             data: {
               habitId: `habit-${index}-0`,
-              dateKey: "2026-08-01",
-              value: 1,
-              done: true,
+              monthKey: "2026-01",
+              cells: {
+                "01": {
+                  value: 1,
+                  done: true,
+                  updatedAt: 9_000_000_000 + index,
+                  deleted: false,
+                },
+              },
             },
-            updatedAt: 9_000_000 + index,
+            updatedAt: 9_000_000_000 + index,
             deleted: false,
           },
         ],
@@ -102,6 +138,7 @@ async function signUp(index: number) {
     await h.call("POST", "/v1/sync/exchange", {
       headers: auth(session.access),
       body: {
+        protocolVersion: 2,
         cursor: changedBody.cursor,
         records: [],
         includeAccountState: true,
@@ -161,10 +198,17 @@ const sum = (tables: readonly string[], source = sizes) =>
 describe("cloud-sync database budget", () => {
   it("stores personal records through authenticated push and pull", async () => {
     const [records] = await h.query<{ n: string }>("select count(*)::text as n from records");
-    expect(Number(records.n)).toBe(USERS * RECORDS_PER_USER);
+    expect(Number(records.n)).toBe(USERS * MONTH_ROWS_PER_USER);
+    const [facts] = await h.query<{ n: string }>(`
+      select count(*)::text as n
+        from records r
+        cross join lateral jsonb_object_keys(r.data->'cells') cell
+       where r.kind = 'habitMonths'
+    `);
+    expect(Number(facts.n)).toBe(USERS * DAILY_FACTS_PER_USER);
     const pull = await h.call("GET", "/v1/sync/pull?cursor=0", { headers: auth(sampleAccess) });
     expect(pull.status).toBe(200);
-    expect((await pull.json()).records).toHaveLength(RECORDS_PER_USER);
+    expect((await pull.json()).records).toHaveLength(MONTH_ROWS_PER_USER);
   });
 
   it("keeps permanent account/content/subscription rows comfortably bounded", () => {
@@ -206,6 +250,10 @@ describe("egress and invocation budget", () => {
     console.log(
       `[egress] boot + one changed session/day ≈ ${dailyBytes} B; 5 GB ≈ ${monthlyDau} DAU`,
     );
+    // The changed response conservatively contains the complete edited month,
+    // not only the one cell this device already knows. Compact day cells keep
+    // even the uncompressed result far above the invocation ceiling (~8.3k
+    // DAU), so egress is not the tier that forces an upgrade.
     expect(monthlyDau).toBeGreaterThan(50_000);
   });
 

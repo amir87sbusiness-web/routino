@@ -44,7 +44,12 @@ describe("edge sync", () => {
     const { access } = await signIn(h, "09120001123");
     const response = await h.call("POST", "/v1/sync/exchange", {
       headers: auth(access),
-      body: { cursor: 0, records: [habit("h1", "ورزش")], includeAccountState: false },
+      body: {
+        protocolVersion: 2,
+        cursor: 0,
+        records: [habit("h1", "ورزش")],
+        includeAccountState: false,
+      },
     });
 
     expect(response.status).toBe(200);
@@ -53,6 +58,15 @@ describe("edge sync", () => {
       skipped: 0,
       records: [expect.objectContaining({ id: "h1" })],
     });
+  });
+
+  it("rejects exchange clients that do not declare protocol v2", async () => {
+    const { access } = await signIn(h, "09120001124");
+    const response = await h.call("POST", "/v1/sync/exchange", {
+      headers: auth(access),
+      body: { cursor: 0, records: [] },
+    });
+    expect(response.status).toBe(400);
   });
 
   it("keeps authenticated personal sync available", async () => {
