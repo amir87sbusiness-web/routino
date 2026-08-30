@@ -37,13 +37,23 @@ const valid = {
     createdAt: 900,
     archived: false,
   }),
-  logs: base("logs", "h1|2026-08-31", {
+  habitMonths: base("habitMonths", "h1|2026-08", {
     habitId: "h1",
-    dateKey: "2026-08-31",
-    value: 30,
-    done: true,
-    note: "انجام شد",
-    mood: "🙂",
+    monthKey: "2026-08",
+    cells: {
+      "2026-08-31": {
+        data: {
+          habitId: "h1",
+          dateKey: "2026-08-31",
+          value: 30,
+          done: true,
+          note: "انجام شد",
+          mood: "🙂",
+        },
+        updatedAt: 1_000,
+        deleted: false,
+      },
+    },
   }),
   tasks: base("tasks", "t1", {
     id: "t1",
@@ -120,9 +130,12 @@ describe("validateSyncRecord", () => {
     expect(rejectCode({ ...valid.habits, data: { ...valid.habits.data, id: "other" } })).toBe(
       "invalid_record",
     );
-    expect(rejectCode({ ...valid.logs, data: { ...valid.logs.data, dateKey: "2026-08-30" } })).toBe(
-      "invalid_record",
-    );
+    expect(
+      rejectCode({
+        ...valid.habitMonths,
+        data: { ...valid.habitMonths.data, monthKey: "2026-07" },
+      }),
+    ).toBe("invalid_record");
     expect(
       rejectCode({ ...valid.journal, data: { ...valid.journal.data, dateKey: "2026-08-30" } }),
     ).toBe("invalid_record");
@@ -161,10 +174,80 @@ describe("validateSyncRecord", () => {
 
   it("bounds notes and identifiers without echoing their values", () => {
     expect(
-      rejectCode({ ...valid.logs, data: { ...valid.logs.data, note: "x".repeat(4_001) } }),
+      rejectCode({
+        ...valid.habitMonths,
+        data: {
+          ...valid.habitMonths.data,
+          cells: {
+            "2026-08-31": {
+              ...valid.habitMonths.data.cells["2026-08-31"],
+              data: {
+                ...valid.habitMonths.data.cells["2026-08-31"].data,
+                note: "x".repeat(4_001),
+              },
+            },
+          },
+        },
+      }),
     ).toBe("invalid_record");
     expect(
       rejectCode({ ...valid.habits, data: { ...valid.habits.data, name: "x".repeat(257) } }),
     ).toBe("invalid_record");
+  });
+
+  it("rejects malformed or unbounded habit-month cells", () => {
+    const tooManyCells = Object.fromEntries(
+      Array.from({ length: 32 }, (_, index) => {
+        const day = String((index % 31) + 1).padStart(2, "0");
+        return [`2026-08-${day}-${index}`, { data: null, updatedAt: index, deleted: true }];
+      }),
+    );
+    expect(
+      rejectCode({
+        ...valid.habitMonths,
+        data: { ...valid.habitMonths.data, cells: tooManyCells },
+      }),
+    ).toBe("invalid_record");
+
+    expect(
+      rejectCode({
+        ...valid.habitMonths,
+        data: {
+          ...valid.habitMonths.data,
+          cells: {
+            "2026-07-31": valid.habitMonths.data.cells["2026-08-31"],
+          },
+        },
+      }),
+    ).toBe("invalid_record");
+
+    expect(
+      rejectCode({
+        ...valid.habitMonths,
+        data: {
+          ...valid.habitMonths.data,
+          cells: {
+            "2026-08-31": {
+              data: valid.habitMonths.data.cells["2026-08-31"].data,
+              updatedAt: 1_000,
+              deleted: true,
+            },
+          },
+        },
+      }),
+    ).toBe("invalid_record");
+  });
+
+  it("rejects legacy raw log rows from protocol v2", () => {
+    expect(
+      rejectCode(
+        base("logs", "h1|2026-08-31", {
+          habitId: "h1",
+          dateKey: "2026-08-31",
+          value: 1,
+          done: true,
+        }),
+      ),
+    ).toBe("bad_kind");
   });
 });

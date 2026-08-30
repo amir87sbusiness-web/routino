@@ -31,7 +31,7 @@ import {
 export const SYNC_KINDS = [
   "categories",
   "habits",
-  "logs",
+  "habitMonths",
   "tasks",
   "timerSessions",
   "journal",
@@ -92,7 +92,7 @@ export const records = pgTable(
     index("records_pull").on(t.userId, t.seq),
     check(
       "records_kind_valid",
-      sql`${t.kind} IN ('categories','habits','logs','tasks','timerSessions','journal')`,
+      sql`${t.kind} IN ('categories','habits','habitMonths','tasks','timerSessions','journal')`,
     ),
   ],
 );

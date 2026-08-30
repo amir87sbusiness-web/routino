@@ -4,9 +4,11 @@ import { SYNC_KINDS, type SyncKind } from "../db/schema.js";
 export const MAX_JOURNAL_CHARACTERS = 4_000;
 export const MAX_JOURNAL_UTF8_BYTES = 16 * 1024;
 export const MAX_RECORD_UTF8_BYTES = 20 * 1024;
+export const MAX_HABIT_MONTH_PACKET_UTF8_BYTES = 44 * 1024;
 
 const ENTITY_ID_RE = /^[A-Za-z0-9_:.-]{1,128}$/;
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const MONTH_KEY_RE = /^\d{4}-\d{2}$/;
 const TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const encoder = new TextEncoder();
 
@@ -24,6 +26,14 @@ function isDateKey(value: string): boolean {
 }
 
 const dateKey = z.string().refine(isDateKey);
+
+function isMonthKey(value: string): boolean {
+  if (!MONTH_KEY_RE.test(value)) return false;
+  const parsed = new Date(`${value}-01T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 7) === value;
+}
+
+const monthKey = z.string().refine(isMonthKey);
 
 const categorySchema = z
   .object({
@@ -76,6 +86,38 @@ const habitLogSchema = z
   })
   .strict();
 
+const habitMonthCellSchema = z
+  .object({
+    data: habitLogSchema.nullable(),
+    updatedAt: epochMs,
+    deleted: z.boolean(),
+  })
+  .strict()
+  .refine((cell) => cell.deleted === (cell.data === null));
+
+const habitMonthSchema = z
+  .object({
+    habitId: entityId,
+    monthKey,
+    cells: z.record(z.string(), habitMonthCellSchema),
+  })
+  .strict()
+  .superRefine((month, ctx) => {
+    const cells = Object.entries(month.cells);
+    if (cells.length === 0 || cells.length > 31) {
+      ctx.addIssue({ code: "custom", message: "habit month must contain 1..31 cells" });
+    }
+    for (const [day, cell] of cells) {
+      if (!isDateKey(day) || day.slice(0, 7) !== month.monthKey) {
+        ctx.addIssue({ code: "custom", message: "cell date is outside month" });
+        continue;
+      }
+      if (!cell.deleted && (cell.data?.habitId !== month.habitId || cell.data?.dateKey !== day)) {
+        ctx.addIssue({ code: "custom", message: "cell payload does not match key" });
+      }
+    }
+  });
+
 const taskSchema = z
   .object({
     id: entityId,
@@ -125,7 +167,7 @@ const journalSchema = z
 const schemas: Record<SyncKind, z.ZodType> = {
   categories: categorySchema,
   habits: habitSchema,
-  logs: habitLogSchema,
+  habitMonths: habitMonthSchema,
   tasks: taskSchema,
   timerSessions: timerSessionSchema,
   journal: journalSchema,
@@ -157,10 +199,10 @@ const isSyncKind = (kind: string): kind is SyncKind =>
 
 function hasValidId(kind: SyncKind, id: string): boolean {
   if (kind === "journal") return isDateKey(id);
-  if (kind === "logs") {
+  if (kind === "habitMonths") {
     const separator = id.lastIndexOf("|");
     if (separator <= 0) return false;
-    return ENTITY_ID_RE.test(id.slice(0, separator)) && isDateKey(id.slice(separator + 1));
+    return ENTITY_ID_RE.test(id.slice(0, separator)) && isMonthKey(id.slice(separator + 1));
   }
   return ENTITY_ID_RE.test(id);
 }
@@ -173,10 +215,21 @@ function encodedJsonBytes(value: unknown): number | null {
   }
 }
 
-function payloadMatchesId(kind: SyncKind, id: string, data: unknown): boolean {
+function payloadMatchesId(
+  kind: SyncKind,
+  id: string,
+  data: unknown,
+  envelopeUpdatedAt: number,
+): boolean {
   const item = data as Record<string, unknown>;
   if (kind === "journal") return item.dateKey === id;
-  if (kind === "logs") return `${item.habitId}|${item.dateKey}` === id;
+  if (kind === "habitMonths") {
+    const cells = Object.values(item.cells as Record<string, { updatedAt: number }>);
+    return (
+      `${item.habitId}|${item.monthKey}` === id &&
+      Math.max(...cells.map((cell) => cell.updatedAt)) === envelopeUpdatedAt
+    );
+  }
   return item.id === id;
 }
 
@@ -207,13 +260,15 @@ export function validateSyncRecord(record: PushRecord): RecordValidation {
   }
 
   const parsed = schemas[record.kind].safeParse(record.data);
-  if (!parsed.success || !payloadMatchesId(record.kind, record.id, parsed.data)) {
+  if (!parsed.success || !payloadMatchesId(record.kind, record.id, parsed.data, record.updatedAt)) {
     return { ok: false, code: "invalid_record" };
   }
 
   const bytes = encodedJsonBytes(record.data);
   if (bytes === null) return { ok: false, code: "invalid_record" };
-  if (bytes > MAX_RECORD_UTF8_BYTES) return { ok: false, code: "record_too_large" };
+  const maxBytes =
+    record.kind === "habitMonths" ? MAX_HABIT_MONTH_PACKET_UTF8_BYTES : MAX_RECORD_UTF8_BYTES;
+  if (bytes > maxBytes) return { ok: false, code: "record_too_large" };
 
   return { ok: true, record };
 }
