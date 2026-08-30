@@ -17,8 +17,6 @@ export interface Tokens {
   access: string;
   /** Epoch ms when `access` expires. */
   accessExpiresAt: number;
-  /** Last successful authenticated server response. Drives the 15-day offline lease. */
-  lastServerConfirmedAt: number;
   /** Last successful subscription read; absent on sessions created by older builds. */
   lastEntitlementCheckedAt?: number;
 }
@@ -79,10 +77,6 @@ export function loadTokens(): Tokens | null {
         typeof parsed.accessExpiresAt === "number"
           ? parsed.accessExpiresAt
           : accessExpiryAt(parsed.access),
-      lastServerConfirmedAt:
-        typeof parsed.lastServerConfirmedAt === "number"
-          ? parsed.lastServerConfirmedAt
-          : Date.now(),
       ...(typeof parsed.lastEntitlementCheckedAt === "number"
         ? { lastEntitlementCheckedAt: parsed.lastEntitlementCheckedAt }
         : {}),
@@ -121,15 +115,9 @@ const withExpiry = (
   return {
     access: t.access,
     accessExpiresAt: accessExpiryAt(t.access, now),
-    lastServerConfirmedAt: now,
     lastEntitlementCheckedAt: entitlementCheckedAt ?? previous?.lastEntitlementCheckedAt,
   };
 };
-
-export function markServerConfirmed(now = Date.now()): void {
-  const tokens = loadTokens();
-  if (tokens) saveTokens({ ...tokens, lastServerConfirmedAt: now });
-}
 
 export function markEntitlementChecked(now = Date.now()): void {
   const tokens = loadTokens();
@@ -269,9 +257,7 @@ export async function authedRequest<T>(
   }
 
   try {
-    const result = await apiRequest<T>(path, { ...requestOptions, token: tokens.access });
-    markServerConfirmed();
-    return result;
+    return await apiRequest<T>(path, { ...requestOptions, token: tokens.access });
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {
       clearTokens();

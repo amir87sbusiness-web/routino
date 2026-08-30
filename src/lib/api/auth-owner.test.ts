@@ -21,7 +21,6 @@ describe("owner-bound authenticated requests", () => {
     saveTokens({
       access: tokenWith({ sub: "user-a", exp: 4_000_000_000 }),
       accessExpiresAt: 4_000_000_000_000,
-      lastServerConfirmedAt: Date.now(),
     });
   });
 

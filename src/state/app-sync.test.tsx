@@ -39,7 +39,6 @@ vi.mock("@/lib/api/auth", () => ({
   loadTokens: vi.fn(() => ({
     access: "access",
     accessExpiresAt: Date.now() + 60_000,
-    lastServerConfirmedAt: Date.now(),
     lastEntitlementCheckedAt: Date.now(),
   })),
   markEntitlementChecked: mocks.markEntitlementChecked,
@@ -602,6 +601,10 @@ describe("AppProvider sync lifecycle", () => {
     expect(mocks.hydrate.mock.invocationCallOrder.at(-1)).toBeLessThan(
       mocks.syncNow.mock.invocationCallOrder.at(-1)!,
     );
+
+    await act(async () => vi.advanceTimersByTime(2_000));
+    await settle();
+    expect(mocks.syncNow).toHaveBeenLastCalledWith("user-b", { pullRequired: true });
   });
 
   it("preserves an unresolved legacy plan on import failure and retries on a later server answer", async () => {

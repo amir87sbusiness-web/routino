@@ -65,4 +65,18 @@ describe("10-second lifecycle sync scheduler", () => {
     await vi.advanceTimersByTimeAsync(EDIT_SYNC_DELAY_MS);
     expect(flush).toHaveBeenCalledTimes(1);
   });
+
+  it("coalesces redundant clean foreground pulls for ten seconds", async () => {
+    hasPending.mockResolvedValue(false);
+    const scheduler = createSyncScheduler({ flush, hasPending });
+
+    await scheduler.flushNow("u1", { pullRequired: true });
+    await scheduler.onForeground("u1");
+    expect(flush).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(EDIT_SYNC_DELAY_MS);
+    await scheduler.onForeground("u1");
+    expect(flush).toHaveBeenCalledTimes(2);
+    expect(flush).toHaveBeenLastCalledWith("u1", { pullRequired: true });
+  });
 });

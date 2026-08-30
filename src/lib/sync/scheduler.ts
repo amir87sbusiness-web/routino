@@ -17,6 +17,7 @@ export function createSyncScheduler({
 }: SyncSchedulerDeps) {
   let timer: ReturnType<typeof setTimeout> | null = null;
   const failed = new Set<string>();
+  const lastCompletedAt = new Map<string, number>();
 
   const cancelTimer = () => {
     if (timer !== null) clearTimer(timer);
@@ -28,6 +29,7 @@ export function createSyncScheduler({
     try {
       const result = await flush(owner, options);
       failed.delete(owner);
+      lastCompletedAt.set(owner, Date.now());
       return result;
     } catch (error) {
       failed.add(owner);
@@ -53,7 +55,10 @@ export function createSyncScheduler({
       return run(owner, { pullRequired: failed.has(owner) });
     },
 
-    onForeground(owner: string) {
+    async onForeground(owner: string) {
+      const pending = await hasPending();
+      const last = lastCompletedAt.get(owner) ?? 0;
+      if (!pending && Date.now() - last < EDIT_SYNC_DELAY_MS) return;
       return run(owner, { pullRequired: true });
     },
 

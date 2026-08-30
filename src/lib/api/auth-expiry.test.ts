@@ -36,13 +36,11 @@ describe("access token expiry", () => {
     expect(loadTokens()).toEqual({
       access: legacy.access,
       accessExpiresAt: 4_000_000,
-      lastServerConfirmedAt: 3_000,
       lastEntitlementCheckedAt: 2_000,
     });
     expect(JSON.parse(localStorage.getItem(TOKEN_KEY)!)).toEqual({
       access: legacy.access,
       accessExpiresAt: 4_000_000,
-      lastServerConfirmedAt: 3_000,
       lastEntitlementCheckedAt: 2_000,
     });
   });

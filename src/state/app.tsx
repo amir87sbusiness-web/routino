@@ -602,7 +602,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       // One bounded race-catcher for a second device that was closing at the
       // same moment this login completed. Login is rare; no repeating timer.
       catchUp = setTimeout(() => {
-        void scheduler.onForeground(sessionOwner).catch(handleSyncError);
+        void scheduler.flushNow(sessionOwner, { pullRequired: true }).catch(handleSyncError);
       }, 2_000);
     }
 

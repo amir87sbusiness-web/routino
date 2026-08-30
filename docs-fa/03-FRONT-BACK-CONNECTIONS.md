@@ -145,7 +145,7 @@ subscribe.tsx (فرانت)
 ### 🔒 قرارداد ۸: دیتای شخصی local-first و cloud-synced — ✅ سیاست لانچ
 
 - عادت، لاگ، کار، ژورنال، تایمر و دسته ابتدا در IndexedDB همان مرورگر/WebView ذخیره می‌شوند؛ همهٔ تنظیمات مثل تم، زبان و اعلان فقط روی همان دستگاه در localStorage می‌مانند و هرگز sync نمی‌شوند.
-- `state/app.tsx` تغییرهای محصول را ۱۰ ثانیه بعد از آخرین ویرایش batch می‌کند. در hidden/pagehide و رفتن اپ نیتیو به پس‌زمینه، outbox را فوری و best-effort با `keepalive` می‌فرستد؛ boot، ورود تازه و foreground نیز pull می‌کنند. poll دوره‌ای و ping امنیتی وجود ندارد. `POST /v1/sync/exchange` push و pull را در یک invocation انجام می‌دهد و فقط auth می‌خواهد؛ boot همان پاسخ را برای وضعیت اشتراک هم استفاده می‌کند.
+- `state/app.tsx` تغییرهای محصول را ۱۰ ثانیه بعد از آخرین ویرایش batch می‌کند. در hidden/pagehide و رفتن اپ نیتیو به پس‌زمینه، outbox را فوری و best-effort با `keepalive` می‌فرستد؛ boot، ورود تازه و foreground نیز pull می‌کنند، ولی foreground تمیزِ تکراری در فاصلهٔ کمتر از ۱۰ ثانیه درخواست دوم نمی‌سازد. poll دوره‌ای و ping امنیتی وجود ندارد. `POST /v1/sync/exchange` push و pull را در یک invocation انجام می‌دهد و فقط auth می‌خواهد؛ boot همان پاسخ را برای وضعیت اشتراک هم استفاده می‌کند.
 - جدول `records` منبع عمومی سرور برای delta sync است؛ cursor، LWW، tombstone و reset watermark جلوی گم‌شدن/زنده‌شدن دوبارهٔ دادهٔ حذف‌شده را می‌گیرند.
 - هر حساب روی این مرورگر یک vault جدا دارد (`src/lib/db/vault.ts`)؛ A→B→A هیچ دیتایی را حذف یا قاطی نمی‌کند.
 - Export همیشه فعال است. Import در `src/lib/import-policy.ts` فقط برای اشتراک پولی فعال است و هم قبل از file picker و هم قبل از commit دوباره چک می‌شود.
