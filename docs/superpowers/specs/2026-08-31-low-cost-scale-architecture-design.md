@@ -93,7 +93,8 @@ Limits are server-side and intentionally far above normal usage:
 - hard body cap before JSON parsing in both production adapters
 - record-count and pull-page caps
 - exact per-kind byte and field limits
-- account live-record and live-byte ceilings sized for decades of ordinary use
+- exact database-owned ceilings of 50,000 cloud rows (including tombstones) and
+  128 MiB stored JSON per account, sized for decades of ordinary use
 - bounded rejected-record details to prevent reflected-response amplification
 - Cloudflare coarse IP/path rate limits plus existing durable OTP/password/provider ledgers
 - aggregate SMS and checkout circuit breakers retained separately from sync limits

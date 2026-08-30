@@ -11,6 +11,8 @@ import { auth, makeHarness, type Harness } from "./helpers/harness.ts";
 const FREE_DB_BYTES = 500 * 1024 * 1024;
 const FREE_EGRESS_BYTES = 5 * 1024 * 1024 * 1024;
 const FREE_FUNCTION_INVOCATIONS = 500_000;
+const ACCOUNT_RECORD_LIMIT = 50_000;
+const ACCOUNT_DATA_BYTE_LIMIT = 128 * 1024 * 1024;
 const USERS = 120;
 const HALF = USERS / 2;
 const PAYING = 36;
@@ -209,6 +211,38 @@ describe("cloud-sync database budget", () => {
     const pull = await h.call("GET", "/v1/sync/pull?cursor=0", { headers: auth(sampleAccess) });
     expect(pull.status).toBe(200);
     expect((await pull.json()).records).toHaveLength(MONTH_ROWS_PER_USER);
+  });
+
+  it("keeps exact per-account counters with centuries of fixture headroom", async () => {
+    const mismatches = await h.query<{ user_id: string }>(`
+      with actual as (
+        select u.id as user_id,
+               count(r.*)::integer as record_count,
+               coalesce(sum(octet_length(r.data::text)), 0)::bigint as data_bytes
+          from users u left join records r on r.user_id = u.id
+         group by u.id
+      )
+      select a.user_id
+        from actual a join users u on u.id = a.user_id
+       where u.sync_record_count <> a.record_count
+          or u.sync_data_bytes <> a.data_bytes
+    `);
+    expect(mismatches).toHaveLength(0);
+
+    const [usage] = await h.query<{ records_per_user: string; data_bytes_per_user: string }>(`
+      select avg(sync_record_count)::text as records_per_user,
+             avg(sync_data_bytes)::text as data_bytes_per_user
+        from users
+    `);
+    const recordsPerYear = Number(usage.records_per_user);
+    const dataBytesPerYear = Number(usage.data_bytes_per_user);
+    const recordYears = Math.floor(ACCOUNT_RECORD_LIMIT / recordsPerYear);
+    const byteYears = Math.floor(ACCOUNT_DATA_BYTE_LIMIT / dataBytesPerYear);
+    console.log(
+      `[account budget] fixture ≈ ${Math.round(recordsPerYear)} rows + ${Math.round(dataBytesPerYear)} JSON B/year; headroom ≈ ${Math.min(recordYears, byteYears)} years`,
+    );
+    expect(recordsPerYear).toBe(MONTH_ROWS_PER_USER);
+    expect(Math.min(recordYears, byteYears)).toBeGreaterThan(100);
   });
 
   it("keeps permanent account/content/subscription rows comfortably bounded", () => {

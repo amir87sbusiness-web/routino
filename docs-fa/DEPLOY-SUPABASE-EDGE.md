@@ -33,6 +33,14 @@ node scripts/gen-setup-sql.mjs
 `20260831120000_compact_habit_logs_by_month.sql` نیز همهٔ `logs`های legacy را در
 یک تراکنش به `habitMonths` تبدیل می‌کند، cursorهای عقب‌مانده را با `gc_seq` به reset
 امن می‌فرستد و روی ردیف malformed کامل rollback می‌کند.
+`20260831130000_account_sync_budgets.sql` سپس تعداد ردیف و بایت JSON هر حساب را
+یک‌بار از دیتای موجود بک‌فیل می‌کند؛ اگر حسابی از ۵۰٬۰۰۰ ردیف یا ۱۲۸ MiB عبور کرده
+باشد، migration بدون حذف یا حدس کامل rollback می‌شود تا بررسی دستی انجام شود.
+
+کد Edge این release ستون‌های accounting را در queryهای عمومی `users` انتخاب
+نمی‌کند؛ بنابراین می‌توان ابتدا Edge را روی schema قدیمی smoke-test کرد، بعد migration
+budget را اجرا کرد و دوباره sync را آزمود. نسخهٔ قدیمی Edge نیز با ستون/trigger جدید
+سازگار است. اجرای migration قبل از backup معتبر یا روی پروژهٔ اشتباه ممنوع است.
 
 این release عمداً pre-launch است: migration ماه constraint نهایی پروتکل ۲ را فعال
 می‌کند و بعد تابع Edge/فرانت/اپِ v2 منتشر می‌شوند. اگر قبل از اجرای این توالی نسخه‌ای
