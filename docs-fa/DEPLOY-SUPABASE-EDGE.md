@@ -28,10 +28,16 @@ npm run test:edge -- --maxWorkers=1
 node scripts/gen-setup-sql.mjs
 ```
 
-سپس migration
-`supabase/migrations/20260828120000_zarinpal_only_payments.sql` را روی پروژه درست
-اجرا کن. migration قبل از حذف ستون‌های قدیمی، اگر پرداخت تسویه‌نشده یا grant مالی
-تکراری ببیند متوقف می‌شود و چیزی را حدسی حذف نمی‌کند.
+بعد از backup غیرخالی و dry-run، migrationهای `supabase/migrations/` را به ترتیب
+نام اجرا کن. migration پرداخت قبل از حذف ستون قدیمی روی وضعیت مبهم متوقف می‌شود.
+`20260831120000_compact_habit_logs_by_month.sql` نیز همهٔ `logs`های legacy را در
+یک تراکنش به `habitMonths` تبدیل می‌کند، cursorهای عقب‌مانده را با `gc_seq` به reset
+امن می‌فرستد و روی ردیف malformed کامل rollback می‌کند.
+
+این release عمداً pre-launch است: migration ماه constraint نهایی پروتکل ۲ را فعال
+می‌کند و بعد تابع Edge/فرانت/اپِ v2 منتشر می‌شوند. اگر قبل از اجرای این توالی نسخه‌ای
+به کاربر واقعی داده شده باشد، این ترتیب دیگر مجاز نیست و باید rollout دوconstraintی
+سازگار با کلاینت قدیمی جدا طراحی شود؛ migration و deploy را کورکورانه ادامه نده.
 
 Secretهای لازم:
 

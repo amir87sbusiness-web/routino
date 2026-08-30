@@ -147,11 +147,12 @@ subscribe.tsx (فرانت)
 - عادت، لاگ، کار، ژورنال، تایمر و دسته ابتدا در IndexedDB همان مرورگر/WebView ذخیره می‌شوند؛ همهٔ تنظیمات مثل تم، زبان و اعلان فقط روی همان دستگاه در localStorage می‌مانند و هرگز sync نمی‌شوند.
 - `state/app.tsx` تغییرهای محصول را ۱۰ ثانیه بعد از آخرین ویرایش batch می‌کند. در hidden/pagehide و رفتن اپ نیتیو به پس‌زمینه، outbox را فوری و best-effort با `keepalive` می‌فرستد؛ boot، ورود تازه و foreground نیز pull می‌کنند، ولی foreground تمیزِ تکراری در فاصلهٔ کمتر از ۱۰ ثانیه درخواست دوم نمی‌سازد. poll دوره‌ای و ping امنیتی وجود ندارد. `POST /v1/sync/exchange` push و pull را در یک invocation انجام می‌دهد و فقط auth می‌خواهد؛ boot همان پاسخ را برای وضعیت اشتراک هم استفاده می‌کند.
 - جدول `records` منبع عمومی سرور برای delta sync است؛ cursor، LWW، tombstone و reset watermark جلوی گم‌شدن/زنده‌شدن دوبارهٔ دادهٔ حذف‌شده را می‌گیرند.
+- exchange فقط قرارداد `protocolVersion: 2` را می‌پذیرد. فرانت لاگ‌های dirty روزانه را در packet جزئی `habitMonths` می‌فرستد؛ سرور یک ردیف کامل به‌ازای هر عادت-ماه نگه می‌دارد و سلول‌ها را جدا merge می‌کند. پاسخ ماه کامل در فرانت به جدول محلی `logs` باز می‌شود، بنابراین UI/آفلاین/Export همچنان تاریخچهٔ روزانهٔ کامل می‌بینند.
 - قرارداد پاسخ exchange شامل `rejectedRecords[{kind,id,updatedAt,code}]` است. سرور payload هر kind را دقیق validate می‌کند ولی متن رکورد ردشده را برنمی‌گرداند؛ فرانت فقط ردیف‌های تسویه‌شدهٔ همان نسخه را clean می‌کند و rejected را durable نگه می‌دارد. این قرارداد در `backend/src/services/sync-record-validation.ts`، `backend/src/services/sync.ts`، `src/lib/api/sync.ts` و `src/lib/sync/engine.ts` باید با هم تغییر کند.
 - بدنهٔ JSON در Fastify و Edge حداکثر ۶۴ KiB است. Edge هم `Content-Length` و هم تعداد واقعی بایت‌های stream را قبل از `JSON.parse` کنترل می‌کند؛ خطای آن `413 payload_too_large` است.
 - هر حساب روی این مرورگر یک vault جدا دارد (`src/lib/db/vault.ts`)؛ A→B→A هیچ دیتایی را حذف یا قاطی نمی‌کند.
 - Export همیشه فعال است. Import در `src/lib/import-policy.ts` فقط برای اشتراک پولی فعال است و هم قبل از file picker و هم قبل از commit دوباره چک می‌شود.
-- سرور علاوه بر داده‌های حساب/ورود، اشتراک و پرداخت، فقط شش نوع رکورد اصلی محصول را در جدول عمومی `records` نگه می‌دارد. هیچ دستگاه یا تنظیماتی روی سرور ذخیره نمی‌شود. PostgREST با RLS بدون policy بسته است و فرانت فقط از Edge API احراز‌شده استفاده می‌کند.
+- سرور علاوه بر داده‌های حساب/ورود، اشتراک و پرداخت، فقط شش نوع رکورد کلادی `categories/habits/habitMonths/tasks/timerSessions/journal` را در جدول عمومی `records` نگه می‌دارد. هیچ دستگاه یا تنظیماتی روی سرور ذخیره نمی‌شود. PostgREST با RLS بدون policy بسته است و فرانت فقط از Edge API احراز‌شده استفاده می‌کند.
 
 ### 🎁 قرارداد ۹: دوره آزمایشی و گِیت اشتراک
 

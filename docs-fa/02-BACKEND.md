@@ -186,8 +186,9 @@ Fastify رو می‌سازه، CORS و فشرده‌سازی و helmet رو فع
 ### `backend/src/services/sync.ts` — sync فعالِ دادهٔ شخصی
 
 - مسیر اصلی `POST /v1/sync/exchange` در یک invocation اول dirty rowها را push و سپس از cursor قبلی pull می‌کند؛ مسیرهای قدیمی push/pull فعلاً برای تست/سازگاری باقی‌اند. اشتراک هرگز شرط sync نیست.
-- kindهای کلادی دقیقاً `categories`، `habits`، `logs`، `tasks`، `timerSessions` و `journal` هستند؛ همهٔ تنظیمات local-only هستند.
-- `sync-record-validation.ts` شکل دقیق هر kind، کلید طبیعی، enumها، عددهای finite، طول رشته و حجم واقعی UTF-8 را قبل از نوشتن بررسی می‌کند. ژورنال حداکثر ۴۰۰۰ کاراکتر و ۱۶ KiB متن UTF-8 دارد و کل رکورد زنده سقف مستقل دارد؛ `data: unknown` دیگر به معنی JSON دلخواه نیست.
+- kindهای کلادی پروتکل ۲ دقیقاً `categories`، `habits`، `habitMonths`، `tasks`، `timerSessions` و `journal` هستند؛ `logs` فقط مدل روزانهٔ IndexedDB است و تنظیمات همگی local-only هستند. exchange بدون `protocolVersion: 2` رد می‌شود.
+- هر `habitMonths` حداکثر ۳۱ سلول روزِ تخت و bounded دارد. push می‌تواند فقط روزهای dirty را بفرستد؛ SQL همان سلول‌ها را با timestamp مستقل داخل ماه کامل merge می‌کند. بنابراین روز جدید با envelope قدیمی‌تر هم گم نمی‌شود، replay مساوی seq ردیف را عوض نمی‌کند و حذف عادت به‌جای صدها روز فقط ماه‌های همان عادت را tombstone می‌کند.
+- `sync-record-validation.ts` شکل دقیق هر kind، کلید طبیعی، enumها، عددهای finite، طول رشته و حجم واقعی UTF-8 را قبل از نوشتن بررسی می‌کند. ژورنال حداکثر ۴۰۰۰ کاراکتر و ۱۶ KiB متن UTF-8 دارد؛ packet ماه سقف ۴۴ KiB و بقیهٔ رکوردهای زنده سقف ۲۰ KiB دارند. `data: unknown` دیگر به معنی JSON دلخواه نیست.
 - رد semantic به‌صورت `rejectedRecords` و بدون بازتاب متن/دادهٔ خصوصی برمی‌گردد؛ رکوردهای سالم همان batch همچنان ذخیره و pull می‌شوند. فقط envelope خراب یا بیش از ۲۰۰ رکورد، خطای کل درخواست است.
 - client با push-before-pull، LWW بر اساس `updatedAt`، clamp ساعت، tombstone، pagination، GC reset و تسویهٔ مستقل هر رکورد کار می‌کند.
 - صفحهٔ نهایی pull entitlement را هم برمی‌گرداند تا کاربرِ منقضی هم بتواند تاریخچه‌اش را بازیابی کند.

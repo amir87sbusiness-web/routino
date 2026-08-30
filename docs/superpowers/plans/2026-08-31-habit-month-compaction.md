@@ -29,11 +29,11 @@
 - Modify: `backend/src/services/sync-record-validation.ts`
 - Modify: `backend/test/sync-record-validation.test.ts`
 
-- [ ] Write failing tests for canonical month IDs, packing multiple days, bounded packet splitting, UTF-8 sizing, expansion, invalid month/day mismatches, more than 31 cells, tombstones, and malformed cell payloads.
-- [ ] Implement the client pure pack/expand helpers.
-- [ ] Replace cloud kind `logs` with `habitMonths` and add a strict server schema for partial month packets.
-- [ ] Run the focused frontend and backend validator tests.
-- [ ] Commit the contract unit.
+- [x] Write failing tests for canonical month IDs, packing multiple days, bounded packet splitting, UTF-8 sizing, expansion, invalid month/day mismatches, more than 31 cells, tombstones, and malformed cell payloads.
+- [x] Implement the client pure pack/expand helpers.
+- [x] Replace cloud kind `logs` with `habitMonths` and add a strict server schema for partial month packets.
+- [x] Run the focused frontend and backend validator tests.
+- [x] Commit the contract unit.
 
 ### Task 2: Pack the client outbox and expand remote months
 
@@ -45,11 +45,11 @@
 - Modify: `src/lib/sync/merge.ts`
 - Modify: `src/lib/sync/merge.test.ts`
 
-- [ ] Write failing tests proving dirty daily logs become month packets, accepted cells clear independently, rejected packets stay dirty, remote months expand into daily rows, deleted months clear only their local month, and concurrent newer edits remain dirty.
-- [ ] Introduce outgoing packets with explicit source rows; chunk by actual UTF-8 bytes and never put duplicate month keys in one request.
-- [ ] Expand `habitMonths` before the existing local LWW merge. Keep `logs` local-only and refuse raw cloud logs.
-- [ ] Add required `protocolVersion: 2` to exchange requests.
-- [ ] Run focused client tests and commit.
+- [x] Write failing tests proving dirty daily logs become month packets, accepted cells clear independently, rejected packets stay dirty, remote months expand into daily rows, deleted months clear only their local month, and concurrent newer edits remain dirty.
+- [x] Introduce outgoing packets with explicit source rows; chunk by actual UTF-8 bytes and never put duplicate month keys in one request.
+- [x] Expand `habitMonths` before the existing local LWW merge. Keep `logs` local-only and refuse raw cloud logs.
+- [x] Add required `protocolVersion: 2` to exchange requests.
+- [x] Run focused client tests and commit.
 
 ### Task 3: Merge month cells atomically on the server
 
@@ -59,10 +59,10 @@
 - Modify: `backend/test/sync.test.ts`
 - Modify: `backend/test/concurrency.test.ts`
 
-- [ ] Write failing integration tests for different-day merge in both orders, same-day LWW, idempotent replay, partial packets, month tombstone precedence, and habit-delete cascade over month rows.
-- [ ] Extend the single atomic upsert so `habitMonths` merges only incoming cells newer than the stored cell while ordinary kinds keep row-level LWW.
-- [ ] Ensure one server sequence change per changed month packet and no sequence churn for fully stale replays.
-- [ ] Run focused backend tests and commit.
+- [x] Write failing integration tests for different-day merge in both orders, same-day LWW, idempotent replay, partial packets, month tombstone precedence, and habit-delete cascade over month rows.
+- [x] Extend the single atomic upsert so `habitMonths` merges only incoming cells newer than the stored cell while ordinary kinds keep row-level LWW.
+- [x] Ensure one server sequence change per changed month packet and no sequence churn for fully stale replays.
+- [x] Run focused backend tests and commit.
 
 ### Task 4: Final schema, migration, adapters, and capacity evidence
 
@@ -75,9 +75,9 @@
 - Modify: relevant backend/Edge/quota tests
 - Modify: affected `docs-fa/` guides
 
-- [ ] Require `protocolVersion: 2` in both HTTP adapters and update all test clients.
-- [ ] Add a data-preserving migration that converts legacy `logs` into `habitMonths`, advances per-user cursors safely, and tightens the kind constraint.
-- [ ] Update fresh-install DDL and regenerate `supabase/setup.sql`; add migration/DDL tests.
-- [ ] Re-measure the quota fixture so it proves row growth is monthly rather than daily.
-- [ ] Run `npm run sync:edge`, all frontend/backend/Edge tests, both typechecks, lint, build, diff checks, and generated parity checks.
-- [ ] Update only the affected Persian documentation and commit.
+- [x] Require `protocolVersion: 2` in both HTTP adapters and update all test clients.
+- [x] Add a data-preserving migration that converts legacy `logs` into `habitMonths`, advances per-user cursors safely, and tightens the kind constraint.
+- [x] Update fresh-install DDL and regenerate `supabase/setup.sql`; add migration/DDL tests.
+- [x] Re-measure the quota fixture so it proves row growth is monthly rather than daily.
+- [x] Run `npm run sync:edge`, all frontend/backend/Edge tests, both typechecks, lint, build, diff checks, and generated parity checks.
+- [x] Update only the affected Persian documentation and commit.

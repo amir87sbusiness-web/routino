@@ -68,7 +68,7 @@ Server validation checks both IDs and payloads:
 - `tasks`: bounded title/note/reminder/color/icon, known measure type, finite non-negative values.
 - `timerSessions`: known mode/link kind, finite timestamps and duration, bounded labels.
 - `journal`: ISO date key, bounded text by characters and UTF-8 bytes, score `null` or 1 through 10, bounded mood.
-- `habitMonths`: canonical `habitId|YYYY-MM` key, at most 31 canonical date cells, each containing a validated habit log or tombstone and its own non-negative timestamp.
+- `habitMonths`: canonical `habitId|YYYY-MM` key, at most 31 day cells keyed `01..31`. Each flat live cell contains value/done and optional note/mood plus its own non-negative timestamp; a tombstone contains only its timestamp and delete marker. Habit id and full date are reconstructed from the month envelope instead of being repeated for every day.
 
 Unknown object keys are stripped or rejected consistently. Non-finite numbers, prototype-shaped values, malformed natural keys, and oversized UTF-8 payloads are rejected before database writes.
 
