@@ -187,8 +187,11 @@ Fastify رو می‌سازه، CORS و فشرده‌سازی و helmet رو فع
 
 - مسیر اصلی `POST /v1/sync/exchange` در یک invocation اول dirty rowها را push و سپس از cursor قبلی pull می‌کند؛ مسیرهای قدیمی push/pull فعلاً برای تست/سازگاری باقی‌اند. اشتراک هرگز شرط sync نیست.
 - kindهای کلادی دقیقاً `categories`، `habits`، `logs`، `tasks`، `timerSessions` و `journal` هستند؛ همهٔ تنظیمات local-only هستند.
-- client با push-before-pull، LWW بر اساس `updatedAt`، clamp ساعت، tombstone، pagination و GC reset کار می‌کند.
+- `sync-record-validation.ts` شکل دقیق هر kind، کلید طبیعی، enumها، عددهای finite، طول رشته و حجم واقعی UTF-8 را قبل از نوشتن بررسی می‌کند. ژورنال حداکثر ۴۰۰۰ کاراکتر و ۱۶ KiB متن UTF-8 دارد و کل رکورد زنده سقف مستقل دارد؛ `data: unknown` دیگر به معنی JSON دلخواه نیست.
+- رد semantic به‌صورت `rejectedRecords` و بدون بازتاب متن/دادهٔ خصوصی برمی‌گردد؛ رکوردهای سالم همان batch همچنان ذخیره و pull می‌شوند. فقط envelope خراب یا بیش از ۲۰۰ رکورد، خطای کل درخواست است.
+- client با push-before-pull، LWW بر اساس `updatedAt`، clamp ساعت، tombstone، pagination، GC reset و تسویهٔ مستقل هر رکورد کار می‌کند.
 - صفحهٔ نهایی pull entitlement را هم برمی‌گرداند تا کاربرِ منقضی هم بتواند تاریخچه‌اش را بازیابی کند.
+- Fastify و Hono/Edge هر دو JSON را پیش از parse روی ۶۴ KiB می‌بندند؛ Hono علاوه بر `Content-Length`، stream واقعی را هم بایت‌به‌بایت محدود می‌کند تا هدر حذف‌شده یا دروغین راه دورزدن نباشد.
 
 ### `backend/src/services/payment-flow.ts` — 💳 ماشین حالت پرداخت (منطق واقعی مسیر پول)
 

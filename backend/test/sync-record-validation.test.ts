@@ -102,14 +102,17 @@ describe("validateSyncRecord", () => {
   });
 
   it("rejects unexpected keys and invalid domain enums or numbers", () => {
-    expect(
-      rejectCode({ ...valid.habits, data: { ...valid.habits.data, injected: "x" } }),
-    ).toBe("invalid_record");
+    expect(rejectCode({ ...valid.habits, data: { ...valid.habits.data, injected: "x" } })).toBe(
+      "invalid_record",
+    );
     expect(rejectCode({ ...valid.habits, data: { ...valid.habits.data, type: "money" } })).toBe(
       "invalid_record",
     );
     expect(
-      rejectCode({ ...valid.tasks, data: { ...valid.tasks.data, value: Number.POSITIVE_INFINITY } }),
+      rejectCode({
+        ...valid.tasks,
+        data: { ...valid.tasks.data, value: Number.POSITIVE_INFINITY },
+      }),
     ).toBe("invalid_record");
   });
 
@@ -117,9 +120,9 @@ describe("validateSyncRecord", () => {
     expect(rejectCode({ ...valid.habits, data: { ...valid.habits.data, id: "other" } })).toBe(
       "invalid_record",
     );
-    expect(
-      rejectCode({ ...valid.logs, data: { ...valid.logs.data, dateKey: "2026-08-30" } }),
-    ).toBe("invalid_record");
+    expect(rejectCode({ ...valid.logs, data: { ...valid.logs.data, dateKey: "2026-08-30" } })).toBe(
+      "invalid_record",
+    );
     expect(
       rejectCode({ ...valid.journal, data: { ...valid.journal.data, dateKey: "2026-08-30" } }),
     ).toBe("invalid_record");
@@ -160,8 +163,8 @@ describe("validateSyncRecord", () => {
     expect(
       rejectCode({ ...valid.logs, data: { ...valid.logs.data, note: "x".repeat(4_001) } }),
     ).toBe("invalid_record");
-    expect(rejectCode({ ...valid.habits, data: { ...valid.habits.data, name: "x".repeat(257) } })).toBe(
-      "invalid_record",
-    );
+    expect(
+      rejectCode({ ...valid.habits, data: { ...valid.habits.data, name: "x".repeat(257) } }),
+    ).toBe("invalid_record");
   });
 });

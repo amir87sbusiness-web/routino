@@ -308,8 +308,9 @@ async function run(owner: string, options: SyncOptions): Promise<SyncOutcome> {
     );
     const refused = new Set((page.rejectedRecords ?? []).map(rejectionKey));
     await clearDirty(
-      batch.filter(({ table, row }) =>
-        !refused.has(rejectionKey({ kind: table, id: row.key, updatedAt: row.updatedAt })),
+      batch.filter(
+        ({ table, row }) =>
+          !refused.has(rejectionKey({ kind: table, id: row.key, updatedAt: row.updatedAt })),
       ),
     );
     pushed += page.applied;

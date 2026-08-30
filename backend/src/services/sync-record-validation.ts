@@ -97,7 +97,12 @@ const timerSessionSchema = z
   .object({
     id: entityId,
     mode: z.enum(["pomodoro", "free", "stopwatch"]),
-    focusSeconds: z.number().int().nonnegative().finite().max(10 * 365 * 86_400),
+    focusSeconds: z
+      .number()
+      .int()
+      .nonnegative()
+      .finite()
+      .max(10 * 365 * 86_400),
     startedAt: epochMs,
     endedAt: epochMs,
     linkedKind: z.enum(["habit", "task"]).optional(),
@@ -135,15 +140,10 @@ export interface PushRecord {
 }
 
 export type SyncRejectionCode =
-  | "bad_kind"
-  | "bad_id"
-  | "bad_updated_at"
-  | "invalid_record"
-  | "record_too_large";
+  "bad_kind" | "bad_id" | "bad_updated_at" | "invalid_record" | "record_too_large";
 
 export type RecordValidation =
-  | { ok: true; record: PushRecord }
-  | { ok: false; code: SyncRejectionCode };
+  { ok: true; record: PushRecord } | { ok: false; code: SyncRejectionCode };
 
 export interface RejectedSyncRecord {
   kind: string;

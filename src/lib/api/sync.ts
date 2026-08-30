@@ -10,11 +10,7 @@ export interface SyncRecord {
 }
 
 export type SyncRejectionCode =
-  | "bad_kind"
-  | "bad_id"
-  | "bad_updated_at"
-  | "invalid_record"
-  | "record_too_large";
+  "bad_kind" | "bad_id" | "bad_updated_at" | "invalid_record" | "record_too_large";
 
 export interface RejectedSyncRecord {
   kind: string;
