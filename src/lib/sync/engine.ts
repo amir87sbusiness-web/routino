@@ -18,6 +18,8 @@ import {
 } from "../api/sync";
 import { hasSession, type ServerEntitlement } from "../api/auth";
 import { db as idb, nextSeq, type RecordRow, type SyncMetaRow } from "../db/dexie";
+import type { HabitLog } from "../store";
+import { expandHabitMonthRecord, packHabitLogRows } from "./habit-month";
 import { SYNCABLE_TABLES, mergeRemote, type SyncableTable } from "./merge";
 
 /** Legacy home of the cursor. Read once so it can be DELETED — never adopted.
@@ -78,11 +80,31 @@ const tableOf = (name: SyncableTable) => idb.table<RecordRow<unknown>, string>(n
 
 /** Pending local changes, as the wire format. `seq` is never sent: it is this
  * device's presentation order, meaningless to anyone else. */
-async function collectOutbox(): Promise<{ table: SyncableTable; row: RecordRow<unknown> }[]> {
-  const out: { table: SyncableTable; row: RecordRow<unknown> }[] = [];
+interface SourceRow {
+  table: SyncableTable;
+  row: RecordRow<unknown>;
+}
+
+interface OutgoingPacket {
+  record: SyncRecord;
+  sources: SourceRow[];
+}
+
+async function collectOutbox(): Promise<OutgoingPacket[]> {
+  const out: OutgoingPacket[] = [];
   for (const table of SYNCABLE_TABLES) {
     const rows = await tableOf(table).where("dirty").equals(1).toArray();
-    for (const row of rows) out.push({ table, row });
+    if (table === "logs") {
+      const packed = packHabitLogRows(rows as RecordRow<HabitLog>[]);
+      for (const packet of packed) {
+        out.push({
+          record: packet.record,
+          sources: packet.sources.map((row) => ({ table: "logs", row })),
+        });
+      }
+      continue;
+    }
+    for (const row of rows) out.push({ record: toWire(table, row), sources: [{ table, row }] });
   }
   return out;
 }
@@ -98,19 +120,28 @@ const toWire = (table: SyncableTable, row: RecordRow<unknown>): SyncRecord => ({
 const rejectionKey = (record: Pick<RejectedSyncRecord, "kind" | "id" | "updatedAt">) =>
   `${record.kind}\u0000${record.id}\u0000${record.updatedAt}`;
 
-function chunk(items: { table: SyncableTable; row: RecordRow<unknown> }[]) {
+const encoder = new TextEncoder();
+
+function chunk(items: OutgoingPacket[]) {
   const chunks: (typeof items)[] = [];
   let current: typeof items = [];
   let bytes = 0;
+  let keys = new Set<string>();
   for (const item of items) {
-    const size = JSON.stringify(toWire(item.table, item.row)).length;
-    if (current.length && (current.length >= MAX_CHUNK_RECORDS || bytes + size > MAX_CHUNK_BYTES)) {
+    const size = encoder.encode(JSON.stringify(item.record)).byteLength;
+    const key = `${item.record.kind}\u0000${item.record.id}`;
+    if (
+      current.length &&
+      (current.length >= MAX_CHUNK_RECORDS || bytes + size > MAX_CHUNK_BYTES || keys.has(key))
+    ) {
       chunks.push(current);
       current = [];
       bytes = 0;
+      keys = new Set<string>();
     }
     current.push(item);
     bytes += size;
+    keys.add(key);
   }
   if (current.length) chunks.push(current);
   return chunks;
@@ -127,6 +158,7 @@ function chunk(items: { table: SyncableTable; row: RecordRow<unknown> }[]) {
 async function clearDirty(
   sent: { table: SyncableTable; row: RecordRow<unknown> }[],
 ): Promise<void> {
+  if (sent.length === 0) return;
   const byTable = new Map<SyncableTable, RecordRow<unknown>[]>();
   for (const { table, row } of sent) {
     const list = byTable.get(table);
@@ -148,18 +180,60 @@ async function clearDirty(
 /** Writes accepted remote records. Returns how many actually changed anything. */
 async function applyRemote(records: RemoteRecord[]): Promise<number> {
   const byTable = new Map<SyncableTable, RemoteRecord[]>();
+  const deletedMonths: RemoteRecord[] = [];
   for (const r of records) {
+    if (r.kind === "habitMonths") {
+      if (r.deleted) deletedMonths.push(r);
+      else {
+        for (const expanded of expandHabitMonthRecord(r)) {
+          const list = byTable.get("logs");
+          if (list) list.push(expanded);
+          else byTable.set("logs", [expanded]);
+        }
+      }
+      continue;
+    }
+    // Protocol v2 never accepts raw cloud logs. Daily rows exist only inside
+    // IndexedDB; the server representation is habitMonths.
+    if (r.kind === "logs") continue;
     if (!(SYNCABLE_TABLES as readonly string[]).includes(r.kind)) continue;
     const table = r.kind as SyncableTable;
     const list = byTable.get(table);
     if (list) list.push(r);
     else byTable.set(table, [r]);
   }
-  if (byTable.size === 0) return 0;
+  if (byTable.size === 0 && deletedMonths.length === 0) return 0;
+
+  if (deletedMonths.length) byTable.set("logs", byTable.get("logs") ?? []);
 
   let written = 0;
   await idb.transaction("rw", [...byTable.keys()].map(tableOf), async () => {
     for (const [table, remotes] of byTable) {
+      if (table === "logs" && deletedMonths.length) {
+        for (const month of deletedMonths) {
+          const locals = await idb.logs.where("key").startsWith(`${month.id}-`).toArray();
+          const tombstones = locals
+            .map((local) =>
+              mergeRemote(
+                local,
+                {
+                  kind: "logs",
+                  id: local.key,
+                  data: null,
+                  updatedAt: month.updatedAt,
+                  deleted: true,
+                  seq: month.seq,
+                },
+                nextSeq,
+              ),
+            )
+            .filter((row): row is RecordRow<unknown> => row !== null);
+          if (tombstones.length) {
+            await idb.logs.bulkPut(tombstones as RecordRow<HabitLog>[]);
+            written += tombstones.length;
+          }
+        }
+      }
       const locals = await tableOf(table).bulkGet(remotes.map((r) => r.id));
       const rows = remotes
         .map((remote, i) => mergeRemote(locals[i], remote, nextSeq))
@@ -288,8 +362,9 @@ async function run(owner: string, options: SyncOptions): Promise<SyncOutcome> {
   ): Promise<ExchangeResponse> => {
     const page = await exchangeRecords(
       {
+        protocolVersion: 2,
         cursor: state.cursor,
-        records: batch.map(({ table, row }) => toWire(table, row)),
+        records: batch.map(({ record }) => record),
         includeAccountState,
       },
       owner,
@@ -308,10 +383,9 @@ async function run(owner: string, options: SyncOptions): Promise<SyncOutcome> {
     );
     const refused = new Set((page.rejectedRecords ?? []).map(rejectionKey));
     await clearDirty(
-      batch.filter(
-        ({ table, row }) =>
-          !refused.has(rejectionKey({ kind: table, id: row.key, updatedAt: row.updatedAt })),
-      ),
+      batch
+        .filter(({ record }) => !refused.has(rejectionKey(record)))
+        .flatMap(({ sources }) => sources),
     );
     pushed += page.applied;
 

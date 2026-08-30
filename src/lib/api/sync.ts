@@ -42,6 +42,7 @@ export interface PullResponse {
 }
 
 export interface ExchangeRequest {
+  protocolVersion: 2;
   cursor: number;
   records: SyncRecord[];
   includeAccountState?: boolean;

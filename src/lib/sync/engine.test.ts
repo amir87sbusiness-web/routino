@@ -146,6 +146,17 @@ async function localDirtyHabit(id: string, name: string, updatedAt = 2000) {
   });
 }
 
+async function localDirtyLog(habitId: string, dateKey: string, updatedAt: number, note?: string) {
+  await idb.logs.put({
+    key: `${habitId}|${dateKey}`,
+    data: { habitId, dateKey, value: 1, done: true, note },
+    updatedAt,
+    deleted: 0,
+    dirty: 1,
+    seq: updatedAt,
+  });
+}
+
 const localHabitNames = async () =>
   (await idb.table("habits").toArray()).map((r) => (r.data as { name: string } | null)?.name);
 
@@ -157,9 +168,107 @@ describe("sync engine, two devices on one account", () => {
 
     expect(server.exchanges).toHaveLength(1);
     expect(server.exchanges[0]).toMatchObject({
+      protocolVersion: 2,
       cursor: 0,
       records: [expect.objectContaining({ id: "h1" })],
     });
+  });
+
+  it("packs dirty daily logs into one month record and settles their exact local versions", async () => {
+    await localDirtyLog("h1", "2026-08-01", 100);
+    await localDirtyLog("h1", "2026-08-02", 200);
+
+    await syncNow(OWNER);
+
+    expect(server.exchanges).toHaveLength(1);
+    expect(server.exchanges[0]!.records).toEqual([
+      expect.objectContaining({
+        kind: "habitMonths",
+        id: "h1|2026-08",
+        updatedAt: 200,
+        data: expect.objectContaining({
+          habitId: "h1",
+          monthKey: "2026-08",
+          cells: expect.objectContaining({
+            "2026-08-01": expect.objectContaining({ updatedAt: 100 }),
+            "2026-08-02": expect.objectContaining({ updatedAt: 200 }),
+          }),
+        }),
+      }),
+    ]);
+    expect(await idb.logs.where("dirty").equals(1).count()).toBe(0);
+  });
+
+  it("keeps every source day dirty when its month packet is rejected", async () => {
+    await localDirtyLog("h1", "2026-08-01", 100);
+    await localDirtyLog("h1", "2026-08-02", 200);
+    server.refuse.add("h1|2026-08");
+
+    const outcome = await syncNow(OWNER);
+
+    expect(outcome.rejected).toBe(1);
+    expect(await idb.logs.where("dirty").equals(1).count()).toBe(2);
+  });
+
+  it("expands a pulled server month into the unchanged local daily rows", async () => {
+    server.push([
+      {
+        kind: "habitMonths",
+        id: "h1|2026-08",
+        data: {
+          habitId: "h1",
+          monthKey: "2026-08",
+          cells: {
+            "2026-08-01": {
+              data: { habitId: "h1", dateKey: "2026-08-01", value: 1, done: true },
+              updatedAt: 100,
+              deleted: false,
+            },
+            "2026-08-02": { data: null, updatedAt: 200, deleted: true },
+          },
+        },
+        updatedAt: 200,
+        deleted: false,
+      },
+    ]);
+
+    await syncNow(OWNER);
+
+    expect((await idb.logs.get("h1|2026-08-01"))?.data).toMatchObject({ done: true });
+    expect((await idb.logs.get("h1|2026-08-02"))?.deleted).toBe(1);
+  });
+
+  it("applies a deleted server month only to local days inside that month", async () => {
+    await localDirtyLog("h1", "2026-08-01", 100);
+    await localDirtyLog("h1", "2026-09-01", 100);
+    await idb.logs.toCollection().modify({ dirty: 0 });
+    server.push([
+      {
+        kind: "habitMonths",
+        id: "h1|2026-08",
+        data: null,
+        updatedAt: 300,
+        deleted: true,
+      },
+    ]);
+
+    await syncNow(OWNER);
+
+    expect((await idb.logs.get("h1|2026-08-01"))?.deleted).toBe(1);
+    expect((await idb.logs.get("h1|2026-09-01"))?.deleted).toBe(0);
+  });
+
+  it("does not settle a newer daily edit made while its month packet is in flight", async () => {
+    await localDirtyLog("h1", "2026-08-01", 100);
+    server.afterExchange = async () => {
+      server.afterExchange = null;
+      await localDirtyLog("h1", "2026-08-01", 300, "newer");
+    };
+
+    await syncNow(OWNER);
+
+    expect((await idb.logs.get("h1|2026-08-01"))?.dirty).toBe(1);
+    expect((await idb.logs.get("h1|2026-08-01"))?.data).toMatchObject({ note: "newer" });
   });
 
   it("does not send an empty ordinary background exchange", async () => {
