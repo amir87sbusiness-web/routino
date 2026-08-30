@@ -79,13 +79,28 @@ const habit = (id: string, name: string, updatedAt = 1000) => ({
   deleted: false,
 });
 
-const log = (habitId: string, dateKey: string, updatedAt = 1000) => ({
-  kind: "logs",
-  id: `${habitId}|${dateKey}`,
-  data: { habitId, dateKey, value: 1, done: true },
-  updatedAt,
-  deleted: false,
-});
+const month = (
+  habitId: string,
+  days: { dateKey: string; updatedAt?: number; done?: boolean; deleted?: boolean }[],
+) => {
+  const cells = Object.fromEntries(
+    days.map(({ dateKey, updatedAt = 1000, done = true, deleted = false }) => [
+      dateKey,
+      {
+        data: deleted ? null : { habitId, dateKey, value: done ? 1 : 0, done },
+        updatedAt,
+        deleted,
+      },
+    ]),
+  );
+  return {
+    kind: "habitMonths",
+    id: `${habitId}|${days[0]!.dateKey.slice(0, 7)}`,
+    data: { habitId, monthKey: days[0]!.dateKey.slice(0, 7), cells },
+    updatedAt: Math.max(...days.map((day) => day.updatedAt ?? 1000)),
+    deleted: false,
+  };
+};
 
 describe("sync", () => {
   it("accepts valid rows even when another row in the exchange is rejected", async () => {
@@ -224,9 +239,8 @@ describe("sync", () => {
     const { access } = await signIn("09120000006");
     await push(access, [
       habit("h1", "ورزش", 1000),
-      log("h1", "2026-08-01"),
-      log("h1", "2026-08-02"),
-      log("h2", "2026-08-01"),
+      month("h1", [{ dateKey: "2026-08-01" }, { dateKey: "2026-08-02" }]),
+      month("h2", [{ dateKey: "2026-08-01" }]),
     ]);
 
     // ONE tombstone for the habit — the client does not send one per log, which
@@ -236,13 +250,67 @@ describe("sync", () => {
     const body = (await pull(access, 0)).json() as {
       records: { kind: string; id: string; deleted: boolean }[];
     };
-    const logs = Object.fromEntries(
-      body.records.filter((r) => r.kind === "logs").map((r) => [r.id, r.deleted]),
+    const months = Object.fromEntries(
+      body.records.filter((r) => r.kind === "habitMonths").map((r) => [r.id, r.deleted]),
     );
-    expect(logs["h1|2026-08-01"]).toBe(true);
-    expect(logs["h1|2026-08-02"]).toBe(true);
+    expect(months["h1|2026-08"]).toBe(true);
     // Another habit's log with a similar-looking key must survive.
-    expect(logs["h2|2026-08-01"]).toBe(false);
+    expect(months["h2|2026-08"]).toBe(false);
+  });
+
+  it("clamps the timestamp inside every habit-month cell too", async () => {
+    const { access } = await signIn("09120000024");
+    const year2099 = Date.parse("2099-01-01T00:00:00Z");
+
+    await push(access, [month("h1", [{ dateKey: "2026-08-01", updatedAt: year2099 }])]);
+    const body = (await pull(access, 0)).json() as {
+      records: { kind: string; data: { cells: Record<string, { updatedAt: number }> } }[];
+    };
+    const stored = body.records.find((record) => record.kind === "habitMonths")!;
+    expect(stored.data.cells["2026-08-01"]!.updatedAt).toBeLessThan(Date.now() + 120_000);
+  });
+
+  it("merges different days independently even when the later packet has an older envelope", async () => {
+    const { access } = await signIn("09120000022");
+    await push(access, [month("h1", [{ dateKey: "2026-08-01", updatedAt: 5000 }])]);
+
+    const second = await push(access, [month("h1", [{ dateKey: "2026-08-02", updatedAt: 1000 }])]);
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toMatchObject({ applied: 1, skipped: 0 });
+
+    const body = (await pull(access, 0)).json() as {
+      records: { kind: string; data: { cells: Record<string, unknown> } }[];
+    };
+    const stored = body.records.find((record) => record.kind === "habitMonths")!;
+    expect(Object.keys(stored.data.cells).sort()).toEqual(["2026-08-01", "2026-08-02"]);
+  });
+
+  it("uses per-day LWW and does not churn the stored row on an idempotent replay", async () => {
+    const { access, user } = await signIn("09120000023");
+    const newest = month("h1", [{ dateKey: "2026-08-01", updatedAt: 5000, done: true }]);
+    await push(access, [newest]);
+    const before = await h.query<{ seq: string }>(
+      `select seq::text from records where user_id = '${user.id}' and kind = 'habitMonths'`,
+    );
+
+    const stale = await push(access, [
+      month("h1", [{ dateKey: "2026-08-01", updatedAt: 4000, done: false }]),
+    ]);
+    const replay = await push(access, [newest]);
+    expect(stale.json()).toMatchObject({ applied: 0, skipped: 1 });
+    expect(replay.json()).toMatchObject({ applied: 0, skipped: 1 });
+
+    const after = await h.query<{ seq: string }>(
+      `select seq::text from records where user_id = '${user.id}' and kind = 'habitMonths'`,
+    );
+    expect(after[0]!.seq).toBe(before[0]!.seq);
+    const body = (await pull(access, 0)).json() as {
+      records: { kind: string; data: { cells: Record<string, { data: { done: boolean } }> } }[];
+    };
+    expect(
+      body.records.find((record) => record.kind === "habitMonths")!.data.cells["2026-08-01"]!.data
+        .done,
+    ).toBe(true);
   });
 
   it("never shows one user another user's data", async () => {
@@ -337,23 +405,40 @@ describe("sync", () => {
   it("survives a habit tombstone that repeats a log the client also sent", async () => {
     const { access } = await signIn("09120000012");
 
-    // A log exists on the server, so the habit delete will try to cascade it.
-    await push(access, [
-      { kind: "logs", id: "h1|2026-08-01", data: { done: 1 }, updatedAt: 1000, deleted: false },
-    ]);
+    // A month exists on the server, so the habit delete will try to cascade it.
+    await push(access, [month("h1", [{ dateKey: "2026-08-01", updatedAt: 1000 }])]);
 
     // The client deletes the habit AND happens to send that same log itself.
-    // Both name (logs, h1|2026-08-01), and an INSERT … ON CONFLICT DO UPDATE
+    // Both name (habitMonths, h1|2026-08), and an INSERT … ON CONFLICT DO UPDATE
     // that touches one key twice is a hard Postgres error — which would 500 a
     // push the client then retries forever, wedging sync for this account.
     const res = await push(access, [
       { kind: "habits", id: "h1", data: null, updatedAt: 2000, deleted: true },
-      { kind: "logs", id: "h1|2026-08-01", data: null, updatedAt: 2000, deleted: true },
+      { kind: "habitMonths", id: "h1|2026-08", data: null, updatedAt: 2000, deleted: true },
     ]);
     expect(res.statusCode).toBe(200);
 
     const down = (await pull(access, 0)).json() as { records: { id: string; deleted: boolean }[] };
-    expect(down.records.find((r) => r.id === "h1|2026-08-01")!.deleted).toBe(true);
+    expect(down.records.find((r) => r.id === "h1|2026-08")!.deleted).toBe(true);
+  });
+
+  it("lets the habit-delete cascade beat a live month packet on an exact tie", async () => {
+    const { access } = await signIn("09120000025");
+    await push(access, [month("h1", [{ dateKey: "2026-08-01", updatedAt: 1000 }])]);
+
+    const res = await push(access, [
+      { kind: "habits", id: "h1", data: null, updatedAt: 2000, deleted: true },
+      month("h1", [{ dateKey: "2026-08-02", updatedAt: 2000 }]),
+    ]);
+    expect(res.statusCode).toBe(200);
+
+    const body = (await pull(access, 0)).json() as {
+      records: { kind: string; id: string; deleted: boolean }[];
+    };
+    expect(body.records.find((record) => record.id === "h1|2026-08")).toMatchObject({
+      kind: "habitMonths",
+      deleted: true,
+    });
   });
 
   it("carries the entitlement on the last page and only there", async () => {

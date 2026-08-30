@@ -115,36 +115,65 @@ function partitionIncoming(rows: PushRecord[]): {
 const keyOf = (r: PushRecord) => `${r.kind} ${r.id}`;
 
 /**
- * Collapses repeats of the same `(kind, id)`.
+ * Collapses repeats of the same `(kind, id)` by the same LWW rule used in DB.
  *
  * Not a nicety: `INSERT … ON CONFLICT DO UPDATE` raises 21000 ("cannot affect
  * row a second time") if one statement touches a key twice. That would be a 500
  * on a push the client retries forever with identical content — sync wedged for
- * that account, permanently. The FIRST occurrence wins: the client's own rows
- * are assembled ahead of the cascade below, so a log the client sent explicitly
- * beats the tombstone its habit's deletion would have implied for it.
+ * that account, permanently. Newer wins; on an exact tie a tombstone wins so a
+ * pending cell cannot keep a month alive beside a habit deleted in the same tick.
  */
 function dedupe(rows: PushRecord[]): PushRecord[] {
   const byKey = new Map<string, PushRecord>();
-  for (const r of rows) if (!byKey.has(keyOf(r))) byKey.set(keyOf(r), r);
+  for (const r of rows) {
+    const existing = byKey.get(keyOf(r));
+    if (
+      !existing ||
+      r.updatedAt > existing.updatedAt ||
+      (r.updatedAt === existing.updatedAt && r.deleted && !existing.deleted)
+    ) {
+      byKey.set(keyOf(r), r);
+    }
+  }
   return [...byKey.values()];
 }
 
+function clampRecordClock(record: PushRecord, ceiling: number): PushRecord {
+  if (record.kind !== "habitMonths" || record.deleted) {
+    return { ...record, updatedAt: Math.min(record.updatedAt, ceiling) };
+  }
+  const month = record.data as {
+    habitId: string;
+    monthKey: string;
+    cells: Record<string, { data: unknown; updatedAt: number; deleted: boolean }>;
+  };
+  const cells = Object.fromEntries(
+    Object.entries(month.cells).map(([dateKey, cell]) => [
+      dateKey,
+      { ...cell, updatedAt: Math.min(cell.updatedAt, ceiling) },
+    ]),
+  );
+  return {
+    ...record,
+    data: { ...month, cells },
+    updatedAt: Math.max(...Object.values(cells).map((cell) => cell.updatedAt)),
+  };
+}
+
 /**
- * Log ids belonging to a habit, so deleting the habit can bury its logs.
+ * Month ids belonging to a habit, so deleting the habit can bury its history.
  *
- * The client sends ONE habit tombstone rather than one per log — a habit with a
- * year of history would otherwise be a 400-row push. `logKey` is `habitId|dateKey`
- * (see `src/lib/store.ts`), so the prefix match is exact rather than heuristic.
+ * The client sends ONE habit tombstone rather than one per month. Month ids are
+ * `habitId|YYYY-MM`, so the prefix match is exact rather than heuristic.
  */
-async function childLogIds(db: Database, userId: string, habitId: string): Promise<string[]> {
+async function childMonthIds(db: Database, userId: string, habitId: string): Promise<string[]> {
   const rows = await db
     .select()
     .from(records)
     .where(
       and(
         eq(records.userId, userId),
-        eq(records.kind, "logs"),
+        eq(records.kind, "habitMonths"),
         eq(records.deleted, false),
         // `habitId` came through ID_RE, so it holds no LIKE wildcards.
         like(records.id, `${habitId}|%`),
@@ -167,15 +196,15 @@ export async function pushRecords(
   }
 
   const ceiling = now.getTime() + CLOCK_SKEW_TOLERANCE_MS;
-  const stamped = valid.map((r) => ({ ...r, updatedAt: Math.min(r.updatedAt, ceiling) }));
+  const stamped = valid.map((record) => clampRecordClock(record, ceiling));
 
-  // Expand habit deletes into log tombstones before the write, so the sequence
+  // Expand habit deletes into month tombstones before the write, so the sequence
   // block below is sized to everything actually written.
   const cascaded: PushRecord[] = [];
   for (const r of stamped) {
     if (r.kind !== "habits" || !r.deleted) continue;
-    for (const id of await childLogIds(db, userId, r.id)) {
-      cascaded.push({ kind: "logs", id, data: null, updatedAt: r.updatedAt, deleted: true });
+    for (const id of await childMonthIds(db, userId, r.id)) {
+      cascaded.push({ kind: "habitMonths", id, data: null, updatedAt: r.updatedAt, deleted: true });
     }
   }
 
@@ -213,11 +242,54 @@ export async function pushRecords(
              b.seq - ${all.length} + 1 + i.ord
         from incoming i cross join bump b
       on conflict (user_id, kind, id) do update
-        set data = excluded.data,
-            updated_at = excluded.updated_at,
-            deleted = excluded.deleted,
+        set data = case
+              when excluded.kind = 'habitMonths'
+               and excluded.deleted = false
+               and records.deleted = false
+              then jsonb_build_object(
+                'habitId', excluded.data->'habitId',
+                'monthKey', excluded.data->'monthKey',
+                'cells', coalesce(records.data->'cells', '{}'::jsonb) || coalesce((
+                  select jsonb_object_agg(incoming_cell.key, incoming_cell.value)
+                    from jsonb_each(excluded.data->'cells') incoming_cell
+                   where coalesce(
+                     (records.data->'cells'->incoming_cell.key->>'updatedAt')::bigint,
+                     -1
+                   ) < (incoming_cell.value->>'updatedAt')::bigint
+                ), '{}'::jsonb)
+              )
+              else excluded.data
+            end,
+            updated_at = case
+              when excluded.kind = 'habitMonths'
+               and excluded.deleted = false
+               and records.deleted = false
+              then greatest(records.updated_at, excluded.updated_at)
+              else excluded.updated_at
+            end,
+            deleted = case
+              when excluded.kind = 'habitMonths'
+               and excluded.deleted = false
+               and records.deleted = false
+              then false
+              else excluded.deleted
+            end,
             seq = excluded.seq
-        where records.updated_at < excluded.updated_at
+        where case
+          when excluded.kind = 'habitMonths' then case
+            when excluded.deleted = true or records.deleted = true
+              then records.updated_at < excluded.updated_at
+            else exists (
+              select 1
+                from jsonb_each(excluded.data->'cells') incoming_cell
+               where coalesce(
+                 (records.data->'cells'->incoming_cell.key->>'updatedAt')::bigint,
+                 -1
+               ) < (incoming_cell.value->>'updatedAt')::bigint
+            )
+          end
+          else records.updated_at < excluded.updated_at
+        end
       returning 1 as ok
     )
     select (select seq from bump) as cursor, (select count(*) from upserted) as applied

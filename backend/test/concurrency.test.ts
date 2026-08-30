@@ -75,6 +75,24 @@ const habit = (id: string, name: string, updatedAt: number) => ({
   deleted: false,
 });
 
+const monthCell = (habitId: string, dateKey: string, updatedAt: number) => ({
+  kind: "habitMonths",
+  id: `${habitId}|${dateKey.slice(0, 7)}`,
+  data: {
+    habitId,
+    monthKey: dateKey.slice(0, 7),
+    cells: {
+      [dateKey]: {
+        data: { habitId, dateKey, value: 1, done: true },
+        updatedAt,
+        deleted: false,
+      },
+    },
+  },
+  updatedAt,
+  deleted: false,
+});
+
 describe("one account, several devices at once", () => {
   it("keeps every sequence number unique when devices push simultaneously", async () => {
     const s = await signIn("09130000001");
@@ -135,6 +153,21 @@ describe("one account, several devices at once", () => {
     const ids = final.records.map((r) => r.id);
     expect(ids).toContain("a");
     expect(ids).toContain("b");
+  });
+
+  it("preserves different days when two devices update one month concurrently", async () => {
+    const s = await signIn("09130000010");
+
+    await Promise.all([
+      push(s.access, [monthCell("h1", "2026-08-01", 5000)]),
+      push(s.access, [monthCell("h1", "2026-08-02", 1000)]),
+    ]);
+
+    const body = (await pull(s.access, 0)).json() as {
+      records: { kind: string; data: { cells: Record<string, unknown> } }[];
+    };
+    const stored = body.records.find((record) => record.kind === "habitMonths")!;
+    expect(Object.keys(stored.data.cells).sort()).toEqual(["2026-08-01", "2026-08-02"]);
   });
 });
 
