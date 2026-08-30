@@ -1,7 +1,6 @@
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../plugins/auth.js";
-import { badRequest } from "../plugins/errors.js";
 import {
   ensureExpiresAt,
   hasSettledGrant,

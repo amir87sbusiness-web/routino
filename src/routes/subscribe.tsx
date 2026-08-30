@@ -25,12 +25,6 @@ export const Route = createFileRoute("/subscribe")({
   component: SubscribePage,
 });
 
-// ═══════════════ TEST-ONLY — بعداً حذف شود ═══════════════
-// دکمه‌ی «تمدید تستی» که بدون پرداخت، اشتراک محلی می‌دهد تا بتوانی بقیه‌ی اپ را
-// تست کنی. دکمه‌ی پرداخت واقعی زرین‌پال دست‌نخورده کنارش می‌ماند.
-// برای حذف: این ثابت را false کن یا بلاکِ نشان‌دارِ TEST-ONLY در JSX را پاک کن.
-const TEST_GRANT_BUTTON = false;
-
 /** Bundled catalog as a fallback so the page can RENDER offline — buying still
  * needs the server, and the button says so. */
 const FALLBACK_PLANS: ServerPlan[] = PLANS.map((p) => ({
@@ -81,7 +75,7 @@ function SubscribePage() {
   }, []);
 
   if (!ctx?.db) return null;
-  const { db, update, applyEntitlement, t, lang, cal } = ctx;
+  const { db, applyEntitlement, t, lang, cal } = ctx;
 
   const active = subscriptionActive(db);
   const progress = !active ? subscriptionProgress(db) : null;
@@ -227,25 +221,6 @@ function SubscribePage() {
       paymentInFlight.current = false;
       setPaying(false);
     }
-  };
-
-  // TEST-ONLY: اشتراک محلی بدون پرداخت. مبلغی جابه‌جا نمی‌شود و سرور خبردار نمی‌شود.
-  const testGrant = () => {
-    const plan = plans.find((p) => p.id === selected) ?? plans[0];
-    const now = Date.now();
-    const base =
-      db.subscription && db.subscription.expiresAt > now ? db.subscription.expiresAt : now;
-    update((d) => ({
-      ...d,
-      subscription: {
-        planId: plan?.id ?? "m3",
-        startedAt: now,
-        expiresAt: base + (plan?.months ?? 3) * 30 * 86_400_000,
-        trial: false,
-      },
-      meta: { ...d.meta, tampered: false },
-    }));
-    navigate({ to: "/" });
   };
 
   return (
@@ -432,18 +407,6 @@ function SubscribePage() {
           "Payment goes through a secure gateway and the subscription activates immediately.",
         )}
       </p>
-
-      {/* ═══ TEST-ONLY: تمدید بدون پرداخت — این بلاک را برای حذف پاک کن ═══ */}
-      {TEST_GRANT_BUTTON && (
-        <button
-          type="button"
-          onClick={testGrant}
-          className="rounded-xl border border-dashed border-muted-foreground/40 py-2.5 text-xs text-muted-foreground"
-        >
-          🧪 {t("تمدید تستی (بدون پرداخت)", "Test activate (no payment)")}
-        </button>
-      )}
-      {/* ═══ پایان TEST-ONLY ═══ */}
 
       {active && (
         <Button variant="ghost" onClick={() => navigate({ to: "/" })}>

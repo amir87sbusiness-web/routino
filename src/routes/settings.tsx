@@ -65,9 +65,7 @@ import {
 } from "@/lib/native-notifications";
 import { toLocalPhone } from "@/lib/phone";
 import { CATEGORY_COLOR_CHOICES } from "@/lib/presets";
-import { applyDemoContent } from "@/lib/seed-demo";
 import { uid } from "@/lib/store";
-import { wipeContent } from "@/lib/wipe";
 import { useAppMaybe } from "@/state/app";
 
 export const Route = createFileRoute("/settings")({
@@ -90,12 +88,6 @@ const BRAND_COLORS = [
   "#8B5CF6",
   "#EC4899",
 ];
-
-// ⚠️ TEST-ONLY — دکمهٔ «ساخت یک سال دادهٔ آزمایشی». برای انتشار false بماند.
-const SHOW_DEMO_SEED = false;
-
-/** Export is permanently visible; Import is gated independently in logic. */
-const BACKUP_UI: boolean = true;
 
 type DisplayPermission =
   "checking" | "unsupported" | "granted" | "denied" | "prompt" | "prompt-with-rationale";
@@ -213,11 +205,6 @@ function SettingsPage() {
     toast.success(t("همهٔ داده‌ها پاک شد", "All data was erased"));
   };
 
-  // ═══ TEST-ONLY: یک سال دادهٔ آزمایشی برای تست همهٔ صفحه‌ها — بعداً حذف شود ═══
-  const seedDemo = () => {
-    update((d) => applyDemoContent(wipeContent(d)));
-    toast.success(t("یک سال دادهٔ آزمایشی ساخته شد", "Seeded one year of demo data"));
-  };
   const s = db.settings;
   // «اشتراک پولی» = اشتراک فعالِ غیرآزمایشی. بازیابی اطلاعات فقط برای این‌ها باز است؛
   // در اشتراک رایگان/آزمایشی قفل می‌ماند تا کاربر ارتقا بدهد.
@@ -686,73 +673,51 @@ function SettingsPage() {
         </div>
       </Modal>
 
-      {/* backup & restore — behind BACKUP_UI; that flag explains what hiding it costs */}
-      {(BACKUP_UI || SHOW_DEMO_SEED) && (
-        <Card className="flex flex-col gap-3">
-          {BACKUP_UI && (
-            <>
-              <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-                <Archive className="h-4 w-4 text-primary" />{" "}
-                {t("پشتیبان‌گیری و بازیابی", "Backup & restore")}
-              </div>
-              <p className="text-[11px] leading-5 text-muted-foreground">
-                {t(
-                  "اطلاعاتت روی دستگاه و فضای ابری حسابت همگام می‌شود. برای داشتن یک نسخهٔ مستقل، فایل پشتیبان را هم در جای امن نگه دار.",
-                  "Your data syncs between this device and your account cloud. Keep an exported backup as an independent copy too.",
-                )}
-              </p>
-              <div className="grid grid-cols-2 gap-2">
-                <Button variant="secondary" onClick={exportData}>
-                  <Download className="h-4 w-4" /> {t("گرفتن پشتیبان", "Export")}
-                </Button>
-                <Button
-                  variant="secondary"
-                  disabled={!paidActive}
-                  onClick={() => fileRef.current?.click()}
-                >
-                  {paidActive ? <Upload className="h-4 w-4" /> : <Lock className="h-4 w-4" />}{" "}
-                  {t("بازیابی", "Import")}
-                </Button>
-              </div>
-              {/* بازیابی داده‌ها فقط برای اشتراک پولی — در اشتراک رایگان قفل است */}
-              {!paidActive && (
-                <Link
-                  to="/subscribe"
-                  className="flex items-center justify-center gap-1.5 rounded-xl bg-primary-soft px-3 py-2 text-[11px] font-bold text-primary"
-                >
-                  <Lock className="h-3.5 w-3.5" />
-                  {t(
-                    "بازیابی اطلاعات فقط برای اشتراک پولی فعال است",
-                    "Restoring data is available on paid plans only",
-                  )}
-                </Link>
-              )}
-              <input
-                ref={fileRef}
-                type="file"
-                accept="application/json,.json"
-                hidden
-                onChange={onFilePicked}
-              />
-            </>
+      <Card className="flex flex-col gap-3">
+        <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+          <Archive className="h-4 w-4 text-primary" />{" "}
+          {t("پشتیبان‌گیری و بازیابی", "Backup & restore")}
+        </div>
+        <p className="text-[11px] leading-5 text-muted-foreground">
+          {t(
+            "اطلاعاتت روی دستگاه و فضای ابری حسابت همگام می‌شود. برای داشتن یک نسخهٔ مستقل، فایل پشتیبان را هم در جای امن نگه دار.",
+            "Your data syncs between this device and your account cloud. Keep an exported backup as an independent copy too.",
           )}
-          {/* ═══ TEST-ONLY: دادهٔ آزمایشی یک‌ساله — با SHOW_DEMO_SEED کنترل می‌شود ═══ */}
-          {SHOW_DEMO_SEED && (
-            <button
-              type="button"
-              onClick={seedDemo}
-              className="rounded-xl border border-dashed border-muted-foreground/40 py-2 text-xs text-muted-foreground"
-            >
-              🧪{" "}
-              {t(
-                "ساخت یک سال دادهٔ آزمایشی (جایگزین دیتای فعلی)",
-                "Seed 1 year of demo data (replaces current)",
-              )}
-            </button>
-          )}
-          {/* ═══ پایان TEST-ONLY ═══ */}
-        </Card>
-      )}
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="secondary" onClick={exportData}>
+            <Download className="h-4 w-4" /> {t("گرفتن پشتیبان", "Export")}
+          </Button>
+          <Button
+            variant="secondary"
+            disabled={!paidActive}
+            onClick={() => fileRef.current?.click()}
+          >
+            {paidActive ? <Upload className="h-4 w-4" /> : <Lock className="h-4 w-4" />}{" "}
+            {t("بازیابی", "Import")}
+          </Button>
+        </div>
+        {/* بازیابی داده‌ها فقط برای اشتراک پولی — در اشتراک رایگان قفل است */}
+        {!paidActive && (
+          <Link
+            to="/subscribe"
+            className="flex items-center justify-center gap-1.5 rounded-xl bg-primary-soft px-3 py-2 text-[11px] font-bold text-primary"
+          >
+            <Lock className="h-3.5 w-3.5" />
+            {t(
+              "بازیابی اطلاعات فقط برای اشتراک پولی فعال است",
+              "Restoring data is available on paid plans only",
+            )}
+          </Link>
+        )}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="application/json,.json"
+          hidden
+          onChange={onFilePicked}
+        />
+      </Card>
 
       {/* danger zone: sign out + erase everything, together in one red box */}
       <Card className="flex flex-col gap-3 border-destructive/40 bg-destructive/5">

@@ -10,7 +10,7 @@
  */
 import { and, count, desc, eq, gt, ilike, sql } from "drizzle-orm";
 import type { Database } from "../db/client.ts";
-import { discounts, entitlements, grants, otpCodes, payments, users } from "../db/schema.ts";
+import { discounts, entitlements, otpCodes, payments, users } from "../db/schema.ts";
 import { badRequest, notFound } from "../lib/http-errors.ts";
 import { normalizePhone, toAsciiDigits } from "../lib/phone.ts";
 import { grantInterval, listGrants, readEntitlement } from "./entitlement.ts";

@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { CalendarCheck2, ChevronLeft, ChevronRight, Flame, ListChecks } from "lucide-react";
+import { CalendarCheck2, ChevronLeft, ChevronRight, Flame } from "lucide-react";
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { AppShell } from "@/components/AppShell";
 import { MonthCalendarGrid } from "@/components/habits";

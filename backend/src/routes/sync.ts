@@ -76,7 +76,7 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
    * chunks rather than sending its whole outbox: a first sync of a year of
    * history is thousands of rows.
    */
-  app.post("/sync/push", { preHandler: app.authenticate }, async (req, reply) => {
+  app.post("/sync/push", { preHandler: app.authenticate }, async (req) => {
     const user = requireUser(req);
     const { records } = pushBody.parse(req.body);
     return pushRecords(db, user.id, records as PushRecord[], now());
@@ -102,7 +102,7 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
    * gateway callback never arrived is simply subscribed by the time the app
    * paints. On the normal path that is one indexed SELECT returning nothing.
    */
-  app.get("/sync/pull", { preHandler: app.authenticate }, async (req, reply) => {
+  app.get("/sync/pull", { preHandler: app.authenticate }, async (req) => {
     const user = requireUser(req);
     const { cursor, limit } = pullQuery.parse(req.query);
     const t = now();

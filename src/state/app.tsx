@@ -542,9 +542,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     // profile), and the one thing worse than losing it is the user not knowing:
     // they would keep adding habits into a session that saves nothing.
     //
-    // This used to point at Settings → Backup. That card is hidden behind
-    // `BACKUP_UI` now, so the message names the causes the user can actually act
-    // on instead of a button they will not find.
+    // The error names the storage causes the user can act on; backup remains a
+    // separate recovery path rather than a claim that the failed write succeeded.
     if (changes.length) {
       const owner = syncOwnerOf(db);
       const write = persistQueue.current.then(() => applyChanges(changes));

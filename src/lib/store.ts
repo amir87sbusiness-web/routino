@@ -196,8 +196,6 @@ export const logKey = (habitId: string, dk: string) => `${habitId}|${dk}`;
 
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
-const STORAGE_KEY = "routino:v1";
-
 export function defaultDb(categories: Category[]): Db {
   return {
     version: 1,
@@ -239,5 +237,5 @@ export function defaultDb(categories: Category[]): Db {
  *   hydrate()  — rebuilds this shape from IndexedDB + the device-local slice
  *   diffDb()   — works out what changed
  *   applyChanges() — writes only those records
- * The legacy blob under STORAGE_KEY is imported once by `db/migrate.ts` and then
+ * The legacy `routino:v1` blob is imported once by `db/migrate.ts` and then
  * deliberately left on disk as a recovery path. */

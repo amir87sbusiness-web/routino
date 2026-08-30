@@ -156,7 +156,6 @@ subscribe.tsx (فرانت)
 - ساخت حساب هیچ دسترسی رایگانی نمی‌دهد. تریال ۷روزه را فقط endpoint صریح `POST /subscriptions/trial/start` و منطق `startTrialOnce` سمت سرور می‌سازد؛ کلاینت نه تاریخ هفت‌روزه می‌سازد و نه فلگ تریال local-only دارد.
 - فعال‌سازی فقط وقتی ممکن است که هیچ grant قبلی (trial/payment/migration/admin) و هیچ entitlement materialized وجود نداشته باشد. retry، نصب مجدد و دستگاه دوم همان جواب فعلی را می‌گیرند و زمان اضافه نمی‌شود.
 - گِیت اپ با `accessState` از auth، وضعیت نشست، فلگ حل‌شدن migration و کپی محلی entitlement تصمیم می‌گیرد: فقط `none` حل‌شده به `/activation` می‌رود؛ active-trial/active-paid نوشتن دارند؛ expired داخل اپ و sync می‌ماند ولی `AppProvider.update()` محتوای محصول را فقط‌خواندنی می‌کند. `tampered` بدون جواب authoritative حالت تأیید آنلاین است، نه paywall.
-- نتیجه: دکمه‌ی تستی فرانت (`TEST_GRANT_BUTTON`) فقط همین کپی محلی رو پر می‌کنه — سرور خبردار نمی‌شه و خرید واقعی باهاش تست نمی‌شه. (`TEST_LOGIN_BUTTON` دیگه وجود نداره.)
 
 ---
 

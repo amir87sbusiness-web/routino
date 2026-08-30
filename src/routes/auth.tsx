@@ -2,13 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { Button, Input, Logo } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
-import {
-  clearTokens,
-  passwordLogin,
-  requestOtp,
-  verifyOtp,
-  type ServerEntitlement,
-} from "@/lib/api/auth";
+import { passwordLogin, requestOtp, verifyOtp, type ServerEntitlement } from "@/lib/api/auth";
 import { faNum } from "@/lib/dates";
 import { normalizePhone, toAsciiDigits, toLocalPhone } from "@/lib/phone";
 import { useAppMaybe } from "@/state/app";
@@ -16,12 +10,6 @@ import { useAppMaybe } from "@/state/app";
 export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
-
-// ورود واقعی با کد پیامکی. در توسعه، سرور کد را در ترمینال چاپ می‌کند
-// (SMS_PROVIDER=console) پس بدون کاوه‌نگار هم قابل تست است.
-// فقط برای دموی آفلاین این را true کن — با true هیچ حساب سروری ساخته نمی‌شود
-// و خرید اشتراک کار نمی‌کند.
-const SKIP_SMS = false;
 
 type Method = "password" | "otp";
 type OtpIntent = "signup" | "password_reset";
@@ -45,7 +33,7 @@ function AuthPage() {
   const [busy, setBusy] = useState(false);
 
   if (!ctx?.db) return null;
-  const { db, signInLocal, switchAccount, t, lang } = ctx;
+  const { db, switchAccount, t, lang } = ctx;
 
   /** Turns an ApiError into something a Persian-speaking human can act on. */
   const explain = (err: unknown): string => {
@@ -143,14 +131,6 @@ function AuthPage() {
       return;
     }
     setError("");
-    if (SKIP_SMS) {
-      if (db.meta.dataOwner && db.meta.dataOwner !== canonical) clearTokens();
-      // Offline demo mode has no server answer. Preserve semantics are explicit
-      // here instead of relying on an omitted production argument.
-      signInLocal(canonical, db.subscription);
-      navigate({ to: "/" });
-      return;
-    }
     setBusy(true);
     try {
       await requestOtp(canonical);
@@ -280,11 +260,7 @@ function AuthPage() {
             />
             {error && <p className="text-center text-xs text-destructive">{error}</p>}
             <Button onClick={() => void sendCode()} disabled={busy}>
-              {busy
-                ? t("در حال ارسال…", "Sending…")
-                : SKIP_SMS
-                  ? t("ورود", "Sign in")
-                  : t("ارسال کد پیامکی", "Send SMS code")}
+              {busy ? t("در حال ارسال…", "Sending…") : t("ارسال کد پیامکی", "Send SMS code")}
             </Button>
             <button
               type="button"

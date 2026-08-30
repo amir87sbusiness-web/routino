@@ -3,7 +3,6 @@
  * with only an env change.
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { eq } from "drizzle-orm";
 import { schema } from "../src/db/schema.js";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
 

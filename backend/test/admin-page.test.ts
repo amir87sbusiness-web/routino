@@ -23,7 +23,7 @@ describe("admin page", () => {
   it("renders the authenticated overview without fetching it a second time", async () => {
     // This catches the old login flow where the successful /overview response
     // only validated the token and showPanel immediately fetched it again.
-    const fetch = vi.fn(async (path: string) => ({
+    const fetch = vi.fn(async (_path: string) => ({
       status: 200,
       ok: true,
       json: async () => overview,

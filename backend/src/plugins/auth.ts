@@ -1,4 +1,4 @@
-import type { FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyRequest } from "fastify";
 import fp from "fastify-plugin";
 import { verifyAccessToken } from "../services/tokens.js";
 import { unauthorized } from "./errors.js";
@@ -9,7 +9,7 @@ export interface AuthedUser {
 
 declare module "fastify" {
   interface FastifyInstance {
-    authenticate: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    authenticate: (req: FastifyRequest) => Promise<void>;
   }
   interface FastifyRequest {
     user?: AuthedUser;

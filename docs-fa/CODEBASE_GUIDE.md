@@ -130,7 +130,6 @@ routino1.0/
 | [src/lib/native.ts](../src/lib/native.ts)                             | هماهنگی نوار وضعیت اندروید/iOS با تم                                                                                                                                                                               | معمولاً دست نمی‌زنی                                                        |
 | [src/lib/native-notifications.ts](../src/lib/native-notifications.ts) | نوتیفیکیشن‌های سیستم‌عاملی موبایل (وقتی اپ بسته‌ست هم کار می‌کنن)                                                                                                                                                  | متن نوتیف‌های عادت/ژورنال/کار در موبایل                                    |
 | [src/lib/wipe.ts](../src/lib/wipe.ts)                                 | جداسازی دیتا موقع تعویض شماره ورود (`loginAs`, `wipeContent`) — صدا زده می‌شه از `auth.tsx`                                                                                                                        | معمولاً دست نمی‌زنی                                                        |
-| [src/lib/seed-demo.ts](../src/lib/seed-demo.ts)                       | دکمه‌ی «دیتای نمایشی» در تنظیمات — یک سال دیتای ساختگی می‌سازه برای دمو/تست (`applyDemoContent`)                                                                                                                   | فقط برای دمو، تو نسخه‌ی واقعی کاربر لازم نیست                              |
 | [src/lib/backup-native.ts](../src/lib/backup-native.ts)               | خروجی فایل پشتیبان روی موبایل (share sheet کپسیتور، چون دانلود مستقیم مرورگر اونجا کار نمی‌کنه)                                                                                                                    | معمولاً دست نمی‌زنی                                                        |
 | [src/lib/utils.ts](../src/lib/utils.ts)                               | تابع کمکی `cn` (ترکیب کلاس‌های Tailwind)                                                                                                                                                                           | معمولاً دست نمی‌زنی                                                        |
 
@@ -168,9 +167,9 @@ routino1.0/
 | [analytics.tsx](../src/routes/analytics.tsx)           | **آنالیز**: `WeeklyReviewCard`، نمودار کلی، شبکه تقویمی هر عادت، لیست کارهای انجام‌شده/نشده                                                                                                      | بازه‌های نمودار (`RANGES`)؛ محاسبهٔ مرور در `logic.ts` است                                                           |
 | [settings.tsx](../src/routes/settings.tsx)             | **تنظیمات**: حساب، زبان/تم، نوتیف و Export/Import                                                                                                                                                | Export همیشه؛ Import فقط پولی                                                                                        |
 | [onboarding.tsx](../src/routes/onboarding.tsx)         | **خوش‌آمدگویی**: ۳ اسلاید معرفی + تنظیمات اولیه                                                                                                                                                  | متن و ایموجی اسلایدها (آرایه `slides`)                                                                               |
-| [auth.tsx](../src/routes/auth.tsx)                     | **ورود**: پیش‌فرض **رمز عبور** (شماره موبایل یا نام کاربری + رمز)؛ دو دکمهٔ «ثبت‌نام» و «فراموشی رمز عبور» مسیر کد ۴ رقمی + ثبت رمز را باز می‌کنند. اشتراک قدیمی محلی رو هم به سرور منتقل می‌کنه | ⚠️ `SKIP_SMS` (بخش ۷)، متن خطاها، ترتیب دو روش ورود                                                                  |
+| [auth.tsx](../src/routes/auth.tsx)                     | **ورود**: پیش‌فرض **رمز عبور** (شماره موبایل یا نام کاربری + رمز)؛ دو دکمهٔ «ثبت‌نام» و «فراموشی رمز عبور» مسیر کد ۴ رقمی + ثبت رمز را باز می‌کنند. اشتراک قدیمی محلی رو هم به سرور منتقل می‌کنه | متن خطاها، ترتیب دو روش ورود                                                                                         |
 | [activation.tsx](../src/routes/activation.tsx)         | **فعال‌سازی تریال**: انتخاب/ساخت نخستین عادت، سپس CTA صریح برای شروع تریال                                                                                                                       | از مدل عادت و همگام‌سازی عادی استفاده می‌کند؛ قبل از CTA تریال نمی‌سازد                                              |
-| [subscribe.tsx](../src/routes/subscribe.tsx)           | **دیوار اشتراک**: لیست پلن‌ها (از سرور، با نسخه آفلاین پشتیبان)، کد تخفیف، دکمه پرداخت                                                                                                           | ⚠️ `TEST_GRANT_BUTTON` (بخش ۷)، متن‌های صفحه خرید                                                                    |
+| [subscribe.tsx](../src/routes/subscribe.tsx)           | **دیوار اشتراک**: لیست پلن‌ها (از سرور، با نسخه آفلاین پشتیبان)، کد تخفیف، دکمه پرداخت                                                                                                           | متن‌های صفحه خرید                                                                                                    |
 | [pay.result.tsx](../src/routes/pay.result.tsx)         | **نتیجه پرداخت**: بعد از برگشت از درگاه، وضعیت رو از سرور می‌پرسه (تا ۱ دقیقه تلاش می‌کنه)                                                                                                       | متن‌های موفق/لغو/ناموفق                                                                                              |
 
 ### 🧩 قطعه‌های UI (`src/components/`)
@@ -309,14 +308,12 @@ routino1.0/
 
 ---
 
-## ۷. ⚠️ حالت‌های تستی — قبل از انتشار واقعی حذف/خاموش کن
+## ۷. ⚠️ حالت‌های تستی سرور — قبل از انتشار واقعی خاموش کن
 
-| کجا                                                     | چی                                                                            | چطور خاموش می‌شه                                              |
-| ------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| [src/routes/auth.tsx](../src/routes/auth.tsx)           | `SKIP_SMS = false` → اگه `true` بشه کلاً بدون سرور وارد می‌شه (فقط دمو)       | `false` بمونه                                                 |
-| [src/routes/subscribe.tsx](../src/routes/subscribe.tsx) | `TEST_GRANT_BUTTON` → دکمه «تمدید تستی بدون پرداخت» — الان از قبل `false` است | اگه برای تست خودت روشنش کردی، قبل از انتشار دوباره `false` کن |
-| env سرور                                                | `PSP_PROVIDER=fake` → درگاه تقلبی                                             | در production خطا می‌دهد؛ `zarinpal` بگذار                    |
-| env سرور                                                | همه‌ی secretهای `dev-only...`                                                 | در پروداکشن سرور اصلاً بالا نمیاد تا عوضشون نکنی (عمداً)      |
+| کجا      | چی                            | چطور خاموش می‌شه                                         |
+| -------- | ----------------------------- | -------------------------------------------------------- |
+| env سرور | `PSP_PROVIDER=fake` → درگاه تقلبی | در production خطا می‌دهد؛ `zarinpal` بگذار               |
+| env سرور | همه‌ی secretهای `dev-only...` | در پروداکشن سرور اصلاً بالا نمیاد تا عوضشون نکنی (عمداً) |
 
 **چطور بفهمم چیزی تستی مونده؟** لاگ استارتاپ سرور/تابع. هر چیزی که تستی باشه با `[!] TEST MODE — …` چاپ می‌شه. اگه هیچ خطی نبود، همه‌چی واقعیه.
 
@@ -394,5 +391,5 @@ npm test               # تست‌های بک‌اند
 - **Timer:** ref-based interval tick (not setState updaters — StrictMode safety); commits focus minutes to linked time-habit/task via `applyLog` inside updater; sessions sorted by endedAt, capped 200.
 - **Native:** CapacitorHttp for API (CORS-free), LocalNotifications for OS reminders (`native-notifications.ts`), StatusBar overlay in `native.ts`, deep link `routino://pay/result` handled in `client.tsx`. PWA SW disabled on mobile builds; `virtual:pwa-register` prompt-style updates on web.
 - **i18n:** inline `t(fa, en)` everywhere; no translation files. Dates via `lib/dates.ts` (jalaali-js); week starts Sat (jalali) / Sun (gregorian); `faNum` for Persian digits.
-- **Known test-only flags:** `TEST_GRANT_BUTTON` (subscribe.tsx), `SKIP_SMS` (auth.tsx), `SHOW_DEMO_SEED` (settings.tsx), fake PSP + console SMS via env. (`TEST_LOGIN_BUTTON` no longer exists.) All are `false` literals, so Rollup tree-shakes their bodies out of the bundle — verified, `seed-demo.ts` does not ship.
-- **`BACKUP_UI` (settings.tsx) is NOT a test flag and is `true`.** Export همیشه در دسترس است؛ Import فقط پلن پولی فعال. «پاک‌کردن همه» reset محتوای حساب همگام‌شده است، نه پاک‌کردن حساب یا cache محلی، و در حالت expired هم مجاز می‌ماند.
+- **Test-only frontend branches were removed.** Fake PSP + console SMS remain controlled by server env for local tests.
+- **Backup UI is permanent.** Export همیشه در دسترس است؛ Import فقط پلن پولی فعال. «پاک‌کردن همه» reset محتوای حساب همگام‌شده است، نه پاک‌کردن حساب یا cache محلی، و در حالت expired هم مجاز می‌ماند.

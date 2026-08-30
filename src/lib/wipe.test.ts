@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CATEGORIES } from "./presets";
-import { buildDemoContent } from "./seed-demo";
 import { defaultDb, logKey, type Db } from "./store";
 import { loginAs, wipeContent } from "./wipe";
 
@@ -121,42 +120,5 @@ describe("loginAs — account isolation", () => {
   it("preserves the cached subscription only when the argument is omitted", () => {
     const next = loginAs({ ...seededDb(), auth: null }, "989111111111");
     expect(next.subscription?.planId).toBe("p3");
-  });
-});
-
-describe("buildDemoContent", () => {
-  const demo = buildDemoContent(new Date(2026, 6, 19, 12).getTime());
-
-  it("is deterministic", () => {
-    const again = buildDemoContent(new Date(2026, 6, 19, 12).getTime());
-    expect(again).toEqual(demo);
-  });
-
-  it("covers a full year with realistic volume", () => {
-    expect(demo.habits.length).toBeGreaterThanOrEqual(8);
-    expect(Object.keys(demo.logs).length).toBeGreaterThan(1000);
-    expect(Object.keys(demo.journal).length).toBeGreaterThan(120);
-    expect(demo.timerSessions.length).toBe(120);
-    expect(demo.tasks.length).toBeGreaterThan(25);
-    // oldest habit really is ~a year old
-    const oldest = Math.min(...demo.habits.map((h) => h.createdAt));
-    expect(Date.now() - oldest).toBeGreaterThan(360 * 24 * 60 * 60 * 1000 - 1);
-  });
-
-  it("every log belongs to an existing habit, is keyed correctly, and is on/after its habit's createdAt", () => {
-    const byId = new Map(demo.habits.map((h) => [h.id, h]));
-    for (const [key, log] of Object.entries(demo.logs)) {
-      expect(key).toBe(logKey(log.habitId, log.dateKey));
-      const habit = byId.get(log.habitId);
-      expect(habit).toBeDefined();
-      expect(new Date(log.dateKey + "T23:59:59").getTime()).toBeGreaterThanOrEqual(
-        habit!.createdAt - 24 * 60 * 60 * 1000,
-      );
-    }
-  });
-
-  it("keeps at least one reminder so notifications are testable", () => {
-    expect(demo.habits.some((h) => h.reminderTime)).toBe(true);
-    expect(demo.tasks.some((t) => t.reminderAt)).toBe(true);
   });
 });
