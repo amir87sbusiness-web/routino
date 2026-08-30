@@ -1,0 +1,212 @@
+import { z } from "zod";
+import { SYNC_KINDS, type SyncKind } from "../db/schema.js";
+
+export const MAX_JOURNAL_CHARACTERS = 4_000;
+export const MAX_JOURNAL_UTF8_BYTES = 16 * 1024;
+export const MAX_RECORD_UTF8_BYTES = 20 * 1024;
+
+const ENTITY_ID_RE = /^[A-Za-z0-9_:.-]{1,128}$/;
+const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_RE = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+const encoder = new TextEncoder();
+
+const bounded = (max: number) => z.string().max(max);
+const entityId = z.string().regex(ENTITY_ID_RE);
+const epochMs = z.number().int().nonnegative().finite().max(Number.MAX_SAFE_INTEGER);
+const finiteAmount = z.number().nonnegative().finite().max(1_000_000_000);
+const note = bounded(4_000).optional();
+const mood = bounded(32).optional();
+
+function isDateKey(value: string): boolean {
+  if (!DATE_KEY_RE.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+const dateKey = z.string().refine(isDateKey);
+
+const categorySchema = z
+  .object({
+    id: entityId,
+    nameFa: bounded(256),
+    nameEn: bounded(256),
+    color: bounded(32),
+    icon: bounded(64),
+    isDefault: z.boolean(),
+    isLimit: z.boolean().optional(),
+  })
+  .strict();
+
+const scheduleSchema = z
+  .object({
+    kind: z.enum(["daily", "odd", "even", "weekdays"]),
+    weekdays: z
+      .array(z.number().int().min(0).max(6))
+      .max(7)
+      .refine((days) => new Set(days).size === days.length)
+      .optional(),
+  })
+  .strict();
+
+const habitSchema = z
+  .object({
+    id: entityId,
+    name: z.string().min(1).max(256),
+    categoryId: entityId,
+    type: z.enum(["binary", "quantity"]),
+    target: finiteAmount,
+    unit: bounded(64).optional(),
+    unitKind: z.enum(["count", "time"]).optional(),
+    schedule: scheduleSchema,
+    monthlyGoal: z.number().int().min(1).max(31).nullable(),
+    reminderTime: z.string().regex(TIME_RE).nullable(),
+    createdAt: epochMs,
+    archived: z.boolean().optional(),
+  })
+  .strict();
+
+const habitLogSchema = z
+  .object({
+    habitId: entityId,
+    dateKey,
+    value: finiteAmount,
+    done: z.boolean(),
+    note,
+    mood,
+  })
+  .strict();
+
+const taskSchema = z
+  .object({
+    id: entityId,
+    dateKey,
+    title: z.string().min(1).max(256),
+    type: z.enum(["binary", "quantity"]),
+    target: finiteAmount,
+    value: finiteAmount,
+    done: z.boolean(),
+    note,
+    unitKind: z.enum(["count", "time"]).optional(),
+    reminderAt: bounded(64).nullable().optional(),
+    color: bounded(32).optional(),
+    icon: bounded(64).optional(),
+  })
+  .strict();
+
+const timerSessionSchema = z
+  .object({
+    id: entityId,
+    mode: z.enum(["pomodoro", "free", "stopwatch"]),
+    focusSeconds: z.number().int().nonnegative().finite().max(10 * 365 * 86_400),
+    startedAt: epochMs,
+    endedAt: epochMs,
+    linkedKind: z.enum(["habit", "task"]).optional(),
+    linkedId: entityId.optional(),
+    linkedLabel: bounded(256).optional(),
+  })
+  .strict()
+  .refine((session) => session.endedAt >= session.startedAt);
+
+const journalSchema = z
+  .object({
+    dateKey,
+    text: bounded(MAX_JOURNAL_CHARACTERS),
+    score: z.number().int().min(1).max(10).nullable(),
+    mood: bounded(32).nullable(),
+    updatedAt: epochMs,
+  })
+  .strict();
+
+const schemas: Record<SyncKind, z.ZodType> = {
+  categories: categorySchema,
+  habits: habitSchema,
+  logs: habitLogSchema,
+  tasks: taskSchema,
+  timerSessions: timerSessionSchema,
+  journal: journalSchema,
+};
+
+export interface PushRecord {
+  kind: string;
+  id: string;
+  data: unknown;
+  updatedAt: number;
+  deleted: boolean;
+}
+
+export type SyncRejectionCode =
+  | "bad_kind"
+  | "bad_id"
+  | "bad_updated_at"
+  | "invalid_record"
+  | "record_too_large";
+
+export type RecordValidation =
+  | { ok: true; record: PushRecord }
+  | { ok: false; code: SyncRejectionCode };
+
+const isSyncKind = (kind: string): kind is SyncKind =>
+  (SYNC_KINDS as readonly string[]).includes(kind);
+
+function hasValidId(kind: SyncKind, id: string): boolean {
+  if (kind === "journal") return isDateKey(id);
+  if (kind === "logs") {
+    const separator = id.lastIndexOf("|");
+    if (separator <= 0) return false;
+    return ENTITY_ID_RE.test(id.slice(0, separator)) && isDateKey(id.slice(separator + 1));
+  }
+  return ENTITY_ID_RE.test(id);
+}
+
+function encodedJsonBytes(value: unknown): number | null {
+  try {
+    return encoder.encode(JSON.stringify(value)).byteLength;
+  } catch {
+    return null;
+  }
+}
+
+function payloadMatchesId(kind: SyncKind, id: string, data: unknown): boolean {
+  const item = data as Record<string, unknown>;
+  if (kind === "journal") return item.dateKey === id;
+  if (kind === "logs") return `${item.habitId}|${item.dateKey}` === id;
+  return item.id === id;
+}
+
+export function validateSyncRecord(record: PushRecord): RecordValidation {
+  if (!isSyncKind(record.kind)) return { ok: false, code: "bad_kind" };
+  if (!hasValidId(record.kind, record.id)) return { ok: false, code: "bad_id" };
+  if (
+    !Number.isFinite(record.updatedAt) ||
+    !Number.isInteger(record.updatedAt) ||
+    record.updatedAt < 0 ||
+    record.updatedAt > Number.MAX_SAFE_INTEGER
+  ) {
+    return { ok: false, code: "bad_updated_at" };
+  }
+
+  if (record.deleted) return { ok: true, record };
+
+  if (record.kind === "journal") {
+    const candidate = record.data as { text?: unknown } | null;
+    if (typeof candidate?.text === "string") {
+      if (candidate.text.length > MAX_JOURNAL_CHARACTERS) {
+        return { ok: false, code: "record_too_large" };
+      }
+      if (encoder.encode(candidate.text).byteLength > MAX_JOURNAL_UTF8_BYTES) {
+        return { ok: false, code: "record_too_large" };
+      }
+    }
+  }
+
+  const parsed = schemas[record.kind].safeParse(record.data);
+  if (!parsed.success || !payloadMatchesId(record.kind, record.id, parsed.data)) {
+    return { ok: false, code: "invalid_record" };
+  }
+
+  const bytes = encodedJsonBytes(record.data);
+  if (bytes === null) return { ok: false, code: "invalid_record" };
+  if (bytes > MAX_RECORD_UTF8_BYTES) return { ok: false, code: "record_too_large" };
+
+  return { ok: true, record };
+}

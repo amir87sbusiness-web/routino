@@ -24,8 +24,14 @@
  */
 import { and, eq, gt, like, sql } from "drizzle-orm";
 import { rowsOf, type Database } from "../db/client.js";
-import { records, SYNC_KINDS, users, type SyncKind } from "../db/schema.js";
+import { records, users } from "../db/schema.js";
 import { badRequest } from "../lib/http-errors.js";
+import {
+  validateSyncRecord,
+  type PushRecord,
+} from "./sync-record-validation.js";
+
+export type { PushRecord } from "./sync-record-validation.js";
 
 /** How far ahead of the server a device's clock may be before we stop believing
  * it. Generous enough for ordinary skew, small enough that a wrong clock cannot
@@ -39,29 +45,6 @@ export const MAX_PUSH_RECORDS = 200;
 /** Rows per pull page. A first sync of a year of history is thousands of rows,
  * so pulling is paged and the client loops until `hasMore` is false. */
 export const PULL_PAGE_SIZE = 500;
-
-/** Bytes of JSON per record. Habits and journal entries are small; this only
- * exists so a malicious client cannot park a megabyte in one row. */
-const MAX_RECORD_BYTES = 8 * 1024;
-
-/**
- * Ids are client-generated: `uid()`, or a natural composite (`habitId|dateKey`,
- * `dateKey`, or a settings field name). Anchored and bounded because this value
- * reaches a primary key — an unbounded id is a cheap way to bloat an index.
- */
-const ID_RE = /^[A-Za-z0-9_:|.-]{1,128}$/;
-
-const isSyncKind = (k: string): k is SyncKind => (SYNC_KINDS as readonly string[]).includes(k);
-
-/** One record as the client sends it. `seq` is server-assigned and deliberately
- * absent — a client cannot choose its own position in the log. */
-export interface PushRecord {
-  kind: string;
-  id: string;
-  data: unknown;
-  updatedAt: number;
-  deleted: boolean;
-}
 
 export interface PullRecord {
   kind: string;
@@ -105,15 +88,8 @@ function validate(rows: PushRecord[]): void {
     throw badRequest("too_many_records", `Send at most ${MAX_PUSH_RECORDS} records per push`);
   }
   for (const r of rows) {
-    if (!isSyncKind(r.kind)) throw badRequest("bad_kind", `Unknown record kind: ${r.kind}`);
-    if (!ID_RE.test(r.id)) throw badRequest("bad_id", "Malformed record id");
-    if (!Number.isFinite(r.updatedAt) || r.updatedAt < 0) {
-      throw badRequest("bad_updated_at", "updatedAt must be a positive epoch-ms number");
-    }
-    // A tombstone carries no body, so only live rows are measured.
-    if (!r.deleted && JSON.stringify(r.data ?? null).length > MAX_RECORD_BYTES) {
-      throw badRequest("record_too_large", "One record exceeds the size limit");
-    }
+    const result = validateSyncRecord(r);
+    if (!result.ok) throw badRequest(result.code, "Sync record was rejected");
   }
 }
 

@@ -64,7 +64,25 @@ function exchange(
 const habit = (id: string, name: string, updatedAt = 1000) => ({
   kind: "habits",
   id,
-  data: { id, name },
+  data: {
+    id,
+    name,
+    categoryId: "c1",
+    type: "binary",
+    target: 1,
+    schedule: { kind: "daily" },
+    monthlyGoal: null,
+    reminderTime: null,
+    createdAt: 1,
+  },
+  updatedAt,
+  deleted: false,
+});
+
+const log = (habitId: string, dateKey: string, updatedAt = 1000) => ({
+  kind: "logs",
+  id: `${habitId}|${dateKey}`,
+  data: { habitId, dateKey, value: 1, done: true },
   updatedAt,
   deleted: false,
 });
@@ -166,9 +184,9 @@ describe("sync", () => {
     const { access } = await signIn("09120000006");
     await push(access, [
       habit("h1", "ورزش", 1000),
-      { kind: "logs", id: "h1|2026-08-01", data: { done: true }, updatedAt: 1000, deleted: false },
-      { kind: "logs", id: "h1|2026-08-02", data: { done: true }, updatedAt: 1000, deleted: false },
-      { kind: "logs", id: "h2|2026-08-01", data: { done: true }, updatedAt: 1000, deleted: false },
+      log("h1", "2026-08-01"),
+      log("h1", "2026-08-02"),
+      log("h2", "2026-08-01"),
     ]);
 
     // ONE tombstone for the habit — the client does not send one per log, which

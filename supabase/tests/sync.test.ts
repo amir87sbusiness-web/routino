@@ -24,7 +24,17 @@ afterAll(async () => {
 const habit = (id: string, name: string, updatedAt = 1000) => ({
   kind: "habits",
   id,
-  data: { id, name },
+  data: {
+    id,
+    name,
+    categoryId: "c1",
+    type: "binary",
+    target: 1,
+    schedule: { kind: "daily" },
+    monthlyGoal: null,
+    reminderTime: null,
+    createdAt: 1,
+  },
   updatedAt,
   deleted: false,
 });
