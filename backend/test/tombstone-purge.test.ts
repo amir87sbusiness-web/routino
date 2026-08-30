@@ -39,6 +39,24 @@ function purgeSql(): string {
 
 const DAY = 86_400_000;
 
+const habit = (id: string) => ({
+  kind: "habits",
+  id,
+  data: {
+    id,
+    name: id,
+    categoryId: "c1",
+    type: "binary",
+    target: 1,
+    schedule: { kind: "daily" },
+    monthlyGoal: null,
+    reminderTime: null,
+    createdAt: 1,
+  },
+  updatedAt: Date.now(),
+  deleted: false,
+});
+
 async function signIn(phone: string) {
   await h.raw(`update otp_codes set consumed_at = null, created_at = now() - interval '2 minutes'`);
   await h.app.inject({ method: "POST", url: "/v1/auth/otp/request", payload: { phone } });
@@ -68,7 +86,7 @@ describe("weekly tombstone purge", () => {
     const { access, user } = await signIn("09124440001");
 
     await push(access, [
-      { kind: "habits", id: "keep", data: { id: "keep" }, updatedAt: Date.now(), deleted: false },
+      habit("keep"),
       {
         kind: "habits",
         id: "old-delete",
@@ -109,7 +127,7 @@ describe("weekly tombstone purge", () => {
     // genuinely behind it. (A device at cursor 2 would NOT be — it already saw
     // the tombstone, which is why the check is a strict `cursor < gc_seq`.)
     await push(access, [
-      { kind: "habits", id: "alive", data: { id: "alive" }, updatedAt: Date.now(), deleted: false },
+      habit("alive"),
       { kind: "habits", id: "gone", data: null, updatedAt: Date.now() - 200 * DAY, deleted: true },
     ]);
     await h.raw(purgeSql());
@@ -132,15 +150,7 @@ describe("weekly tombstone purge", () => {
     await push(a.access, [
       { kind: "habits", id: "a-old", data: null, updatedAt: Date.now() - 200 * DAY, deleted: true },
     ]);
-    await push(b.access, [
-      {
-        kind: "habits",
-        id: "b-live",
-        data: { id: "b-live" },
-        updatedAt: Date.now(),
-        deleted: false,
-      },
-    ]);
+    await push(b.access, [habit("b-live")]);
 
     await h.raw(purgeSql());
 
@@ -154,7 +164,7 @@ describe("purge racing a device that is syncing", () => {
     const { access } = await signIn("09124440005");
 
     await push(access, [
-      { kind: "habits", id: "alive", data: { id: "alive" }, updatedAt: Date.now(), deleted: false },
+      habit("alive"),
       { kind: "habits", id: "old", data: null, updatedAt: Date.now() - 200 * DAY, deleted: true },
     ]);
 

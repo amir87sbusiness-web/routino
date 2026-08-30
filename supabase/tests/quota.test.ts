@@ -54,13 +54,17 @@ async function signUp(index: number) {
     headers: auth(session.access),
     body: {
       cursor: 0,
-      records: Array.from({ length: RECORDS_PER_USER }, (_, recordIndex) => ({
-        kind: "logs",
-        id: `habit-${index}|2026-08-${String((recordIndex % 28) + 1).padStart(2, "0")}-${recordIndex}`,
-        data: { done: recordIndex % 2 === 0 },
-        updatedAt: index * 10_000 + recordIndex,
-        deleted: false,
-      })),
+      records: Array.from({ length: RECORDS_PER_USER }, (_, recordIndex) => {
+        const habitId = `habit-${index}-${recordIndex}`;
+        const dateKey = `2026-08-${String((recordIndex % 28) + 1).padStart(2, "0")}`;
+        return {
+          kind: "logs",
+          id: `${habitId}|${dateKey}`,
+          data: { habitId, dateKey, value: 1, done: recordIndex % 2 === 0 },
+          updatedAt: index * 10_000 + recordIndex,
+          deleted: false,
+        };
+      }),
       includeAccountState: false,
     },
   });
@@ -77,8 +81,13 @@ async function signUp(index: number) {
         records: [
           {
             kind: "logs",
-            id: `habit-${index}|2026-08-01-0`,
-            data: { done: true },
+            id: `habit-${index}-0|2026-08-01`,
+            data: {
+              habitId: `habit-${index}-0`,
+              dateKey: "2026-08-01",
+              value: 1,
+              done: true,
+            },
             updatedAt: 9_000_000 + index,
             deleted: false,
           },

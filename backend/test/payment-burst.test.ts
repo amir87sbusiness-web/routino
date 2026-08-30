@@ -186,7 +186,23 @@ describe("a burst of simultaneous sales", () => {
           headers: auth(b.access),
           payload: {
             records: [
-              { kind: "habits", id: `h${i}`, data: { owner: i }, updatedAt: 1000, deleted: false },
+              {
+                kind: "habits",
+                id: `h${i}`,
+                data: {
+                  id: `h${i}`,
+                  name: `owner-${i}`,
+                  categoryId: "c1",
+                  type: "binary",
+                  target: 1,
+                  schedule: { kind: "daily" },
+                  monthlyGoal: null,
+                  reminderTime: null,
+                  createdAt: 1,
+                },
+                updatedAt: 1000,
+                deleted: false,
+              },
             ],
           },
         }),
@@ -200,10 +216,10 @@ describe("a burst of simultaneous sales", () => {
     );
 
     pulls.forEach((res, i) => {
-      const body = res.json() as { records: { id: string; data: { owner: number } }[] };
+      const body = res.json() as { records: { id: string; data: { name: string } }[] };
       const habits = body.records.filter((r) => r.id.startsWith("h"));
       expect(habits).toHaveLength(1);
-      expect(habits[0]!.data.owner).toBe(i);
+      expect(habits[0]!.data.name).toBe(`owner-${i}`);
     });
   });
 });
