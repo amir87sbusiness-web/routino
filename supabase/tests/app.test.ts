@@ -123,6 +123,52 @@ describe("error shapes", () => {
   });
 });
 
+describe("request body limit", () => {
+  it("rejects a declared body above 64 KiB before parsing it", async () => {
+    const res = await h.app.request("/api/v1/auth/otp/request", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "content-length": String(70 * 1024),
+      },
+      body: "{}",
+    });
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toMatchObject({ error: "payload_too_large" });
+  });
+
+  it("rejects an undeclared body once its actual bytes pass 64 KiB", async () => {
+    const res = await h.app.request("/api/v1/auth/otp/request", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ phone: "09123334444", padding: "🙂".repeat(20_000) }),
+    });
+
+    expect(res.status).toBe(413);
+    expect(await res.json()).toMatchObject({ error: "payload_too_large" });
+  });
+
+  it("keeps malformed small JSON on the clean validation-error path", async () => {
+    const res = await h.app.request("/api/v1/auth/otp/request", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{",
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "invalid_request" });
+  });
+
+  it("still accepts a valid JSON request below the cap", async () => {
+    const res = await h.call("POST", "/v1/auth/otp/request", {
+      body: { phone: "09123334444" },
+    });
+
+    expect(res.status).toBe(200);
+  });
+});
+
 describe("plans", () => {
   it("serves the seeded plans in the client's shape", async () => {
     const res = await h.call("GET", "/v1/plans");

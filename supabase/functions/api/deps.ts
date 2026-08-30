@@ -8,7 +8,7 @@ import type { Context, Next } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
 import type { Database } from "./shared/db/client.ts";
 import type { Env } from "./shared/env.ts";
-import { unauthorized } from "./shared/lib/http-errors.ts";
+import { payloadTooLarge, unauthorized } from "./shared/lib/http-errors.ts";
 import type { PspProvider } from "./shared/providers/psp/index.ts";
 import type { SmsProvider } from "./shared/providers/sms/index.ts";
 import { verifyAccessToken } from "./shared/services/tokens.ts";
@@ -29,11 +29,64 @@ export interface AuthedUser {
 /** Hono generics: what handlers may read from context. */
 export type AppEnv = { Variables: { user?: AuthedUser; requestId?: string } };
 
-/** Body parse that never throws: malformed JSON becomes `{}`, which zod then
- * rejects as a clean 400 instead of a 500. */
-export async function readJson(c: Context): Promise<unknown> {
+export const MAX_JSON_BODY_BYTES = 64 * 1024;
+
+/**
+ * Bounded body parse for the production Hono adapter.
+ *
+ * Fastify enforces the same 64 KiB limit before its route handlers. Hono does
+ * not, and `Request.json()` buffers the whole body, so an attacker could make
+ * the deployed Edge function allocate an arbitrary payload before Zod ever saw
+ * it. Read the stream incrementally and stop as soon as the byte budget is
+ * crossed. Malformed JSON below the cap still becomes `{}` so Zod returns the
+ * existing clean 400 contract.
+ */
+export async function readJson(c: Context, maxBytes = MAX_JSON_BODY_BYTES): Promise<unknown> {
+  const declared = c.req.header("content-length");
+  if (declared !== undefined) {
+    const bytes = Number(declared);
+    if (Number.isFinite(bytes) && bytes > maxBytes) throw payloadTooLarge();
+  }
+
+  const body = c.req.raw.body;
+  if (!body) return {};
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
   try {
-    return await c.req.json();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        try {
+          await reader.cancel();
+        } catch {
+          // The deliberate 413 below is the useful result even if cancellation
+          // races with the client closing its upload stream.
+        }
+        throw payloadTooLarge();
+      }
+      chunks.push(value);
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // A cancelled stream may already have released its reader.
+    }
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+
+  try {
+    return JSON.parse(new TextDecoder().decode(bytes));
   } catch {
     return {};
   }

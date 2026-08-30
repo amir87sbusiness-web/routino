@@ -25,6 +25,10 @@ export const locked = (code = "locked", msg = "Locked", details?: Record<string,
   new HttpError(423, code, msg, details);
 export const notFound = (code = "not_found", msg = "Not found") => new HttpError(404, code, msg);
 export const conflict = (code: string, msg: string) => new HttpError(409, code, msg);
+export const payloadTooLarge = (
+  code = "payload_too_large",
+  msg = "Request body is too large",
+) => new HttpError(413, code, msg);
 export const badGateway = (code: string, msg: string) => new HttpError(502, code, msg);
 export const serviceUnavailable = (code: string, msg: string) => new HttpError(503, code, msg);
 export const gatewayTimeout = (code: string, msg: string) => new HttpError(504, code, msg);

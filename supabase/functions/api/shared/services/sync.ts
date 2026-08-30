@@ -25,8 +25,15 @@
  */
 import { and, eq, gt, like, sql } from "drizzle-orm";
 import { rowsOf, type Database } from "../db/client.ts";
-import { records, SYNC_KINDS, users, type SyncKind } from "../db/schema.ts";
+import { records, users } from "../db/schema.ts";
 import { badRequest } from "../lib/http-errors.ts";
+import {
+  validateSyncRecord,
+  type PushRecord,
+  type RejectedSyncRecord,
+} from "./sync-record-validation.ts";
+
+export type { PushRecord, RejectedSyncRecord } from "./sync-record-validation.ts";
 
 /** How far ahead of the server a device's clock may be before we stop believing
  * it. Generous enough for ordinary skew, small enough that a wrong clock cannot
@@ -40,29 +47,6 @@ export const MAX_PUSH_RECORDS = 200;
 /** Rows per pull page. A first sync of a year of history is thousands of rows,
  * so pulling is paged and the client loops until `hasMore` is false. */
 export const PULL_PAGE_SIZE = 500;
-
-/** Bytes of JSON per record. Habits and journal entries are small; this only
- * exists so a malicious client cannot park a megabyte in one row. */
-const MAX_RECORD_BYTES = 8 * 1024;
-
-/**
- * Ids are client-generated: `uid()`, or a natural composite (`habitId|dateKey`,
- * `dateKey`, or a settings field name). Anchored and bounded because this value
- * reaches a primary key — an unbounded id is a cheap way to bloat an index.
- */
-const ID_RE = /^[A-Za-z0-9_:|.-]{1,128}$/;
-
-const isSyncKind = (k: string): k is SyncKind => (SYNC_KINDS as readonly string[]).includes(k);
-
-/** One record as the client sends it. `seq` is server-assigned and deliberately
- * absent — a client cannot choose its own position in the log. */
-export interface PushRecord {
-  kind: string;
-  id: string;
-  data: unknown;
-  updatedAt: number;
-  deleted: boolean;
-}
 
 export interface PullRecord {
   kind: string;
@@ -81,6 +65,9 @@ export interface PushResult {
    * copy. Not an error — the client drops its dirty flag either way, since the
    * newer value arrives on the next pull. */
   skipped: number;
+  /** Invalid rows refused independently so one bad local item cannot stop the
+   * rest of the outbox or the pull. Payload data is never echoed. */
+  rejectedRecords: RejectedSyncRecord[];
 }
 
 export interface PullResult {
@@ -99,23 +86,31 @@ export interface PullResult {
 export interface ExchangeResult extends PullResult {
   applied: number;
   skipped: number;
+  rejectedRecords: RejectedSyncRecord[];
 }
 
-function validate(rows: PushRecord[]): void {
+function partitionIncoming(rows: PushRecord[]): {
+  valid: PushRecord[];
+  rejectedRecords: RejectedSyncRecord[];
+} {
   if (rows.length > MAX_PUSH_RECORDS) {
     throw badRequest("too_many_records", `Send at most ${MAX_PUSH_RECORDS} records per push`);
   }
+  const valid: PushRecord[] = [];
+  const rejectedRecords: RejectedSyncRecord[] = [];
   for (const r of rows) {
-    if (!isSyncKind(r.kind)) throw badRequest("bad_kind", `Unknown record kind: ${r.kind}`);
-    if (!ID_RE.test(r.id)) throw badRequest("bad_id", "Malformed record id");
-    if (!Number.isFinite(r.updatedAt) || r.updatedAt < 0) {
-      throw badRequest("bad_updated_at", "updatedAt must be a positive epoch-ms number");
-    }
-    // A tombstone carries no body, so only live rows are measured.
-    if (!r.deleted && JSON.stringify(r.data ?? null).length > MAX_RECORD_BYTES) {
-      throw badRequest("record_too_large", "One record exceeds the size limit");
+    const result = validateSyncRecord(r);
+    if (result.ok) valid.push(result.record);
+    else {
+      rejectedRecords.push({
+        kind: r.kind,
+        id: r.id,
+        updatedAt: r.updatedAt,
+        code: result.code,
+      });
     }
   }
+  return { valid, rejectedRecords };
 }
 
 const keyOf = (r: PushRecord) => `${r.kind} ${r.id}`;
@@ -165,15 +160,15 @@ export async function pushRecords(
   incoming: PushRecord[],
   now: Date,
 ): Promise<PushResult> {
-  validate(incoming);
+  const { valid, rejectedRecords } = partitionIncoming(incoming);
 
-  if (incoming.length === 0) {
+  if (valid.length === 0) {
     const [u] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-    return { cursor: Number(u?.seq ?? 0), applied: 0, skipped: 0 };
+    return { cursor: Number(u?.seq ?? 0), applied: 0, skipped: 0, rejectedRecords };
   }
 
   const ceiling = now.getTime() + CLOCK_SKEW_TOLERANCE_MS;
-  const stamped = incoming.map((r) => ({ ...r, updatedAt: Math.min(r.updatedAt, ceiling) }));
+  const stamped = valid.map((r) => ({ ...r, updatedAt: Math.min(r.updatedAt, ceiling) }));
 
   // Expand habit deletes into log tombstones before the write, so the sequence
   // block below is sized to everything actually written.
@@ -233,7 +228,12 @@ export async function pushRecords(
   if (!row) throw new Error("sync push produced no result row");
   // bigint and count() arrive as strings on node-postgres, numbers on PGlite.
   const applied = Number(row.applied);
-  return { cursor: Number(row.cursor), applied, skipped: all.length - applied };
+  return {
+    cursor: Number(row.cursor),
+    applied,
+    skipped: all.length - applied,
+    rejectedRecords,
+  };
 }
 
 export async function pullRecords(
@@ -297,9 +297,14 @@ export async function exchangeRecords(
 ): Promise<ExchangeResult> {
   const pushed = incoming.length
     ? await pushRecords(db, userId, incoming, now)
-    : { applied: 0, skipped: 0 };
+    : { applied: 0, skipped: 0, rejectedRecords: [] };
   const pulled = await pullRecords(db, userId, cursor, limit);
-  return { ...pulled, applied: pushed.applied, skipped: pushed.skipped };
+  return {
+    ...pulled,
+    applied: pushed.applied,
+    skipped: pushed.skipped,
+    rejectedRecords: pushed.rejectedRecords,
+  };
 }
 
 /**
