@@ -32,4 +32,4 @@
 - [x] Extend the production-like quota fixture to assert counters equal actual rows/JSON bytes and report multi-year headroom.
 - [x] Update affected Persian architecture/deploy documentation.
 - [x] Regenerate setup/Edge shared files.
-- [ ] Run all frontend/backend/Edge tests, both typechecks, lint, build, parity and scope checks; commit documentation.
+- [x] Run all frontend/backend/Edge tests, both typechecks, lint, build, parity and scope checks; commit documentation.
