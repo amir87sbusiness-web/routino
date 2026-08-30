@@ -88,6 +88,46 @@ const log = (habitId: string, dateKey: string, updatedAt = 1000) => ({
 });
 
 describe("sync", () => {
+  it("accepts valid rows even when another row in the exchange is rejected", async () => {
+    const { access } = await signIn("09120000019");
+    const privateText = "private:" + "x".repeat(4_001);
+
+    const response = await exchange(access, 0, [
+      habit("h-valid", "ورزش"),
+      {
+        kind: "journal",
+        id: "2026-08-31",
+        data: {
+          dateKey: "2026-08-31",
+          text: privateText,
+          score: null,
+          mood: null,
+          updatedAt: 1_000,
+        },
+        updatedAt: 1_000,
+        deleted: false,
+      },
+    ]);
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as {
+      applied: number;
+      records: { id: string }[];
+      rejectedRecords: { kind: string; id: string; updatedAt: number; code: string }[];
+    };
+    expect(body.applied).toBe(1);
+    expect(body.records.map((record) => record.id)).toContain("h-valid");
+    expect(body.rejectedRecords).toEqual([
+      {
+        kind: "journal",
+        id: "2026-08-31",
+        updatedAt: 1_000,
+        code: "record_too_large",
+      },
+    ]);
+    expect(response.body).not.toContain(privateText);
+  });
+
   it("pushes then pulls from the caller's original cursor in one exchange", async () => {
     const { access } = await signIn("09120000020");
 
@@ -268,11 +308,19 @@ describe("sync", () => {
   it("refuses records it cannot store safely", async () => {
     const { access } = await signIn("09120000011");
 
+    const rejectedCode = (response: { statusCode: number; json(): unknown }) => {
+      expect(response.statusCode).toBe(200);
+      const body = response.json() as { applied: number; rejectedRecords: { code: string }[] };
+      expect(body.applied).toBe(0);
+      expect(body.rejectedRecords).toHaveLength(1);
+      return body.rejectedRecords[0]!.code;
+    };
+
     const badKind = await push(access, [{ ...habit("h1", "x"), kind: "passwords" }]);
-    expect(badKind.statusCode).toBe(400);
+    expect(rejectedCode(badKind)).toBe("bad_kind");
 
     const badId = await push(access, [{ ...habit("h1", "x"), id: "a/../../etc/passwd" }]);
-    expect(badId.statusCode).toBe(400);
+    expect(rejectedCode(badId)).toBe("bad_id");
 
     const huge = await push(access, [
       {
@@ -283,7 +331,7 @@ describe("sync", () => {
         deleted: false,
       },
     ]);
-    expect(huge.statusCode).toBe(400);
+    expect(rejectedCode(huge)).toBe("record_too_large");
   });
 
   it("survives a habit tombstone that repeats a log the client also sent", async () => {

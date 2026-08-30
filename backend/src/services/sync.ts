@@ -29,9 +29,10 @@ import { badRequest } from "../lib/http-errors.js";
 import {
   validateSyncRecord,
   type PushRecord,
+  type RejectedSyncRecord,
 } from "./sync-record-validation.js";
 
-export type { PushRecord } from "./sync-record-validation.js";
+export type { PushRecord, RejectedSyncRecord } from "./sync-record-validation.js";
 
 /** How far ahead of the server a device's clock may be before we stop believing
  * it. Generous enough for ordinary skew, small enough that a wrong clock cannot
@@ -63,6 +64,9 @@ export interface PushResult {
    * copy. Not an error — the client drops its dirty flag either way, since the
    * newer value arrives on the next pull. */
   skipped: number;
+  /** Invalid rows refused independently so one bad local item cannot stop the
+   * rest of the outbox or the pull. Payload data is never echoed. */
+  rejectedRecords: RejectedSyncRecord[];
 }
 
 export interface PullResult {
@@ -81,16 +85,31 @@ export interface PullResult {
 export interface ExchangeResult extends PullResult {
   applied: number;
   skipped: number;
+  rejectedRecords: RejectedSyncRecord[];
 }
 
-function validate(rows: PushRecord[]): void {
+function partitionIncoming(rows: PushRecord[]): {
+  valid: PushRecord[];
+  rejectedRecords: RejectedSyncRecord[];
+} {
   if (rows.length > MAX_PUSH_RECORDS) {
     throw badRequest("too_many_records", `Send at most ${MAX_PUSH_RECORDS} records per push`);
   }
+  const valid: PushRecord[] = [];
+  const rejectedRecords: RejectedSyncRecord[] = [];
   for (const r of rows) {
     const result = validateSyncRecord(r);
-    if (!result.ok) throw badRequest(result.code, "Sync record was rejected");
+    if (result.ok) valid.push(result.record);
+    else {
+      rejectedRecords.push({
+        kind: r.kind,
+        id: r.id,
+        updatedAt: r.updatedAt,
+        code: result.code,
+      });
+    }
   }
+  return { valid, rejectedRecords };
 }
 
 const keyOf = (r: PushRecord) => `${r.kind} ${r.id}`;
@@ -140,15 +159,15 @@ export async function pushRecords(
   incoming: PushRecord[],
   now: Date,
 ): Promise<PushResult> {
-  validate(incoming);
+  const { valid, rejectedRecords } = partitionIncoming(incoming);
 
-  if (incoming.length === 0) {
+  if (valid.length === 0) {
     const [u] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-    return { cursor: Number(u?.seq ?? 0), applied: 0, skipped: 0 };
+    return { cursor: Number(u?.seq ?? 0), applied: 0, skipped: 0, rejectedRecords };
   }
 
   const ceiling = now.getTime() + CLOCK_SKEW_TOLERANCE_MS;
-  const stamped = incoming.map((r) => ({ ...r, updatedAt: Math.min(r.updatedAt, ceiling) }));
+  const stamped = valid.map((r) => ({ ...r, updatedAt: Math.min(r.updatedAt, ceiling) }));
 
   // Expand habit deletes into log tombstones before the write, so the sequence
   // block below is sized to everything actually written.
@@ -208,7 +227,12 @@ export async function pushRecords(
   if (!row) throw new Error("sync push produced no result row");
   // bigint and count() arrive as strings on node-postgres, numbers on PGlite.
   const applied = Number(row.applied);
-  return { cursor: Number(row.cursor), applied, skipped: all.length - applied };
+  return {
+    cursor: Number(row.cursor),
+    applied,
+    skipped: all.length - applied,
+    rejectedRecords,
+  };
 }
 
 export async function pullRecords(
@@ -272,9 +296,14 @@ export async function exchangeRecords(
 ): Promise<ExchangeResult> {
   const pushed = incoming.length
     ? await pushRecords(db, userId, incoming, now)
-    : { applied: 0, skipped: 0 };
+    : { applied: 0, skipped: 0, rejectedRecords: [] };
   const pulled = await pullRecords(db, userId, cursor, limit);
-  return { ...pulled, applied: pushed.applied, skipped: pushed.skipped };
+  return {
+    ...pulled,
+    applied: pushed.applied,
+    skipped: pushed.skipped,
+    rejectedRecords: pushed.rejectedRecords,
+  };
 }
 
 /**

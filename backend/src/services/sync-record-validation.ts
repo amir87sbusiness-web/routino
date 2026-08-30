@@ -145,6 +145,13 @@ export type RecordValidation =
   | { ok: true; record: PushRecord }
   | { ok: false; code: SyncRejectionCode };
 
+export interface RejectedSyncRecord {
+  kind: string;
+  id: string;
+  updatedAt: number;
+  code: SyncRejectionCode;
+}
+
 const isSyncKind = (kind: string): kind is SyncKind =>
   (SYNC_KINDS as readonly string[]).includes(kind);
 

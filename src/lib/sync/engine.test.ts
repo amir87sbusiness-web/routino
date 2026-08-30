@@ -8,7 +8,6 @@
  * does is the smallest thing that can catch that class of mistake.
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ApiError } from "../api/client";
 import type {
   ExchangeRequest,
   ExchangeResponse,
@@ -30,13 +29,22 @@ const server = {
   exchanges: [] as ExchangeRequest[],
   /** ids the server permanently refuses, e.g. an oversized journal entry. */
   refuse: new Set<string>(),
+  afterExchange: null as null | (() => Promise<void>),
   /** Writes rows at the next sequence numbers, newest-wins per (kind, id). */
-  push(records: SyncRecord[]): PushResponse {
-    for (const r of records) {
-      if (this.refuse.has(r.id)) throw new ApiError(400, "record_too_large", "too large");
-    }
+  push(records: SyncRecord[]): PushResponse & {
+    rejectedRecords: { kind: string; id: string; updatedAt: number; code: string }[];
+  } {
+    const accepted = records.filter((record) => !this.refuse.has(record.id));
+    const rejectedRecords = records
+      .filter((record) => this.refuse.has(record.id))
+      .map((record) => ({
+        kind: record.kind,
+        id: record.id,
+        updatedAt: record.updatedAt,
+        code: "record_too_large" as const,
+      }));
     let applied = 0;
-    for (const r of records) {
+    for (const r of accepted) {
       this.seq += 1;
       const existing = this.log.find((x) => x.kind === r.kind && x.id === r.id);
       if (existing && existing.updatedAt >= r.updatedAt) continue;
@@ -44,7 +52,12 @@ const server = {
       this.log.push({ ...r, seq: this.seq });
       applied += 1;
     }
-    return { cursor: this.seq, applied, skipped: records.length - applied };
+    return {
+      cursor: this.seq,
+      applied,
+      skipped: accepted.length - applied,
+      rejectedRecords,
+    };
   },
   pull(cursor: number): PullResponse {
     if (this.resetNextPull) {
@@ -63,7 +76,12 @@ const server = {
     this.exchanges.push(structuredClone(request));
     const pushed = this.push(request.records);
     const pulled = this.pull(request.cursor);
-    return { ...pulled, applied: pushed.applied, skipped: pushed.skipped };
+    return {
+      ...pulled,
+      applied: pushed.applied,
+      skipped: pushed.skipped,
+      rejectedRecords: pushed.rejectedRecords,
+    };
   },
   reset() {
     this.log = [];
@@ -71,6 +89,7 @@ const server = {
     this.resetNextPull = false;
     this.exchanges = [];
     this.refuse.clear();
+    this.afterExchange = null;
   },
 };
 
@@ -78,7 +97,11 @@ vi.mock("../api/auth", () => ({ hasSession: () => true }));
 vi.mock("../api/sync", () => ({
   pushRecords: (records: SyncRecord[]) => Promise.resolve(server.push(records)),
   pullRecords: (cursor: number) => Promise.resolve(server.pull(cursor)),
-  exchangeRecords: (request: ExchangeRequest) => Promise.resolve(server.exchange(request)),
+  exchangeRecords: async (request: ExchangeRequest) => {
+    const response = server.exchange(request);
+    await server.afterExchange?.();
+    return response;
+  },
 }));
 
 const { clearSyncState, hasPendingChanges, syncNow } = await import("./engine");
@@ -241,6 +264,7 @@ describe("sync engine, two devices on one account", () => {
       seq: 1,
     });
     server.refuse.add("2026-08-01");
+    await localDirtyHabit("h-local", "پیاده‌روی", 2_000);
 
     // Something the other device wrote, which the pull must still deliver.
     server.push([
@@ -257,8 +281,29 @@ describe("sync engine, two devices on one account", () => {
 
     expect(outcome.rejected).toBe(1);
     expect(await localHabitNames()).toContain("شنا");
+    expect((await idb.table("habits").get("h-local"))?.dirty).toBe(0);
     // The refused row is kept, not discarded: it is the user's writing.
     expect((await idb.table("journal").get("2026-08-01"))?.dirty).toBe(1);
+  });
+
+  it("does not settle a newer local edit made while the exchange is in flight", async () => {
+    await localDirtyHabit("h1", "نسخه ارسالی", 2_000);
+    server.afterExchange = async () => {
+      server.afterExchange = null;
+      await idb.habits.put({
+        key: "h1",
+        data: habitData("h1", "نسخه جدیدتر"),
+        updatedAt: 3_000,
+        deleted: 0,
+        dirty: 1,
+        seq: 1,
+      });
+    };
+
+    await syncNow(OWNER);
+
+    expect((await idb.habits.get("h1"))?.dirty).toBe(1);
+    expect((await idb.habits.get("h1"))?.data).toMatchObject({ name: "نسخه جدیدتر" });
   });
 
   it("starts from zero when a different account signs in on this device", async () => {

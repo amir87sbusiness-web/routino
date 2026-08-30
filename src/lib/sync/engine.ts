@@ -12,10 +12,10 @@
 import {
   exchangeRecords,
   type ExchangeResponse,
+  type RejectedSyncRecord,
   type RemoteRecord,
   type SyncRecord,
 } from "../api/sync";
-import { ApiError } from "../api/client";
 import { hasSession, type ServerEntitlement } from "../api/auth";
 import { db as idb, nextSeq, type RecordRow, type SyncMetaRow } from "../db/dexie";
 import { SYNCABLE_TABLES, mergeRemote, type SyncableTable } from "./merge";
@@ -94,6 +94,9 @@ const toWire = (table: SyncableTable, row: RecordRow<unknown>): SyncRecord => ({
   updatedAt: row.updatedAt,
   deleted: row.deleted === 1,
 });
+
+const rejectionKey = (record: Pick<RejectedSyncRecord, "kind" | "id" | "updatedAt">) =>
+  `${record.kind}\u0000${record.id}\u0000${record.updatedAt}`;
 
 function chunk(items: { table: SyncableTable; row: RecordRow<unknown> }[]) {
   const chunks: (typeof items)[] = [];
@@ -276,6 +279,7 @@ async function run(owner: string, options: SyncOptions): Promise<SyncOutcome> {
       entitlement = page.entitlement;
       accountStateReceived = true;
     }
+    rejected += page.rejectedRecords?.length ?? 0;
   };
 
   const exchangePage = async (
@@ -298,36 +302,16 @@ async function run(owner: string, options: SyncOptions): Promise<SyncOutcome> {
 
   for (let index = 0; index < batches.length; index += 1) {
     const batch = batches[index]!;
-    let page: ExchangeResponse;
-    try {
-      page = await exchangePage(
-        batch,
-        options.includeAccountState === true && index === batches.length - 1,
-      );
-    } catch (err) {
-      // A 4xx is the server's permanent judgement on THESE rows — an oversized
-      // journal entry is the realistic one. Retrying cannot fix it, and letting
-      // it abort the run meant one bad row stopped every other table from
-      // syncing AND stopped the pull, so the account silently went dark: no
-      // error anywhere, just a phone that never saw the laptop again.
-      //
-      // The rows keep their dirty flag (nothing is thrown away) and the run
-      // carries on with the rest. 401 is deliberately NOT swallowed: a dead
-      // session is not a bad record, and the pull below would only fail too.
-      if (
-        err instanceof ApiError &&
-        !err.offline &&
-        err.status >= 400 &&
-        err.status < 500 &&
-        err.status !== 401
-      ) {
-        console.warn("sync: server rejected a batch, skipping it", err.code, err.message);
-        rejected += batch.length;
-        continue;
-      }
-      throw err;
-    }
-    await clearDirty(batch);
+    let page = await exchangePage(
+      batch,
+      options.includeAccountState === true && index === batches.length - 1,
+    );
+    const refused = new Set((page.rejectedRecords ?? []).map(rejectionKey));
+    await clearDirty(
+      batch.filter(({ table, row }) =>
+        !refused.has(rejectionKey({ kind: table, id: row.key, updatedAt: row.updatedAt })),
+      ),
+    );
     pushed += page.applied;
 
     let guard = 0;

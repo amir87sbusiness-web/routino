@@ -9,6 +9,20 @@ export interface SyncRecord {
   deleted: boolean;
 }
 
+export type SyncRejectionCode =
+  | "bad_kind"
+  | "bad_id"
+  | "bad_updated_at"
+  | "invalid_record"
+  | "record_too_large";
+
+export interface RejectedSyncRecord {
+  kind: string;
+  id: string;
+  updatedAt: number;
+  code: SyncRejectionCode;
+}
+
 export interface RemoteRecord extends SyncRecord {
   seq: number;
 }
@@ -17,6 +31,7 @@ export interface PushResponse {
   cursor: number;
   applied: number;
   skipped: number;
+  rejectedRecords: RejectedSyncRecord[];
 }
 
 export interface PullResponse {
@@ -40,6 +55,7 @@ export interface ExchangeRequest {
 export interface ExchangeResponse extends PullResponse {
   applied: number;
   skipped: number;
+  rejectedRecords: RejectedSyncRecord[];
 }
 
 export function exchangeRecords(
