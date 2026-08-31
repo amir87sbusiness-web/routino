@@ -171,7 +171,7 @@ export function authRoutes(deps: Deps) {
     const phone = normalizePhone(identifier);
     const key = phone ?? normalizeUsername(identifier);
 
-    const verdict = await checkLoginRate(db, ip, key, t);
+    const verdict = await checkLoginRate(db, env, ip, key, t);
     if (!verdict.ok) {
       console.warn("password login rate limited", { reason: verdict.reason });
       throw tooMany("Too many attempts. Try again later.", verdict.retryAfter);
@@ -183,7 +183,7 @@ export function authRoutes(deps: Deps) {
 
     const ok = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
     if (!user || !user.passwordHash || !ok) {
-      await recordLoginFailure(db, ip, key, t);
+      await recordLoginFailure(db, env, ip, key, t, { trackIdentifier: !!user });
       // Past the soft limit a WRONG password becomes "too many attempts" — but a
       // correct one still gets through below, so an attacker who knows someone's
       // phone number cannot lock them out of their own account.
@@ -191,7 +191,7 @@ export function authRoutes(deps: Deps) {
         throw tooMany("Too many attempts. Try again later.", verdict.retryAfter);
       throw unauthorized("bad_credentials", "Wrong phone/username or password");
     }
-    await clearLoginFailures(db, key);
+    await clearLoginFailures(db, env, key);
     const tokens = await issueAccessToken(env, user.id, t);
     const entitlement = await readEntitlement(db, user.id, t);
 

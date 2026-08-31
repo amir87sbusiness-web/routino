@@ -121,6 +121,24 @@ export const otpCodes = pgTable(
   ],
 );
 
+/** Fixed-window authentication counters. One row absorbs every attempt for one
+ * opaque key/window, avoiding the append-per-failure growth of login_attempts. */
+export const authRateLimitBuckets = pgTable(
+  "auth_rate_limit_buckets",
+  {
+    scope: text("scope").notNull(),
+    keyHash: text("key_hash").notNull(),
+    windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+    count: integer("count").notNull().default(1),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.scope, t.keyHash, t.windowStart] }),
+    index("auth_rate_limit_buckets_expiry").on(t.expiresAt),
+    check("auth_rate_limit_buckets_count_positive", sql`${t.count} >= 1`),
+  ],
+);
+
 /**
  * Failed-login ledger — the rate-limit state for password sign-in, mirroring how
  * `otp_codes` backs the OTP limits. In Postgres, not memory: it must survive
@@ -307,6 +325,7 @@ export const schema = {
   users,
   records,
   otpCodes,
+  authRateLimitBuckets,
   loginAttempts,
   plans,
   discounts,

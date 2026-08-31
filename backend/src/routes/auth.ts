@@ -172,7 +172,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const phone = normalizePhone(identifier);
     const key = phone ?? normalizeUsername(identifier);
 
-    const verdict = await checkLoginRate(db, ip, key, t);
+    const verdict = await checkLoginRate(db, env, ip, key, t);
     if (!verdict.ok) {
       req.log.warn({ reason: verdict.reason }, "password login rate limited");
       throw tooMany("Too many attempts. Try again later.", verdict.retryAfter);
@@ -184,7 +184,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
 
     const ok = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
     if (!user || !user.passwordHash || !ok) {
-      await recordLoginFailure(db, ip, key, t);
+      await recordLoginFailure(db, env, ip, key, t, { trackIdentifier: !!user });
       // Past the soft limit the answer becomes "too many attempts" instead of
       // "wrong password" — but only for a wrong one. A correct password still
       // gets through below, so an attacker cannot lock the real owner out.
@@ -192,7 +192,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         throw tooMany("Too many attempts. Try again later.", verdict.retryAfter);
       throw unauthorized("bad_credentials", "Wrong phone/username or password");
     }
-    await clearLoginFailures(db, key);
+    await clearLoginFailures(db, env, key);
     const tokens = await issueAccessToken(env, user.id, t);
     const entitlement = await readEntitlement(db, user.id, t);
 

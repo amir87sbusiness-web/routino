@@ -360,11 +360,15 @@ describe("limits that are counted rather than locked", () => {
 
     for (const r of attempts) expect([401, 429]).toContain(r.statusCode);
 
-    const [row] = await h.query<{ n: number }>(
-      `select count(*)::int as n from login_attempts where identifier = '989136660002'`,
+    const [row] = await h.query<{ n: number; rows: number }>(
+      `select sum(count)::int as n, count(*)::int as rows
+         from auth_rate_limit_buckets
+        where scope = 'login_identifier'`,
     );
-    // Every failure was recorded, so the NEXT burst starts already throttled.
+    // Every failure was recorded in one aggregate row, so the NEXT burst starts
+    // already throttled without growing one row per attempt.
     expect(Number(row!.n)).toBeGreaterThanOrEqual(25);
+    expect(Number(row!.rows)).toBe(1);
 
     // And the real owner is not locked out by someone else's guessing — the
     // whole reason the soft limit lets a CORRECT password through.

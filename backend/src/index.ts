@@ -65,15 +65,16 @@ await ensureOwner(db, env, new Date(), {
   warn: (msg) => app.log.warn(msg),
 }).catch((err) => app.log.error({ err }, "owner bootstrap failed"));
 
-// OTP rows double as the rate-limit ledger, so they must live 24h — after
-// that they are pure noise. Hourly is plenty. Failed-login rows are purged on
-// the same beat.
+// OTP rows double as the send-rate ledger and live for 24h. Authentication
+// buckets carry explicit expiry timestamps. Hourly housekeeping bounds both.
 const { purgeOldCodes } = await import("./services/otp.js");
-const { purgeOldLoginAttempts } = await import("./services/login-throttle.js");
+const { purgeExpiredAuthRateLimits } = await import("./services/login-throttle.js");
 const purgeTimer = setInterval(() => {
   const t = new Date();
   purgeOldCodes(db, t).catch((err) => app.log.error({ err }, "otp purge failed"));
-  purgeOldLoginAttempts(db, t).catch((err) => app.log.error({ err }, "login-attempt purge failed"));
+  purgeExpiredAuthRateLimits(db, t).catch((err) =>
+    app.log.error({ err }, "auth-rate-limit purge failed"),
+  );
 }, 3_600_000);
 
 const close = async () => {

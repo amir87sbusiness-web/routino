@@ -126,7 +126,7 @@ export async function makeHarness(
     },
     async truncate() {
       await db.execute(sql`
-        truncate users, records, otp_codes, login_attempts, discounts,
+        truncate users, records, otp_codes, auth_rate_limit_buckets, login_attempts, discounts,
                  redemptions, payments, grants, entitlements, feedback, admins
         restart identity cascade
       `);

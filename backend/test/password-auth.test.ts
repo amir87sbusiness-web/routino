@@ -316,6 +316,38 @@ describe("admin set-password", () => {
 });
 
 describe("brute-force throttling", () => {
+  it("aggregates repeated failures into one identifier bucket and one IP bucket", async () => {
+    const { access } = await otpSignIn("09123334444");
+    await setPw(access, "Amir@1387");
+
+    for (let i = 0; i < 8; i++) await login("09123334444", "bad-guess1");
+
+    const rows = await h.query<{ scope: string; count: number }>(`
+      select scope, count
+        from auth_rate_limit_buckets
+       order by scope
+    `);
+    expect(rows).toEqual([
+      { scope: "login_identifier", count: 8 },
+      { scope: "login_ip", count: 8 },
+    ]);
+  });
+
+  it("does not create one database row per guessed unknown identifier", async () => {
+    for (let i = 0; i < 20; i++) {
+      const suffix = String(i).padStart(2, "0");
+      expect((await login(`091200000${suffix}`, "bad-guess1")).statusCode).toBe(401);
+    }
+
+    const rows = await h.query<{ scope: string; rows: number; attempts: number }>(`
+      select scope, count(*)::int as rows, sum(count)::int as attempts
+        from auth_rate_limit_buckets
+       group by scope
+       order by scope
+    `);
+    expect(rows).toEqual([{ scope: "login_ip", rows: 1, attempts: 20 }]);
+  });
+
   it("throttles wrong passwords but never locks out the real owner", async () => {
     const { access } = await otpSignIn("09123334444");
     await setPw(access, "Amir@1387");

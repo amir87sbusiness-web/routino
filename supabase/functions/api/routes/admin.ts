@@ -86,8 +86,8 @@ export function adminRoutes(deps: Deps) {
       return;
     }
 
-    await recordAdminFailure(db, ip, t);
-    const rate = await checkAdminRate(db, ip, t);
+    await recordAdminFailure(db, env, ip, t);
+    const rate = await checkAdminRate(db, env, ip, t);
     if (!rate.ok) {
       console.warn("admin auth throttled");
       throw tooMany("Too many admin attempts. Try again later.", rate.retryAfter);

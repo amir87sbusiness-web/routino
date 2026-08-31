@@ -202,6 +202,18 @@ create index if not exists otp_ip_recent on otp_codes (ip, created_at);
 -- 24h purge scans.
 create index if not exists otp_recent on otp_codes (created_at);
 
+create table if not exists auth_rate_limit_buckets (
+  scope text not null,
+  key_hash text not null,
+  window_start timestamptz not null,
+  count integer not null default 1,
+  expires_at timestamptz not null,
+  primary key (scope, key_hash, window_start),
+  constraint auth_rate_limit_buckets_count_positive check (count >= 1)
+);
+create index if not exists auth_rate_limit_buckets_expiry
+  on auth_rate_limit_buckets (expires_at);
+
 create table if not exists login_attempts (
   id uuid primary key default gen_random_uuid(),
   ip text,

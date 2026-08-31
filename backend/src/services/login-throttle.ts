@@ -1,142 +1,176 @@
-/**
- * Rate limits for password sign-in.
- *
- * Two independent windows over the `login_attempts` failure ledger:
- *  - per identifier: stops someone hammering ONE account (or one username),
- *    however many IPs they rotate through.
- *  - per IP: stops credential-stuffing MANY accounts from one source.
- *
- * Only failures are recorded, and a correct password clears the identifier's
- * recent rows — so a legitimate user is never locked out by their own success.
- * State lives in Postgres, not memory: it must be durable and shared across
- * isolates, exactly like the OTP limiter.
- */
-import { and, count, eq, gt, lt } from "drizzle-orm";
+/** Durable, low-growth fixed-window authentication throttles. */
+import { createHmac } from "node:crypto";
+import { and, eq, lt, sql } from "drizzle-orm";
 import type { Database } from "../db/client.js";
-import { loginAttempts } from "../db/schema.js";
+import { authRateLimitBuckets } from "../db/schema.js";
+import type { Env } from "../env.js";
 
-/** 15-minute window. Slow hashing already makes each guess expensive; these
- * bound how many guesses are even attemptable. */
 const WINDOW_SECONDS = 900;
+const WINDOW_MS = WINDOW_SECONDS * 1000;
 const LIMITS = {
-  /**
-   * Past this many recent failures a WRONG password is refused outright — but a
-   * CORRECT one still gets in. That asymmetry is the point: a flat lockout let
-   * anyone who knew a customer's phone number keep the real owner out of
-   * password sign-in indefinitely with eight wrong guesses every 15 minutes.
-   */
   perIdentifierSoft: 8,
-  /** Past this many, nothing gets through at all. Each attempt costs one
-   * deliberately-slow scrypt, so sustained hammering has to stop being free. */
   perIdentifierHard: 50,
   perIp: 50,
 } as const;
+const ADMIN_LIMIT = 10;
+
+type Scope = "login_identifier" | "login_ip" | "admin_otp_ip";
 
 export interface LoginRateVerdict {
   ok: boolean;
-  /** Over the soft limit: verify the credentials, but reject anything wrong with
-   * 429 instead of the usual 401. */
   verifyOnly?: boolean;
   retryAfter?: number;
   reason?: "identifier" | "ip";
 }
 
-/** Namespaced key for the admin token, which has no user row to hang a counter
- * off. The prefix keeps it from ever colliding with a sign-in identifier. */
-export const adminAttemptKey = (ip: string | null): string => `admin:${ip ?? "unknown"}`;
-/** Deliberately tighter than sign-in: there is exactly one correct admin token
- * and the owner types it once. */
-const ADMIN_LIMIT = 10;
+const windowStart = (now: Date): Date =>
+  new Date(Math.floor(now.getTime() / WINDOW_MS) * WINDOW_MS);
+const expiresAt = (start: Date): Date => new Date(start.getTime() + WINDOW_MS);
+const secondsUntilReset = (now: Date): number =>
+  Math.max(1, Math.ceil((expiresAt(windowStart(now)).getTime() - now.getTime()) / 1000));
 
-async function countFailures(
+const keyHash = (env: Env, scope: Scope, value: string): string =>
+  createHmac("sha256", env.OTP_PEPPER).update(`${scope}\0${value}`).digest("hex");
+
+async function readCount(
   db: Database,
-  column: "identifier" | "ip",
+  env: Env,
+  scope: Scope,
   value: string,
   now: Date,
 ): Promise<number> {
-  const since = new Date(now.getTime() - WINDOW_SECONDS * 1000);
-  const col = column === "identifier" ? loginAttempts.identifier : loginAttempts.ip;
   const [row] = await db
-    .select({ n: count() })
-    .from(loginAttempts)
-    .where(and(eq(col, value), gt(loginAttempts.createdAt, since)));
-  return row?.n ?? 0;
+    .select({ count: authRateLimitBuckets.count })
+    .from(authRateLimitBuckets)
+    .where(
+      and(
+        eq(authRateLimitBuckets.scope, scope),
+        eq(authRateLimitBuckets.keyHash, keyHash(env, scope, value)),
+        eq(authRateLimitBuckets.windowStart, windowStart(now)),
+      ),
+    );
+  return row?.count ?? 0;
+}
+
+async function increment(
+  db: Database,
+  env: Env,
+  scope: Scope,
+  value: string,
+  now: Date,
+): Promise<number> {
+  const start = windowStart(now);
+  const [row] = await db
+    .insert(authRateLimitBuckets)
+    .values({
+      scope,
+      keyHash: keyHash(env, scope, value),
+      windowStart: start,
+      count: 1,
+      expiresAt: expiresAt(start),
+    })
+    .onConflictDoUpdate({
+      target: [
+        authRateLimitBuckets.scope,
+        authRateLimitBuckets.keyHash,
+        authRateLimitBuckets.windowStart,
+      ],
+      set: {
+        count: sql`${authRateLimitBuckets.count} + 1`,
+        expiresAt: expiresAt(start),
+      },
+    })
+    .returning();
+  if (!row) throw new Error("rate-limit increment returned no row");
+  return row.count;
 }
 
 export async function checkLoginRate(
   db: Database,
+  env: Env,
   ip: string | null,
   identifier: string,
   now: Date,
 ): Promise<LoginRateVerdict> {
-  const failures = await countFailures(db, "identifier", identifier, now);
+  const failures = await readCount(db, env, "login_identifier", identifier, now);
   if (failures >= LIMITS.perIdentifierHard) {
-    return { ok: false, retryAfter: WINDOW_SECONDS, reason: "identifier" };
+    return { ok: false, retryAfter: secondsUntilReset(now), reason: "identifier" };
   }
-  if (ip && (await countFailures(db, "ip", ip, now)) >= LIMITS.perIp) {
-    return { ok: false, retryAfter: WINDOW_SECONDS, reason: "ip" };
+  if (ip && (await readCount(db, env, "login_ip", ip, now)) >= LIMITS.perIp) {
+    return { ok: false, retryAfter: secondsUntilReset(now), reason: "ip" };
   }
   if (failures >= LIMITS.perIdentifierSoft) {
-    return { ok: true, verifyOnly: true, retryAfter: WINDOW_SECONDS, reason: "identifier" };
+    return { ok: true, verifyOnly: true, retryAfter: secondsUntilReset(now), reason: "identifier" };
   }
   return { ok: true };
 }
 
-/** Admin-token attempts, over the same ledger. DB-backed rather than in-memory
- * because production runs on serverless isolates, where a `Map` counter resets
- * on every cold start and protects nothing. */
-export async function checkAdminRate(
+/** Claim one admin request before checking the submitted phone. This uses only
+ * the trusted client IP, so arbitrary phone guesses cannot create DB rows. */
+export async function claimAdminOtpRequest(
   db: Database,
+  env: Env,
   ip: string | null,
   now: Date,
 ): Promise<LoginRateVerdict> {
-  const n = await countFailures(db, "identifier", adminAttemptKey(ip), now);
-  return n >= ADMIN_LIMIT ? { ok: false, retryAfter: WINDOW_SECONDS } : { ok: true };
+  const count = await increment(db, env, "admin_otp_ip", ip ?? "unknown", now);
+  return count <= ADMIN_LIMIT
+    ? { ok: true }
+    : { ok: false, retryAfter: secondsUntilReset(now), reason: "ip" };
+}
+
+/** Compatibility for the legacy shared-token guard until the OTP route unit
+ * replaces it. Correct tokens are still checked before these functions run. */
+export async function checkAdminRate(
+  db: Database,
+  env: Env,
+  ip: string | null,
+  now: Date,
+): Promise<LoginRateVerdict> {
+  const count = await readCount(db, env, "admin_otp_ip", ip ?? "unknown", now);
+  return count >= ADMIN_LIMIT
+    ? { ok: false, retryAfter: secondsUntilReset(now), reason: "ip" }
+    : { ok: true };
 }
 
 export async function recordAdminFailure(
   db: Database,
+  env: Env,
   ip: string | null,
   now: Date,
 ): Promise<void> {
-  await recordLoginFailure(db, ip, adminAttemptKey(ip), now);
+  await increment(db, env, "admin_otp_ip", ip ?? "unknown", now);
 }
 
-/** Records one failed attempt. Also trims rows older than a day for this
- * identifier, so the ledger stays bounded even where no purge job runs (the
- * edge function has no background timer). */
 export async function recordLoginFailure(
   db: Database,
+  env: Env,
   ip: string | null,
   identifier: string,
   now: Date,
+  options: { trackIdentifier: boolean },
 ): Promise<void> {
-  await db.insert(loginAttempts).values({ ip, identifier, createdAt: now });
+  if (ip) await increment(db, env, "login_ip", ip, now);
+  if (options.trackIdentifier) await increment(db, env, "login_identifier", identifier, now);
+}
+
+export async function clearLoginFailures(
+  db: Database,
+  env: Env,
+  identifier: string,
+): Promise<void> {
   await db
-    .delete(loginAttempts)
+    .delete(authRateLimitBuckets)
     .where(
       and(
-        eq(loginAttempts.identifier, identifier),
-        lt(loginAttempts.createdAt, new Date(now.getTime() - 86_400_000)),
+        eq(authRateLimitBuckets.scope, "login_identifier"),
+        eq(authRateLimitBuckets.keyHash, keyHash(env, "login_identifier", identifier)),
       ),
     );
-  // Identifiers that failed once and never came back — including one
-  // `admin:<ip>` key per attacker IP — are swept by the hourly
-  // `routino-login-attempts-purge` pg_cron job in supabase/setup.sql, since the
-  // edge function has no resident process to run `purgeOldLoginAttempts` on.
 }
 
-/** Clears an identifier's recent failures — called on a successful sign-in so
- * the counter resets the moment the real owner gets in. */
-export async function clearLoginFailures(db: Database, identifier: string): Promise<void> {
-  await db.delete(loginAttempts).where(eq(loginAttempts.identifier, identifier));
-}
-
-/** Housekeeping for the Node deployment's purge timer. */
-export async function purgeOldLoginAttempts(db: Database, now: Date): Promise<void> {
-  await db
-    .delete(loginAttempts)
-    .where(lt(loginAttempts.createdAt, new Date(now.getTime() - 86_400_000)));
+export async function purgeExpiredAuthRateLimits(db: Database, now: Date): Promise<void> {
+  await db.delete(authRateLimitBuckets).where(lt(authRateLimitBuckets.expiresAt, now));
 }
 
 export { LIMITS as LOGIN_LIMITS };

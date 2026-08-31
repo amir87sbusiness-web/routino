@@ -96,8 +96,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     // attempt bounded and visible in the log, not to gate the real key.
     if (typeof token === "string" && tokenEquals(token, env.ADMIN_TOKEN)) return;
 
-    await recordAdminFailure(db, ip, t);
-    const rate = await checkAdminRate(db, ip, t);
+    await recordAdminFailure(db, env, ip, t);
+    const rate = await checkAdminRate(db, env, ip, t);
     if (!rate.ok) {
       req.log.warn({ ip }, "admin auth throttled");
       throw tooMany("Too many admin attempts. Try again later.", rate.retryAfter);
