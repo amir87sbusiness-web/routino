@@ -5,6 +5,7 @@
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
+import { isAccountQuotaError } from "../src/services/sync.js";
 
 let h: Harness;
 
@@ -107,6 +108,19 @@ const month = (
 };
 
 describe("sync", () => {
+  it("recognises postgres-js quota constraints without swallowing unrelated database errors", () => {
+    expect(
+      isAccountQuotaError({
+        cause: { code: "23514", constraint_name: "users_sync_data_bytes_bounds" },
+      }),
+    ).toBe(true);
+    expect(
+      isAccountQuotaError({ code: "23514", constraint_name: "some_other_check" }),
+    ).toBe(false);
+    expect(
+      isAccountQuotaError({ code: "23505", constraint_name: "users_sync_data_bytes_bounds" }),
+    ).toBe(false);
+  });
   it("returns a bounded per-record quota refusal and keeps the rolled-back batch pullable", async () => {
     const { access, user } = await signIn("09120000027");
     await h.raw(`

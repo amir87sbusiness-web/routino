@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { loadEnv, testProviderWarnings } from "../src/env.js";
+import { loadEdgeEnv, loadEnv, testProviderWarnings } from "../src/env.js";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
 
 let h: Harness;
@@ -107,6 +107,11 @@ describe("production env guards", () => {
       loadEnv({ ...ok, JWT_SECRET: "dev-only-secret-change-me-in-production-32+" }),
     ).toThrow(/JWT_SECRET/);
     expect(() => loadEnv({ ...ok, PSP_PROVIDER: "fake" })).toThrow(/fake/);
+  });
+
+  it("defaults the deployed Edge entry to production, never development", () => {
+    expect(() => loadEdgeEnv({})).toThrow(/JWT_SECRET|Invalid environment/);
+    expect(loadEdgeEnv({ ...prod, NODE_ENV: undefined }).NODE_ENV).toBe("production");
   });
 
   it("requires a private admin phone, session secret, and proxy secret", () => {

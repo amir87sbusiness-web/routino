@@ -57,14 +57,20 @@ const SYNC_QUOTA_CONSTRAINTS = new Set([
  * depending on the driver. Match only SQLSTATE 23514 plus our named checks: an
  * unrelated database failure must remain loud instead of being mislabeled as a
  * harmless quota refusal. */
-function isAccountQuotaError(error: unknown): boolean {
+export function isAccountQuotaError(error: unknown): boolean {
   let current: unknown = error;
   for (let depth = 0; depth < 3 && current && typeof current === "object"; depth += 1) {
-    const candidate = current as { code?: unknown; constraint?: unknown; cause?: unknown };
+    const candidate = current as {
+      code?: unknown;
+      constraint?: unknown;
+      constraint_name?: unknown;
+      cause?: unknown;
+    };
+    const constraint = candidate.constraint ?? candidate.constraint_name;
     if (
       candidate.code === "23514" &&
-      typeof candidate.constraint === "string" &&
-      SYNC_QUOTA_CONSTRAINTS.has(candidate.constraint)
+      typeof constraint === "string" &&
+      SYNC_QUOTA_CONSTRAINTS.has(constraint)
     ) {
       return true;
     }

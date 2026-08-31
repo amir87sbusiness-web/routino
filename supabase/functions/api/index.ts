@@ -15,12 +15,12 @@ import postgres from "postgres";
 import { buildApp } from "./app.ts";
 import type { Database } from "./shared/db/client.ts";
 import { schema } from "./shared/db/schema.ts";
-import { loadEnv, testProviderWarnings } from "./shared/env.ts";
+import { loadEdgeEnv, testProviderWarnings } from "./shared/env.ts";
 import { fakePsp, zarinpalPsp } from "./shared/providers/psp/index.ts";
 import { consoleSms, kavenegarSms, type SmsProvider } from "./shared/providers/sms/index.ts";
 import { ensureOwner } from "./shared/services/owner-bootstrap.ts";
 
-const env = loadEnv(Deno.env.toObject());
+const env = loadEdgeEnv(Deno.env.toObject());
 
 const dbUrl = Deno.env.get("DATABASE_URL") ?? Deno.env.get("SUPABASE_DB_URL");
 if (!dbUrl) throw new Error("DATABASE_URL secret is required");

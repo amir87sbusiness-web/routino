@@ -144,6 +144,13 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   return parsed.data;
 }
 
+/** Edge functions are production unless an explicit local/test harness says
+ * otherwise. Supabase does not guarantee NODE_ENV, so inheriting the generic
+ * development default there would silently disable every production guard. */
+export function loadEdgeEnv(source: NodeJS.ProcessEnv): Env {
+  return loadEnv({ ...source, NODE_ENV: source.NODE_ENV || "production" });
+}
+
 /** Which live-money/live-delivery paths are currently faked. Printed at boot so
  * "why did nobody get the SMS" and "why is there no money in the account" are
  * answered by the first line of the log rather than by a support ticket. */
