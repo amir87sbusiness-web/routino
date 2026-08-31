@@ -9,13 +9,24 @@ const overview = {
   payments: {
     paidTotal: 0,
     revenueToman: 0,
+    paidLast24h: 0,
     revenueTomanLast24h: 0,
     pending: 0,
   },
   otpSentLast24h: 0,
+  serverTime: "2026-09-01T00:00:00.000Z",
 };
 
+const overviewSnapshot = (data = overview) =>
+  JSON.stringify({ version: 1, savedAt: 1_788_220_800_000, data });
+
 const settlePage = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+const sessionStorageOf = (dom: JSDOM) =>
+  (
+    dom.window as unknown as {
+      sessionStorage: { getItem: (key: string) => string | null };
+    }
+  ).sessionStorage;
 
 describe("admin page", () => {
   afterEach(() => vi.restoreAllMocks());
@@ -102,6 +113,9 @@ describe("admin page", () => {
 
       expect(fetch.mock.calls.every(([, init]) => init?.credentials === "same-origin")).toBe(true);
       expect(document.querySelector("#ovCards")?.textContent).toContain("۴۲");
+      expect(document.querySelector("#ovCards")?.textContent).toContain("امروز");
+      expect(document.querySelector("#ovCards")?.textContent).toContain("کسب‌وکار");
+      expect(document.querySelector("#ovCards")?.textContent).toContain("نیاز به توجه");
     } finally {
       dom.window.close();
     }
@@ -154,6 +168,196 @@ describe("admin page", () => {
       expect(overviewSignal?.aborted).toBe(true);
       expect(overviewCalls).toBe(1);
       expect(dom.window.document.querySelector("#pageStatus")?.textContent).toContain("خطا");
+    } finally {
+      dom.window.close();
+    }
+  });
+
+  it("renders a same-tab aggregate snapshot only after session validation", async () => {
+    let resolveSession!: (response: {
+      status: number;
+      ok: boolean;
+      json: () => Promise<{ authenticated: boolean }>;
+    }) => void;
+    let resolveOverview!: (response: {
+      status: number;
+      ok: boolean;
+      json: () => Promise<typeof overview>;
+    }) => void;
+    const sessionResponse = new Promise<{
+      status: number;
+      ok: boolean;
+      json: () => Promise<{ authenticated: boolean }>;
+    }>((resolve) => {
+      resolveSession = resolve;
+    });
+    const liveOverview = { ...overview, users: { ...overview.users, total: 43 } };
+    const liveResponse = new Promise<{
+      status: number;
+      ok: boolean;
+      json: () => Promise<typeof overview>;
+    }>((resolve) => {
+      resolveOverview = resolve;
+    });
+    const fetch = vi.fn((path: string) =>
+      path.endsWith("/auth/session") ? sessionResponse : liveResponse,
+    );
+    const dom = new JSDOM(ADMIN_PAGE, {
+      runScripts: "dangerously",
+      url: "https://admin.routino.test/admin",
+      beforeParse(window: object) {
+        (
+          window as { sessionStorage: { setItem: (key: string, value: string) => void } }
+        ).sessionStorage.setItem("routino_admin_overview_v1", overviewSnapshot());
+        Object.assign(window, { fetch, alert: vi.fn(), confirm: vi.fn(() => true) });
+      },
+    });
+
+    try {
+      expect(dom.window.document.querySelector("#ovCards")?.textContent).not.toContain("۴۲");
+      resolveSession({
+        status: 200,
+        ok: true,
+        json: async () => ({ authenticated: true }),
+      });
+      await settlePage();
+      await settlePage();
+      expect(dom.window.document.querySelector("#ovCards")?.textContent).toContain("۴۲");
+      expect(fetch.mock.calls.filter(([path]) => path === "/v1/admin/overview")).toHaveLength(1);
+
+      resolveOverview({ status: 200, ok: true, json: async () => liveOverview });
+      await settlePage();
+      await settlePage();
+      expect(dom.window.document.querySelector("#ovCards")?.textContent).toContain("۴۳");
+      const saved = JSON.parse(
+        sessionStorageOf(dom).getItem("routino_admin_overview_v1") || "{}",
+      ) as { data?: { users?: { total?: number } } };
+      expect(saved.data?.users?.total).toBe(43);
+    } finally {
+      dom.window.close();
+    }
+  });
+
+  it("clears the aggregate snapshot when the admin session is invalid", async () => {
+    const fetch = vi.fn(async () => ({ status: 401, ok: false, json: async () => ({}) }));
+    const dom = new JSDOM(ADMIN_PAGE, {
+      runScripts: "dangerously",
+      url: "https://admin.routino.test/admin",
+      beforeParse(window: object) {
+        (
+          window as { sessionStorage: { setItem: (key: string, value: string) => void } }
+        ).sessionStorage.setItem("routino_admin_overview_v1", overviewSnapshot());
+        Object.assign(window, { fetch, alert: vi.fn(), confirm: vi.fn(() => true) });
+      },
+    });
+
+    try {
+      await settlePage();
+      expect(sessionStorageOf(dom).getItem("routino_admin_overview_v1")).toBeNull();
+      expect((dom.window.document.querySelector("#login") as { style: { display: string } }).style.display).toBe(
+        "",
+      );
+    } finally {
+      dom.window.close();
+    }
+  });
+
+  it("rejects a malformed aggregate snapshot without rendering its contents", async () => {
+    const never = new Promise<never>(() => undefined);
+    const fetch = vi.fn((path: string) =>
+      path.endsWith("/auth/session")
+        ? Promise.resolve({
+            status: 200,
+            ok: true,
+            json: async () => ({ authenticated: true }),
+          })
+        : never,
+    );
+    const dom = new JSDOM(ADMIN_PAGE, {
+      runScripts: "dangerously",
+      url: "https://admin.routino.test/admin",
+      beforeParse(window: object) {
+        (
+          window as { sessionStorage: { setItem: (key: string, value: string) => void } }
+        ).sessionStorage.setItem(
+          "routino_admin_overview_v1",
+          JSON.stringify({ version: 1, savedAt: Date.now(), data: { phone: "private" } }),
+        );
+        Object.assign(window, { fetch, alert: vi.fn(), confirm: vi.fn(() => true) });
+      },
+    });
+
+    try {
+      await settlePage();
+      await settlePage();
+      expect(sessionStorageOf(dom).getItem("routino_admin_overview_v1")).toBeNull();
+      expect(dom.window.document.querySelector("#ovCards")?.textContent).not.toContain("private");
+    } finally {
+      dom.window.close();
+    }
+  });
+
+  it("clears the aggregate snapshot on logout", async () => {
+    const fetch = vi.fn(async (path: string) => ({
+      status: path.endsWith("/auth/logout") ? 204 : 200,
+      ok: true,
+      json: async () => (path.endsWith("/overview") ? overview : { authenticated: true }),
+    }));
+    const dom = new JSDOM(ADMIN_PAGE, {
+      runScripts: "dangerously",
+      url: "https://admin.routino.test/admin",
+      beforeParse(window: object) {
+        Object.assign(window, { fetch, alert: vi.fn(), confirm: vi.fn(() => true) });
+      },
+    });
+
+    try {
+      await settlePage();
+      await settlePage();
+      expect(sessionStorageOf(dom).getItem("routino_admin_overview_v1")).not.toBeNull();
+      (dom.window.document.querySelector("#logout") as { click: () => void }).click();
+      await settlePage();
+      expect(sessionStorageOf(dom).getItem("routino_admin_overview_v1")).toBeNull();
+    } finally {
+      dom.window.close();
+    }
+  });
+
+  it("refreshes the overview once after creating an account from the panel", async () => {
+    const fetch = vi.fn(async (path: string) => {
+      if (path.endsWith("/overview")) {
+        return { status: 200, ok: true, json: async () => overview };
+      }
+      if (path.endsWith("/users/set-password")) {
+        return {
+          status: 200,
+          ok: true,
+          json: async () => ({ created: true, userId: "new-user", phone: "989120000000" }),
+        };
+      }
+      if (path.includes("/users")) {
+        return { status: 200, ok: true, json: async () => ({ users: [] }) };
+      }
+      return { status: 200, ok: true, json: async () => ({ authenticated: true }) };
+    });
+    const dom = new JSDOM(ADMIN_PAGE, {
+      runScripts: "dangerously",
+      url: "https://admin.routino.test/admin",
+      beforeParse(window: object) {
+        Object.assign(window, { fetch, alert: vi.fn(), confirm: vi.fn(() => true) });
+      },
+    });
+
+    try {
+      await settlePage();
+      await settlePage();
+      expect(fetch.mock.calls.filter(([path]) => path === "/v1/admin/overview")).toHaveLength(1);
+      (dom.window.document.querySelector("#spPhone") as { value: string }).value = "09120000000";
+      (dom.window.document.querySelector("#spPass") as { value: string }).value = "safePass123";
+      (dom.window.document.querySelector("#spGo") as { click: () => void }).click();
+      await settlePage();
+      await settlePage();
+      expect(fetch.mock.calls.filter(([path]) => path === "/v1/admin/overview")).toHaveLength(2);
     } finally {
       dom.window.close();
     }

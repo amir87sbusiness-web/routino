@@ -204,6 +204,9 @@ Fastify رو می‌سازه، CORS و فشرده‌سازی و helmet رو فع
 ### `backend/src/services/admin.ts` — منطق API های پنل ادمین
 
 - `adminOverview`, `adminListUsers`, `adminUserDetail`, `adminGrant`, `adminListPayments`, `adminListDiscounts`, `adminCreateDiscount`, `adminUpdateDiscount` — همه‌ی چیزی که `routes/admin.ts` صداشون می‌زنه
+- `adminOverview` همهٔ عددهای نمای کلی را با **یک درخواست API و یک دستور SQL تجمیعی** می‌خواند؛ جدول کاربران، اشتراک‌ها، پرداخت‌ها و OTP هرکدام حداکثر یک‌بار در همان دستور اسکن می‌شوند و fan-out چند query وجود ندارد.
+- بعد از تأیید OTP، پوستهٔ پنل فوراً باز می‌شود و منتظر آمار نمی‌ماند. فقط عددهای کلی نمای قبلی در `sessionStorage` همان تب نگه داشته می‌شوند و پس از معتبرشدن cookie در پس‌زمینه با یک درخواست تازه می‌شوند؛ شمارهٔ کاربران، ردیف پرداخت/تخفیف، OTP، CSRF و secret هیچ‌وقت cache نمی‌شوند.
+- پنل polling و retry خودکار ندارد. تب‌های کاربران، پرداخت‌ها و تخفیف‌ها فقط هنگام بازشدن خودشان request می‌زنند؛ overview هم هنگام ورود، تازه‌سازی صریح یا تغییر مرتبط خوانده می‌شود. request معلق بعد از timeout متوقف می‌شود تا loop و فشار پنهان نسازد.
 
 ---
 
