@@ -31,7 +31,7 @@ const PERMANENT = [
   "payments",
   "redemptions",
 ] as const;
-const ROLLING = ["otp_codes", "login_attempts"] as const;
+const ROLLING = ["otp_codes", "auth_rate_limit_buckets"] as const;
 
 let h: Harness;
 let sampleAccess: string;
@@ -259,13 +259,15 @@ describe("cloud-sync database budget", () => {
     expect(sum(ROLLING)).toBeGreaterThan(0);
     await h.raw(`
       update otp_codes set created_at = now() - interval '48 hours';
-      update login_attempts set created_at = now() - interval '48 hours';
+      insert into auth_rate_limit_buckets
+        (scope, key_hash, window_start, count, expires_at)
+      values ('test', 'expired', now() - interval '48 hours', 20, now() - interval '1 hour');
       delete from otp_codes where created_at < now() - interval '24 hours';
-      delete from login_attempts where created_at < now() - interval '24 hours';
+      delete from auth_rate_limit_buckets where expires_at < now();
     `);
     const [otp] = await h.query<{ n: string }>("select count(*)::text as n from otp_codes");
     const [attempts] = await h.query<{ n: string }>(
-      "select count(*)::text as n from login_attempts",
+      "select count(*)::text as n from auth_rate_limit_buckets where key_hash = 'expired'",
     );
     expect(Number(otp.n)).toBe(0);
     expect(Number(attempts.n)).toBe(0);

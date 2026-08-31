@@ -43,7 +43,7 @@
 | ۱۱  | — (مرورگر، نه اپ) درگاه کاربر رو برمی‌گردونه                | —                                                      | `GET /v1/payments/callback`                                                  | `backend/src/routes/payments.ts`                                                    |
 | ۱۲  | — (مرورگر ادمین)                                            | —                                                      | `GET /admin` + `/v1/admin/*`                                                 | `backend/src/routes/admin-panel.ts` و `admin.ts`                                    |
 
-> مسیرهای ۱، ۲، ۲ب، ۷ و ۱۱ عمومی‌اند؛ خروجِ ۴ اصلاً درخواست ندارد. بقیه (از جمله ۲ج: account/username/password) توکن ورود می‌خواهند (هدر `Authorization: Bearer ...`)؛ پنل ادمین هم توکن جداگانهٔ خودش را دارد.
+> مسیرهای ۱، ۲، ۲ب، ۷ و ۱۱ عمومی‌اند؛ خروجِ ۴ اصلاً درخواست ندارد. بقیه (از جمله ۲ج: account/username/password) توکن ورود می‌خواهند (هدر `Authorization: Bearer ...`)؛ پنل ادمین شماره و OTP می‌گیرد، سپس با cookie امضاشدهٔ HttpOnly کار می‌کند و درخواست‌های تغییردهنده CSRF می‌خواهند.
 
 ---
 

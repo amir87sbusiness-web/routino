@@ -214,15 +214,6 @@ create table if not exists auth_rate_limit_buckets (
 create index if not exists auth_rate_limit_buckets_expiry
   on auth_rate_limit_buckets (expires_at);
 
-create table if not exists login_attempts (
-  id uuid primary key default gen_random_uuid(),
-  ip text,
-  identifier text not null,
-  created_at timestamptz not null default now()
-);
-create index if not exists login_attempts_identifier on login_attempts (identifier, created_at);
-create index if not exists login_attempts_ip on login_attempts (ip, created_at);
-
 create table if not exists plans (
   id text primary key,
   name_fa text not null,

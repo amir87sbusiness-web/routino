@@ -193,14 +193,17 @@ create index if not exists otp_ip_recent on otp_codes (ip, created_at);
 -- 24h purge scans.
 create index if not exists otp_recent on otp_codes (created_at);
 
-create table if not exists login_attempts (
-  id uuid primary key default gen_random_uuid(),
-  ip text,
-  identifier text not null,
-  created_at timestamptz not null default now()
+create table if not exists auth_rate_limit_buckets (
+  scope text not null,
+  key_hash text not null,
+  window_start timestamptz not null,
+  count integer not null default 1,
+  expires_at timestamptz not null,
+  primary key (scope, key_hash, window_start),
+  constraint auth_rate_limit_buckets_count_positive check (count >= 1)
 );
-create index if not exists login_attempts_identifier on login_attempts (identifier, created_at);
-create index if not exists login_attempts_ip on login_attempts (ip, created_at);
+create index if not exists auth_rate_limit_buckets_expiry
+  on auth_rate_limit_buckets (expires_at);
 
 create table if not exists plans (
   id text primary key,
@@ -398,9 +401,9 @@ on conflict (id) do nothing;
 create extension if not exists pg_cron;
 select cron.schedule('routino-otp-purge', '0 * * * *',
   $$delete from otp_codes where created_at < now() - interval '24 hours'$$);
--- Same story for the failed-login ledger backing the password rate limits.
-select cron.schedule('routino-login-attempts-purge', '30 * * * *',
-  $$delete from login_attempts where created_at < now() - interval '24 hours'$$);
+-- Aggregate auth counters are bounded by key/window and expire automatically.
+select cron.schedule('routino-auth-rate-limit-purge', '30 * * * *',
+  $$delete from auth_rate_limit_buckets where expires_at < now()$$);
 
 -- Tombstones, weekly. A deleted habit or log leaves a row behind on purpose: a
 -- delete has to be able to TRAVEL to the user's other devices, and an absence
@@ -440,7 +443,7 @@ $$);
 alter table users enable row level security;
 alter table records enable row level security;
 alter table otp_codes enable row level security;
-alter table login_attempts enable row level security;
+alter table auth_rate_limit_buckets enable row level security;
 alter table plans enable row level security;
 alter table discounts enable row level security;
 alter table redemptions enable row level security;

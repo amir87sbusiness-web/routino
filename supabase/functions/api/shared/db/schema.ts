@@ -122,7 +122,7 @@ export const otpCodes = pgTable(
 );
 
 /** Fixed-window authentication counters. One row absorbs every attempt for one
- * opaque key/window, avoiding the append-per-failure growth of login_attempts. */
+ * opaque key/window instead of appending one database row per failure. */
 export const authRateLimitBuckets = pgTable(
   "auth_rate_limit_buckets",
   {
@@ -136,28 +136,6 @@ export const authRateLimitBuckets = pgTable(
     primaryKey({ columns: [t.scope, t.keyHash, t.windowStart] }),
     index("auth_rate_limit_buckets_expiry").on(t.expiresAt),
     check("auth_rate_limit_buckets_count_positive", sql`${t.count} >= 1`),
-  ],
-);
-
-/**
- * Failed-login ledger — the rate-limit state for password sign-in, mirroring how
- * `otp_codes` backs the OTP limits. In Postgres, not memory: it must survive
- * restarts and work across multiple isolates. Only failures are recorded; a
- * correct password clears the identifier's recent rows. `identifier` is the
- * canonical lookup key (a `989…` phone or a lowercased username), so the two
- * ways of typing one phone throttle as one account.
- */
-export const loginAttempts = pgTable(
-  "login_attempts",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    ip: text("ip"),
-    identifier: text("identifier").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => [
-    index("login_attempts_identifier").on(t.identifier, t.createdAt),
-    index("login_attempts_ip").on(t.ip, t.createdAt),
   ],
 );
 
@@ -326,7 +304,6 @@ export const schema = {
   records,
   otpCodes,
   authRateLimitBuckets,
-  loginAttempts,
   plans,
   discounts,
   redemptions,

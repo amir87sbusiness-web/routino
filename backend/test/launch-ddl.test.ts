@@ -19,6 +19,14 @@ const ACCOUNT_SYNC_BUDGET_MIGRATION_SQL = readFileSync(
   resolve(root, "supabase/migrations/20260831130000_account_sync_budgets.sql"),
   "utf8",
 );
+const AUTH_BUCKET_MIGRATION_SQL = readFileSync(
+  resolve(root, "supabase/migrations/20260831140000_auth_rate_limit_buckets.sql"),
+  "utf8",
+);
+const REMOVE_LEGACY_AUTH_MIGRATION_SQL = readFileSync(
+  resolve(root, "supabase/migrations/20260831141000_remove_legacy_auth_tables.sql"),
+  "utf8",
+);
 
 let h: Harness;
 
@@ -31,6 +39,46 @@ afterAll(async () => {
 });
 
 describe("launch schema repairs", () => {
+  it("expands an existing database without rewriting legacy auth rows", async () => {
+    await h.raw(`
+      drop table auth_rate_limit_buckets;
+      create table if not exists login_attempts (
+        id uuid primary key default gen_random_uuid(),
+        ip text,
+        identifier text not null,
+        created_at timestamptz not null default now()
+      );
+      insert into login_attempts (ip, identifier) values ('127.0.0.1', 'legacy-user');
+    `);
+
+    await h.raw(AUTH_BUCKET_MIGRATION_SQL);
+
+    expect(await h.query("select scope from auth_rate_limit_buckets")).toHaveLength(0);
+    expect(await h.query("select identifier from login_attempts")).toEqual([
+      { identifier: "legacy-user" },
+    ]);
+  });
+
+  it("contracts only the retired append-per-attempt table", async () => {
+    await h.raw(`
+      create table if not exists login_attempts (
+        id uuid primary key default gen_random_uuid(),
+        identifier text not null,
+        created_at timestamptz not null default now()
+      );
+      insert into users (phone) values ('989122299991');
+    `);
+
+    await h.raw(REMOVE_LEGACY_AUTH_MIGRATION_SQL);
+
+    const tables = await h.query<{ table_name: string }>(`
+      select table_name from information_schema.tables
+       where table_schema = 'public' and table_name = 'login_attempts'
+    `);
+    expect(tables).toHaveLength(0);
+    expect(await h.query("select phone from users where phone = '989122299991'")).toHaveLength(1);
+  });
+
   it("backfills exact account usage before enabling sync storage budgets", async () => {
     await h.raw(`
       drop trigger records_sync_usage_after_insert on records;
@@ -382,7 +430,7 @@ describe("launch schema repairs", () => {
       "users",
       "records",
       "otp_codes",
-      "login_attempts",
+      "auth_rate_limit_buckets",
       "plans",
       "discounts",
       "redemptions",
@@ -395,6 +443,7 @@ describe("launch schema repairs", () => {
       expect(sql).toContain(`alter table ${table} enable row level security;`);
     }
     expect(sql).not.toContain("create policy");
+    expect(sql).not.toContain("create table if not exists login_attempts");
   });
 
   it("does not generate the retired device purge job", () => {

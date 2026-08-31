@@ -29,9 +29,9 @@ const cron = `
 create extension if not exists pg_cron;
 select cron.schedule('routino-otp-purge', '0 * * * *',
   $$delete from otp_codes where created_at < now() - interval '24 hours'$$);
--- Same story for the failed-login ledger backing the password rate limits.
-select cron.schedule('routino-login-attempts-purge', '30 * * * *',
-  $$delete from login_attempts where created_at < now() - interval '24 hours'$$);
+-- Aggregate auth counters are bounded by key/window and expire automatically.
+select cron.schedule('routino-auth-rate-limit-purge', '30 * * * *',
+  $$delete from auth_rate_limit_buckets where expires_at < now()$$);
 
 -- Tombstones, weekly. A deleted habit or log leaves a row behind on purpose: a
 -- delete has to be able to TRAVEL to the user's other devices, and an absence
@@ -80,7 +80,7 @@ const RLS_TABLES = [
   "users",
   "records",
   "otp_codes",
-  "login_attempts",
+  "auth_rate_limit_buckets",
   "plans",
   "discounts",
   "redemptions",
