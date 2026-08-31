@@ -110,9 +110,7 @@ describe("user detail", () => {
       body: { planId: "m1", attemptId: crypto.randomUUID() },
     });
 
-    const d = await (
-      await h.call("GET", `/v1/admin/users/${user.id}`, { headers: admin })
-    ).json();
+    const d = await (await h.call("GET", `/v1/admin/users/${user.id}`, { headers: admin })).json();
     expect(d.user.phone).toBe("989123334444");
     expect(d.user).not.toHaveProperty("blocked");
     expect(d.entitlement).toMatchObject({ status: "none", planId: null, expiresAt: null });

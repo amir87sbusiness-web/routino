@@ -72,7 +72,9 @@ describe("a payment whose callback never came back", () => {
     expect(Number(payment!.verify_attempts)).toBe(1);
     expect(new Date(payment!.next_verify_at).getTime()).toBeGreaterThan(Date.now());
 
-    await h.raw(`update payments set next_verify_at = now() - interval '1 second' where id = '${paymentId}'`);
+    await h.raw(
+      `update payments set next_verify_at = now() - interval '1 second' where id = '${paymentId}'`,
+    );
     await openApp(access);
     [payment] = await h.query<{ verify_attempts: number; next_verify_at: string }>(`
       select verify_attempts, next_verify_at::text from payments where id = '${paymentId}'

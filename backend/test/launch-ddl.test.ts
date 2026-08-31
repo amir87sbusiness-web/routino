@@ -68,10 +68,14 @@ describe("launch schema repairs", () => {
     await h.raw(PAYMENT_BACKOFF_MIGRATION_SQL);
 
     expect(
-      await h.query("select id, status from payments where id = '92222222-2222-4222-8222-222222222222'"),
+      await h.query(
+        "select id, status from payments where id = '92222222-2222-4222-8222-222222222222'",
+      ),
     ).toEqual([{ id: "92222222-2222-4222-8222-222222222222", status: "paid" }]);
     expect(
-      await h.query("select payment_id from grants where payment_id = '92222222-2222-4222-8222-222222222222'"),
+      await h.query(
+        "select payment_id from grants where payment_id = '92222222-2222-4222-8222-222222222222'",
+      ),
     ).toHaveLength(1);
   });
 
@@ -131,7 +135,9 @@ describe("launch schema repairs", () => {
       insert into admins (user_id) values ('81111111-1111-4111-8111-111111111111');
     `);
 
-    await expect(h.raw(REMOVE_LEGACY_AUTH_MIGRATION_SQL)).rejects.toThrow(/admins table is not empty/i);
+    await expect(h.raw(REMOVE_LEGACY_AUTH_MIGRATION_SQL)).rejects.toThrow(
+      /admins table is not empty/i,
+    );
     // PGlite leaves the explicit transaction open-and-aborted after a script
     // raises; a migration runner would issue this rollback automatically.
     await h.raw("rollback");

@@ -33,8 +33,10 @@ describe("admin page", () => {
   it("requests and verifies OTP, then renders the overview once", async () => {
     const fetch = vi.fn(async (path: string, _init?: { credentials?: string }) => {
       if (path.endsWith("/auth/session")) return { status: 401, ok: false, json: async () => ({}) };
-      if (path.endsWith("/auth/otp/request")) return { status: 202, ok: true, json: async () => ({ accepted: true }) };
-      if (path.endsWith("/auth/otp/verify")) return { status: 200, ok: true, json: async () => ({ authenticated: true }) };
+      if (path.endsWith("/auth/otp/request"))
+        return { status: 202, ok: true, json: async () => ({ accepted: true }) };
+      if (path.endsWith("/auth/otp/verify"))
+        return { status: 200, ok: true, json: async () => ({ authenticated: true }) };
       return { status: 200, ok: true, json: async () => overview };
     });
     const dom = new JSDOM(ADMIN_PAGE, {
@@ -54,7 +56,9 @@ describe("admin page", () => {
       (document.querySelector("#adminPhone") as { value: string }).value = "09120000123";
       (document.querySelector("#enter") as { click: () => void }).click();
       await settlePage();
-      expect((document.querySelector("#otpStep") as unknown as { hidden: boolean }).hidden).toBe(false);
+      expect((document.querySelector("#otpStep") as unknown as { hidden: boolean }).hidden).toBe(
+        false,
+      );
 
       (document.querySelector("#adminOtp") as { value: string }).value = "1234";
       (document.querySelector("#enter") as { click: () => void }).click();
@@ -73,7 +77,8 @@ describe("admin page", () => {
     const fetch = vi.fn(async (path: string, _init?: { headers?: Record<string, string> }) => ({
       status: 200,
       ok: true,
-      json: async () => path.endsWith("/overview") ? overview : { authenticated: true, discount: {} },
+      json: async () =>
+        path.endsWith("/overview") ? overview : { authenticated: true, discount: {} },
     }));
     const dom = new JSDOM(ADMIN_PAGE, {
       runScripts: "dangerously",

@@ -160,7 +160,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     }
     const result = await verifyCode(db, env, adminOtpLedgerKey(env), code, now());
     if (!result.ok) {
-      if (result.reason === "too_many") throw tooMany("Too many wrong attempts. Request a new code.");
+      if (result.reason === "too_many")
+        throw tooMany("Too many wrong attempts. Request a new code.");
       throw unauthorized("bad_admin_code", "The code is wrong or has expired");
     }
     await setSessionCookies(reply, now());

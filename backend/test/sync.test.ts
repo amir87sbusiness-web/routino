@@ -5,10 +5,7 @@
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
-import {
-  isAccountQuotaError,
-  PULL_RESPONSE_MAX_UTF8_BYTES,
-} from "../src/services/sync.js";
+import { isAccountQuotaError, PULL_RESPONSE_MAX_UTF8_BYTES } from "../src/services/sync.js";
 
 let h: Harness;
 
@@ -117,9 +114,7 @@ describe("sync", () => {
         cause: { code: "23514", constraint_name: "users_sync_data_bytes_bounds" },
       }),
     ).toBe(true);
-    expect(
-      isAccountQuotaError({ code: "23514", constraint_name: "some_other_check" }),
-    ).toBe(false);
+    expect(isAccountQuotaError({ code: "23514", constraint_name: "some_other_check" })).toBe(false);
     expect(
       isAccountQuotaError({ code: "23505", constraint_name: "users_sync_data_bytes_bounds" }),
     ).toBe(false);

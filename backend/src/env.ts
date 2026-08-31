@@ -41,10 +41,7 @@ const schema = z.object({
 
   /** Owner-only admin login. Kept in deployment secrets, never in a table or UI. */
   ADMIN_PHONE: z.string().default(""),
-  ADMIN_SESSION_SECRET: z
-    .string()
-    .min(32)
-    .default("dev-only-admin-session-secret-change-me-32+"),
+  ADMIN_SESSION_SECRET: z.string().min(32).default("dev-only-admin-session-secret-change-me-32+"),
 
   JWT_SECRET: z.string().min(32).default("dev-only-secret-change-me-in-production-32+"),
   // Stateless access tokens expire after exactly 30 days and cannot be revoked early.

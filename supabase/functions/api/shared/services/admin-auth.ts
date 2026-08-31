@@ -14,8 +14,7 @@ export const ADMIN_RENEW_WINDOW_SECONDS = 30 * 86_400;
 const ADMIN_ISSUER = "routino-admin";
 const ADMIN_AUDIENCE = "routino-admin-panel";
 
-const sessionSecret = (env: Env): Uint8Array =>
-  new TextEncoder().encode(env.ADMIN_SESSION_SECRET);
+const sessionSecret = (env: Env): Uint8Array => new TextEncoder().encode(env.ADMIN_SESSION_SECRET);
 
 const safeEqual = (a: string, b: string): boolean => {
   const left = Buffer.from(a);
@@ -113,7 +112,10 @@ export function readCookie(header: string | undefined, name: string): string | n
   return null;
 }
 
-export function adminCsrfMatches(cookieValue: string | null, headerValue: string | undefined): boolean {
+export function adminCsrfMatches(
+  cookieValue: string | null,
+  headerValue: string | undefined,
+): boolean {
   return !!cookieValue && !!headerValue && safeEqual(cookieValue, headerValue);
 }
 
