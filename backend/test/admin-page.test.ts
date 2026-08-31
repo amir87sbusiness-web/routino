@@ -30,14 +30,31 @@ describe("admin page", () => {
     expect(ADMIN_PAGE).not.toContain("localStorage");
   });
 
-  it("requests and verifies OTP, then renders the overview once", async () => {
-    const fetch = vi.fn(async (path: string, _init?: { credentials?: string }) => {
-      if (path.endsWith("/auth/session")) return { status: 401, ok: false, json: async () => ({}) };
+  it("enters immediately after OTP and coalesces overview refreshes", async () => {
+    let resolveOverview!: (response: {
+      status: number;
+      ok: boolean;
+      json: () => Promise<typeof overview>;
+    }) => void;
+    const overviewResponse = new Promise<{
+      status: number;
+      ok: boolean;
+      json: () => Promise<typeof overview>;
+    }>((resolve) => {
+      resolveOverview = resolve;
+    });
+    const fetch = vi.fn((path: string, _init?: { credentials?: string }) => {
+      if (path.endsWith("/auth/session"))
+        return Promise.resolve({ status: 401, ok: false, json: async () => ({}) });
       if (path.endsWith("/auth/otp/request"))
-        return { status: 202, ok: true, json: async () => ({ accepted: true }) };
+        return Promise.resolve({ status: 202, ok: true, json: async () => ({ accepted: true }) });
       if (path.endsWith("/auth/otp/verify"))
-        return { status: 200, ok: true, json: async () => ({ authenticated: true }) };
-      return { status: 200, ok: true, json: async () => overview };
+        return Promise.resolve({
+          status: 200,
+          ok: true,
+          json: async () => ({ authenticated: true }),
+        });
+      return overviewResponse;
     });
     const dom = new JSDOM(ADMIN_PAGE, {
       runScripts: "dangerously",
@@ -63,11 +80,80 @@ describe("admin page", () => {
       (document.querySelector("#adminOtp") as { value: string }).value = "1234";
       (document.querySelector("#enter") as { click: () => void }).click();
       await settlePage();
+
+      expect((document.querySelector("#panel") as { style: { display: string } }).style.display).toBe(
+        "",
+      );
+      expect((document.querySelector("#login") as { style: { display: string } }).style.display).toBe(
+        "none",
+      );
+      expect(document.querySelector("#pageStatus")?.textContent).toContain("به‌روزرسانی");
+      expect(fetch.mock.calls.filter(([path]) => path === "/v1/admin/overview")).toHaveLength(1);
+
+      const firstRefresh = (dom.window as unknown as { loadOverview: () => Promise<void> })
+        .loadOverview();
+      const secondRefresh = (dom.window as unknown as { loadOverview: () => Promise<void> })
+        .loadOverview();
+      expect(fetch.mock.calls.filter(([path]) => path === "/v1/admin/overview")).toHaveLength(1);
+
+      resolveOverview({ status: 200, ok: true, json: async () => overview });
+      await Promise.all([firstRefresh, secondRefresh]);
       await settlePage();
 
-      expect(fetch.mock.calls.filter(([path]) => path === "/v1/admin/overview")).toHaveLength(1);
       expect(fetch.mock.calls.every(([, init]) => init?.credentials === "same-origin")).toBe(true);
       expect(document.querySelector("#ovCards")?.textContent).toContain("۴۲");
+    } finally {
+      dom.window.close();
+    }
+  });
+
+  it("bounds a stalled overview request without retrying", async () => {
+    let overviewCalls = 0;
+    let overviewSignal: AbortSignal | undefined;
+    const fetch = vi.fn(
+      (
+        path: string,
+        init?: { signal?: AbortSignal },
+      ): Promise<{ status: number; ok: boolean; json: () => Promise<object> }> => {
+        if (path.endsWith("/auth/session")) {
+          return Promise.resolve({
+            status: 200,
+            ok: true,
+            json: async () => ({ authenticated: true }),
+          });
+        }
+        overviewCalls += 1;
+        overviewSignal = init?.signal;
+        return new Promise((_resolve, reject) => {
+          overviewSignal?.addEventListener("abort", () => reject(new Error("aborted")), {
+            once: true,
+          });
+        });
+      },
+    );
+    const dom = new JSDOM(ADMIN_PAGE, {
+      runScripts: "dangerously",
+      url: "https://admin.routino.test/admin",
+      beforeParse(window: object) {
+        Object.assign(window, {
+          fetch,
+          alert: vi.fn(),
+          confirm: vi.fn(() => true),
+          setTimeout: (callback: () => void) => {
+            queueMicrotask(callback);
+            return 1;
+          },
+          clearTimeout: vi.fn(),
+        });
+      },
+    });
+
+    try {
+      await settlePage();
+      await settlePage();
+      expect(overviewSignal?.aborted).toBe(true);
+      expect(overviewCalls).toBe(1);
+      expect(dom.window.document.querySelector("#pageStatus")?.textContent).toContain("خطا");
     } finally {
       dom.window.close();
     }

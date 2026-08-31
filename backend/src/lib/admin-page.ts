@@ -100,7 +100,9 @@ export const ADMIN_PAGE = `<!doctype html>
 
 <script>
 const $ = (s) => document.querySelector(s);
+const REQUEST_TIMEOUT_MS = 8000;
 let otpRequested = false;
+let overviewRequest = null;
 
 function cookieValue(name) {
   const prefix = name + "=";
@@ -108,10 +110,20 @@ function cookieValue(name) {
   return part ? decodeURIComponent(part.slice(prefix.length)) : "";
 }
 
+async function request(url, init) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error("زمان پاسخ سرور بیش از حد طول کشید؛ دوباره تلاش کن.");
+    throw error;
+  } finally { clearTimeout(timeout); }
+}
+
 async function authApi(path, opts = {}) {
-  const res = await fetch("/v1/admin/auth" + path, {
-    method: opts.method || "GET",
-    credentials: "same-origin",
+  const res = await request("/v1/admin/auth" + path, {
+    method: opts.method || "GET", credentials: "same-origin",
     headers: opts.body ? { "content-type": "application/json" } : {},
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
@@ -124,10 +136,8 @@ async function api(path, opts = {}) {
   const method = opts.method || "GET";
   const headers = opts.body ? { "content-type": "application/json" } : {};
   if (method === "POST") headers["x-admin-csrf"] = cookieValue("routino_admin_csrf");
-  const res = await fetch("/v1/admin" + path, {
-    method,
-    credentials: "same-origin",
-    headers,
+  const res = await request("/v1/admin" + path, {
+    method, credentials: "same-origin", headers,
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   if (res.status === 401) { showLogin("نشست مدیریت منقضی شده؛ دوباره وارد شو."); throw new Error("نشست مدیریت منقضی شده است"); }
@@ -147,7 +157,8 @@ function showLogin(message) {
 function showPanel(overview) {
   $("#login").style.display = "none"; $("#panel").style.display = "";
   $("#logout").style.display = ""; $("#refreshOverview").style.display = "";
-  renderOverview(overview); setStatus("آمار به‌روز است");
+  if (overview) { renderOverview(overview); setStatus("آمار به‌روز است"); }
+  else { loading("ovCards"); setStatus("در حال به‌روزرسانی آمار…"); }
 }
 function setLoginBusy(busy) {
   $("#enter").disabled = busy;
@@ -176,7 +187,7 @@ $("#loginForm").onsubmit = async (event) => {
     const code = $("#adminOtp").value.trim();
     if (!code) { $("#loginErr").textContent = "کد پیامک‌شده را وارد کن."; return; }
     await authApi("/otp/verify", { method: "POST", body: { phone, code } });
-    showPanel(await api("/overview"));
+    showPanel(); void loadOverview();
   } catch (error) {
     if ($("#login").style.display !== "") $("#loginErr").textContent = error.message || "ورود ممکن نشد";
   } finally { setLoginBusy(false); }
@@ -219,10 +230,19 @@ function renderOverview(o) {
     ["در انتظار درگاه", fa(o.payments.pending)], ["پیامک ۲۴ ساعت", fa(o.otpSentLast24h)],
   ].map(([label, value]) => '<article class="metric"><div class="k">' + label + '</div><div class="v">' + value + "</div></article>").join("");
 }
-async function loadOverview() {
-  loading("ovCards"); setStatus("در حال به‌روزرسانی آمار…");
-  try { renderOverview(await api("/overview")); setStatus("آمار به‌روز است"); }
-  catch (error) { errorState("ovCards", error.message || "آمار دریافت نشد", loadOverview); setStatus("خطا در دریافت آمار"); }
+function loadOverview() {
+  if (overviewRequest) return overviewRequest;
+  const hasMetrics = Boolean($("#ovCards .metric"));
+  if (!hasMetrics) loading("ovCards");
+  setStatus("در حال به‌روزرسانی آمار…");
+  overviewRequest = (async () => {
+    try { renderOverview(await api("/overview")); setStatus("آمار به‌روز است"); }
+    catch (error) {
+      if (!hasMetrics) errorState("ovCards", error.message || "آمار دریافت نشد", loadOverview);
+      setStatus("خطا در دریافت آمار");
+    } finally { overviewRequest = null; }
+  })();
+  return overviewRequest;
 }
 
 async function loadUsers() {
@@ -305,7 +325,7 @@ $("#dCreate").onclick = async () => {
 
 async function boot() {
   setStatus("در حال بررسی نشست مدیریت…");
-  try { await authApi("/session"); showPanel(await api("/overview")); }
+  try { await authApi("/session"); showPanel(); void loadOverview(); }
   catch { showLogin(); }
 }
 boot();
