@@ -81,8 +81,9 @@ export async function buildApp(deps: Omit<Deps, "now"> & { now?: () => number })
     else if (Math.random() < 0.01) req.log.info(details, "request sample");
   });
 
-  // A blunt per-IP ceiling. The precise limits that matter (SMS spend, login
-  // guessing, admin tokens) are enforced in Postgres by the services, because
+  // A blunt per-IP ceiling. The precise limits that matter (SMS spend, user
+  // login guessing, admin OTP guessing) are enforced in Postgres by the
+  // services, because
   // they must survive restarts and work across serverless isolates; this only
   // stops a single host from flooding the process. Off under test so the suite's
   // deliberate bursts stay deterministic.

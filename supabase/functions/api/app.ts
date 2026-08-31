@@ -85,9 +85,9 @@ export function buildApp(deps: Deps) {
     c.header("Referrer-Policy", "no-referrer");
     c.header("X-Frame-Options", "DENY");
     c.header("Strict-Transport-Security", "max-age=15552000; includeSubDomains");
-    // CSP is scoped to /admin on purpose. That page is one self-contained HTML
-    // document holding the admin token, so it is the only place where an
-    // injected <script src> or an exfiltration beacon would be worth anything —
+    // CSP is scoped to /admin on purpose. That page holds an authenticated
+    // administrator session, so an injected script or exfiltration beacon would
+    // be especially damaging there —
     // and 'unsafe-inline' is unavoidable there because the panel's own script is
     // inline. The payment result page is deliberately left out: it navigates to
     // the `routino://` deep link to return to the Android app, and that flow is
