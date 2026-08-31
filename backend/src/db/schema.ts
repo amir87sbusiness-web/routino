@@ -285,13 +285,6 @@ export const feedback = pgTable("feedback", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const admins = pgTable("admins", {
-  userId: uuid("user_id")
-    .primaryKey()
-    .references(() => users.id, { onDelete: "cascade" }),
-  role: text("role").notNull().default("admin"),
-});
-
 export const usersRelations = relations(users, ({ many, one }) => ({
   records: many(records),
   grants: many(grants),
@@ -310,6 +303,5 @@ export const schema = {
   grants,
   entitlements,
   feedback,
-  admins,
   usersRelations,
 };

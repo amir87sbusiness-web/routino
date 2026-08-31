@@ -88,7 +88,6 @@ const RLS_TABLES = [
   "grants",
   "entitlements",
   "feedback",
-  "admins",
 ];
 
 const rls = `

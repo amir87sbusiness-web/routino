@@ -79,6 +79,30 @@ describe("launch schema repairs", () => {
     expect(await h.query("select phone from users where phone = '989122299991'")).toHaveLength(1);
   });
 
+  it("refuses to remove an occupied legacy admins table", async () => {
+    await h.raw(`
+      create table admins (
+        user_id uuid primary key references users(id) on delete cascade,
+        role text not null default 'admin'
+      );
+      create table if not exists login_attempts (
+        id uuid primary key default gen_random_uuid(),
+        identifier text not null,
+        created_at timestamptz not null default now()
+      );
+      insert into users (id, phone)
+        values ('81111111-1111-4111-8111-111111111111', '989122299992');
+      insert into admins (user_id) values ('81111111-1111-4111-8111-111111111111');
+    `);
+
+    await expect(h.raw(REMOVE_LEGACY_AUTH_MIGRATION_SQL)).rejects.toThrow(/admins table is not empty/i);
+    // PGlite leaves the explicit transaction open-and-aborted after a script
+    // raises; a migration runner would issue this rollback automatically.
+    await h.raw("rollback");
+    expect(await h.query("select user_id from admins")).toHaveLength(1);
+    expect(await h.query("select id from login_attempts")).toHaveLength(0);
+  });
+
   it("backfills exact account usage before enabling sync storage budgets", async () => {
     await h.raw(`
       drop trigger records_sync_usage_after_insert on records;
@@ -438,12 +462,12 @@ describe("launch schema repairs", () => {
       "grants",
       "entitlements",
       "feedback",
-      "admins",
     ]) {
       expect(sql).toContain(`alter table ${table} enable row level security;`);
     }
     expect(sql).not.toContain("create policy");
     expect(sql).not.toContain("create table if not exists login_attempts");
+    expect(sql).not.toContain("create table if not exists admins");
   });
 
   it("does not generate the retired device purge job", () => {

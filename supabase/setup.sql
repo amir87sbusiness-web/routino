@@ -363,11 +363,6 @@ create table if not exists feedback (
   created_at timestamptz not null default now()
 );
 
-create table if not exists admins (
-  user_id uuid primary key references users(id) on delete cascade,
-  role text not null default 'admin'
-);
-
 -- Idempotent upgrades for databases created before a column existed. "create
 -- table if not exists" silently skips existing tables, so new columns must be
 -- added explicitly here.
@@ -451,4 +446,3 @@ alter table payments enable row level security;
 alter table grants enable row level security;
 alter table entitlements enable row level security;
 alter table feedback enable row level security;
-alter table admins enable row level security;
