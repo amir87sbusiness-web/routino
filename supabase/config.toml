@@ -2,8 +2,8 @@
 project_id = "routino"
 
 [functions.api]
-# The API does its own auth (OTP → JWT, admin token). The Supabase gateway must
-# NOT demand its platform JWT on top, or every public route (plans, payment
-# callback, health) would 401. Access control instead comes from PROXY_SECRET:
+# The API does its own auth (user OTP/password → JWT, admin OTP → cookie). The gateway must
+# NOT demand its platform JWT on top, or every public route (plans, admin OTP,
+# payment callback, health) would 401. Access control comes from PROXY_SECRET:
 # only the Cloudflare Worker in front of api.routino.me may call the function.
 verify_jwt = false

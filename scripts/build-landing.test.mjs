@@ -62,6 +62,24 @@ describe("landing build script", () => {
         headers,
         /\/app\/workbox-\*\.js\n  Cache-Control: public, max-age=31536000, immutable/,
       );
+
+      const routes = JSON.parse(readFileSync(join(sandbox, "dist", "_routes.json"), "utf8"));
+      assert.deepEqual(routes, {
+        version: 1,
+        include: ["/v1/*", "/app/*"],
+        exclude: [
+          "/app",
+          "/app/",
+          "/app/index.html",
+          "/app/assets/*",
+          "/app/icons/*",
+          "/app/sw.js",
+          "/app/workbox-*.js",
+          "/app/manifest.webmanifest",
+          "/app/favicon.svg",
+          "/app/robots.txt",
+        ],
+      });
     } finally {
       rmSync(sandbox, { recursive: true, force: true });
     }

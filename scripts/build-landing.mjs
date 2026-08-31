@@ -6,6 +6,7 @@
  *   dist/fonts/*.woff2     وزیرمتن (از node_modules، بدون CDN)
  *   dist/_redirects        SPA fallback برای /app/*
  *   dist/_headers          کنترل کش
+ *   dist/_routes.json      فقط routeهای پویا را از Pages Function رد می‌کند
  *
  * خودِ برنامه در `dist/app/` می‌نشیند و `vite build` می‌سازدش، پس این اسکریپت
  * باید بعد از آن اجرا شود (`npm run build` همین ترتیب را دارد) وگرنه
@@ -405,6 +406,34 @@ async function main() {
       "  Cache-Control: public, max-age=31536000, immutable",
       "",
     ].join("\n"),
+  );
+
+  // Pages Functions are metered while static Pages assets are free. Keep only
+  // API calls and extension-less client routes on the Function path; all
+  // versioned assets, icons and PWA files go straight through the CDN where
+  // `_headers` also applies normally.
+  writeFileSync(
+    join(OUT_DIR, "_routes.json"),
+    JSON.stringify(
+      {
+        version: 1,
+        include: ["/v1/*", "/app/*"],
+        exclude: [
+          "/app",
+          "/app/",
+          "/app/index.html",
+          "/app/assets/*",
+          "/app/icons/*",
+          "/app/sw.js",
+          "/app/workbox-*.js",
+          "/app/manifest.webmanifest",
+          "/app/favicon.svg",
+          "/app/robots.txt",
+        ],
+      },
+      null,
+      2,
+    ) + "\n",
   );
 
   const kb = (n) => (n / 1024).toFixed(1) + "KB";
