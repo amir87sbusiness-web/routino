@@ -4,7 +4,6 @@
  *   dist/index.html        صفحه‌ی معرفی محصول
  *   dist/legal/index.html  قوانین + حریم خصوصی + تماس
  *   dist/fonts/*.woff2     وزیرمتن (از node_modules، بدون CDN)
- *   dist/_redirects        SPA fallback برای /app/*
  *   dist/_headers          کنترل کش
  *   dist/_routes.json      فقط routeهای پویا را از Pages Function رد می‌کند
  *
@@ -352,17 +351,10 @@ async function main() {
   // ── پیکربندی Cloudflare Pages ───────────────────────────
   // ASCII only, deliberately. The first version of this file had Persian
   // comments and Cloudflare silently ignored the whole thing.
-  writeFileSync(
-    join(OUT_DIR, "_redirects"),
-    [
-      "# SPA fallback for the app only, never the public pages.",
-      "# /app/habits is not a real file and must serve /app/index.html.",
-      "# NOTE: the fallback that actually works in production is the Pages",
-      "# Function in functions/app/[[path]].js — this rule never took effect.",
-      "/app/* /app/index.html 200",
-      "",
-    ].join("\n"),
-  );
+  // The Pages Function owns the SPA fallback. The old `_redirects` rule was
+  // ignored by Pages as an infinite loop, so remove a stale file left by an
+  // earlier build instead of publishing a known-invalid rule.
+  rmSync(join(OUT_DIR, "_redirects"), { force: true });
 
   writeFileSync(
     join(OUT_DIR, "_headers"),
@@ -386,6 +378,12 @@ async function main() {
       "  Cache-Control: no-cache",
       "",
       "/app/index.html",
+      "  Cache-Control: no-cache",
+      "",
+      "/app",
+      "  Cache-Control: no-cache",
+      "",
+      "/app/",
       "  Cache-Control: no-cache",
       "",
       "/app/sw.js",

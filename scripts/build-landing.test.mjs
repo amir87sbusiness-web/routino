@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cpSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -52,6 +52,8 @@ describe("landing build script", () => {
       assert.match(headers, /  Referrer-Policy: strict-origin-when-cross-origin/);
       assert.match(headers, /  Content-Security-Policy: .*frame-ancestors 'none'.*/);
       assert.match(headers, /\/app\/index\.html\n  Cache-Control: no-cache/);
+      assert.match(headers, /\/app\n  Cache-Control: no-cache/);
+      assert.match(headers, /\/app\/\n  Cache-Control: no-cache/);
       assert.match(headers, /\/app\/sw\.js\n  Cache-Control: no-cache/);
       assert.match(headers, /\/app\/manifest\.webmanifest\n  Cache-Control: no-cache/);
       assert.match(
@@ -80,6 +82,7 @@ describe("landing build script", () => {
           "/app/robots.txt",
         ],
       });
+      assert.equal(existsSync(join(sandbox, "dist", "_redirects")), false);
     } finally {
       rmSync(sandbox, { recursive: true, force: true });
     }
