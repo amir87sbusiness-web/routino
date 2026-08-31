@@ -75,6 +75,9 @@ describe("production env guards", () => {
     JWT_SECRET: "x".repeat(40),
     OTP_PEPPER: "y".repeat(20),
     ADMIN_TOKEN: "z".repeat(20),
+    ADMIN_PHONE: "09120000123",
+    ADMIN_SESSION_SECRET: "s".repeat(48),
+    PROXY_SECRET: "p".repeat(48),
     SMS_PROVIDER: "kavenegar",
     KAVENEGAR_API_KEY: "k",
     PSP_PROVIDER: "zarinpal",
@@ -106,6 +109,15 @@ describe("production env guards", () => {
     ).toThrow(/JWT_SECRET/);
     expect(() => loadEnv({ ...ok, ADMIN_TOKEN: "dev-only-admin-token" })).toThrow(/ADMIN_TOKEN/);
     expect(() => loadEnv({ ...ok, PSP_PROVIDER: "fake" })).toThrow(/fake/);
+  });
+
+  it("requires a private admin phone, session secret, and proxy secret", () => {
+    expect(() => loadEnv({ ...prod, ADMIN_PHONE: "" })).toThrow(/ADMIN_PHONE/);
+    expect(() => loadEnv({ ...prod, ADMIN_PHONE: "not-a-phone" })).toThrow(/ADMIN_PHONE/);
+    expect(() => loadEnv({ ...prod, ADMIN_SESSION_SECRET: "short" })).toThrow(
+      /ADMIN_SESSION_SECRET/,
+    );
+    expect(() => loadEnv({ ...prod, PROXY_SECRET: "" })).toThrow(/PROXY_SECRET/);
   });
 });
 

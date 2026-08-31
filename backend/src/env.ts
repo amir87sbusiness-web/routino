@@ -4,6 +4,7 @@
 // reference must still resolve.
 import process from "node:process";
 import { z } from "zod";
+import { normalizePhone } from "./lib/phone.js";
 
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
@@ -41,6 +42,12 @@ const schema = z.object({
   /** Shared secret for /v1/admin/* and the /admin panel. Header-only, compared
    * in constant time. */
   ADMIN_TOKEN: z.string().min(12).default("dev-only-admin-token"),
+  /** Owner-only admin login. Kept in deployment secrets, never in a table or UI. */
+  ADMIN_PHONE: z.string().default(""),
+  ADMIN_SESSION_SECRET: z
+    .string()
+    .min(32)
+    .default("dev-only-admin-session-secret-change-me-32+"),
 
   JWT_SECRET: z.string().min(32).default("dev-only-secret-change-me-in-production-32+"),
   // Stateless access tokens expire after exactly 30 days and cannot be revoked early.
@@ -114,6 +121,12 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       throw new Error("OTP_PEPPER must be set in production");
     if (parsed.data.ADMIN_TOKEN.startsWith("dev-only"))
       throw new Error("ADMIN_TOKEN must be set in production");
+    if (!normalizePhone(parsed.data.ADMIN_PHONE))
+      throw new Error("ADMIN_PHONE must be a valid Iranian mobile number in production");
+    if (parsed.data.ADMIN_SESSION_SECRET.startsWith("dev-only"))
+      throw new Error("ADMIN_SESSION_SECRET must be set in production");
+    if (parsed.data.PROXY_SECRET.length < 32)
+      throw new Error("PROXY_SECRET must be at least 32 characters in production");
     if (parsed.data.SMS_PROVIDER === "kavenegar" && !parsed.data.KAVENEGAR_API_KEY) {
       throw new Error("KAVENEGAR_API_KEY is required when SMS_PROVIDER=kavenegar");
     }
