@@ -28,14 +28,18 @@ export async function onRequest(context) {
 
   const shell = await env.ASSETS.fetch(new URL("/app/index.html", url.origin));
 
+  // Pages applies `_headers` to the app shell. Preserve those security headers
+  // when re-wrapping it for a client-side route; otherwise the fallback path
+  // would silently lose CSP, clickjacking and MIME protections.
+  const headers = new Headers(shell.headers);
+  headers.set("content-type", "text/html; charset=utf-8");
+  headers.set("cache-control", "no-cache");
+
   // Re-wrap so the status is 200 for the route the browser actually asked for,
   // and so the shell is never cached under a route URL (it would then be
   // served for a different route after a deploy).
   return new Response(shell.body, {
     status: 200,
-    headers: {
-      "content-type": "text/html; charset=utf-8",
-      "cache-control": "no-cache",
-    },
+    headers,
   });
 }

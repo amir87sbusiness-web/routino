@@ -41,6 +41,27 @@ describe("landing build script", () => {
       assert.match(legalHtml, /https:\/\/instagram\.com\/routino\.me/);
       assert.equal(legalHtml.includes(["mail", "to:"].join("")), false);
       assert.equal(legalHtml.includes(["amir.templates", "gmail.com"].join("@")), false);
+
+      const headers = readFileSync(join(sandbox, "dist", "_headers"), "utf8");
+      assert.match(
+        headers,
+        /\/\*\n  Strict-Transport-Security: max-age=31536000; includeSubDomains/,
+      );
+      assert.match(headers, /  X-Content-Type-Options: nosniff/);
+      assert.match(headers, /  X-Frame-Options: DENY/);
+      assert.match(headers, /  Referrer-Policy: strict-origin-when-cross-origin/);
+      assert.match(headers, /  Content-Security-Policy: .*frame-ancestors 'none'.*/);
+      assert.match(headers, /\/app\/index\.html\n  Cache-Control: no-cache/);
+      assert.match(headers, /\/app\/sw\.js\n  Cache-Control: no-cache/);
+      assert.match(headers, /\/app\/manifest\.webmanifest\n  Cache-Control: no-cache/);
+      assert.match(
+        headers,
+        /\/app\/assets\/\*\n  Cache-Control: public, max-age=31536000, immutable/,
+      );
+      assert.match(
+        headers,
+        /\/app\/workbox-\*\.js\n  Cache-Control: public, max-age=31536000, immutable/,
+      );
     } finally {
       rmSync(sandbox, { recursive: true, force: true });
     }

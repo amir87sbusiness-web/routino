@@ -367,6 +367,7 @@ npm test               # تست‌های بک‌اند
 
 - **Current local-first/cloud-sync budget:** personal records are locally durable first and sync through `records`; the quota test models 48 small records per user and measures the storage slope. No security ping or periodic poll exists. Boot uses one exchange including entitlement; a changed session uses one batched exchange, `/health` is answered at the Cloudflare edge, and only public `/plans` is cached. `supabase/tests/quota.test.ts` measures this production-like path.
 - **Web API routing:** the browser deliberately uses relative `/v1`. Vite proxies it in development; Cloudflare Pages runs `functions/v1/[[path]].js` in production and forwards only that fixed namespace to `api.routino.me`. Without this Function, Pages' root SPA fallback returns landing HTML to API calls. Covered by `test/pages-api-proxy.test.ts`.
+- **Pages security/cache:** `scripts/build-landing.mjs` generates a baseline CSP/HSTS/nosniff/frame-deny policy for every page. Stable HTML, manifest and `sw.js` always revalidate; content-hashed `/app/assets/*` and `workbox-*.js` are immutable for one year. The `/app/*` Pages Function must preserve the shell's security headers while forcing `no-cache` on SPA fallbacks.
 
 > The detailed sync/cursor/tombstone notes below describe the active launch protocol and must remain aligned with `services/sync.ts` and `src/lib/sync/engine.ts`.
 

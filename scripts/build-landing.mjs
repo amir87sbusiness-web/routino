@@ -24,6 +24,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { createHash } from "node:crypto";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import sharp from "sharp";
@@ -33,6 +34,12 @@ const OUT_DIR = join(ROOT, "dist");
 
 /** آدرسِ عمومی سایت. در متاتگ‌ها، sitemap و robots تکرار می‌شود، پس یک‌جا. */
 const SITE = "https://routino.me";
+
+function inlineScriptHashes(html) {
+  return [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].map(
+    ([, body]) => `'sha256-${createHash("sha256").update(body).digest("base64")}'`,
+  );
+}
 
 /** HTML-escape. متن از ما می‌آید نه از کاربر، ولی یک `<` بی‌جا نباید صفحه را
  * خراب کند. کد اینماد عمداً از این مسیر رد نمی‌شود (باید عیناً درج شود). */
@@ -321,6 +328,26 @@ async function main() {
   const ogBytes = await makeOgImage();
   writeSeoFiles();
 
+  // The public page has three small inline scripts (structured data, an
+  // early class toggle and interactions). Hashing their exact build output
+  // keeps CSP strict without moving or duplicating that code.
+  const scriptHashes = inlineScriptHashes(homeHtml);
+  const contentSecurityPolicy = [
+    "default-src 'self'",
+    `script-src 'self' ${scriptHashes.join(" ")}`,
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
+    "img-src 'self' data: blob: https://trustseal.enamad.ir",
+    "connect-src 'self' https://api.routino.me",
+    "worker-src 'self' blob:",
+    "manifest-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "upgrade-insecure-requests",
+  ].join("; ");
+
   // ── پیکربندی Cloudflare Pages ───────────────────────────
   // ASCII only, deliberately. The first version of this file had Persian
   // comments and Cloudflare silently ignored the whole thing.
@@ -340,6 +367,15 @@ async function main() {
     join(OUT_DIR, "_headers"),
     [
       "# ASCII only, same reason as _redirects.",
+      "# Baseline browser security policy for every static page and app asset.",
+      "/*",
+      "  Strict-Transport-Security: max-age=31536000; includeSubDomains",
+      "  X-Content-Type-Options: nosniff",
+      "  X-Frame-Options: DENY",
+      "  Referrer-Policy: strict-origin-when-cross-origin",
+      "  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()",
+      `  Content-Security-Policy: ${contentSecurityPolicy}`,
+      "",
       "# Anything with a stable name must not be cached, or users freeze on an",
       "# old version and never receive an update.",
       "/",
@@ -362,7 +398,11 @@ async function main() {
       "  Cache-Control: public, max-age=604800",
       "",
       "/app/assets/*",
-      "  Cache-Control: no-cache",
+      "  Cache-Control: public, max-age=31536000, immutable",
+      "",
+      "# Workbox runtime filenames are content-hashed too.",
+      "/app/workbox-*.js",
+      "  Cache-Control: public, max-age=31536000, immutable",
       "",
     ].join("\n"),
   );

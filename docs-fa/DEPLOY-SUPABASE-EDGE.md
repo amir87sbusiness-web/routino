@@ -76,6 +76,18 @@ Secretها را در repository، bundle، log یا خروجی مشترک قرا
 npx supabase functions deploy api --no-verify-jwt --project-ref <PROJECT_REF>
 ```
 
+### ترتیب امن migrationهای احراز هویت ادمین
+
+چون کاربر و پرداخت واقعی وجود دارد، سه migration جدید را یک‌جا و کورکورانه push نکن:
+
+1. از جدول‌های عملیاتی و کاربر/پرداخت backup قابل‌بازیابی بگیر و project ref را دوباره چک کن.
+2. فقط migration افزایشی `20260831140000_auth_rate_limit_buckets.sql` و migration افزایشی `20260831142000_payment_verify_backoff.sql` را اجرا کن؛ هیچ جدول کاربری حذف نمی‌شود.
+3. Secretهای `ADMIN_PHONE` و `ADMIN_SESSION_SECRET` را روی سرور تنظیم کن و Edge جدید را deploy کن.
+4. مالک باید در `/admin` شماره را خودش وارد کند، OTP واقعی بگیرد و ورود/خروج و یک درخواست ادمین را موفق ببیند.
+5. فقط بعد از این اثبات و کنترل دوبارهٔ backup/countها، migration قراردادی `20260831141000_remove_legacy_auth_tables.sql` را اجرا کن. این migration اگر `admins` خالی نباشد عمداً abort می‌شود و فقط جدول‌های قدیمی `login_attempts` و `admins` را حذف می‌کند؛ به دادهٔ ژورنال، عادت، کاربر، اشتراک یا پرداخت دست نمی‌زند.
+
+اگر مرحلهٔ ۴ موفق نشد، Edge قبلی را برگردان و migration قراردادی را اجرا نکن؛ جدول‌های قدیمی بلااستفاده اما سالم می‌مانند.
+
 ## اعتبارسنجی بعد از deploy
 
 1. `health` و `health/ready`، لاگ cold-start و CORS وب/موبایل را بررسی کن.
