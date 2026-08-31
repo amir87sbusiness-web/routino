@@ -27,6 +27,10 @@ const REMOVE_LEGACY_AUTH_MIGRATION_SQL = readFileSync(
   resolve(root, "supabase/migrations/20260831141000_remove_legacy_auth_tables.sql"),
   "utf8",
 );
+const PAYMENT_BACKOFF_MIGRATION_SQL = readFileSync(
+  resolve(root, "supabase/migrations/20260831142000_payment_verify_backoff.sql"),
+  "utf8",
+);
 
 let h: Harness;
 
@@ -39,6 +43,38 @@ afterAll(async () => {
 });
 
 describe("launch schema repairs", () => {
+  it("adds payment cooldown state without changing paid rows or grants", async () => {
+    await h.raw(`
+      alter table payments drop constraint payments_verify_attempts_nonnegative;
+      alter table payments drop column verify_attempts;
+      alter table payments drop column next_verify_at;
+      insert into users (id, phone)
+        values ('91111111-1111-4111-8111-111111111111', '989122299993');
+      insert into payments (
+        id, user_id, plan_id, months, amount_toman, amount_rial, status, attempt_id,
+        paid_at, verified_at, applied_at
+      ) values (
+        '92222222-2222-4222-8222-222222222222',
+        '91111111-1111-4111-8111-111111111111', 'm1', 1, 59000, 590000, 'paid',
+        '93333333-3333-4333-8333-333333333333', now(), now(), now()
+      );
+      insert into grants (user_id, months, source, payment_id)
+        values (
+          '91111111-1111-4111-8111-111111111111', 1, 'payment',
+          '92222222-2222-4222-8222-222222222222'
+        );
+    `);
+
+    await h.raw(PAYMENT_BACKOFF_MIGRATION_SQL);
+
+    expect(
+      await h.query("select id, status from payments where id = '92222222-2222-4222-8222-222222222222'"),
+    ).toEqual([{ id: "92222222-2222-4222-8222-222222222222", status: "paid" }]);
+    expect(
+      await h.query("select payment_id from grants where payment_id = '92222222-2222-4222-8222-222222222222'"),
+    ).toHaveLength(1);
+  });
+
   it("expands an existing database without rewriting legacy auth rows", async () => {
     await h.raw(`
       drop table auth_rate_limit_buckets;

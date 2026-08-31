@@ -59,6 +59,41 @@ const daysLeft = (iso: string | null) =>
   iso === null ? 0 : Math.round((new Date(iso).getTime() - Date.now()) / 86_400_000);
 
 describe("a payment whose callback never came back", () => {
+  it("coalesces rapid recovery polls and retries only after the stored cooldown", async () => {
+    const { access } = await signIn("09121110006");
+    const { paymentId } = await checkout(access);
+
+    await openApp(access);
+    await openApp(access);
+    await openApp(access);
+    let [payment] = await h.query<{ verify_attempts: number; next_verify_at: string }>(`
+      select verify_attempts, next_verify_at::text from payments where id = '${paymentId}'
+    `);
+    expect(Number(payment!.verify_attempts)).toBe(1);
+    expect(new Date(payment!.next_verify_at).getTime()).toBeGreaterThan(Date.now());
+
+    await h.raw(`update payments set next_verify_at = now() - interval '1 second' where id = '${paymentId}'`);
+    await openApp(access);
+    [payment] = await h.query<{ verify_attempts: number; next_verify_at: string }>(`
+      select verify_attempts, next_verify_at::text from payments where id = '${paymentId}'
+    `);
+    expect(Number(payment!.verify_attempts)).toBe(2);
+  });
+
+  it("lets the real callback bypass a poll cooldown", async () => {
+    const { access } = await signIn("09121110007");
+    const { paymentId, authority } = await checkout(access);
+    await openApp(access); // pending verify starts the cooldown
+    h.psp._settle(authority, "paid");
+
+    const callback = await h.app.inject({
+      method: "GET",
+      url: `/v1/payments/callback?paymentId=${paymentId}&Authority=${authority}&Status=OK`,
+    });
+    expect(callback.statusCode).toBe(200);
+    expect((await openApp(access)).entitlement.status).toBe("active");
+  });
+
   it("is finished the next time the user opens the app", async () => {
     const { access } = await signIn("09121110001");
     const { authority } = await checkout(access);

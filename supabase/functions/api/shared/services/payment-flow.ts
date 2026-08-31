@@ -1,5 +1,5 @@
 // AUTO-GENERATED from backend/src — do not edit. Run `node scripts/sync-edge-shared.mjs`.
-import { and, count, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, count, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import type { Database } from "../db/client.ts";
 import { grants, payments } from "../db/schema.ts";
 import { badRequest, conflict, notFound, serviceUnavailable, tooMany } from "../lib/http-errors.ts";
@@ -13,6 +13,8 @@ export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 
 const MAX_CHECKOUTS_PER_HOUR = 10;
 const VERIFY_LEASE_MS = 30_000;
+const VERIFY_BACKOFF_BASE_MS = 5_000;
+const VERIFY_BACKOFF_MAX_MS = 5 * 60_000;
 const SETTLE_WINDOW_MS = 72 * 3_600_000;
 const SETTLE_MAX = 3;
 
@@ -133,6 +135,7 @@ export async function applyPaid(
         paidAt: payment.paidAt ?? t,
         verifiedAt: t,
         verifyStartedAt: null,
+        nextVerifyAt: null,
         appliedAt: t,
         updatedAt: t,
       })
@@ -297,6 +300,7 @@ async function verifyAndApplyPayment(
   payment: PaymentRow,
   t: Date,
   candidateAuthority?: string,
+  options: { bypassBackoff?: boolean } = {},
 ): Promise<VerifyOutcome> {
   if (payment.appliedAt) return { outcome: "paid", payment, changed: false };
   if (["failed", "verify_failed"].includes(payment.status)) {
@@ -309,15 +313,29 @@ async function verifyAndApplyPayment(
   }
 
   const staleBefore = new Date(t.getTime() - VERIFY_LEASE_MS);
+  const cooldownMs = Math.min(
+    VERIFY_BACKOFF_MAX_MS,
+    VERIFY_BACKOFF_BASE_MS * 2 ** Math.min(payment.verifyAttempts, 6),
+  );
+  const cooldownUntil = new Date(t.getTime() + cooldownMs);
   const [claimed] = await db
     .update(payments)
-    .set({ status: "verifying", verifyStartedAt: t, updatedAt: t })
+    .set({
+      status: "verifying",
+      verifyStartedAt: t,
+      nextVerifyAt: cooldownUntil,
+      verifyAttempts: sql`${payments.verifyAttempts} + 1`,
+      updatedAt: t,
+    })
     .where(
       and(
         eq(payments.id, payment.id),
         isNull(payments.appliedAt),
         sql`${payments.status} not in ('failed', 'verify_failed')`,
         or(isNull(payments.verifyStartedAt), lt(payments.verifyStartedAt, staleBefore)),
+        options.bypassBackoff
+          ? sql`true`
+          : or(isNull(payments.nextVerifyAt), lte(payments.nextVerifyAt, t)),
       ),
     )
     .returning();
@@ -369,7 +387,13 @@ async function verifyAndApplyPayment(
   const status = verified.kind === "canceled" ? "canceled" : "failed";
   await db
     .update(payments)
-    .set({ status, pspResult: verified.code ?? null, verifyStartedAt: null, updatedAt: t })
+    .set({
+      status,
+      pspResult: verified.code ?? null,
+      verifyStartedAt: null,
+      nextVerifyAt: null,
+      updatedAt: t,
+    })
     .where(and(eq(payments.id, claimed.id), isNull(payments.appliedAt)));
   const fresh = (await readPayment(db, claimed.id)) ?? claimed;
   return { outcome: status, payment: fresh, changed: true };
@@ -404,7 +428,9 @@ export async function handlePaymentCallback(
   // stored authority terminal; a later authenticated poll may still verify it.
   if (status !== "OK") return { outcome: "canceled", payment };
 
-  const result = await verifyAndApplyPayment(db, psp, payment, t, authority);
+  const result = await verifyAndApplyPayment(db, psp, payment, t, authority, {
+    bypassBackoff: true,
+  });
   return { outcome: result.outcome, payment: result.payment, message: result.message };
 }
 
@@ -444,6 +470,7 @@ export async function settleOpenPayments(
           isNull(payments.appliedAt),
           inArray(payments.status, ["redirected", "verifying"]),
           or(isNull(payments.verifyStartedAt), lt(payments.verifyStartedAt, staleBefore)),
+          or(isNull(payments.nextVerifyAt), lte(payments.nextVerifyAt, t)),
           gt(payments.createdAt, since),
         ),
       )

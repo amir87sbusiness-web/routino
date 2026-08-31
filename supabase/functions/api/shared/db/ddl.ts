@@ -260,6 +260,9 @@ create table if not exists payments (
   psp_result integer,
   request_started_at timestamptz,
   verify_started_at timestamptz,
+  next_verify_at timestamptz,
+  verify_attempts integer not null default 0
+    constraint payments_verify_attempts_nonnegative check (verify_attempts >= 0),
   paid_at timestamptz,
   verified_at timestamptz,
   applied_at timestamptz,
@@ -269,6 +272,8 @@ create table if not exists payments (
 alter table payments add column if not exists attempt_id uuid;
 alter table payments add column if not exists request_started_at timestamptz;
 alter table payments add column if not exists verify_started_at timestamptz;
+alter table payments add column if not exists next_verify_at timestamptz;
+alter table payments add column if not exists verify_attempts integer not null default 0;
 update payments set attempt_id = gen_random_uuid() where attempt_id is null;
 alter table payments alter column attempt_id set default gen_random_uuid();
 alter table payments alter column attempt_id set not null;

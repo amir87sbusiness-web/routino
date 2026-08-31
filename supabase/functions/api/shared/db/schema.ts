@@ -210,6 +210,8 @@ export const payments = pgTable(
     pspResult: integer("psp_result"),
     requestStartedAt: timestamp("request_started_at", { withTimezone: true }),
     verifyStartedAt: timestamp("verify_started_at", { withTimezone: true }),
+    nextVerifyAt: timestamp("next_verify_at", { withTimezone: true }),
+    verifyAttempts: integer("verify_attempts").notNull().default(0),
     paidAt: timestamp("paid_at", { withTimezone: true }),
     verifiedAt: timestamp("verified_at", { withTimezone: true }),
     /**
@@ -225,6 +227,7 @@ export const payments = pgTable(
     index("payments_user").on(t.userId),
     index("payments_status").on(t.status, t.createdAt),
     uniqueIndex("payments_user_attempt_unique").on(t.userId, t.attemptId),
+    check("payments_verify_attempts_nonnegative", sql`${t.verifyAttempts} >= 0`),
   ],
 );
 
