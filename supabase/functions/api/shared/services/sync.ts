@@ -23,9 +23,9 @@
  *
  * Deletes are rows, never absences: a tombstone has to be able to travel.
  */
-import { and, eq, gt, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { rowsOf, type Database } from "../db/client.ts";
-import { records, users } from "../db/schema.ts";
+import { users } from "../db/schema.ts";
 import { badRequest } from "../lib/http-errors.ts";
 import {
   validateSyncRecord,
@@ -47,6 +47,10 @@ export const MAX_PUSH_RECORDS = 200;
 /** Rows per pull page. A first sync of a year of history is thousands of rows,
  * so pulling is paged and the client loops until `hasMore` is false. */
 export const PULL_PAGE_SIZE = 500;
+/** Hard cap for one pull/exchange JSON response. The query keeps an 8 KiB
+ * envelope reserve for cursor/reset/entitlement metadata. */
+export const PULL_RESPONSE_MAX_UTF8_BYTES = 512 * 1024;
+const PULL_RECORDS_BYTE_BUDGET = PULL_RESPONSE_MAX_UTF8_BYTES - 8 * 1024;
 
 const SYNC_QUOTA_CONSTRAINTS = new Set([
   "users_sync_record_count_bounds",
@@ -391,24 +395,57 @@ export async function pullRecords(
     return { records: [], cursor: 0, hasMore: true, reset: true };
   }
 
-  const page = await db
-    .select()
-    .from(records)
-    .where(and(eq(records.userId, userId), gt(records.seq, safeCursor)))
-    .orderBy(records.seq)
-    // One extra row is the cheapest way to answer "is there another page?"
-    // without a second COUNT over the same index.
-    .limit(limit + 1);
-
-  const hasMore = page.length > limit;
-  const rows = hasMore ? page.slice(0, limit) : page;
+  const safeLimit = Math.max(1, Math.min(PULL_PAGE_SIZE, Math.floor(limit) || PULL_PAGE_SIZE));
+  const result = await db.execute(sql`
+    with candidates as (
+      select r.kind, r.id, r.data, r.updated_at, r.deleted, r.seq,
+             row_number() over (order by r.seq) as row_number,
+             sum(
+               octet_length(jsonb_build_object(
+                 'kind', r.kind,
+                 'id', r.id,
+                 'data', r.data,
+                 'updatedAt', r.updated_at,
+                 'deleted', r.deleted,
+                 'seq', r.seq
+               )::text) + 1
+             ) over (order by r.seq) as cumulative_bytes
+        from records r
+       where r.user_id = ${userId}::uuid and r.seq > ${safeCursor}::bigint
+       order by r.seq
+       limit ${safeLimit}
+    ), selected as (
+      select * from candidates
+       where row_number = 1 or cumulative_bytes <= ${PULL_RECORDS_BYTE_BUDGET}
+    ), boundary as (
+      select max(seq) as last_seq from selected
+    )
+    select s.kind, s.id, s.data, s.updated_at, s.deleted, s.seq,
+           exists (
+             select 1 from records later
+              where later.user_id = ${userId}::uuid
+                and later.seq > (select last_seq from boundary)
+           ) as has_more
+      from selected s
+     order by s.seq
+  `);
+  const rows = rowsOf<{
+    kind: string;
+    id: string;
+    data: unknown;
+    updated_at: string | number;
+    deleted: boolean;
+    seq: string | number;
+    has_more: boolean;
+  }>(result);
+  const hasMore = rows[0]?.has_more ?? false;
 
   return {
     records: rows.map((r) => ({
       kind: r.kind,
       id: r.id,
       data: r.data,
-      updatedAt: Number(r.updatedAt),
+      updatedAt: Number(r.updated_at),
       deleted: r.deleted,
       seq: Number(r.seq),
     })),

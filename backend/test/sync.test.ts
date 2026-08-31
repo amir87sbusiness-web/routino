@@ -5,7 +5,10 @@
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
-import { isAccountQuotaError } from "../src/services/sync.js";
+import {
+  isAccountQuotaError,
+  PULL_RESPONSE_MAX_UTF8_BYTES,
+} from "../src/services/sync.js";
 
 let h: Harness;
 
@@ -415,6 +418,40 @@ describe("sync", () => {
       hasMore = page.hasMore;
     }
     expect(seen.size).toBe(12);
+  });
+
+  it("bounds each pull by UTF-8 bytes and still eventually returns every large row", async () => {
+    const { access, user } = await signIn("09120000029");
+    await h.raw(`
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      select '${user.id}', 'journal', 'large-' || n,
+             jsonb_build_object('text', repeat('x', 40000)), n, false, n
+        from generate_series(1, 20) n;
+      update users set seq = 20 where id = '${user.id}';
+    `);
+
+    const seen = new Set<string>();
+    let cursor = 0;
+    let hasMore = true;
+    while (hasMore) {
+      const response = await pull(access, cursor);
+      expect(Buffer.byteLength(response.body, "utf8")).toBeLessThanOrEqual(
+        PULL_RESPONSE_MAX_UTF8_BYTES,
+      );
+      const page = response.json() as {
+        records: { id: string }[];
+        cursor: number;
+        hasMore: boolean;
+      };
+      expect(page.records.length).toBeGreaterThan(0);
+      for (const record of page.records) {
+        expect(seen.has(record.id)).toBe(false);
+        seen.add(record.id);
+      }
+      cursor = page.cursor;
+      hasMore = page.hasMore;
+    }
+    expect(seen.size).toBe(20);
   });
 
   it("tells a device that fell behind the tombstone purge to start over", async () => {
