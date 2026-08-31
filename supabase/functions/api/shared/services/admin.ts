@@ -4,12 +4,13 @@
  * function (so the Fastify route and the Hono route can never drift, and both
  * get the same optimisations). The route adapters only do auth + zod parsing.
  *
- * Performance: the dashboard's overview fans out seven independent counts in a
- * single `Promise.all`, so the panel's landing query is one round-trip's worth
- * of latency instead of seven. The per-user detail view does the same.
+ * Performance: the dashboard overview is one aggregate SQL statement. This is
+ * one pool checkout and one network round-trip in production, while each source
+ * table is scanned at most once. The per-user detail view still fans out its
+ * independent, on-demand history reads.
  */
-import { and, count, desc, eq, gt, ilike, sql } from "drizzle-orm";
-import type { Database } from "../db/client.ts";
+import { desc, eq, ilike, sql } from "drizzle-orm";
+import { rowsOf, type Database } from "../db/client.ts";
 import { discounts, entitlements, otpCodes, payments, users } from "../db/schema.ts";
 import { badRequest, notFound } from "../lib/http-errors.ts";
 import { normalizePhone, toAsciiDigits } from "../lib/phone.ts";
@@ -21,38 +22,73 @@ const DAY_MS = 86_400_000;
 export async function adminOverview(db: Database, now: Date) {
   const dayAgo = new Date(now.getTime() - DAY_MS);
 
-  // All independent — one parallel batch, not seven serial round-trips.
-  const [totalUsers, newUsers, activeSubs, paid, paidToday, otpToday, verifyFailed, pending] =
-    await Promise.all([
-      db.select({ n: count() }).from(users),
-      db.select({ n: count() }).from(users).where(gt(users.createdAt, dayAgo)),
-      db.select({ n: count() }).from(entitlements).where(gt(entitlements.expiresAt, now)),
-      db
-        .select({ n: count(), revenue: sql<string>`coalesce(sum(${payments.amountToman}), 0)` })
-        .from(payments)
-        .where(eq(payments.status, "paid")),
-      db
-        .select({ n: count(), revenue: sql<string>`coalesce(sum(${payments.amountToman}), 0)` })
-        .from(payments)
-        .where(and(eq(payments.status, "paid"), gt(payments.createdAt, dayAgo))),
-      db.select({ n: count() }).from(otpCodes).where(gt(otpCodes.createdAt, dayAgo)),
-      // verify_failed = amount mismatch; must never happen. Surfaced loudly.
-      db.select({ n: count() }).from(payments).where(eq(payments.status, "verify_failed")),
-      db.select({ n: count() }).from(payments).where(eq(payments.status, "redirected")),
-    ]);
+  type AggregateRow = {
+    total_users: number | string | bigint;
+    new_users: number | string | bigint;
+    active_subscriptions: number | string | bigint;
+    paid_total: number | string | bigint;
+    revenue_toman: number | string | bigint;
+    paid_last_24h: number | string | bigint;
+    revenue_toman_last_24h: number | string | bigint;
+    pending: number | string | bigint;
+    verify_failed: number | string | bigint;
+    otp_sent_last_24h: number | string | bigint;
+  };
+
+  const result = await db.execute(sql`
+    with user_stats as (
+      select
+        count(*) as total_users,
+        count(*) filter (
+          where ${users.createdAt} > ${dayAgo.toISOString()}::timestamptz
+        ) as new_users
+      from ${users}
+    ), subscription_stats as (
+      select count(*) filter (
+        where ${entitlements.expiresAt} > ${now.toISOString()}::timestamptz
+      ) as active_subscriptions
+      from ${entitlements}
+    ), payment_stats as (
+      select
+        count(*) filter (where ${payments.status} = ${"paid"}) as paid_total,
+        coalesce(sum(${payments.amountToman}) filter (
+          where ${payments.status} = ${"paid"}
+        ), 0) as revenue_toman,
+        count(*) filter (
+          where ${payments.status} = ${"paid"}
+            and ${payments.createdAt} > ${dayAgo.toISOString()}::timestamptz
+        ) as paid_last_24h,
+        coalesce(sum(${payments.amountToman}) filter (
+          where ${payments.status} = ${"paid"}
+            and ${payments.createdAt} > ${dayAgo.toISOString()}::timestamptz
+        ), 0) as revenue_toman_last_24h,
+        count(*) filter (where ${payments.status} = ${"redirected"}) as pending,
+        count(*) filter (where ${payments.status} = ${"verify_failed"}) as verify_failed
+      from ${payments}
+    ), otp_stats as (
+      select count(*) filter (
+        where ${otpCodes.createdAt} > ${dayAgo.toISOString()}::timestamptz
+      ) as otp_sent_last_24h
+      from ${otpCodes}
+    )
+    select * from user_stats, subscription_stats, payment_stats, otp_stats
+  `);
+  const row = rowsOf<AggregateRow>(result)[0];
+  const metric = (value: number | string | bigint | undefined) => Number(value ?? 0);
 
   return {
-    users: { total: totalUsers[0]?.n ?? 0, last24h: newUsers[0]?.n ?? 0 },
-    activeSubscriptions: activeSubs[0]?.n ?? 0,
+    users: { total: metric(row?.total_users), last24h: metric(row?.new_users) },
+    activeSubscriptions: metric(row?.active_subscriptions),
     payments: {
-      paidTotal: paid[0]?.n ?? 0,
-      revenueToman: Number(paid[0]?.revenue ?? 0),
-      paidLast24h: paidToday[0]?.n ?? 0,
-      revenueTomanLast24h: Number(paidToday[0]?.revenue ?? 0),
-      pending: pending[0]?.n ?? 0,
+      paidTotal: metric(row?.paid_total),
+      revenueToman: metric(row?.revenue_toman),
+      paidLast24h: metric(row?.paid_last_24h),
+      revenueTomanLast24h: metric(row?.revenue_toman_last_24h),
+      pending: metric(row?.pending),
     },
-    alerts: { verifyFailed: verifyFailed[0]?.n ?? 0 },
-    otpSentLast24h: otpToday[0]?.n ?? 0,
+    // verify_failed = amount mismatch; must never happen. Surfaced loudly.
+    alerts: { verifyFailed: metric(row?.verify_failed) },
+    otpSentLast24h: metric(row?.otp_sent_last_24h),
     serverTime: now.toISOString(),
   };
 }

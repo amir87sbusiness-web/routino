@@ -33,13 +33,13 @@ export const ADMIN_PAGE = `<!doctype html>
   .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:42px;padding:8px 13px;border:1px solid transparent;border-radius:12px;background:var(--brand);color:#fff;font-weight:700;cursor:pointer;transition:transform .15s ease,background .15s ease,box-shadow .15s ease}.btn:hover{background:#c75f12;box-shadow:0 7px 16px rgba(188,81,15,.17)}.btn:active{transform:scale(.98)}.btn:disabled{cursor:wait;opacity:.6;box-shadow:none}.btn.secondary{border-color:var(--line);background:var(--surface);color:var(--txt)}.btn.secondary:hover{background:var(--surface-soft);box-shadow:none}.btn.danger{background:var(--bad)}.btn.mini{min-height:34px;padding:5px 10px;border-radius:9px;font-size:11px}
   .login-card .btn{width:100%;margin-top:3px}.panel-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin:2px 0 16px}.panel-head h2{margin:0;font-size:20px;letter-spacing:-.03em}.panel-head p{margin:2px 0 0;color:var(--mut);font-size:12px}
   nav{display:flex;gap:8px;overflow-x:auto;margin:0 -16px 18px;padding:0 16px 4px;scrollbar-width:none}nav::-webkit-scrollbar{display:none}nav button{flex:0 0 auto;min-height:42px;padding:8px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--mut);font-weight:700;cursor:pointer;transition:background .15s,color .15s,border-color .15s}nav button:hover{background:var(--surface-soft);color:var(--txt)}nav button.on{border-color:transparent;background:var(--brand);color:#fff;box-shadow:0 6px 14px rgba(188,81,15,.16)}
-  .cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.metric{min-height:118px;padding:15px;background:var(--surface);border:1px solid var(--line);border-radius:17px;box-shadow:0 1px 3px rgba(62,47,33,.035)}.metric .k{color:var(--mut);font-size:11px;font-weight:700}.metric .v{margin-top:4px;font-size:clamp(20px,5vw,28px);font-weight:900;line-height:1.35;font-variant-numeric:tabular-nums}.metric.alert{grid-column:1/-1;min-height:auto;border-color:#f3b1a9;background:var(--bad-soft)}.metric.alert .k,.metric.alert .v{color:#9f2727}
+  .overview-groups{display:grid;gap:14px}.metric-group{overflow:hidden;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:0 2px 8px rgba(62,47,33,.035)}.metric-group-head{display:flex;align-items:center;min-height:43px;padding:9px 14px;background:var(--surface-soft)}.metric-group-head h3{margin:0;font-size:12px;font-weight:900;letter-spacing:-.01em}.metric-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;padding-top:1px;background:var(--line)}.metric{min-width:0;min-height:102px;padding:14px;background:var(--surface)}.metric .k{color:var(--mut);font-size:11px;font-weight:700}.metric .v{margin-top:5px;overflow-wrap:anywhere;font-size:clamp(19px,5vw,27px);font-weight:900;line-height:1.35;font-variant-numeric:tabular-nums}.metric.warn{background:#fff8e8}.metric.warn .v{color:#8b5a00}.metric.danger{background:var(--bad-soft)}.metric.danger .k,.metric.danger .v{color:#9f2727}.metric-group.attention{border-color:#ead8c7}.metric-group.attention .metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .section-surface{padding:14px;background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:0 1px 3px rgba(62,47,33,.035)}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.row + .row{margin-top:10px}.row input:not([type="number"]){min-width:0;flex:1 1 180px}.helper{padding:11px 12px;background:var(--surface-soft);border:1px dashed #d7d0c6;border-radius:13px}.helper strong{font-size:12px}.muted{color:var(--mut);font-size:12px}
   .result{margin-top:12px}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:14px;background:var(--surface)}table{width:100%;min-width:700px;border-collapse:collapse}th,td{padding:11px 12px;border-bottom:1px solid var(--line);text-align:right;vertical-align:middle;white-space:nowrap;font-size:12px}th{position:sticky;top:0;background:var(--surface-soft);color:var(--mut);font-size:11px;font-weight:700}tbody tr:last-child td{border-bottom:0}tbody tr:hover{background:#fffaf5}.pill{display:inline-flex;align-items:center;min-height:24px;padding:2px 9px;border-radius:999px;font-size:10px;font-weight:900}.pill.ok{background:var(--ok-soft);color:var(--ok)}.pill.bad{background:var(--bad-soft);color:var(--bad)}.pill.mut{background:#f1efeb;color:#716960}
   .empty,.load-state,.error-state{display:grid;place-items:center;min-height:170px;padding:24px;text-align:center;color:var(--mut);border:1px dashed #d8d1c8;border-radius:14px;background:var(--surface-soft)}.error-state{color:var(--bad);border-color:#f3b1a9;background:var(--bad-soft)}.state-copy{max-width:30rem;margin:0 0 10px;font-size:12px}.skeleton{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.sk{height:118px;border-radius:17px;background:linear-gradient(100deg,#f2efe9 30%,#faf8f4 48%,#f2efe9 66%);background-size:200% 100%;animation:shine 1.2s linear infinite}@keyframes shine{to{background-position:-200% 0}}@media (prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
   dialog{width:min(720px,calc(100% - 32px));max-height:min(86vh,780px);padding:0;overflow:hidden;border:0;border-radius:22px;background:var(--surface);color:var(--txt);box-shadow:0 24px 80px rgba(45,34,23,.28)}dialog::backdrop{background:rgba(35,29,24,.48);backdrop-filter:blur(2px)}.dialog-body{max-height:min(86vh,780px);padding:20px;overflow:auto}.dialog-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}.dialog-head h2{margin:0;font-size:18px}.dialog-head p{margin:2px 0 0}.dialog-actions{padding-bottom:14px;border-bottom:1px solid var(--line)}.dialog-section{margin-top:18px}.dialog-section h3{margin:0 0 8px;font-size:13px}.dialog-section .table-wrap{border-radius:12px}.dialog-section table{min-width:540px}.close{min-width:42px;padding:8px}.dialog-load{min-height:300px}
-  @media (min-width:680px){.topbar{padding-inline:max(24px,env(safe-area-inset-right))}.status{display:block}.cards{grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.metric{min-height:128px;padding:17px}.panel-head h2{font-size:23px}.section-surface{padding:16px}.toolbar{gap:8px}}
-  @media (min-width:1024px){main{padding-top:28px}.cards{grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.metric{min-height:136px}.metric .v{font-size:29px}.panel-head{margin-bottom:20px}nav{margin:0 0 20px;padding:0}.section-surface{padding:18px}}
+  @media (min-width:680px){.topbar{padding-inline:max(24px,env(safe-area-inset-right))}.status{display:block}.overview-groups{gap:16px}.metric-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.metric{min-height:112px;padding:16px}.metric-group.attention .metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.panel-head h2{font-size:23px}.section-surface{padding:16px}.toolbar{gap:8px}}
+  @media (min-width:1024px){main{padding-top:28px}.overview-groups{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}.metric-group:first-child{grid-column:1/-1}.metric{min-height:118px}.metric .v{font-size:28px}.panel-head{margin-bottom:20px}nav{margin:0 0 20px;padding:0}.section-surface{padding:18px}}
   @media (max-width:679px){.toolbar .btn{min-width:42px;padding-inline:10px}.toolbar .btn .wide-label{display:none}.toolbar .btn .short-label{display:inline}.login-card{padding:24px 20px}.panel-head{align-items:flex-start;flex-direction:column}.panel-head .btn{width:100%}dialog{width:100%;max-width:none;height:100dvh;max-height:100dvh;margin:0;border-radius:0}.dialog-body{max-height:100dvh;min-height:100dvh;padding:18px max(16px,env(safe-area-inset-right)) calc(22px + env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}.dialog-actions .btn{flex:1 1 130px}.dialog-section table{min-width:500px}}
 </style>
 </head>
@@ -77,7 +77,7 @@ export const ADMIN_PAGE = `<!doctype html>
     <button type="button" role="tab" aria-selected="false" aria-controls="tab-discounts" id="tab-button-discounts" data-tab="discounts">کدهای تخفیف</button>
   </nav>
 
-  <section id="tab-overview" role="tabpanel" aria-labelledby="tab-button-overview"><div class="cards" id="ovCards" aria-live="polite"></div></section>
+  <section id="tab-overview" role="tabpanel" aria-labelledby="tab-button-overview"><div class="overview-groups" id="ovCards" aria-live="polite"></div></section>
 
   <section id="tab-users" role="tabpanel" aria-labelledby="tab-button-users" style="display:none">
     <div class="section-surface">
@@ -101,7 +101,55 @@ export const ADMIN_PAGE = `<!doctype html>
 
 <script>
 const $ = (s) => document.querySelector(s);
+const REQUEST_TIMEOUT_MS = 8000;
+const OVERVIEW_CACHE_KEY = "routino_admin_overview_v1";
 let otpRequested = false;
+let overviewRequest = null;
+
+const finiteMetric = (value) => typeof value === "number" && Number.isFinite(value);
+function safeOverview(value) {
+  if (!value || !value.users || !value.payments || !value.alerts) return null;
+  const metrics = [
+    value.users.total, value.users.last24h, value.activeSubscriptions,
+    value.payments.paidTotal, value.payments.revenueToman, value.payments.paidLast24h,
+    value.payments.revenueTomanLast24h, value.payments.pending,
+    value.alerts.verifyFailed, value.otpSentLast24h,
+  ];
+  if (!metrics.every(finiteMetric) || typeof value.serverTime !== "string") return null;
+  return {
+    users: { total: value.users.total, last24h: value.users.last24h },
+    activeSubscriptions: value.activeSubscriptions,
+    payments: {
+      paidTotal: value.payments.paidTotal,
+      revenueToman: value.payments.revenueToman,
+      paidLast24h: value.payments.paidLast24h,
+      revenueTomanLast24h: value.payments.revenueTomanLast24h,
+      pending: value.payments.pending,
+    },
+    alerts: { verifyFailed: value.alerts.verifyFailed },
+    otpSentLast24h: value.otpSentLast24h,
+    serverTime: value.serverTime,
+  };
+}
+function clearOverviewCache() {
+  try { sessionStorage.removeItem(OVERVIEW_CACHE_KEY); } catch {}
+}
+function readOverviewCache() {
+  try {
+    const raw = sessionStorage.getItem(OVERVIEW_CACHE_KEY);
+    if (!raw) return null;
+    const snapshot = JSON.parse(raw), data = safeOverview(snapshot && snapshot.data);
+    if (snapshot.version !== 1 || !finiteMetric(snapshot.savedAt) || !data) throw new Error("bad cache");
+    return { savedAt: snapshot.savedAt, data };
+  } catch { clearOverviewCache(); return null; }
+}
+function writeOverviewCache(value) {
+  const data = safeOverview(value);
+  if (!data) throw new Error("پاسخ آمار معتبر نبود؛ دوباره تلاش کن.");
+  const snapshot = { version: 1, savedAt: Date.now(), data };
+  try { sessionStorage.setItem(OVERVIEW_CACHE_KEY, JSON.stringify(snapshot)); } catch {}
+  return snapshot;
+}
 
 function cookieValue(name) {
   const prefix = name + "=";
@@ -109,15 +157,28 @@ function cookieValue(name) {
   return part ? decodeURIComponent(part.slice(prefix.length)) : "";
 }
 
+async function request(url, init) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error("زمان پاسخ سرور بیش از حد طول کشید؛ دوباره تلاش کن.");
+    throw error;
+  } finally { clearTimeout(timeout); }
+}
+
 async function authApi(path, opts = {}) {
-  const res = await fetch("/v1/admin/auth" + path, {
-    method: opts.method || "GET",
-    credentials: "same-origin",
+  const res = await request("/v1/admin/auth" + path, {
+    method: opts.method || "GET", credentials: "same-origin",
     headers: opts.body ? { "content-type": "application/json" } : {},
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   const body = res.status === 204 ? null : await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body && body.message || "ارتباط با سرور برقرار نشد");
+  if (!res.ok) {
+    const error = new Error(body && body.message || "ارتباط با سرور برقرار نشد");
+    error.status = res.status; throw error;
+  }
   return body;
 }
 
@@ -125,13 +186,11 @@ async function api(path, opts = {}) {
   const method = opts.method || "GET";
   const headers = opts.body ? { "content-type": "application/json" } : {};
   if (method === "POST") headers["x-admin-csrf"] = cookieValue("routino_admin_csrf");
-  const res = await fetch("/v1/admin" + path, {
-    method,
-    credentials: "same-origin",
-    headers,
+  const res = await request("/v1/admin" + path, {
+    method, credentials: "same-origin", headers,
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
-  if (res.status === 401) { showLogin("نشست مدیریت منقضی شده؛ دوباره وارد شو."); throw new Error("نشست مدیریت منقضی شده است"); }
+  if (res.status === 401) { clearOverviewCache(); showLogin("نشست مدیریت منقضی شده؛ دوباره وارد شو."); throw new Error("نشست مدیریت منقضی شده است"); }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.message || "دریافت اطلاعات ممکن نشد");
   return body;
@@ -145,10 +204,14 @@ function showLogin(message) {
   $("#adminOtp").value = ""; $("#enter").textContent = "ارسال کد ورود";
   $("#loginErr").textContent = message || ""; setStatus("");
 }
-function showPanel(overview) {
+function updatedLabel(savedAt) {
+  return new Date(savedAt).toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" });
+}
+function showPanel(snapshot) {
   $("#login").style.display = "none"; $("#panel").style.display = "";
   $("#logout").style.display = ""; $("#refreshOverview").style.display = "";
-  renderOverview(overview); setStatus("آمار به‌روز است");
+  if (snapshot) { renderOverview(snapshot.data); setStatus("آمار ذخیره‌شده · در حال به‌روزرسانی…"); }
+  else { loading("ovCards"); setStatus("در حال به‌روزرسانی آمار…"); }
 }
 function setLoginBusy(busy) {
   $("#enter").disabled = busy;
@@ -177,7 +240,7 @@ $("#loginForm").onsubmit = async (event) => {
     const code = $("#adminOtp").value.trim();
     if (!code) { $("#loginErr").textContent = "کد پیامک‌شده را وارد کن."; return; }
     await authApi("/otp/verify", { method: "POST", body: { phone, code } });
-    showPanel(await api("/overview"));
+    showPanel(readOverviewCache()); void loadOverview();
   } catch (error) {
     if ($("#login").style.display !== "") $("#loginErr").textContent = error.message || "ورود ممکن نشد";
   } finally { setLoginBusy(false); }
@@ -186,7 +249,7 @@ $("#changePhone").onclick = () => { showLogin(); $("#adminPhone").focus(); };
 $("#logout").onclick = async () => {
   $("#logout").disabled = true;
   try { await authApi("/logout", { method: "POST" }); }
-  finally { $("#logout").disabled = false; showLogin(); $("#adminPhone").focus(); }
+  finally { clearOverviewCache(); $("#logout").disabled = false; showLogin(); $("#adminPhone").focus(); }
 };
 $("#refreshOverview").onclick = () => loadOverview();
 $("#overviewRetry").onclick = () => loadOverview();
@@ -210,20 +273,37 @@ const dt = (v) => v ? new Date(v).toLocaleString("fa-IR", { dateStyle: "short", 
 const localPhone = (p) => (p || "").startsWith("98") ? "0" + p.slice(2) : p;
 
 function renderOverview(o) {
-  const alert = o.alerts && o.alerts.verifyFailed > 0
-    ? '<div class="metric alert"><div class="k">پرداخت با خطای تأیید — امروز پیگیری شود</div><div class="v">' + fa(o.alerts.verifyFailed) + "</div></div>"
-    : "";
-  $("#ovCards").innerHTML = alert + [
-    ["کل کاربران", fa(o.users.total)], ["کاربر جدید (۲۴ ساعت)", fa(o.users.last24h)],
-    ["اشتراک فعال", fa(o.activeSubscriptions)], ["پرداخت موفق", fa(o.payments.paidTotal)],
-    ["درآمد کل (تومان)", fa(o.payments.revenueToman)], ["درآمد ۲۴ ساعت (تومان)", fa(o.payments.revenueTomanLast24h)],
-    ["در انتظار درگاه", fa(o.payments.pending)], ["پیامک ۲۴ ساعت", fa(o.otpSentLast24h)],
-  ].map(([label, value]) => '<article class="metric"><div class="k">' + label + '</div><div class="v">' + value + "</div></article>").join("");
+  const group = (title, items, tone = "") => '<section class="metric-group ' + tone + '"><div class="metric-group-head"><h3>' + title + '</h3></div><div class="metric-grid">' + items.map(([label, value, state]) => '<article class="metric ' + (state || "") + '"><div class="k">' + label + '</div><div class="v">' + value + "</div></article>").join("") + "</div></section>";
+  $("#ovCards").innerHTML =
+    group("امروز", [
+      ["کاربر جدید", fa(o.users.last24h)], ["پرداخت موفق", fa(o.payments.paidLast24h)],
+      ["درآمد (تومان)", fa(o.payments.revenueTomanLast24h)], ["پیامک ارسال‌شده", fa(o.otpSentLast24h)],
+    ]) +
+    group("کسب‌وکار", [
+      ["کل کاربران", fa(o.users.total)], ["اشتراک فعال", fa(o.activeSubscriptions)],
+      ["کل پرداخت موفق", fa(o.payments.paidTotal)], ["کل درآمد (تومان)", fa(o.payments.revenueToman)],
+    ]) +
+    group("نیاز به توجه", [
+      ["در انتظار درگاه", fa(o.payments.pending), o.payments.pending > 0 ? "warn" : ""],
+      ["خطای تأیید پرداخت", fa(o.alerts.verifyFailed), o.alerts.verifyFailed > 0 ? "danger" : ""],
+    ], "attention");
 }
-async function loadOverview() {
-  loading("ovCards"); setStatus("در حال به‌روزرسانی آمار…");
-  try { renderOverview(await api("/overview")); setStatus("آمار به‌روز است"); }
-  catch (error) { errorState("ovCards", error.message || "آمار دریافت نشد", loadOverview); setStatus("خطا در دریافت آمار"); }
+function loadOverview() {
+  if (overviewRequest) return overviewRequest;
+  const hasMetrics = Boolean($("#ovCards .metric"));
+  if (!hasMetrics) loading("ovCards");
+  setStatus("در حال به‌روزرسانی آمار…");
+  overviewRequest = (async () => {
+    try {
+      const snapshot = writeOverviewCache(await api("/overview"));
+      renderOverview(snapshot.data); setStatus("آخرین به‌روزرسانی: " + updatedLabel(snapshot.savedAt));
+    }
+    catch (error) {
+      if (!hasMetrics) errorState("ovCards", error.message || "آمار دریافت نشد", loadOverview);
+      setStatus("خطا در دریافت آمار");
+    } finally { overviewRequest = null; }
+  })();
+  return overviewRequest;
 }
 
 async function loadUsers() {
@@ -250,6 +330,7 @@ $("#resetPasswordForm").onsubmit = async (event) => {
     const result = await api("/users/set-password", { method: "POST", body: { phone, password } });
     alert(result.created ? "حساب ساخته شد و رمز تنظیم شد." : "رمز عبور به‌روزرسانی شد.");
     $("#spPhone").value = ""; $("#spPass").value = ""; loadUsers();
+    if (result.created) void loadOverview();
   } catch (error) { $("#spErr").textContent = error.message || "ثبت رمز ممکن نشد"; }
   finally { $("#spGo").disabled = false; }
 };
@@ -269,7 +350,7 @@ window.openUser = async (id) => {
       '<section class="dialog-section"><h3>پرداخت‌ها</h3><div class="table-wrap"><table><thead><tr><th>تاریخ</th><th>پلن</th><th>مبلغ</th><th>وضعیت</th><th>پیگیری</th></tr></thead><tbody>' + (d.payments.length ? d.payments.map((p) => "<tr><td>" + dt(p.createdAt) + "</td><td>" + esc(p.planId) + "</td><td>" + fa(p.amountToman) + "</td><td>" + esc(p.status) + "</td><td dir='ltr'>" + esc(p.refNumber || "—") + "</td></tr>").join("") : "<tr><td colspan='5' class='muted'>پرداختی ثبت نشده است.</td></tr>") + '</tbody></table></div></section>' +
       '<section class="dialog-section"><h3>تاریخچهٔ دسترسی</h3><div class="table-wrap"><table><thead><tr><th>تاریخ</th><th>منبع</th><th>مدت</th><th>تا</th></tr></thead><tbody>' + (d.grants.length ? d.grants.map((g) => "<tr><td>" + dt(g.createdAt) + "</td><td>" + esc(g.source) + "</td><td>" + fa(g.months) + " ماه " + fa(g.days) + " روز</td><td>" + dt(g.expiresAfter) + "</td></tr>").join("") : "<tr><td colspan='4' class='muted'>سابقه‌ای ثبت نشده است.</td></tr>") + '</tbody></table></div></section></div>';
     $("#closeUserDlg").onclick = () => dlg.close();
-    $("#gGo").onclick = async () => { const months = Number($("#gMonths").value) || 0, days = Number($("#gDays").value) || 0; if (!months && !days) return alert("ماه یا روز را وارد کن"); await api("/users/" + id + "/grant", { method: "POST", body: { months, days, note: "panel" } }); dlg.close(); loadUsers(); };
+    $("#gGo").onclick = async () => { const months = Number($("#gMonths").value) || 0, days = Number($("#gDays").value) || 0; if (!months && !days) return alert("ماه یا روز را وارد کن"); await api("/users/" + id + "/grant", { method: "POST", body: { months, days, note: "panel" } }); dlg.close(); loadUsers(); void loadOverview(); };
   } catch (error) {
     dlg.innerHTML = '<div class="dialog-body dialog-load"><div class="error-state"><div><p class="state-copy">' + esc(error.message || "جزئیات کاربر دریافت نشد") + '</p><button class="btn secondary mini" type="button" id="retryUserDlg">تلاش دوباره</button></div></div></div>';
     $("#retryUserDlg").onclick = () => window.openUser(id);
@@ -306,8 +387,8 @@ $("#dCreate").onclick = async () => {
 
 async function boot() {
   setStatus("در حال بررسی نشست مدیریت…");
-  try { await authApi("/session"); showPanel(await api("/overview")); }
-  catch { showLogin(); }
+  try { await authApi("/session"); showPanel(readOverviewCache()); void loadOverview(); }
+  catch (error) { if (error && error.status === 401) clearOverviewCache(); showLogin(); }
 }
 boot();
 </script>
