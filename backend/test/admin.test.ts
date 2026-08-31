@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { adminSignIn, makeHarness, type Harness } from "./helpers/pglite.js";
 
 let h: Harness;
@@ -12,6 +12,7 @@ beforeEach(async () => {
 afterAll(async () => {
   await h?.close();
 });
+afterEach(() => vi.restoreAllMocks());
 
 async function signIn(phone = "09123334444") {
   await h.app.inject({ method: "POST", url: "/v1/auth/otp/request", payload: { phone } });
@@ -69,8 +70,10 @@ describe("admin endpoints", () => {
       url: `/v1/payments/callback?paymentId=${checkout.paymentId}&Authority=${checkout.authority}&Status=OK`,
     });
 
+    const execute = vi.spyOn(h.db, "execute");
     const res = await h.app.inject({ method: "GET", url: "/v1/admin/overview", headers: admin });
     const body = res.json();
+    expect(execute).toHaveBeenCalledTimes(1);
     expect(body.users.total).toBe(1);
     expect(body.activeSubscriptions).toBe(1);
     expect(body.payments.paidTotal).toBe(1);
