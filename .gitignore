@@ -46,6 +46,7 @@ android/keystore.properties
 # Isolated Codex feature worktrees
 .worktrees/
 .playwright-cli/
+.wrangler/
 /tmp/
 
 # Written by `supabase link`: project ref and pooler URL for THIS machine.
