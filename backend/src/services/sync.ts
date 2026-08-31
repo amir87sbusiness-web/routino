@@ -22,7 +22,7 @@
  *
  * Deletes are rows, never absences: a tombstone has to be able to travel.
  */
-import { and, eq, gt, like, sql } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import { rowsOf, type Database } from "../db/client.js";
 import { records, users } from "../db/schema.js";
 import { badRequest } from "../lib/http-errors.js";
@@ -191,28 +191,6 @@ function clampRecordClock(record: PushRecord, ceiling: number): PushRecord {
   };
 }
 
-/**
- * Month ids belonging to a habit, so deleting the habit can bury its history.
- *
- * The client sends ONE habit tombstone rather than one per month. Month ids are
- * `habitId|YYYY-MM`, so the prefix match is exact rather than heuristic.
- */
-async function childMonthIds(db: Database, userId: string, habitId: string): Promise<string[]> {
-  const rows = await db
-    .select()
-    .from(records)
-    .where(
-      and(
-        eq(records.userId, userId),
-        eq(records.kind, "habitMonths"),
-        eq(records.deleted, false),
-        // `habitId` came through ID_RE, so it holds no LIKE wildcards.
-        like(records.id, `${habitId}|%`),
-      ),
-    );
-  return rows.map((r) => r.id);
-}
-
 export async function pushRecords(
   db: Database,
   userId: string,
@@ -229,17 +207,11 @@ export async function pushRecords(
   const ceiling = now.getTime() + CLOCK_SKEW_TOLERANCE_MS;
   const stamped = valid.map((record) => clampRecordClock(record, ceiling));
 
-  // Expand habit deletes into month tombstones before the write, so the sequence
-  // block below is sized to everything actually written.
-  const cascaded: PushRecord[] = [];
-  for (const r of stamped) {
-    if (r.kind !== "habits" || !r.deleted) continue;
-    for (const id of await childMonthIds(db, userId, r.id)) {
-      cascaded.push({ kind: "habitMonths", id, data: null, updatedAt: r.updatedAt, deleted: true });
-    }
-  }
-
-  const all = dedupe([...stamped, ...cascaded]);
+  // Incoming work is capped at 200, so this bounded JS dedupe is safe. Habit
+  // month cascades are intentionally NOT materialised here: one long-lived
+  // habit can own thousands of rows, and production Edge memory must not scale
+  // with account history.
+  const all = dedupe(stamped);
 
   const values = all.map(
     (r, i) =>
@@ -263,17 +235,49 @@ export async function pushRecords(
   let res: Awaited<ReturnType<Database["execute"]>>;
   try {
     res = await db.execute(sql`
-      with bump as (
-      update users set seq = seq + ${all.length} where id = ${userId} returning seq
-      ),
-      incoming (kind, id, data, updated_at, deleted, ord) as (
+      with incoming (kind, id, data, updated_at, deleted, ord) as (
       values ${sql.join(values, sql`, `)}
+      ),
+      cascaded (kind, id, data, updated_at, deleted, ord) as (
+        select 'habitMonths'::text, child.id, null::jsonb,
+               parent.updated_at, true,
+               ${all.length}::bigint + row_number() over (order by child.id)
+          from incoming parent
+          join records child
+            on child.user_id = ${userId}::uuid
+           and child.kind = 'habitMonths'
+           and child.deleted = false
+           and child.id like parent.id || '|%'
+         where parent.kind = 'habits' and parent.deleted = true
+      ),
+      combined as (
+        select * from incoming
+        union all
+        select * from cascaded
+      ),
+      deduped as (
+        select distinct on (kind, id)
+               kind, id, data, updated_at, deleted, ord
+          from combined
+         order by kind, id, updated_at desc, deleted desc, ord
+      ),
+      numbered as (
+        select kind, id, data, updated_at, deleted,
+               row_number() over (order by ord, kind, id)::bigint as position
+          from deduped
+      ),
+      sized as (
+        select count(*)::bigint as total from numbered
+      ),
+      bump as (
+        update users u set seq = u.seq + sized.total
+          from sized where u.id = ${userId} returning u.seq
       ),
       upserted as (
       insert into records (user_id, kind, id, data, updated_at, deleted, seq)
       select ${userId}::uuid, i.kind, i.id, i.data, i.updated_at, i.deleted,
-             b.seq - ${all.length} + 1 + i.ord
-        from incoming i cross join bump b
+             b.seq - s.total + i.position
+        from numbered i cross join sized s cross join bump b
       on conflict (user_id, kind, id) do update
         set data = case
               when excluded.kind = 'habitMonths'
@@ -325,7 +329,9 @@ export async function pushRecords(
         end
       returning 1 as ok
       )
-      select (select seq from bump) as cursor, (select count(*) from upserted) as applied
+      select (select seq from bump) as cursor,
+             (select count(*) from upserted) as applied,
+             (select total from sized) as total
     `);
   } catch (error) {
     if (!isAccountQuotaError(error)) throw error;
@@ -348,14 +354,18 @@ export async function pushRecords(
     };
   }
 
-  const [row] = rowsOf<{ cursor: string | number; applied: string | number }>(res);
+  const [row] = rowsOf<{
+    cursor: string | number;
+    applied: string | number;
+    total: string | number;
+  }>(res);
   if (!row) throw new Error("sync push produced no result row");
   // bigint and count() arrive as strings on node-postgres, numbers on PGlite.
   const applied = Number(row.applied);
   return {
     cursor: Number(row.cursor),
     applied,
-    skipped: all.length - applied,
+    skipped: Number(row.total) - applied,
     rejectedRecords,
   };
 }
