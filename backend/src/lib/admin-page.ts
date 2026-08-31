@@ -2,10 +2,9 @@
  * The admin panel page — one self-contained HTML string.
  *
  * Framework-free so both HTTP layers (Fastify locally, the Supabase Edge
- * Function in production) serve the exact same panel. It talks to /v1/admin/*
- * with the token the operator enters (kept in localStorage, sent only as a
- * header); without a valid token every call returns 401, so the shell reveals
- * nothing but the fact an admin panel exists.
+ * Function in production) serve the exact same panel. Authentication is an
+ * owner-only OTP followed by a signed HttpOnly cookie; the browser never stores
+ * or handles a reusable admin secret.
  */
 export const ADMIN_PAGE = `<!doctype html>
 <html lang="fa" dir="rtl">
@@ -13,6 +12,7 @@ export const ADMIN_PAGE = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='9' fill='%23dd6d19'/%3E%3Cpath d='m9 16 4 4 10-10' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <title>روتینو — پنل مدیریت</title>
 <style>
   :root{--bg:#fdfcf9;--surface:#fff;--surface-soft:#fbfaf7;--line:#e7e3dc;--txt:#302d29;--mut:#776f67;--brand:#dd6d19;--brand-soft:#fff0e4;--ok:#177c45;--ok-soft:#e7f6ec;--bad:#be3434;--bad-soft:#fff0ef;--shadow:0 16px 38px rgba(62,47,33,.07);color-scheme:light}
@@ -28,7 +28,7 @@ export const ADMIN_PAGE = `<!doctype html>
   .login-shell{display:grid;min-height:calc(100vh - 68px);place-items:center;padding:24px}.login-card{width:min(100%,390px);padding:28px;background:var(--surface);border:1px solid var(--line);border-radius:24px;box-shadow:var(--shadow)}
   .login-card h2{margin:0 0 4px;font-size:22px;letter-spacing:-.03em}.login-card p{margin:0 0 22px;color:var(--mut);font-size:13px}.field-label{display:block;margin:0 0 7px;font-size:12px;font-weight:700;color:var(--mut)}
   input,select{min-height:44px;border:1px solid var(--line);border-radius:12px;padding:9px 12px;background:var(--surface);color:var(--txt);transition:border-color .15s,box-shadow .15s}input:focus,select:focus{border-color:var(--brand);box-shadow:0 0 0 3px rgba(221,109,25,.12)}input::placeholder{color:#9a9289}
-  .token{width:100%;margin-bottom:10px;text-align:center;letter-spacing:.03em}.err{min-height:22px;margin:4px 0;color:var(--bad);font-size:12px}.err:not(:empty){padding:6px 9px;background:var(--bad-soft);border-radius:9px}
+  .auth-input{width:100%;margin-bottom:10px;text-align:center;font-size:16px;letter-spacing:.03em}.auth-actions{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 8px}.auth-actions .field-label{margin:0}.text-button{min-height:36px;padding:4px 2px;border:0;background:transparent;color:var(--brand);font-weight:700;cursor:pointer}.text-button:hover{text-decoration:underline;text-underline-offset:4px}[hidden]{display:none!important}.err{min-height:22px;margin:4px 0;color:var(--bad);font-size:12px}.err:not(:empty){padding:6px 9px;background:var(--bad-soft);border-radius:9px}
   .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:42px;padding:8px 13px;border:1px solid transparent;border-radius:12px;background:var(--brand);color:#fff;font-weight:700;cursor:pointer;transition:transform .15s ease,background .15s ease,box-shadow .15s ease}.btn:hover{background:#c75f12;box-shadow:0 7px 16px rgba(188,81,15,.17)}.btn:active{transform:scale(.98)}.btn:disabled{cursor:wait;opacity:.6;box-shadow:none}.btn.secondary{border-color:var(--line);background:var(--surface);color:var(--txt)}.btn.secondary:hover{background:var(--surface-soft);box-shadow:none}.btn.danger{background:var(--bad)}.btn.mini{min-height:34px;padding:5px 10px;border-radius:9px;font-size:11px}
   .login-card .btn{width:100%;margin-top:3px}.panel-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin:2px 0 16px}.panel-head h2{margin:0;font-size:20px;letter-spacing:-.03em}.panel-head p{margin:2px 0 0;color:var(--mut);font-size:12px}
   nav{display:flex;gap:8px;overflow-x:auto;margin:0 -16px 18px;padding:0 16px 4px;scrollbar-width:none}nav::-webkit-scrollbar{display:none}nav button{flex:0 0 auto;min-height:42px;padding:8px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--mut);font-weight:700;cursor:pointer;transition:background .15s,color .15s,border-color .15s}nav button:hover{background:var(--surface-soft);color:var(--txt)}nav button.on{border-color:transparent;background:var(--brand);color:#fff;box-shadow:0 6px 14px rgba(188,81,15,.16)}
@@ -55,11 +55,15 @@ export const ADMIN_PAGE = `<!doctype html>
 <div id="login" class="login-shell">
   <form class="login-card" id="loginForm">
     <h2>ورود مدیر</h2>
-    <p>برای دیدن اطلاعات حساب‌ها، توکن امن مدیریت را وارد کن.</p>
-    <label class="field-label" for="tok">توکن مدیریت</label>
-    <input class="token" id="tok" type="password" placeholder="ADMIN_TOKEN" autocomplete="current-password" dir="ltr" required>
+    <p>شمارهٔ مدیر را خودت وارد کن؛ کد ورود فقط برای شمارهٔ خصوصی ثبت‌شده ارسال می‌شود.</p>
+    <label class="field-label" for="adminPhone">شمارهٔ موبایل</label>
+    <input class="auth-input" id="adminPhone" name="phone" type="tel" placeholder="09xxxxxxxxx" autocomplete="tel" inputmode="tel" maxlength="16" dir="ltr" required>
+    <div id="otpStep" hidden>
+      <div class="auth-actions"><label class="field-label" for="adminOtp">کد پیامک‌شده</label><button class="text-button" id="changePhone" type="button">تغییر شماره</button></div>
+      <input class="auth-input" id="adminOtp" name="otp" type="text" placeholder="ــــ" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9۰-۹٠-٩]{4,8}" maxlength="8" dir="ltr">
+    </div>
     <div class="err" id="loginErr" role="alert" aria-live="assertive"></div>
-    <button class="btn" type="submit" id="enter">ورود به پنل</button>
+    <button class="btn" type="submit" id="enter">ارسال کد ورود</button>
   </form>
 </div>
 
@@ -77,7 +81,7 @@ export const ADMIN_PAGE = `<!doctype html>
   <section id="tab-users" role="tabpanel" aria-labelledby="tab-button-users" style="display:none">
     <div class="section-surface">
       <div class="row"><input id="uq" placeholder="جستجوی شمارهٔ موبایل…" aria-label="جستجوی شمارهٔ موبایل" inputmode="tel" dir="ltr"><button class="btn" type="button" id="uSearch">جستجو</button></div>
-      <div class="helper row"><strong>تنظیم یا ریست رمز عبور</strong><input id="spPhone" placeholder="شماره (مثل 09…)" aria-label="شماره برای تنظیم رمز" inputmode="tel" dir="ltr"><input id="spPass" type="text" placeholder="رمز عبور جدید" aria-label="رمز عبور جدید" autocomplete="new-password" dir="ltr"><button class="btn" type="button" id="spGo">اعمال</button><span class="muted">برای شمارهٔ تازه، حساب آزمایشی ساخته می‌شود.</span></div>
+      <form class="helper row" id="resetPasswordForm"><strong>تنظیم یا ریست رمز عبور</strong><input id="spPhone" name="phone" placeholder="شماره (مثل 09…)" aria-label="شماره برای تنظیم رمز" autocomplete="tel" inputmode="tel" dir="ltr"><input id="spPass" name="password" type="password" placeholder="رمز عبور جدید" aria-label="رمز عبور جدید" autocomplete="new-password" dir="ltr"><button class="btn" type="submit" id="spGo">اعمال</button><span class="muted">برای شمارهٔ تازه، حساب آزمایشی ساخته می‌شود.</span></form>
       <div class="err" id="spErr" role="alert"></div>
       <div class="result" id="uResults" aria-live="polite"></div>
     </div>
@@ -96,16 +100,38 @@ export const ADMIN_PAGE = `<!doctype html>
 
 <script>
 const $ = (s) => document.querySelector(s);
-let TOKEN = localStorage.getItem("routino:admin-token") || "";
+let otpRequested = false;
 
-async function api(path, opts = {}) {
-  const res = await fetch("/v1/admin" + path, {
+function cookieValue(name) {
+  const prefix = name + "=";
+  const part = document.cookie.split(";").map((v) => v.trim()).find((v) => v.startsWith(prefix));
+  return part ? decodeURIComponent(part.slice(prefix.length)) : "";
+}
+
+async function authApi(path, opts = {}) {
+  const res = await fetch("/v1/admin/auth" + path, {
     method: opts.method || "GET",
-    headers: { "content-type": "application/json", "x-admin-token": TOKEN },
+    credentials: "same-origin",
+    headers: opts.body ? { "content-type": "application/json" } : {},
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
-  if (res.status === 401) { showLogin("توکن نامعتبر است"); throw new Error("توکن نامعتبر است"); }
-  const body = await res.json();
+  const body = res.status === 204 ? null : await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body && body.message || "ارتباط با سرور برقرار نشد");
+  return body;
+}
+
+async function api(path, opts = {}) {
+  const method = opts.method || "GET";
+  const headers = opts.body ? { "content-type": "application/json" } : {};
+  if (method === "POST") headers["x-admin-csrf"] = cookieValue("routino_admin_csrf");
+  const res = await fetch("/v1/admin" + path, {
+    method,
+    credentials: "same-origin",
+    headers,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  if (res.status === 401) { showLogin("نشست مدیریت منقضی شده؛ دوباره وارد شو."); throw new Error("نشست مدیریت منقضی شده است"); }
+  const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.message || "دریافت اطلاعات ممکن نشد");
   return body;
 }
@@ -114,6 +140,8 @@ function setStatus(message) { $("#pageStatus").textContent = message || ""; }
 function showLogin(message) {
   $("#login").style.display = ""; $("#panel").style.display = "none";
   $("#logout").style.display = "none"; $("#refreshOverview").style.display = "none";
+  otpRequested = false; $("#otpStep").hidden = true; $("#adminPhone").disabled = false;
+  $("#adminOtp").value = ""; $("#enter").textContent = "ارسال کد ورود";
   $("#loginErr").textContent = message || ""; setStatus("");
 }
 function showPanel(overview) {
@@ -121,7 +149,10 @@ function showPanel(overview) {
   $("#logout").style.display = ""; $("#refreshOverview").style.display = "";
   renderOverview(overview); setStatus("آمار به‌روز است");
 }
-function setLoginBusy(busy) { $("#enter").disabled = busy; $("#enter").textContent = busy ? "در حال ورود…" : "ورود به پنل"; }
+function setLoginBusy(busy) {
+  $("#enter").disabled = busy;
+  $("#enter").textContent = busy ? (otpRequested ? "در حال بررسی…" : "در حال ارسال…") : (otpRequested ? "تأیید و ورود" : "ارسال کد ورود");
+}
 function loading(target, count = 4) { $("#" + target).innerHTML = '<div class="skeleton">' + Array(count).fill('<div class="sk"></div>').join("") + "</div>"; }
 function errorState(target, message, retry) {
   $("#" + target).innerHTML = '<div class="error-state"><div><p class="state-copy">' + esc(message) + '</p><button class="btn secondary mini" type="button">تلاش دوباره</button></div></div>';
@@ -131,18 +162,31 @@ function emptyState(message) { return '<div class="empty"><p class="state-copy">
 
 $("#loginForm").onsubmit = async (event) => {
   event.preventDefault();
-  TOKEN = $("#tok").value.trim();
-  if (!TOKEN) return;
+  const phone = $("#adminPhone").value.trim();
+  if (!phone) return;
   $("#loginErr").textContent = ""; setLoginBusy(true);
   try {
-    const overview = await api("/overview");
-    localStorage.setItem("routino:admin-token", TOKEN);
-    showPanel(overview);
+    if (!otpRequested) {
+      await authApi("/otp/request", { method: "POST", body: { phone } });
+      otpRequested = true; $("#otpStep").hidden = false; $("#adminPhone").disabled = true;
+      $("#loginErr").textContent = "اگر شماره مجاز باشد، کد تا چند لحظهٔ دیگر می‌رسد.";
+      $("#adminOtp").focus();
+      return;
+    }
+    const code = $("#adminOtp").value.trim();
+    if (!code) { $("#loginErr").textContent = "کد پیامک‌شده را وارد کن."; return; }
+    await authApi("/otp/verify", { method: "POST", body: { phone, code } });
+    showPanel(await api("/overview"));
   } catch (error) {
     if ($("#login").style.display !== "") $("#loginErr").textContent = error.message || "ورود ممکن نشد";
   } finally { setLoginBusy(false); }
 };
-$("#logout").onclick = () => { localStorage.removeItem("routino:admin-token"); TOKEN = ""; showLogin(); $("#tok").focus(); };
+$("#changePhone").onclick = () => { showLogin(); $("#adminPhone").focus(); };
+$("#logout").onclick = async () => {
+  $("#logout").disabled = true;
+  try { await authApi("/logout", { method: "POST" }); }
+  finally { $("#logout").disabled = false; showLogin(); $("#adminPhone").focus(); }
+};
 $("#refreshOverview").onclick = () => loadOverview();
 $("#overviewRetry").onclick = () => loadOverview();
 
@@ -195,7 +239,8 @@ async function loadUsers() {
 $("#uSearch").onclick = loadUsers;
 $("#uq").addEventListener("keydown", (event) => event.key === "Enter" && loadUsers());
 
-$("#spGo").onclick = async () => {
+$("#resetPasswordForm").onsubmit = async (event) => {
+  event.preventDefault();
   $("#spErr").textContent = "";
   const phone = $("#spPhone").value.trim(), password = $("#spPass").value;
   if (!phone || !password) { $("#spErr").textContent = "شماره و رمز را وارد کن"; return; }
@@ -219,7 +264,7 @@ window.openUser = async (id) => {
   try {
     const d = await api("/users/" + id);
     dlg.innerHTML = '<div class="dialog-body"><div class="dialog-head"><div><h2 id="userDlgTitle" dir="ltr">' + esc(localPhone(d.user.phone)) + '</h2><p class="muted">اشتراک: ' + esc(d.entitlement.planId || "—") + " تا " + dt(d.entitlement.expiresAt) + '</p></div><button class="btn secondary close" type="button" id="closeUserDlg">بستن</button></div>' +
-      '<div class="row dialog-actions"><input id="gMonths" type="number" min="0" max="36" placeholder="ماه" aria-label="ماه هدیه" style="width:74px"><input id="gDays" type="number" min="0" max="366" placeholder="روز" aria-label="روز هدیه" style="width:74px"><button class="btn mini" type="button" id="gGo">گرنت اشتراک</button></div>' +
+      '<div class="row dialog-actions"><input id="gMonths" type="number" min="-36" max="36" placeholder="ماه" aria-label="ماه هدیه یا کسر" style="width:74px"><input id="gDays" type="number" min="-366" max="366" placeholder="روز" aria-label="روز هدیه یا کسر" style="width:74px"><button class="btn mini" type="button" id="gGo">اصلاح اشتراک</button></div>' +
       '<section class="dialog-section"><h3>پرداخت‌ها</h3><div class="table-wrap"><table><thead><tr><th>تاریخ</th><th>پلن</th><th>مبلغ</th><th>وضعیت</th><th>پیگیری</th></tr></thead><tbody>' + (d.payments.length ? d.payments.map((p) => "<tr><td>" + dt(p.createdAt) + "</td><td>" + esc(p.planId) + "</td><td>" + fa(p.amountToman) + "</td><td>" + esc(p.status) + "</td><td dir='ltr'>" + esc(p.refNumber || "—") + "</td></tr>").join("") : "<tr><td colspan='5' class='muted'>پرداختی ثبت نشده است.</td></tr>") + '</tbody></table></div></section>' +
       '<section class="dialog-section"><h3>تاریخچهٔ دسترسی</h3><div class="table-wrap"><table><thead><tr><th>تاریخ</th><th>منبع</th><th>مدت</th><th>تا</th></tr></thead><tbody>' + (d.grants.length ? d.grants.map((g) => "<tr><td>" + dt(g.createdAt) + "</td><td>" + esc(g.source) + "</td><td>" + fa(g.months) + " ماه " + fa(g.days) + " روز</td><td>" + dt(g.expiresAfter) + "</td></tr>").join("") : "<tr><td colspan='4' class='muted'>سابقه‌ای ثبت نشده است.</td></tr>") + '</tbody></table></div></section></div>';
     $("#closeUserDlg").onclick = () => dlg.close();
@@ -258,7 +303,12 @@ $("#dCreate").onclick = async () => {
   catch (error) { $("#dErr").textContent = error.message || "ساخت کد ممکن نشد"; }
 };
 
-if (TOKEN) { setStatus("در حال بررسی توکن…"); api("/overview").then(showPanel).catch(() => {}); } else { showLogin(); }
+async function boot() {
+  setStatus("در حال بررسی نشست مدیریت…");
+  try { await authApi("/session"); showPanel(await api("/overview")); }
+  catch { showLogin(); }
+}
+boot();
 </script>
 </body>
 </html>`;

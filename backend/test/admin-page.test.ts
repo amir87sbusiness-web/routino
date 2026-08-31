@@ -20,14 +20,23 @@ const settlePage = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 describe("admin page", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("renders the authenticated overview without fetching it a second time", async () => {
-    // This catches the old login flow where the successful /overview response
-    // only validated the token and showPanel immediately fetched it again.
-    const fetch = vi.fn(async (_path: string) => ({
-      status: 200,
-      ok: true,
-      json: async () => overview,
-    }));
+  it("contains only the phone + OTP login contract, never a browser-stored admin secret", () => {
+    expect(ADMIN_PAGE).toContain('name="phone"');
+    expect(ADMIN_PAGE).toContain('autocomplete="tel"');
+    expect(ADMIN_PAGE).toContain('name="otp"');
+    expect(ADMIN_PAGE).toContain('autocomplete="one-time-code"');
+    expect(ADMIN_PAGE).not.toContain("ADMIN_TOKEN");
+    expect(ADMIN_PAGE).not.toContain("x-admin-token");
+    expect(ADMIN_PAGE).not.toContain("localStorage");
+  });
+
+  it("requests and verifies OTP, then renders the overview once", async () => {
+    const fetch = vi.fn(async (path: string, _init?: { credentials?: string }) => {
+      if (path.endsWith("/auth/session")) return { status: 401, ok: false, json: async () => ({}) };
+      if (path.endsWith("/auth/otp/request")) return { status: 202, ok: true, json: async () => ({ accepted: true }) };
+      if (path.endsWith("/auth/otp/verify")) return { status: 200, ok: true, json: async () => ({ authenticated: true }) };
+      return { status: 200, ok: true, json: async () => overview };
+    });
     const dom = new JSDOM(ADMIN_PAGE, {
       runScripts: "dangerously",
       url: "https://admin.routino.test/admin",
@@ -41,13 +50,51 @@ describe("admin page", () => {
 
     try {
       const document = dom.window.document;
-      (document.querySelector("#tok") as { value: string }).value = "admin-token";
+      await settlePage();
+      (document.querySelector("#adminPhone") as { value: string }).value = "09120000123";
+      (document.querySelector("#enter") as { click: () => void }).click();
+      await settlePage();
+      expect((document.querySelector("#otpStep") as unknown as { hidden: boolean }).hidden).toBe(false);
+
+      (document.querySelector("#adminOtp") as { value: string }).value = "1234";
       (document.querySelector("#enter") as { click: () => void }).click();
       await settlePage();
       await settlePage();
 
       expect(fetch.mock.calls.filter(([path]) => path === "/v1/admin/overview")).toHaveLength(1);
+      expect(fetch.mock.calls.every(([, init]) => init?.credentials === "same-origin")).toBe(true);
       expect(document.querySelector("#ovCards")?.textContent).toContain("۴۲");
+    } finally {
+      dom.window.close();
+    }
+  });
+
+  it("restores the long-lived cookie session and sends CSRF on mutations", async () => {
+    const fetch = vi.fn(async (path: string, _init?: { headers?: Record<string, string> }) => ({
+      status: 200,
+      ok: true,
+      json: async () => path.endsWith("/overview") ? overview : { authenticated: true, discount: {} },
+    }));
+    const dom = new JSDOM(ADMIN_PAGE, {
+      runScripts: "dangerously",
+      url: "https://admin.routino.test/admin",
+      beforeParse(window: object) {
+        (window as { document: { cookie: string } }).document.cookie =
+          "routino_admin_csrf=csrf-test-value; Path=/; Secure; SameSite=Strict";
+        Object.assign(window, { fetch, alert: vi.fn(), confirm: vi.fn(() => true) });
+      },
+    });
+
+    try {
+      await settlePage();
+      await settlePage();
+      const document = dom.window.document;
+      (document.querySelector("#dCode") as unknown as { value: string }).value = "SAFE30";
+      (document.querySelector("#dPercent") as unknown as { value: string }).value = "30";
+      (document.querySelector("#dCreate") as unknown as { click(): void }).click();
+      await settlePage();
+      const mutation = fetch.mock.calls.find(([path]) => path === "/v1/admin/discounts");
+      expect(mutation?.[1]?.headers).toMatchObject({ "x-admin-csrf": "csrf-test-value" });
     } finally {
       dom.window.close();
     }
@@ -77,6 +124,8 @@ describe("admin page", () => {
     });
 
     try {
+      await settlePage();
+      await settlePage();
       await (dom.window as unknown as { openUser: (id: string) => Promise<void> }).openUser(
         "user-id",
       );
