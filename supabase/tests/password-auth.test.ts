@@ -1,6 +1,6 @@
 /** Password sign-in + admin set-password against the deployed edge (Hono) app. */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { auth, makeHarness, signIn, type Harness } from "./helpers/harness.ts";
+import { adminSignIn, auth, makeHarness, signIn, type Harness } from "./helpers/harness.ts";
 
 let h: Harness;
 
@@ -11,8 +11,6 @@ beforeEach(async () => {
 afterAll(async () => {
   await h?.close();
 });
-
-const ADMIN = "dev-only-admin-token";
 
 const login = (identifier: string, password: string) =>
   h.call("POST", "/v1/auth/password/login", { body: { identifier, password } });
@@ -70,12 +68,12 @@ describe("edge password sign-in", () => {
 describe("edge admin set-password", () => {
   it("creates an account with a password and it can sign in", async () => {
     const res = await h.call("POST", "/v1/admin/users/set-password", {
-      headers: { "x-admin-token": ADMIN },
-      body: { phone: "09138982893", password: "Amir@1387" },
+      headers: await adminSignIn(h),
+      body: { phone: "09135556677", password: "Amir@1387" },
     });
     expect(res.status).toBe(200);
     expect((await res.json()).created).toBe(true);
-    const signedIn = await login("09138982893", "Amir@1387");
+    const signedIn = await login("09135556677", "Amir@1387");
     expect(signedIn.status).toBe(200);
     expect((await signedIn.json()).entitlement).toMatchObject({
       status: "none",
@@ -86,10 +84,10 @@ describe("edge admin set-password", () => {
     expect(await h.query(`select user_id from entitlements`)).toHaveLength(0);
   });
 
-  it("rejects a bad admin token", async () => {
+  it("rejects the retired shared-secret header", async () => {
     const res = await h.call("POST", "/v1/admin/users/set-password", {
       headers: { "x-admin-token": "wrong" },
-      body: { phone: "09138982893", password: "Amir@1387" },
+      body: { phone: "09135556677", password: "Amir@1387" },
     });
     expect(res.status).toBe(401);
   });

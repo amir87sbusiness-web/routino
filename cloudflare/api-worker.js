@@ -185,7 +185,7 @@ export default {
             "access-control-allow-origin": requestOrigin,
             "access-control-allow-credentials": "true",
             "access-control-allow-methods": "GET, POST, OPTIONS",
-            "access-control-allow-headers": "authorization, content-type, x-admin-token",
+            "access-control-allow-headers": "authorization, content-type, x-admin-csrf",
             "access-control-max-age": "86400",
             vary: "Origin",
           },

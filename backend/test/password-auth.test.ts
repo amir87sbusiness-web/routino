@@ -1,7 +1,7 @@
 /** Password sign-in, credential management, admin set-password, and the
  * brute-force limits — driven through the real Fastify app. */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { makeHarness, type Harness } from "./helpers/pglite.js";
+import { adminSignIn, makeHarness, type Harness } from "./helpers/pglite.js";
 
 let h: Harness;
 
@@ -12,8 +12,6 @@ beforeEach(async () => {
 afterAll(async () => {
   await h?.close();
 });
-
-const ADMIN = "dev-only-admin-token";
 
 /** OTP sign-in, returning the access token. */
 async function otpSignIn(phone = "09123334444") {
@@ -50,11 +48,11 @@ const setName = (access: string, username: string) =>
     payload: { username },
   });
 
-const adminSetPw = (phone: string, password: string) =>
+const adminSetPw = async (phone: string, password: string) =>
   h.app.inject({
     method: "POST",
     url: "/v1/admin/users/set-password",
-    headers: { "x-admin-token": ADMIN },
+    headers: await adminSignIn(h),
     payload: { phone, password },
   });
 
@@ -285,31 +283,31 @@ describe("username", () => {
 
 describe("admin set-password", () => {
   it("creates an account with a password and no automatic access", async () => {
-    const res = await adminSetPw("09138982893", "Amir@1387");
+    const res = await adminSetPw("09135556677", "Amir@1387");
     expect(res.statusCode).toBe(200);
     expect((res.json() as { created: boolean }).created).toBe(true);
 
-    const login1 = await login("09138982893", "Amir@1387");
+    const login1 = await login("09135556677", "Amir@1387");
     expect(login1.statusCode).toBe(200);
     expect((login1.json() as { entitlement: { status: string } }).entitlement.status).toBe("none");
     expect(await h.query(`select id from grants`)).toHaveLength(0);
   });
 
   it("resets the password of an existing account", async () => {
-    const { access } = await otpSignIn("09138982893");
+    const { access } = await otpSignIn("09135556677");
     await setPw(access, "OldPass11");
-    const res = await adminSetPw("09138982893", "Amir@1387");
+    const res = await adminSetPw("09135556677", "Amir@1387");
     expect((res.json() as { created: boolean }).created).toBe(false);
-    expect((await login("09138982893", "Amir@1387")).statusCode).toBe(200);
-    expect((await login("09138982893", "OldPass11")).statusCode).toBe(401);
+    expect((await login("09135556677", "Amir@1387")).statusCode).toBe(200);
+    expect((await login("09135556677", "OldPass11")).statusCode).toBe(401);
   });
 
-  it("needs a valid admin token", async () => {
+  it("rejects the retired shared-secret header", async () => {
     const res = await h.app.inject({
       method: "POST",
       url: "/v1/admin/users/set-password",
       headers: { "x-admin-token": "wrong" },
-      payload: { phone: "09138982893", password: "Amir@1387" },
+      payload: { phone: "09135556677", password: "Amir@1387" },
     });
     expect(res.statusCode).toBe(401);
   });

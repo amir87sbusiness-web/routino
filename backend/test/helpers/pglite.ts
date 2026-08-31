@@ -74,6 +74,8 @@ export async function makeHarness(overrides: Partial<NodeJS.ProcessEnv> = {}): P
   const env = loadEnv({
     ...process.env,
     NODE_ENV: "test",
+    ADMIN_PHONE: "09120000123",
+    ADMIN_SESSION_SECRET: "s".repeat(48),
     ...overrides,
   });
   const pglite = new PGlite();
@@ -116,4 +118,24 @@ export async function makeHarness(overrides: Partial<NodeJS.ProcessEnv> = {}): P
       await pglite.close();
     },
   };
+}
+
+/** Signs the configured owner into the real admin OTP routes. */
+export async function adminSignIn(h: Harness): Promise<Record<string, string>> {
+  const phone = h.env.ADMIN_PHONE;
+  await h.app.inject({ method: "POST", url: "/v1/admin/auth/otp/request", payload: { phone } });
+  const response = await h.app.inject({
+    method: "POST",
+    url: "/v1/admin/auth/otp/verify",
+    payload: { phone, code: h.sms.last()!.code },
+  });
+  if (response.statusCode !== 200) {
+    throw new Error(`adminSignIn failed: ${response.statusCode} ${response.body}`);
+  }
+  const lines = response.headers["set-cookie"];
+  const cookies = (Array.isArray(lines) ? lines : [lines]).filter(Boolean) as string[];
+  const values = cookies.map((line) => line.split(";", 1)[0]!);
+  const csrf = values.find((value) => value.startsWith("routino_admin_csrf="))?.split("=")[1];
+  if (!csrf) throw new Error("adminSignIn did not receive a CSRF cookie");
+  return { cookie: values.join("; "), "x-admin-csrf": csrf };
 }

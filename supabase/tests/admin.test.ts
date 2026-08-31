@@ -1,42 +1,27 @@
 /** Admin API on the edge app: token guard, grants, user support detail,
  * discounts. Mirrors the critical assertions of backend/test/admin.test.ts. */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { auth, makeHarness, signIn, type Harness } from "./helpers/harness.ts";
+import { adminSignIn, auth, makeHarness, signIn, type Harness } from "./helpers/harness.ts";
 
 let h: Harness;
+let admin: Record<string, string>;
 
 beforeEach(async () => {
   h ??= await makeHarness();
   await h.truncate();
+  admin = await adminSignIn(h);
 });
 afterAll(async () => {
   await h?.close();
 });
 
-const admin = () => ({ "x-admin-token": h.env.ADMIN_TOKEN });
-
 describe("admin auth", () => {
-  it("rejects a missing or wrong token", async () => {
+  it("rejects a missing session and the retired shared-secret header", async () => {
     expect((await h.call("GET", "/v1/admin/overview")).status).toBe(401);
     expect(
       (await h.call("GET", "/v1/admin/overview", { headers: { "x-admin-token": "nope" } })).status,
     ).toBe(401);
-  });
-
-  it("throttles repeated wrong tokens without locking out the real one", async () => {
-    // This app IS production, and there is no HTTP rate limiter in front of it —
-    // so the guessing limit has to live here, backed by Postgres rather than an
-    // in-memory counter that a cold start would reset.
-    const codes: number[] = [];
-    for (let i = 0; i < 12; i++) {
-      codes.push(
-        (await h.call("GET", "/v1/admin/overview", { headers: { "x-admin-token": `g${i}` } }))
-          .status,
-      );
-    }
-    expect(codes.slice(0, 9)).toEqual(Array(9).fill(401));
-    expect(codes.slice(9)).toEqual(Array(3).fill(429));
-    expect((await h.call("GET", "/v1/admin/overview", { headers: admin() })).status).toBe(200);
+    expect((await h.call("GET", "/v1/admin/overview", { headers: admin })).status).toBe(200);
   });
 
   it("sends security headers, and a CSP on the panel", async () => {
@@ -65,14 +50,14 @@ describe("overview + users", () => {
     await signIn(h, "09123334444");
     await signIn(h, "09351112222");
 
-    const ov = await (await h.call("GET", "/v1/admin/overview", { headers: admin() })).json();
+    const ov = await (await h.call("GET", "/v1/admin/overview", { headers: admin })).json();
     expect(ov.users.total).toBe(2);
     // Money-safety + ops fields the panel surfaces.
     expect(ov.alerts.verifyFailed).toBe(0);
     expect(ov.payments.pending).toBe(0);
 
     const found = await (
-      await h.call("GET", "/v1/admin/users?q=0912333", { headers: admin() })
+      await h.call("GET", "/v1/admin/users?q=0912333", { headers: admin })
     ).json();
     expect(found.users).toHaveLength(1);
     expect(found.users[0].phone).toBe("989123334444");
@@ -84,7 +69,7 @@ describe("overview + users", () => {
       `insert into payments (user_id, plan_id, months, amount_toman, amount_rial, status)
        values ('${user.id}', 'm1', 1, 59000, 590000, 'verify_failed')`,
     );
-    const ov = await (await h.call("GET", "/v1/admin/overview", { headers: admin() })).json();
+    const ov = await (await h.call("GET", "/v1/admin/overview", { headers: admin })).json();
     expect(ov.alerts.verifyFailed).toBe(1);
   });
 });
@@ -94,7 +79,7 @@ describe("manual grant", () => {
     const { user } = await signIn(h);
     const before = Date.now();
     const res = await h.call("POST", `/v1/admin/users/${user.id}/grant`, {
-      headers: admin(),
+      headers: admin,
       body: { months: 1, note: "support gift" },
     });
     expect(res.status).toBe(200);
@@ -110,7 +95,7 @@ describe("manual grant", () => {
   it("refuses an empty grant", async () => {
     const { user } = await signIn(h);
     const res = await h.call("POST", `/v1/admin/users/${user.id}/grant`, {
-      headers: admin(),
+      headers: admin,
       body: {},
     });
     expect(res.status).toBe(400);
@@ -126,7 +111,7 @@ describe("user detail", () => {
     });
 
     const d = await (
-      await h.call("GET", `/v1/admin/users/${user.id}`, { headers: admin() })
+      await h.call("GET", `/v1/admin/users/${user.id}`, { headers: admin })
     ).json();
     expect(d.user.phone).toBe("989123334444");
     expect(d.user).not.toHaveProperty("blocked");
@@ -140,11 +125,11 @@ describe("user detail", () => {
     expect(
       (
         await h.call("GET", "/v1/admin/users/11111111-1111-1111-1111-111111111111", {
-          headers: admin(),
+          headers: admin,
         })
       ).status,
     ).toBe(404);
-    expect((await h.call("GET", "/v1/admin/users/not-a-uuid", { headers: admin() })).status).toBe(
+    expect((await h.call("GET", "/v1/admin/users/not-a-uuid", { headers: admin })).status).toBe(
       400,
     );
   });
@@ -154,7 +139,7 @@ describe("device policy", () => {
   it("does not expose obsolete device quota administration", async () => {
     const { user } = await signIn(h);
     const response = await h.call("POST", `/v1/admin/users/${user.id}/device-policy`, {
-      headers: admin(),
+      headers: admin,
       body: { maxActiveDevices: 3 },
     });
     expect(response.status).toBe(404);
@@ -166,7 +151,7 @@ describe("retired device and blocking routes", () => {
     const { user, access } = await signIn(h);
 
     const block = await h.call("POST", `/v1/admin/users/${user.id}/block`, {
-      headers: admin(),
+      headers: admin,
       body: { blocked: true },
     });
     expect(block.status).toBe(404);
@@ -178,24 +163,24 @@ describe("retired device and blocking routes", () => {
 describe("discounts", () => {
   it("creates, lists, rejects duplicates, and toggles", async () => {
     const created = await h.call("POST", "/v1/admin/discounts", {
-      headers: admin(),
+      headers: admin,
       body: { code: "EID1405", percent: 30, maxUses: 100 },
     });
     expect(created.status).toBe(200);
 
     const dup = await h.call("POST", "/v1/admin/discounts", {
-      headers: admin(),
+      headers: admin,
       body: { code: "eid1405", percent: 10 },
     });
     expect(dup.status).toBe(400);
 
     const toggled = await h.call("POST", "/v1/admin/discounts/EID1405", {
-      headers: admin(),
+      headers: admin,
       body: { active: false },
     });
     expect((await toggled.json()).discount.active).toBe(false);
 
-    const list = await (await h.call("GET", "/v1/admin/discounts", { headers: admin() })).json();
+    const list = await (await h.call("GET", "/v1/admin/discounts", { headers: admin })).json();
     expect(list.discounts).toHaveLength(1);
     expect(list.discounts[0].code).toBe("EID1405");
   });
@@ -209,12 +194,12 @@ describe("payments listing", () => {
       body: { planId: "m1", attemptId: crypto.randomUUID() },
     });
 
-    const all = await (await h.call("GET", "/v1/admin/payments", { headers: admin() })).json();
+    const all = await (await h.call("GET", "/v1/admin/payments", { headers: admin })).json();
     expect(all.payments).toHaveLength(1);
     expect(all.payments[0].phone).toBe("989123334444");
 
     const none = await (
-      await h.call("GET", "/v1/admin/payments?status=paid", { headers: admin() })
+      await h.call("GET", "/v1/admin/payments?status=paid", { headers: admin })
     ).json();
     expect(none.payments).toHaveLength(0);
   });

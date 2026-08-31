@@ -39,9 +39,6 @@ const schema = z.object({
     .default("false")
     .transform((v) => v === "true" || v === "1"),
 
-  /** Shared secret for /v1/admin/* and the /admin panel. Header-only, compared
-   * in constant time. */
-  ADMIN_TOKEN: z.string().min(12).default("dev-only-admin-token"),
   /** Owner-only admin login. Kept in deployment secrets, never in a table or UI. */
   ADMIN_PHONE: z.string().default(""),
   ADMIN_SESSION_SECRET: z
@@ -119,8 +116,6 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       throw new Error("JWT_SECRET must be set in production");
     if (parsed.data.OTP_PEPPER.startsWith("dev-only"))
       throw new Error("OTP_PEPPER must be set in production");
-    if (parsed.data.ADMIN_TOKEN.startsWith("dev-only"))
-      throw new Error("ADMIN_TOKEN must be set in production");
     if (!normalizePhone(parsed.data.ADMIN_PHONE))
       throw new Error("ADMIN_PHONE must be a valid Iranian mobile number in production");
     if (parsed.data.ADMIN_SESSION_SECRET.startsWith("dev-only"))

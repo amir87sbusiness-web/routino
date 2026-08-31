@@ -67,7 +67,7 @@ export function buildApp(deps: Deps) {
     cors({
       origin: (origin) => (allowed.includes(origin) ? origin : ""),
       credentials: true,
-      allowHeaders: ["content-type", "authorization", "x-admin-token"],
+      allowHeaders: ["content-type", "authorization", "x-admin-csrf"],
       allowMethods: ["GET", "POST", "OPTIONS"],
       // Cache the preflight so the browser stops sending an OPTIONS before every
       // API call. Without it, each authenticated call pays two round-trips to the

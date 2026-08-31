@@ -97,3 +97,27 @@ export const adminSessionCookie = (token: string, expiresAt: Date): string =>
 
 export const csrfCookie = (token: string, expiresAt: Date): string =>
   cookie(ADMIN_CSRF_COOKIE, token, expiresAt, { httpOnly: false });
+
+export function readCookie(header: string | undefined, name: string): string | null {
+  if (!header) return null;
+  for (const part of header.split(";")) {
+    const index = part.indexOf("=");
+    if (index < 0 || part.slice(0, index).trim() !== name) continue;
+    try {
+      return decodeURIComponent(part.slice(index + 1).trim());
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+export function adminCsrfMatches(cookieValue: string | null, headerValue: string | undefined): boolean {
+  return !!cookieValue && !!headerValue && safeEqual(cookieValue, headerValue);
+}
+
+export const clearAdminSessionCookie = (): string =>
+  `${ADMIN_SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`;
+
+export const clearAdminCsrfCookie = (): string =>
+  `${ADMIN_CSRF_COOKIE}=; Path=/; Secure; SameSite=Strict; Max-Age=0`;

@@ -2,17 +2,31 @@
  * Admin API — thin Fastify adapter.
  *
  * All queries live in `services/admin.ts` (shared verbatim with the edge
- * function). Auth model: one shared secret (`ADMIN_TOKEN` env), sent as
- * `x-admin-token`, compared in constant time. Deliberately NOT tied to user
- * accounts/OTP: the panel must keep working when SMS is down — that is exactly
- * when you need it. Every mutation writes to the `grants` ledger (source='admin').
+ * function). The owner requests an admin-namespaced OTP and receives a signed,
+ * HttpOnly cookie; no browser-stored shared secret exists.
  */
-import { Buffer } from "node:buffer";
-import { timingSafeEqual } from "node:crypto";
-import type { FastifyPluginAsync, FastifyRequest } from "fastify";
+import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { tooMany, unauthorized } from "../plugins/errors.js";
-import { checkAdminRate, recordAdminFailure } from "../services/login-throttle.js";
+import { normalizePhone } from "../lib/phone.js";
+import { forbidden, tooMany, unauthorized } from "../plugins/errors.js";
+import { SmsNotSentError } from "../providers/sms/index.js";
+import {
+  ADMIN_CSRF_COOKIE,
+  ADMIN_SESSION_COOKIE,
+  adminCsrfMatches,
+  adminOtpLedgerKey,
+  adminPhoneMatches,
+  adminSessionCookie,
+  clearAdminCsrfCookie,
+  clearAdminSessionCookie,
+  csrfCookie,
+  issueAdminSession,
+  newAdminCsrfToken,
+  readCookie,
+  verifyAdminSession,
+} from "../services/admin-auth.js";
+import { claimAdminOtpRequest } from "../services/login-throttle.js";
+import { claimSendSlot, releaseSendSlot, verifyCode } from "../services/otp.js";
 import {
   adminCreateDiscount,
   adminGrant,
@@ -25,12 +39,11 @@ import {
   adminUserDetail,
 } from "../services/admin.js";
 
-const tokenEquals = (a: string, b: string): boolean => {
-  const ab = Buffer.from(a);
-  const bb = Buffer.from(b);
-  if (ab.length !== bb.length) return false;
-  return timingSafeEqual(ab, bb);
-};
+const adminOtpRequestBody = z.object({ phone: z.string().min(1).max(32) });
+const adminOtpVerifyBody = z.object({
+  phone: z.string().min(1).max(32),
+  code: z.string().min(4).max(8),
+});
 
 // Negative values are allowed on purpose, and this is the ONLY way to take
 // access back. A refund or a chargeback happens entirely at the gateway — no
@@ -76,36 +89,93 @@ const discountUpdateBody = z.object({
 });
 
 export const adminRoutes: FastifyPluginAsync = async (app) => {
-  const { db, env } = app.deps;
+  const { db, env, sms } = app.deps;
   const now = () => new Date(app.deps.now());
 
-  /**
-   * One shared secret, constant-time compared — plus a ledger-backed attempt
-   * limit, because nothing else in the stack rate-limits anything. Without it a
-   * `for` loop could try admin tokens forever at full speed, and this token
-   * gifts subscriptions and resets passwords.
-   */
-  const requireAdmin = async (req: FastifyRequest) => {
-    const t = now();
-    const ip = req.ip ?? null;
-    const token = req.headers["x-admin-token"];
-    // The CORRECT token is always honoured, whatever the counter says. Checking
-    // the limit first would mean anyone could lock the owner out of their own
-    // panel from a shared IP — the same trap the password endpoint had. Guessing
-    // is what gets throttled, and the throttle's job is to make a brute-force
-    // attempt bounded and visible in the log, not to gate the real key.
-    if (typeof token === "string" && tokenEquals(token, env.ADMIN_TOKEN)) return;
+  const setSessionCookies = async (reply: FastifyReply, t: Date) => {
+    const session = await issueAdminSession(env, t);
+    const csrf = newAdminCsrfToken();
+    void reply.header("set-cookie", [
+      adminSessionCookie(session.token, session.expiresAt),
+      csrfCookie(csrf, session.expiresAt),
+    ]);
+  };
 
-    await recordAdminFailure(db, env, ip, t);
-    const rate = await checkAdminRate(db, env, ip, t);
-    if (!rate.ok) {
-      req.log.warn({ ip }, "admin auth throttled");
-      throw tooMany("Too many admin attempts. Try again later.", rate.retryAfter);
+  const clearCookies = (reply: FastifyReply) => {
+    void reply.header("set-cookie", [clearAdminSessionCookie(), clearAdminCsrfCookie()]);
+  };
+
+  const requireSession = async (req: FastifyRequest, reply: FastifyReply) => {
+    const t = now();
+    const token = readCookie(req.headers.cookie, ADMIN_SESSION_COOKIE);
+    if (!token) throw unauthorized("invalid_admin_session", "Admin session is required");
+    try {
+      const session = await verifyAdminSession(env, token, t);
+      if (session.renew) await setSessionCookies(reply, t);
+    } catch (error) {
+      clearCookies(reply);
+      throw error;
     }
-    req.log.warn({ ip }, "admin auth failed");
-    throw unauthorized("bad_admin_token", "Invalid admin token");
+  };
+
+  const requireAdmin = async (req: FastifyRequest, reply: FastifyReply) => {
+    await requireSession(req, reply);
+    if (req.method === "POST") {
+      const csrf = readCookie(req.headers.cookie, ADMIN_CSRF_COOKIE);
+      const header = req.headers["x-admin-csrf"];
+      if (!adminCsrfMatches(csrf, typeof header === "string" ? header : undefined)) {
+        throw forbidden("bad_admin_csrf", "Admin CSRF token is invalid");
+      }
+    }
   };
   const opts = { preHandler: requireAdmin };
+
+  app.post("/admin/auth/otp/request", async (req, reply) => {
+    const { phone } = adminOtpRequestBody.parse(req.body);
+    const t = now();
+    const verdict = await claimAdminOtpRequest(db, env, req.ip ?? null, t);
+    if (!verdict.ok) {
+      throw tooMany("Too many admin code requests. Try again later.", verdict.retryAfter);
+    }
+
+    if (adminPhoneMatches(env, phone)) {
+      const ledgerKey = adminOtpLedgerKey(env);
+      const slot = await claimSendSlot(db, env, ledgerKey, req.ip ?? null, t);
+      if (slot) {
+        try {
+          await sms.sendOtp(normalizePhone(env.ADMIN_PHONE)!, slot.code);
+        } catch (error) {
+          if (error instanceof SmsNotSentError) await releaseSendSlot(db, slot.slotId);
+          req.log.error({ error }, "admin otp send failed");
+        }
+      }
+    }
+    return reply.status(202).send({ accepted: true });
+  });
+
+  app.post("/admin/auth/otp/verify", async (req, reply) => {
+    const { phone, code } = adminOtpVerifyBody.parse(req.body);
+    if (!adminPhoneMatches(env, phone)) {
+      throw unauthorized("bad_admin_code", "The code is wrong or has expired");
+    }
+    const result = await verifyCode(db, env, adminOtpLedgerKey(env), code, now());
+    if (!result.ok) {
+      if (result.reason === "too_many") throw tooMany("Too many wrong attempts. Request a new code.");
+      throw unauthorized("bad_admin_code", "The code is wrong or has expired");
+    }
+    await setSessionCookies(reply, now());
+    return { authenticated: true };
+  });
+
+  app.get("/admin/auth/session", async (req, reply) => {
+    await requireSession(req, reply);
+    return { authenticated: true };
+  });
+
+  app.post("/admin/auth/logout", async (_req, reply) => {
+    clearCookies(reply);
+    return reply.status(204).send();
+  });
 
   app.get("/admin/overview", opts, async () => adminOverview(db, now()));
 

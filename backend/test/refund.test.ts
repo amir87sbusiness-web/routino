@@ -14,21 +14,22 @@
  * what these tests pin down.
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { makeHarness, type Harness } from "./helpers/pglite.js";
+import { adminSignIn, makeHarness, type Harness } from "./helpers/pglite.js";
 
 let h: Harness;
+let admin: Record<string, string>;
 
 beforeEach(async () => {
   h ??= await makeHarness();
   await h.truncate();
   h.psp._txns.clear();
+  admin = await adminSignIn(h);
 });
 afterAll(async () => {
   await h?.close();
 });
 
 const auth = (access: string) => ({ authorization: `Bearer ${access}` });
-const adminAuth = () => ({ "x-admin-token": h.env.ADMIN_TOKEN });
 
 async function signIn(phone: string) {
   await h.app.inject({ method: "POST", url: "/v1/auth/otp/request", payload: { phone } });
@@ -109,7 +110,7 @@ describe("money that comes back", () => {
     const res = await h.app.inject({
       method: "POST",
       url: `/v1/admin/users/${user.id}/grant`,
-      headers: adminAuth(),
+      headers: admin,
       payload: { months: -1, planId: "refund", note: "zarinpal refund #123" },
     });
     expect(res.statusCode).toBe(200);
@@ -134,7 +135,7 @@ describe("money that comes back", () => {
     const res = await h.app.inject({
       method: "POST",
       url: `/v1/admin/users/${user.id}/grant`,
-      headers: adminAuth(),
+      headers: admin,
       payload: { months: 0, days: 0 },
     });
     expect(res.statusCode).toBeGreaterThanOrEqual(400);

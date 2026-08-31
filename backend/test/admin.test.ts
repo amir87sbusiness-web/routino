@@ -1,17 +1,17 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { makeHarness, type Harness } from "./helpers/pglite.js";
+import { adminSignIn, makeHarness, type Harness } from "./helpers/pglite.js";
 
 let h: Harness;
+let admin: Record<string, string>;
 
 beforeEach(async () => {
   h ??= await makeHarness();
   await h.truncate();
+  admin = await adminSignIn(h);
 });
 afterAll(async () => {
   await h?.close();
 });
-
-const admin = { "x-admin-token": "dev-only-admin-token" };
 
 async function signIn(phone = "09123334444") {
   await h.app.inject({ method: "POST", url: "/v1/auth/otp/request", payload: { phone } });
@@ -24,42 +24,20 @@ async function signIn(phone = "09123334444") {
 }
 
 describe("admin auth", () => {
-  it("throttles repeated wrong tokens", async () => {
-    // Regression: nothing in the stack rate-limited anything, so a loop could
-    // guess admin tokens forever at full speed — and this token gifts
-    // subscriptions and resets passwords. The counter lives in Postgres because
-    // production runs on serverless isolates, where an in-memory Map resets on
-    // every cold start.
-    const codes: number[] = [];
-    for (let i = 0; i < 12; i++) {
-      const res = await h.app.inject({
-        method: "GET",
-        url: "/v1/admin/overview",
-        headers: { "x-admin-token": `guess-${i}` },
-      });
-      codes.push(res.statusCode);
-    }
-    expect(codes.slice(0, 9)).toEqual(Array(9).fill(401));
-    expect(codes.slice(9)).toEqual(Array(3).fill(429));
-
-    // The lockout is on guessing, not on the panel: the real token still works
-    // from the same IP, so nobody can lock the owner out of their own panel.
-    expect(
-      (await h.app.inject({ method: "GET", url: "/v1/admin/overview", headers: admin })).statusCode,
-    ).toBe(200);
-  });
-
-  it("rejects a missing or wrong token", async () => {
+  it("rejects a missing session and the retired shared-secret header", async () => {
     expect((await h.app.inject({ method: "GET", url: "/v1/admin/overview" })).statusCode).toBe(401);
     expect(
       (
         await h.app.inject({
           method: "GET",
           url: "/v1/admin/overview",
-          headers: { "x-admin-token": "guess" },
+          headers: { "x-admin-token": "retired" },
         })
       ).statusCode,
     ).toBe(401);
+    expect(
+      (await h.app.inject({ method: "GET", url: "/v1/admin/overview", headers: admin })).statusCode,
+    ).toBe(200);
   });
 
   it("serves the panel shell without auth but with no data in it", async () => {

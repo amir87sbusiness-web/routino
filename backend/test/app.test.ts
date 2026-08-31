@@ -74,7 +74,6 @@ describe("production env guards", () => {
     DB_DRIVER: "postgres",
     JWT_SECRET: "x".repeat(40),
     OTP_PEPPER: "y".repeat(20),
-    ADMIN_TOKEN: "z".repeat(20),
     ADMIN_PHONE: "09120000123",
     ADMIN_SESSION_SECRET: "s".repeat(48),
     PROXY_SECRET: "p".repeat(48),
@@ -107,7 +106,6 @@ describe("production env guards", () => {
     expect(() =>
       loadEnv({ ...ok, JWT_SECRET: "dev-only-secret-change-me-in-production-32+" }),
     ).toThrow(/JWT_SECRET/);
-    expect(() => loadEnv({ ...ok, ADMIN_TOKEN: "dev-only-admin-token" })).toThrow(/ADMIN_TOKEN/);
     expect(() => loadEnv({ ...ok, PSP_PROVIDER: "fake" })).toThrow(/fake/);
   });
 

@@ -74,6 +74,8 @@ export async function makeHarness(
     ...process.env,
     NODE_ENV: "test",
     PROXY_SECRET: "",
+    ADMIN_PHONE: "09120000123",
+    ADMIN_SESSION_SECRET: "s".repeat(48),
     // Production-like origin list, so the CORS behaviour asserted here is the
     // one routino.me actually gets.
     CORS_ORIGINS: "https://routino.me,https://localhost,capacitor://localhost",
@@ -157,3 +159,19 @@ export async function signIn(h: Harness, phone = "09123334444") {
 }
 
 export const auth = (access: string) => ({ authorization: `Bearer ${access}` });
+
+/** Signs the configured owner into the real Edge admin OTP routes. */
+export async function adminSignIn(h: Harness): Promise<Record<string, string>> {
+  const phone = h.env.ADMIN_PHONE;
+  await h.call("POST", "/v1/admin/auth/otp/request", { body: { phone } });
+  const response = await h.call("POST", "/v1/admin/auth/otp/verify", {
+    body: { phone, code: h.sms.last()!.code },
+  });
+  if (response.status !== 200) {
+    throw new Error(`adminSignIn failed: ${response.status} ${await response.text()}`);
+  }
+  const values = response.headers.getSetCookie().map((line) => line.split(";", 1)[0]!);
+  const csrf = values.find((value) => value.startsWith("routino_admin_csrf="))?.split("=")[1];
+  if (!csrf) throw new Error("adminSignIn did not receive a CSRF cookie");
+  return { cookie: values.join("; "), "x-admin-csrf": csrf };
+}
