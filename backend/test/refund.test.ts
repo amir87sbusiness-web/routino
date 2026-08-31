@@ -82,7 +82,10 @@ describe("money that comes back", () => {
     const { access, user } = await signIn("09137770001");
     await buyAMonth(access);
     const afterPurchase = await daysLeft(user.id);
-    expect(afterPurchase).toBeGreaterThan(30);
+    // Payment plans add calendar months, not a hard-coded 30 × 24h interval.
+    // The shortest Gregorian month is 28 days and the assertion runs after the
+    // grant timestamp, so 27 is the correct lower bound.
+    expect(afterPurchase).toBeGreaterThan(27);
 
     // A refund happens entirely at ZarinPal/the bank. There is no callback for
     // it and nothing polls for it, so from this server's point of view nothing

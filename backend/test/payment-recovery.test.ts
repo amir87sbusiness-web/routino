@@ -72,8 +72,11 @@ describe("a payment whose callback never came back", () => {
     const after = await openApp(access);
 
     expect(after.entitlement.status).toBe("active");
-    expect(daysLeft(after.entitlement.expiresAt)).toBeGreaterThan(30);
-    expect(daysLeft(before.entitlement.expiresAt)).toBeGreaterThan(30);
+    // A plan month is a calendar month (28–31 days), and a few milliseconds
+    // elapse before this assertion. `> 30` therefore rejects a correct
+    // 30-day month the instant after it was granted.
+    expect(daysLeft(after.entitlement.expiresAt)).toBeGreaterThan(27);
+    expect(daysLeft(before.entitlement.expiresAt)).toBeGreaterThan(27);
   });
 
   it("does not grant when the user actually cancelled", async () => {

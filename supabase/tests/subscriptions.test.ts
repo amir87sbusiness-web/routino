@@ -35,7 +35,9 @@ describe("GET /v1/subscriptions/me", () => {
 
     const res = await h.call("GET", "/v1/subscriptions/me", { headers: auth(access) });
     const { entitlement } = await res.json();
-    expect((Date.parse(entitlement.expiresAt) - Date.now()) / DAY).toBeGreaterThan(30);
+    // One plan month is a real calendar month. This runs just after the grant,
+    // so a strict `> 30` rejects a correct 30-day month; 27 covers February.
+    expect((Date.parse(entitlement.expiresAt) - Date.now()) / DAY).toBeGreaterThan(27);
   });
 });
 
