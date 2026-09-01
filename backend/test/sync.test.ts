@@ -127,11 +127,7 @@ const archivedTask = (id: string, dateKey: string, updatedAt: number, title = "Ø
   updatedAt,
 });
 
-function taskArchive(
-  monthKey: string,
-  items: ReturnType<typeof archivedTask>[],
-  version = 1,
-) {
+function taskArchive(monthKey: string, items: ReturnType<typeof archivedTask>[], version = 1) {
   return {
     v: version,
     monthKey,

@@ -171,39 +171,35 @@ async function pauseQuotaRejected(
   if (byTable.size === 0 || !Number.isFinite(earliest)) return undefined;
 
   let effectiveRetryAt: number | undefined;
-  await idb.transaction(
-    "rw",
-    [idb.syncMeta, ...[...byTable.keys()].map(tableOf)],
-    async () => {
-      let paused = 0;
-      for (const [table, sentRows] of byTable) {
-        const current = await tableOf(table).bulkGet(sentRows.map((row) => row.key));
-        const exact = current
-          .filter(
-            (row, index): row is RecordRow<unknown> =>
-              !!row && row.dirty === 1 && row.updatedAt === sentRows[index]!.updatedAt,
-          )
-          .map((row) => ({ ...row, dirty: 2 as const }));
-        if (exact.length) {
-          await tableOf(table).bulkPut(exact);
-          paused += exact.length;
-        }
+  await idb.transaction("rw", [idb.syncMeta, ...[...byTable.keys()].map(tableOf)], async () => {
+    let paused = 0;
+    for (const [table, sentRows] of byTable) {
+      const current = await tableOf(table).bulkGet(sentRows.map((row) => row.key));
+      const exact = current
+        .filter(
+          (row, index): row is RecordRow<unknown> =>
+            !!row && row.dirty === 1 && row.updatedAt === sentRows[index]!.updatedAt,
+        )
+        .map((row) => ({ ...row, dirty: 2 as const }));
+      if (exact.length) {
+        await tableOf(table).bulkPut(exact);
+        paused += exact.length;
       }
-      if (paused === 0) return;
+    }
+    if (paused === 0) return;
 
-      const stored = await idb.syncMeta.get("cursor");
-      const existing =
-        stored?.owner === owner && isValidRetryAt(stored.quotaRetryAt)
-          ? stored.quotaRetryAt
-          : undefined;
-      effectiveRetryAt = existing === undefined ? earliest : Math.min(existing, earliest);
-      const base =
-        stored?.owner === owner
-          ? stored
-          : { key: "cursor" as const, owner, cursor: 0, lastSyncedAt: 0 };
-      await idb.syncMeta.put({ ...base, owner, quotaRetryAt: effectiveRetryAt });
-    },
-  );
+    const stored = await idb.syncMeta.get("cursor");
+    const existing =
+      stored?.owner === owner && isValidRetryAt(stored.quotaRetryAt)
+        ? stored.quotaRetryAt
+        : undefined;
+    effectiveRetryAt = existing === undefined ? earliest : Math.min(existing, earliest);
+    const base =
+      stored?.owner === owner
+        ? stored
+        : { key: "cursor" as const, owner, cursor: 0, lastSyncedAt: 0 };
+    await idb.syncMeta.put({ ...base, owner, quotaRetryAt: effectiveRetryAt });
+  });
   return effectiveRetryAt;
 }
 

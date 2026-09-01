@@ -273,10 +273,7 @@ export function validateSyncRecord(record: PushRecord): RecordValidation {
   }
 
   const parsed = schemas[record.kind].safeParse(record.data);
-  if (
-    !parsed.success ||
-    !payloadMatchesId(record.kind, record.id, parsed.data, record.updatedAt)
-  ) {
+  if (!parsed.success || !payloadMatchesId(record.kind, record.id, parsed.data, record.updatedAt)) {
     return { ok: false, code: "invalid_record" };
   }
 

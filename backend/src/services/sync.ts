@@ -685,16 +685,14 @@ export async function pullRecords(
   const hasLookahead = transferred.some((row) => Boolean(row.is_lookahead));
   const candidates = transferred
     .filter((row) => !row.is_lookahead)
-    .map(
-      (row): PullRecord => ({
-        kind: row.kind!,
-        id: row.id!,
-        data: row.data,
-        updatedAt: Number(row.updated_at!),
-        deleted: Boolean(row.deleted),
-        seq: Number(row.seq!),
-      }),
-    );
+    .map((row): PullRecord => ({
+      kind: row.kind!,
+      id: row.id!,
+      data: row.data,
+      updatedAt: Number(row.updated_at!),
+      deleted: Boolean(row.deleted),
+      seq: Number(row.seq!),
+    }));
   const selected = selectPullPage(candidates, safeLimit, recordByteBudget, emptyPageMaxBytes);
   // `cursor` is non-zero whenever a stored row was selected, including a
   // valid empty archive. Preserve the caller's cursor only for an empty query.

@@ -46,13 +46,13 @@ function packetFor(
     } else {
       if (row.data === null) throw new Error("live_habit_log_missing_data");
       cells[day] = {
-          updatedAt: row.updatedAt,
-          deleted: false,
-          value: row.data.value,
-          done: row.data.done,
-          ...(row.data.note === undefined ? {} : { note: row.data.note }),
-          ...(row.data.mood === undefined ? {} : { mood: row.data.mood }),
-        };
+        updatedAt: row.updatedAt,
+        deleted: false,
+        value: row.data.value,
+        done: row.data.done,
+        ...(row.data.note === undefined ? {} : { note: row.data.note }),
+        ...(row.data.mood === undefined ? {} : { mood: row.data.mood }),
+      };
     }
     updatedAt = Math.max(updatedAt, row.updatedAt);
   }

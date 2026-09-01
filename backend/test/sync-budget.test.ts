@@ -249,12 +249,7 @@ describe("per-account sync storage budget", () => {
        where id = '${USER_ID}'
     `);
 
-    const tooEarly = await pushRecords(
-      h.db,
-      USER_ID,
-      [next],
-      new Date("2027-08-31T23:59:59.999Z"),
-    );
+    const tooEarly = await pushRecords(h.db, USER_ID, [next], new Date("2027-08-31T23:59:59.999Z"));
     expect(tooEarly.rejectedRecords[0]).toMatchObject({
       code: "account_quota_exceeded",
       retryAt: Date.parse("2027-09-01T00:00:00.000Z"),

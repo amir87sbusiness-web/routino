@@ -112,7 +112,6 @@ describe("edge sync", () => {
         skipped: 0,
         records: [expect.objectContaining({ kind: "habits", id: "legacy-schema-habit" })],
       });
-
     } finally {
       await legacy.close();
     }
@@ -145,14 +144,23 @@ describe("edge sync", () => {
   it("only accepts the nested undefined-function error for this exact writer", () => {
     expect(
       isUndefinedRoutinoPushRecordsError({
-        cause: { code: "42883", message: "function routino_push_records(uuid, timestamptz, jsonb) does not exist" },
+        cause: {
+          code: "42883",
+          message: "function routino_push_records(uuid, timestamptz, jsonb) does not exist",
+        },
       }),
     ).toBe(true);
     expect(
-      isUndefinedRoutinoPushRecordsError({ code: "42883", message: "function other_writer() does not exist" }),
+      isUndefinedRoutinoPushRecordsError({
+        code: "42883",
+        message: "function other_writer() does not exist",
+      }),
     ).toBe(false);
     expect(
-      isUndefinedRoutinoPushRecordsError({ code: "23505", message: "function routino_push_records() does not exist" }),
+      isUndefinedRoutinoPushRecordsError({
+        code: "23505",
+        message: "function routino_push_records() does not exist",
+      }),
     ).toBe(false);
   });
 
@@ -166,11 +174,14 @@ describe("edge sync", () => {
       isLegacyAccountQuotaError({ code: "23514", constraint: "users_sync_data_bytes_bounds" }),
     ).toBe(true);
     expect(
-      isLegacyAccountQuotaError({ code: "23514", constraint_name: "users_sync_growth_bytes_bounds" }),
+      isLegacyAccountQuotaError({
+        code: "23514",
+        constraint_name: "users_sync_growth_bytes_bounds",
+      }),
     ).toBe(false);
-    expect(isLegacyAccountQuotaError({ code: "23505", constraint: "users_sync_data_bytes_bounds" })).toBe(
-      false,
-    );
+    expect(
+      isLegacyAccountQuotaError({ code: "23505", constraint: "users_sync_data_bytes_bounds" }),
+    ).toBe(false);
   });
 
   it("expands internal task months and lets a newer ordinary override converge", async () => {

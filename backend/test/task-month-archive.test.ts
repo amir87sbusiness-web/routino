@@ -59,9 +59,9 @@ describe("task-month archive codec", () => {
   });
 
   it("rejects unsupported archive versions", () => {
-    expect(() =>
-      expandTaskMonthArchive({ ...archive, data: { ...archiveData, v: 2 } }),
-    ).toThrow("unsupported_task_archive_version");
+    expect(() => expandTaskMonthArchive({ ...archive, data: { ...archiveData, v: 2 } })).toThrow(
+      "unsupported_task_archive_version",
+    );
   });
 
   it.each([
@@ -69,10 +69,43 @@ describe("task-month archive codec", () => {
     ["non-matching count", { ...archive, data: { ...archiveData, count: 1 } }],
     ["non-lowercase checksum", { ...archive, data: { ...archiveData, checksum: "A".repeat(32) } }],
     ["malformed item tuple", { ...archive, data: { ...archiveData, items: [["t-1", 1000]] } }],
-    ["non-integer item timestamp", { ...archive, data: { ...archiveData, items: [["t-1", 1.5, task("t-1", "2026-01-02", "الف")]] } }],
-    ["invalid task payload", { ...archive, data: { ...archiveData, items: [["t-1", 1000, { ...task("t-1", "2026-01-02", "الف"), title: "" }]] } }],
-    ["duplicate task ids", { ...archive, data: { ...archiveData, items: [["t-1", 1000, task("t-1", "2026-01-02", "الف")], ["t-1", 2000, task("t-1", "2026-01-03", "ب")]] } }],
-    ["task outside the archive month", { ...archive, data: { ...archiveData, items: [["t-1", 1000, task("t-1", "2026-02-02", "الف")]] } }],
+    [
+      "non-integer item timestamp",
+      {
+        ...archive,
+        data: { ...archiveData, items: [["t-1", 1.5, task("t-1", "2026-01-02", "الف")]] },
+      },
+    ],
+    [
+      "invalid task payload",
+      {
+        ...archive,
+        data: {
+          ...archiveData,
+          items: [["t-1", 1000, { ...task("t-1", "2026-01-02", "الف"), title: "" }]],
+        },
+      },
+    ],
+    [
+      "duplicate task ids",
+      {
+        ...archive,
+        data: {
+          ...archiveData,
+          items: [
+            ["t-1", 1000, task("t-1", "2026-01-02", "الف")],
+            ["t-1", 2000, task("t-1", "2026-01-03", "ب")],
+          ],
+        },
+      },
+    ],
+    [
+      "task outside the archive month",
+      {
+        ...archive,
+        data: { ...archiveData, items: [["t-1", 1000, task("t-1", "2026-02-02", "الف")]] },
+      },
+    ],
   ])("rejects %s", (_reason, malformed) => {
     expect(() => expandTaskMonthArchive(malformed as StoredTaskMonthRecord)).toThrow(
       "invalid_task_month_archive",

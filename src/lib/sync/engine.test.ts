@@ -297,7 +297,14 @@ describe("sync engine, two devices on one account", () => {
     await syncNow(OWNER);
 
     await applyChanges(
-      [{ table: "tasks", key: "quota-edit", data: taskData("quota-edit", "نسخه جدید"), deleted: false }],
+      [
+        {
+          table: "tasks",
+          key: "quota-edit",
+          data: taskData("quota-edit", "نسخه جدید"),
+          deleted: false,
+        },
+      ],
       2_000,
     );
 

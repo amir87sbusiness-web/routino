@@ -59,9 +59,7 @@ function invalidArchive(): never {
   throw new Error("invalid_task_month_archive");
 }
 
-export function expandTaskMonthArchive(
-  record: StoredTaskMonthRecord,
-): ArchivedTaskPullRecord[] {
+export function expandTaskMonthArchive(record: StoredTaskMonthRecord): ArchivedTaskPullRecord[] {
   if (!isArchiveData(record.data)) {
     const data = record.data as { v?: unknown } | null;
     if (data?.v !== TASK_MONTH_ARCHIVE_VERSION) {

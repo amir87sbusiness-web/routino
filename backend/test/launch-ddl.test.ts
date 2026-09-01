@@ -708,7 +708,8 @@ describe("launch schema repairs", () => {
   it("generates one idempotent low-impact task compaction schedule", () => {
     execFileSync(process.execPath, ["scripts/gen-setup-sql.mjs"], { cwd: root, stdio: "pipe" });
     const sql = readFileSync(resolve(root, "supabase/setup.sql"), "utf8");
-    const unschedule = "select cron.unschedule(jobid) from cron.job where jobname = 'routino-task-month-compaction';";
+    const unschedule =
+      "select cron.unschedule(jobid) from cron.job where jobname = 'routino-task-month-compaction';";
     const schedule = `select cron.schedule(
   'routino-task-month-compaction',
   '17 4 * * *',
