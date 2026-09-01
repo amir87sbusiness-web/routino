@@ -1,0 +1,90 @@
+import { describe, expect, it } from "vitest";
+import {
+  expandTaskMonthArchive,
+  isTaskMonthArchiveKind,
+  type StoredTaskMonthRecord,
+} from "../src/services/task-month-archive.js";
+import { validateSyncRecord } from "../src/services/sync-record-validation.js";
+
+const task = (id: string, dateKey: string, title: string) => ({
+  id,
+  dateKey,
+  title,
+  type: "binary" as const,
+  target: 1,
+  value: 0,
+  done: false,
+});
+
+const archiveData = {
+  v: 1 as const,
+  monthKey: "2026-01",
+  count: 2,
+  checksum: "9a17d18c4f06c7b86034020c9714db8b",
+  items: [
+    ["t-1", 1000, task("t-1", "2026-01-02", "الف")],
+    ["t-2", 2000, task("t-2", "2026-01-03", "ب")],
+  ] as [string, number, unknown][],
+};
+
+const archive: StoredTaskMonthRecord = {
+  kind: "taskMonths",
+  id: "2026-01|0001",
+  data: archiveData,
+  updatedAt: 2000,
+  deleted: false,
+  seq: 9,
+};
+
+describe("task-month archive codec", () => {
+  it("expands a v1 archive losslessly into ordinary task pull records", () => {
+    expect(expandTaskMonthArchive(archive)).toEqual([
+      {
+        kind: "tasks",
+        id: "t-1",
+        data: task("t-1", "2026-01-02", "الف"),
+        updatedAt: 1000,
+        deleted: false,
+        seq: 9,
+      },
+      {
+        kind: "tasks",
+        id: "t-2",
+        data: task("t-2", "2026-01-03", "ب"),
+        updatedAt: 2000,
+        deleted: false,
+        seq: 9,
+      },
+    ]);
+  });
+
+  it("rejects unsupported archive versions", () => {
+    expect(() =>
+      expandTaskMonthArchive({ ...archive, data: { ...archiveData, v: 2 } }),
+    ).toThrow("unsupported_task_archive_version");
+  });
+
+  it.each([
+    ["archive id from another month", { ...archive, id: "2026-02|0001" }],
+    ["non-matching count", { ...archive, data: { ...archiveData, count: 1 } }],
+    ["non-lowercase checksum", { ...archive, data: { ...archiveData, checksum: "A".repeat(32) } }],
+    ["malformed item tuple", { ...archive, data: { ...archiveData, items: [["t-1", 1000]] } }],
+    ["non-integer item timestamp", { ...archive, data: { ...archiveData, items: [["t-1", 1.5, task("t-1", "2026-01-02", "الف")]] } }],
+    ["invalid task payload", { ...archive, data: { ...archiveData, items: [["t-1", 1000, { ...task("t-1", "2026-01-02", "الف"), title: "" }]] } }],
+    ["duplicate task ids", { ...archive, data: { ...archiveData, items: [["t-1", 1000, task("t-1", "2026-01-02", "الف")], ["t-1", 2000, task("t-1", "2026-01-03", "ب")]] } }],
+    ["task outside the archive month", { ...archive, data: { ...archiveData, items: [["t-1", 1000, task("t-1", "2026-02-02", "الف")]] } }],
+  ])("rejects %s", (_reason, malformed) => {
+    expect(() => expandTaskMonthArchive(malformed as StoredTaskMonthRecord)).toThrow(
+      "invalid_task_month_archive",
+    );
+  });
+
+  it("keeps the client validator closed to the internal stored kind", () => {
+    expect(isTaskMonthArchiveKind("taskMonths")).toBe(true);
+    expect(isTaskMonthArchiveKind("tasks")).toBe(false);
+    expect(validateSyncRecord({ ...archive, seq: undefined } as never)).toMatchObject({
+      ok: false,
+      code: "bad_kind",
+    });
+  });
+});
