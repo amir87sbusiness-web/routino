@@ -13,6 +13,7 @@ import type {
   ExchangeResponse,
   PullResponse,
   PushResponse,
+  RejectedSyncRecord,
   RemoteRecord,
   SyncRecord,
   SyncRejectionCode,
@@ -21,6 +22,7 @@ import { defaultLocal, saveLocal } from "../db/local";
 import { hydrate } from "../db/hydrate";
 import { activateVault, LEGACY_VAULT_ID } from "../db/vault";
 import { db as idb } from "../db/dexie";
+import { applyChanges } from "../db/persist";
 
 /** A one-account change log, i.e. what the server actually is. */
 const server = {
@@ -31,20 +33,23 @@ const server = {
   /** ids the server permanently refuses, e.g. an oversized journal entry. */
   refuse: new Set<string>(),
   refuseCode: "record_too_large" as SyncRejectionCode,
+  refuseRetryAt: new Map<string, number | undefined>(),
   afterExchange: null as null | (() => Promise<void>),
   /** Writes rows at the next sequence numbers, newest-wins per (kind, id). */
-  push(records: SyncRecord[]): PushResponse & {
-    rejectedRecords: { kind: string; id: string; updatedAt: number; code: string }[];
-  } {
+  push(records: SyncRecord[]): PushResponse {
     const accepted = records.filter((record) => !this.refuse.has(record.id));
     const rejectedRecords = records
       .filter((record) => this.refuse.has(record.id))
-      .map((record) => ({
-        kind: record.kind,
-        id: record.id,
-        updatedAt: record.updatedAt,
-        code: this.refuseCode,
-      }));
+      .map((record): RejectedSyncRecord => {
+        const retryAt = this.refuseRetryAt.get(record.id);
+        return {
+          kind: record.kind,
+          id: record.id,
+          updatedAt: record.updatedAt,
+          code: this.refuseCode,
+          ...(retryAt === undefined ? {} : { retryAt }),
+        };
+      });
     let applied = 0;
     for (const r of accepted) {
       this.seq += 1;
@@ -92,6 +97,7 @@ const server = {
     this.exchanges = [];
     this.refuse.clear();
     this.refuseCode = "record_too_large";
+    this.refuseRetryAt.clear();
     this.afterExchange = null;
   },
 };
@@ -112,6 +118,7 @@ const { clearSyncState, hasPendingChanges, syncNow } = await import("./engine");
 const OWNER = "user-1";
 
 beforeEach(async () => {
+  vi.restoreAllMocks();
   server.reset();
   localStorage.clear();
   await activateVault(LEGACY_VAULT_ID);
@@ -157,6 +164,27 @@ async function localDirtyLog(habitId: string, dateKey: string, updatedAt: number
     deleted: 0,
     dirty: 1,
     seq: updatedAt,
+  });
+}
+
+const taskData = (id: string, title: string) => ({
+  id,
+  dateKey: "2026-09-01",
+  title,
+  type: "binary" as const,
+  target: 1,
+  value: 0,
+  done: false,
+});
+
+async function localDirtyTask(id: string, title: string, updatedAt = 1000) {
+  await idb.tasks.put({
+    key: id,
+    data: taskData(id, title),
+    updatedAt,
+    deleted: 0,
+    dirty: 1,
+    seq: 1,
   });
 }
 
@@ -213,15 +241,143 @@ describe("sync engine, two devices on one account", () => {
     expect(await idb.logs.where("dirty").equals(1).count()).toBe(2);
   });
 
-  it("reports account quota refusal without clearing the durable outbox", async () => {
-    await localDirtyHabit("quota-habit", "پیاده‌روی");
-    server.refuse.add("quota-habit");
+  it("pauses an exact quota-rejected version and wakes it at the earliest retry time", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(5_000);
+    const retryAt = 10_000;
+    await localDirtyTask("quota-task", "پیاده‌روی");
+    server.refuse.add("quota-task");
     server.refuseCode = "account_quota_exceeded";
+    server.refuseRetryAt.set("quota-task", retryAt);
 
     const outcome = await syncNow(OWNER);
 
     expect(outcome).toMatchObject({ rejected: 1, quotaExceeded: true });
-    expect((await idb.habits.get("quota-habit"))?.dirty).toBe(1);
+    expect((await idb.tasks.get("quota-task"))?.dirty).toBe(2);
+    expect(await hasPendingChanges()).toBe(false);
+    expect(await idb.syncMeta.get("cursor")).toMatchObject({ owner: OWNER, quotaRetryAt: retryAt });
+
+    server.refuse.clear();
+    now.mockReturnValue(retryAt - 1);
+    await syncNow(OWNER, { pullRequired: true });
+    expect(server.exchanges.at(-1)?.records).toEqual([]);
+    expect((await idb.tasks.get("quota-task"))?.dirty).toBe(2);
+
+    now.mockReturnValue(retryAt);
+    await syncNow(OWNER, { pullRequired: true });
+    expect(server.exchanges.at(-1)?.records).toEqual([
+      expect.objectContaining({ kind: "tasks", id: "quota-task", updatedAt: 1000 }),
+    ]);
+    expect((await idb.tasks.get("quota-task"))?.dirty).toBe(0);
+    expect(await idb.syncMeta.get("cursor")).not.toHaveProperty("quotaRetryAt");
+  });
+
+  it("lets an ordinary edit immediately unblock a quota-paused version", async () => {
+    await localDirtyTask("quota-edit", "نسخه قبلی", 1_000);
+    server.refuse.add("quota-edit");
+    server.refuseCode = "account_quota_exceeded";
+    server.refuseRetryAt.set("quota-edit", 10_000);
+    await syncNow(OWNER);
+
+    await applyChanges(
+      [{ table: "tasks", key: "quota-edit", data: taskData("quota-edit", "نسخه جدید"), deleted: false }],
+      2_000,
+    );
+
+    expect((await idb.tasks.get("quota-edit"))?.dirty).toBe(1);
+    expect((await idb.tasks.get("quota-edit"))?.updatedAt).toBe(2_000);
+    expect(await hasPendingChanges()).toBe(true);
+  });
+
+  it("does not quota-pause a newer local version written while the rejected version is in flight", async () => {
+    await localDirtyTask("quota-newer", "نسخه ارسالی", 1_000);
+    server.refuse.add("quota-newer");
+    server.refuseCode = "account_quota_exceeded";
+    server.refuseRetryAt.set("quota-newer", 10_000);
+    server.afterExchange = async () => {
+      server.afterExchange = null;
+      await localDirtyTask("quota-newer", "نسخه جدیدتر", 2_000);
+    };
+
+    await syncNow(OWNER);
+
+    expect((await idb.tasks.get("quota-newer"))?.dirty).toBe(1);
+    expect((await idb.tasks.get("quota-newer"))?.updatedAt).toBe(2_000);
+  });
+
+  it("keeps quota retry timestamps isolated by owner", async () => {
+    const ownerRetryAt = 10_000;
+    await idb.syncMeta.put({
+      key: "cursor",
+      owner: OWNER,
+      cursor: 7,
+      lastSyncedAt: 1,
+      quotaRetryAt: ownerRetryAt,
+    });
+    await localDirtyTask("other-owner-task", "حساب دوم", 1_000);
+
+    await syncNow("user-2");
+
+    expect(server.exchanges.at(-1)?.records).toEqual([
+      expect.objectContaining({ kind: "tasks", id: "other-owner-task" }),
+    ]);
+    expect(await idb.syncMeta.get("cursor")).toMatchObject({ owner: "user-2" });
+    expect(await idb.syncMeta.get("cursor")).not.toHaveProperty("quotaRetryAt");
+  });
+
+  it("stores the earliest valid quota retry time for the owner", async () => {
+    await localDirtyTask("quota-later", "دیرتر", 1_000);
+    await localDirtyTask("quota-earlier", "زودتر", 2_000);
+    server.refuse.add("quota-later");
+    server.refuse.add("quota-earlier");
+    server.refuseCode = "account_quota_exceeded";
+    server.refuseRetryAt.set("quota-later", 20_000);
+    server.refuseRetryAt.set("quota-earlier", 10_000);
+
+    await syncNow(OWNER);
+
+    expect(await idb.syncMeta.get("cursor")).toMatchObject({ quotaRetryAt: 10_000 });
+    expect((await idb.tasks.get("quota-later"))?.dirty).toBe(2);
+    expect((await idb.tasks.get("quota-earlier"))?.dirty).toBe(2);
+  });
+
+  it("leaves a quota rejection without retryAt eligible for the next lifecycle run", async () => {
+    await localDirtyTask("quota-legacy", "سرور قدیمی", 1_000);
+    server.refuse.add("quota-legacy");
+    server.refuseCode = "account_quota_exceeded";
+
+    await syncNow(OWNER);
+
+    expect(server.exchanges).toHaveLength(1);
+    expect((await idb.tasks.get("quota-legacy"))?.dirty).toBe(1);
+    expect(await idb.syncMeta.get("cursor")).not.toHaveProperty("quotaRetryAt");
+
+    server.refuse.clear();
+    await syncNow(OWNER, { pullRequired: true });
+    expect(server.exchanges).toHaveLength(2);
+    expect(server.exchanges.at(-1)?.records).toEqual([
+      expect.objectContaining({ kind: "tasks", id: "quota-legacy" }),
+    ]);
+    expect((await idb.tasks.get("quota-legacy"))?.dirty).toBe(0);
+  });
+
+  it("preserves quota-rejected local data when the same exchange requires a reset", async () => {
+    await localDirtyTask("quota-reset", "نباید پاک شود", 1_000);
+    server.refuse.add("quota-reset");
+    server.refuseCode = "account_quota_exceeded";
+    server.refuseRetryAt.set("quota-reset", 10_000);
+    server.resetNextPull = true;
+
+    await syncNow(OWNER);
+
+    expect(await idb.tasks.get("quota-reset")).toMatchObject({
+      data: taskData("quota-reset", "نباید پاک شود"),
+      updatedAt: 1_000,
+      dirty: 2,
+    });
+    expect(await idb.syncMeta.get("cursor")).toMatchObject({
+      owner: OWNER,
+      quotaRetryAt: 10_000,
+    });
   });
 
   it("expands a pulled server month into the unchanged local daily rows", async () => {

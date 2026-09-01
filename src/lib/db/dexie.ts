@@ -31,7 +31,7 @@ export interface RecordRow<T> {
   /** Tombstone. Deletes must be rows, not absences, or they can't propagate. */
   deleted: 0 | 1;
   /** Outbox flag: pending push. Indexed, so the sync engine can query it. */
-  dirty: 0 | 1;
+  dirty: 0 | 1 | 2;
   /**
    * Local insertion order. IndexedDB returns rows sorted by primary key, so
    * without this the UI's lists would reshuffle into `uid()` order — habits and
@@ -90,6 +90,8 @@ export interface SyncMetaRow {
   owner: string | null;
   cursor: number;
   lastSyncedAt: number;
+  /** Earliest server reset time for quota-paused rows in this owner's vault. */
+  quotaRetryAt?: number;
 }
 
 export class RoutinoDexie extends Dexie {

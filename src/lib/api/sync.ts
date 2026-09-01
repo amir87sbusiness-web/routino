@@ -22,6 +22,7 @@ export interface RejectedSyncRecord {
   id: string;
   updatedAt: number;
   code: SyncRejectionCode;
+  retryAt?: number;
 }
 
 export interface RemoteRecord extends SyncRecord {

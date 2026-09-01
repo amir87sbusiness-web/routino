@@ -53,7 +53,12 @@ export async function loadSyncState(owner: string): Promise<SyncState> {
   try {
     const row = await idb.syncMeta.get("cursor");
     if (!row || row.owner !== owner) return emptyState();
-    return { owner, cursor: row.cursor, lastSyncedAt: row.lastSyncedAt };
+    return {
+      owner,
+      cursor: row.cursor,
+      lastSyncedAt: row.lastSyncedAt,
+      ...(row.quotaRetryAt === undefined ? {} : { quotaRetryAt: row.quotaRetryAt }),
+    };
   } catch {
     return emptyState();
   }
@@ -90,7 +95,32 @@ interface OutgoingPacket {
   sources: SourceRow[];
 }
 
-async function collectOutbox(): Promise<OutgoingPacket[]> {
+const isValidRetryAt = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value) && value > 0;
+
+/** Atomically returns this owner's paused rows to the ordinary outbox once the
+ * server's account window has reset. Rows live in an owner-specific vault; the
+ * metadata owner check prevents a stale timestamp from another login waking it. */
+async function wakeQuotaPausedRows(owner: string): Promise<void> {
+  const tables = SYNCABLE_TABLES.map(tableOf);
+  await idb.transaction("rw", [idb.syncMeta, ...tables], async () => {
+    const state = await idb.syncMeta.get("cursor");
+    if (
+      state?.owner !== owner ||
+      !isValidRetryAt(state.quotaRetryAt) ||
+      state.quotaRetryAt > Date.now()
+    ) {
+      return;
+    }
+
+    await Promise.all(tables.map((table) => table.where("dirty").equals(2).modify({ dirty: 1 })));
+    const { quotaRetryAt: _cleared, ...resumed } = state;
+    await idb.syncMeta.put(resumed);
+  });
+}
+
+async function collectOutbox(owner?: string): Promise<OutgoingPacket[]> {
+  if (owner) await wakeQuotaPausedRows(owner);
   const out: OutgoingPacket[] = [];
   for (const table of SYNCABLE_TABLES) {
     const rows = await tableOf(table).where("dirty").equals(1).toArray();
@@ -107,6 +137,74 @@ async function collectOutbox(): Promise<OutgoingPacket[]> {
     for (const row of rows) out.push({ record: toWire(table, row), sources: [{ table, row }] });
   }
   return out;
+}
+
+/** Pauses only source rows whose exact sent version was rejected for quota.
+ * Missing/invalid retry metadata deliberately leaves rows at dirty=1 so a
+ * legacy server cannot wedge durable local data beyond the current run. */
+async function pauseQuotaRejected(
+  batch: OutgoingPacket[],
+  rejections: RejectedSyncRecord[],
+  owner: string,
+): Promise<number | undefined> {
+  const retryByRecord = new Map<string, number>();
+  for (const rejection of rejections) {
+    if (rejection.code !== "account_quota_exceeded" || !isValidRetryAt(rejection.retryAt)) {
+      continue;
+    }
+    retryByRecord.set(rejectionKey(rejection), rejection.retryAt);
+  }
+  if (retryByRecord.size === 0) return undefined;
+
+  const byTable = new Map<SyncableTable, RecordRow<unknown>[]>();
+  let earliest = Number.POSITIVE_INFINITY;
+  for (const packet of batch) {
+    const retryAt = retryByRecord.get(rejectionKey(packet.record));
+    if (retryAt === undefined) continue;
+    earliest = Math.min(earliest, retryAt);
+    for (const source of packet.sources) {
+      const rows = byTable.get(source.table);
+      if (rows) rows.push(source.row);
+      else byTable.set(source.table, [source.row]);
+    }
+  }
+  if (byTable.size === 0 || !Number.isFinite(earliest)) return undefined;
+
+  let effectiveRetryAt: number | undefined;
+  await idb.transaction(
+    "rw",
+    [idb.syncMeta, ...[...byTable.keys()].map(tableOf)],
+    async () => {
+      let paused = 0;
+      for (const [table, sentRows] of byTable) {
+        const current = await tableOf(table).bulkGet(sentRows.map((row) => row.key));
+        const exact = current
+          .filter(
+            (row, index): row is RecordRow<unknown> =>
+              !!row && row.dirty === 1 && row.updatedAt === sentRows[index]!.updatedAt,
+          )
+          .map((row) => ({ ...row, dirty: 2 as const }));
+        if (exact.length) {
+          await tableOf(table).bulkPut(exact);
+          paused += exact.length;
+        }
+      }
+      if (paused === 0) return;
+
+      const stored = await idb.syncMeta.get("cursor");
+      const existing =
+        stored?.owner === owner && isValidRetryAt(stored.quotaRetryAt)
+          ? stored.quotaRetryAt
+          : undefined;
+      effectiveRetryAt = existing === undefined ? earliest : Math.min(existing, earliest);
+      const base =
+        stored?.owner === owner
+          ? stored
+          : { key: "cursor" as const, owner, cursor: 0, lastSyncedAt: 0 };
+      await idb.syncMeta.put({ ...base, owner, quotaRetryAt: effectiveRetryAt });
+    },
+  );
+  return effectiveRetryAt;
 }
 
 const toWire = (table: SyncableTable, row: RecordRow<unknown>): SyncRecord => ({
@@ -247,12 +345,13 @@ async function applyRemote(records: RemoteRecord[]): Promise<number> {
   return written;
 }
 
-/** Drops every synced row so a reset can rebuild from the server's copy.
+/** Drops every settled row so a reset can rebuild from the server's copy.
  * Device-local state (theme, sign-in, cached subscription) lives outside these
- * tables and is untouched. */
+ * tables and is untouched. Pending/quota-paused rows are local data the server
+ * may just have rejected; preserving them is required for a lossless reset. */
 async function wipeSyncedTables(): Promise<void> {
   await idb.transaction("rw", SYNCABLE_TABLES.map(tableOf), async () => {
-    await Promise.all(SYNCABLE_TABLES.map((t) => tableOf(t).clear()));
+    await Promise.all(SYNCABLE_TABLES.map((t) => tableOf(t).where("dirty").equals(0).delete()));
   });
 }
 
@@ -333,13 +432,13 @@ async function run(owner: string, options: SyncOptions): Promise<SyncOutcome> {
     return { pushed: 0, pulled: 0, rejected: 0, quotaExceeded: false, remoteChanged: false };
   }
 
-  let state = await loadSyncState(owner);
   let pushed = 0;
   let pulled = 0;
   let resetApplied = false;
   let entitlement: ServerEntitlement | undefined;
 
-  const outbox = await collectOutbox();
+  const outbox = await collectOutbox(owner);
+  let state = await loadSyncState(owner);
   const batches = chunk(outbox);
   let rejected = 0;
   let quotaExceeded = false;
@@ -391,6 +490,8 @@ async function run(owner: string, options: SyncOptions): Promise<SyncOutcome> {
       options.includeAccountState === true && index === batches.length - 1,
     );
     const refused = new Set((page.rejectedRecords ?? []).map(rejectionKey));
+    const quotaRetryAt = await pauseQuotaRejected(batch, page.rejectedRecords ?? [], owner);
+    if (quotaRetryAt !== undefined) state = { ...state, owner, quotaRetryAt };
     await clearDirty(
       batch
         .filter(({ record }) => !refused.has(rejectionKey(record)))
