@@ -615,10 +615,21 @@ describe("sync", () => {
 
   it("keeps an exchange below the UTF-8 response cap with maximum rejected-record metadata", async () => {
     const { access, user } = await signIn("09120000033");
+    const normalRecordBudget = PULL_RESPONSE_MAX_UTF8_BYTES - 8 * 1024;
+    const emptyJournal: PullRecord = {
+      kind: "journal",
+      id: "2026-08-01",
+      data: { text: "" },
+      updatedAt: 1,
+      deleted: false,
+      seq: 1,
+    };
+    const journalCharacters =
+      normalRecordBudget - Buffer.byteLength(JSON.stringify([emptyJournal]), "utf8") - 1;
     await h.raw(`
       insert into records (user_id, kind, id, data, updated_at, deleted, seq)
       values ('${user.id}', 'journal', '2026-08-01',
-              jsonb_build_object('text', repeat('x', 515000)), 1, false, 1);
+              jsonb_build_object('text', repeat('x', ${journalCharacters})), 1, false, 1);
       update users set seq = 1 where id = '${user.id}';
     `);
     const rejected = Array.from({ length: 200 }, (_, index) => ({
@@ -642,6 +653,35 @@ describe("sync", () => {
     expect(Buffer.byteLength(response.body, "utf8")).toBeLessThanOrEqual(
       PULL_RESPONSE_MAX_UTF8_BYTES,
     );
+
+    const deferred = await exchange(access, 0, []);
+    expect(deferred.statusCode).toBe(200);
+    expect(deferred.json()).toMatchObject({
+      records: [expect.objectContaining({ kind: "journal", id: "2026-08-01" })],
+      cursor: 1,
+      hasMore: false,
+    });
+  });
+
+  it("keeps a task archive that exceeds the normal pull budget fail closed in exchange", async () => {
+    const { access, user } = await signIn("09120000034");
+    await allowTaskMonthArchives();
+    await seedTaskArchive(
+      user.id,
+      1,
+      "2026-01|oversized",
+      taskArchive(
+        "2026-01",
+        Array.from({ length: 130 }, (_, index) => ({
+          ...archivedTask(`oversized-${index}`, "2026-01-02", 1000 + index),
+          note: "x".repeat(4_000),
+        })),
+      ),
+    );
+
+    const response = await exchange(access, 0, []);
+    expect(response.statusCode).toBe(500);
+    expect((response.json() as { error: string }).error).toBe("internal");
   });
 
   it("tells a device that fell behind the tombstone purge to start over", async () => {

@@ -148,7 +148,7 @@ export function selectPullPage(
   candidates: PullRecord[],
   safeLimit: number,
   byteBudget: number,
-  allowEmptyPage = false,
+  emptyPageMaxBytes = byteBudget,
 ): PullResult {
   const records: PullRecord[] = [];
   let cursor = 0;
@@ -166,11 +166,16 @@ export function selectPullPage(
     }
     if (nextBytes > byteBudget) {
       // Exchange metadata can temporarily leave less room than this otherwise
-      // valid stored row needs. Return an empty page without advancing its
-      // cursor; once the client drops the rejected records, the row is pulled
-      // on the next exchange. A permanently oversized archive still fails
-      // closed under the normal pull budget.
-      if (allowEmptyPage && selectedStoredRows === 0) break;
+      // valid stored row needs. Return an empty page only when the same row
+      // fits the normal pull budget; a permanently oversized archive must
+      // remain fail-closed instead of producing an endless empty-page loop.
+      if (
+        selectedStoredRows === 0 &&
+        byteBudget < emptyPageMaxBytes &&
+        nextBytes <= emptyPageMaxBytes
+      ) {
+        break;
+      }
       throw new Error("task_archive_chunk_exceeds_pull_budget");
     }
     records.push(...expanded);
@@ -444,7 +449,7 @@ export async function pullRecords(
   cursor: number,
   limit = PULL_PAGE_SIZE,
   recordByteBudget = PULL_RECORDS_BYTE_BUDGET,
-  allowEmptyPage = false,
+  emptyPageMaxBytes = recordByteBudget,
 ): Promise<PullResult> {
   const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   if (!user) throw badRequest("unknown_user", "No such user");
@@ -486,7 +491,7 @@ export async function pullRecords(
       seq: Number(r.seq),
     }),
   );
-  const selected = selectPullPage(candidates, safeLimit, recordByteBudget, allowEmptyPage);
+  const selected = selectPullPage(candidates, safeLimit, recordByteBudget, emptyPageMaxBytes);
   // `cursor` is non-zero whenever a stored row was selected, including a
   // valid empty archive. Preserve the caller's cursor only for an empty query.
   const nextCursor = selected.cursor || safeCursor;
@@ -524,14 +529,16 @@ export async function exchangeRecords(
   // adds client-controlled (but bounded) rejection metadata, so reserve its
   // actual UTF-8 JSON size too before choosing public records.
   const rejectedBytes = utf8Bytes(JSON.stringify(pushed.rejectedRecords));
-  const exchangeRecordBudget = Math.max(0, PULL_RECORDS_BYTE_BUDGET - rejectedBytes);
+  const exchangeRecordBudget = pushed.rejectedRecords.length
+    ? Math.max(0, PULL_RECORDS_BYTE_BUDGET - rejectedBytes)
+    : PULL_RECORDS_BYTE_BUDGET;
   const pulled = await pullRecords(
     db,
     userId,
     cursor,
     limit,
     exchangeRecordBudget,
-    true,
+    PULL_RECORDS_BYTE_BUDGET,
   );
   return {
     ...pulled,
