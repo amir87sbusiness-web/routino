@@ -47,6 +47,111 @@ afterAll(async () => {
 });
 
 describe("launch schema repairs", () => {
+  it("bootstraps the task compactor without touching existing sync state", async () => {
+    const owner = "a0111111-1111-4111-8111-111111111111";
+    await h.raw(`
+      insert into users (
+        id, phone, seq, gc_seq, sync_growth_period_started_at, sync_growth_bytes
+      ) values (
+        '${owner}', '989122299990', 17, 3, '2026-01-01T00:00:00Z', 1234
+      );
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      values (
+        '${owner}', 'tasks', 'bootstrap-task',
+        '{"id":"bootstrap-task","dateKey":"2026-01-01","title":"keep","type":"binary","target":1,"value":1,"done":true}'::jsonb,
+        1000, false, 17
+      );
+    `);
+    const [before] = await h.query(`
+      select u.seq, u.gc_seq, u.sync_record_count, u.sync_data_bytes,
+             u.sync_growth_period_started_at::text, u.sync_growth_bytes,
+             r.data, r.updated_at, r.deleted, r.seq as record_seq
+        from users u join records r on r.user_id = u.id
+       where u.id = '${owner}'
+    `);
+
+    await h.raw(SCHEMA_SQL);
+
+    const functions = await h.query<{ routine_name: string }>(`
+      select routine_name from information_schema.routines
+       where routine_schema = 'public'
+         and routine_name in (
+           'routino_task_archive_candidate_valid',
+           'routino_compact_task_months'
+         )
+       order by routine_name
+    `);
+    expect(functions.map((row) => row.routine_name)).toEqual([
+      "routino_compact_task_months",
+      "routino_task_archive_candidate_valid",
+    ]);
+    expect(
+      await h.query(`
+        select u.seq, u.gc_seq, u.sync_record_count, u.sync_data_bytes,
+               u.sync_growth_period_started_at::text, u.sync_growth_bytes,
+               r.data, r.updated_at, r.deleted, r.seq as record_seq
+          from users u join records r on r.user_id = u.id
+         where u.id = '${owner}'
+      `),
+    ).toEqual([before]);
+  });
+
+  it("installs the task compactor migration on the expanded live schema without rewriting data", async () => {
+    const owner = "a0222222-2222-4222-8222-222222222222";
+    await h.raw(`
+      insert into users (
+        id, phone, seq, gc_seq, sync_growth_period_started_at, sync_growth_bytes
+      ) values (
+        '${owner}', '989122299989', 9, 2, '2026-02-01T00:00:00Z', 4321
+      );
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      values (
+        '${owner}', 'tasks', 'migration-task',
+        '{"id":"migration-task","dateKey":"2026-02-01","title":"keep","type":"binary","target":1,"value":1,"done":true}'::jsonb,
+        2000, false, 9
+      );
+      drop function routino_compact_task_months(timestamptz, integer);
+      drop function routino_task_archive_candidate_valid(text, jsonb);
+      drop function routino_js_string_length(text);
+    `);
+    const before = await h.query(`
+      select u.seq, u.gc_seq, u.sync_record_count, u.sync_data_bytes,
+             u.sync_growth_period_started_at::text, u.sync_growth_bytes,
+             r.kind, r.id, r.data, r.updated_at, r.deleted, r.seq as record_seq
+        from users u join records r on r.user_id = u.id
+       where u.id = '${owner}'
+    `);
+    const migrationSql = readFileSync(
+      resolve(root, "supabase/migrations/20260901151000_task_month_compactor.sql"),
+      "utf8",
+    );
+
+    await h.raw(migrationSql);
+
+    const functions = await h.query<{ routine_name: string }>(`
+      select routine_name from information_schema.routines
+       where routine_schema = 'public'
+         and routine_name in (
+           'routino_task_archive_candidate_valid',
+           'routino_compact_task_months'
+         )
+       order by routine_name
+    `);
+    expect(functions.map((row) => row.routine_name)).toEqual([
+      "routino_compact_task_months",
+      "routino_task_archive_candidate_valid",
+    ]);
+    expect(
+      await h.query(`
+        select u.seq, u.gc_seq, u.sync_record_count, u.sync_data_bytes,
+               u.sync_growth_period_started_at::text, u.sync_growth_bytes,
+               r.kind, r.id, r.data, r.updated_at, r.deleted, r.seq as record_seq
+          from users u join records r on r.user_id = u.id
+         where u.id = '${owner}'
+      `),
+    ).toEqual(before);
+  });
+
   it("expands annual quota fields without rewriting grandfathered sync content", async () => {
     await h.raw(`
       alter table records drop constraint records_kind_valid;
@@ -581,5 +686,21 @@ describe("launch schema repairs", () => {
 
     expect(sql).not.toContain("routino-devices-purge");
     expect(sql).not.toContain("delete from devices");
+  });
+
+  it("generates one idempotent low-impact task compaction schedule", () => {
+    execFileSync(process.execPath, ["scripts/gen-setup-sql.mjs"], { cwd: root, stdio: "pipe" });
+    const sql = readFileSync(resolve(root, "supabase/setup.sql"), "utf8");
+    const unschedule = "select cron.unschedule(jobid) from cron.job where jobname = 'routino-task-month-compaction';";
+    const schedule = `select cron.schedule(
+  'routino-task-month-compaction',
+  '17 4 * * *',
+  $$select * from routino_compact_task_months(now(), 500)$$
+);`;
+
+    expect(sql).toContain(unschedule);
+    expect(sql).toContain(schedule);
+    expect(sql.indexOf(unschedule)).toBeLessThan(sql.indexOf(schedule));
+    expect(sql.match(/'routino-task-month-compaction'/g)).toHaveLength(2);
   });
 });

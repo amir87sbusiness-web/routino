@@ -33,6 +33,14 @@ select cron.schedule('routino-otp-purge', '0 * * * *',
 select cron.schedule('routino-auth-rate-limit-purge', '30 * * * *',
   $$delete from auth_rate_limit_buckets where expires_at < now()$$);
 
+-- Re-running setup must replace, not duplicate, the database-local compactor.
+select cron.unschedule(jobid) from cron.job where jobname = 'routino-task-month-compaction';
+select cron.schedule(
+  'routino-task-month-compaction',
+  '17 4 * * *',
+  $$select * from routino_compact_task_months(now(), 500)$$
+);
+
 -- Tombstones, weekly. A deleted habit or log leaves a row behind on purpose: a
 -- delete has to be able to TRAVEL to the user's other devices, and an absence
 -- cannot. But it only has to travel once, and \`records\` is the table that
