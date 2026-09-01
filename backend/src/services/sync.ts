@@ -27,6 +27,11 @@ import { rowsOf, type Database } from "../db/client.js";
 import { users } from "../db/schema.js";
 import { badRequest } from "../lib/http-errors.js";
 import {
+  expandTaskMonthArchive,
+  isTaskMonthArchiveKind,
+  type StoredTaskMonthRecord,
+} from "./task-month-archive.js";
+import {
   validateSyncRecord,
   type PushRecord,
   type RejectedSyncRecord,
@@ -121,6 +126,56 @@ export interface ExchangeResult extends PullResult {
   applied: number;
   skipped: number;
   rejectedRecords: RejectedSyncRecord[];
+}
+
+const utf8Bytes = (value: string) => new TextEncoder().encode(value).byteLength;
+
+/** Converts a server-only archive row into the ordinary task rows understood by
+ * every released client. Stored archives never cross the HTTP boundary raw. */
+export function expandStoredPullRecord(record: PullRecord): PullRecord[] {
+  return isTaskMonthArchiveKind(record.kind)
+    ? expandTaskMonthArchive(record as StoredTaskMonthRecord)
+    : [record];
+}
+
+/**
+ * Chooses complete stored rows for one public pull page. A task archive has one
+ * database sequence number but many client-visible tasks, so it must be either
+ * included in full or left for the next request; advancing past part of one
+ * would make the omitted tasks permanently unreachable.
+ */
+export function selectPullPage(
+  candidates: PullRecord[],
+  safeLimit: number,
+  byteBudget: number,
+): PullResult {
+  const records: PullRecord[] = [];
+  let cursor = 0;
+  let usedBytes = 0;
+  let selectedStoredRows = 0;
+
+  for (const stored of candidates) {
+    const expanded = expandStoredPullRecord(stored);
+    const nextBytes = utf8Bytes(JSON.stringify(expanded)) + 1;
+    if (
+      selectedStoredRows > 0 &&
+      (records.length + expanded.length > safeLimit || usedBytes + nextBytes > byteBudget)
+    ) {
+      break;
+    }
+    if (nextBytes > byteBudget) throw new Error("task_archive_chunk_exceeds_pull_budget");
+    records.push(...expanded);
+    usedBytes += nextBytes;
+    selectedStoredRows += 1;
+    cursor = stored.seq;
+  }
+
+  return {
+    records,
+    cursor,
+    hasMore: selectedStoredRows < candidates.length,
+    reset: false,
+  };
 }
 
 function partitionIncoming(rows: PushRecord[]): {
@@ -396,37 +451,11 @@ export async function pullRecords(
 
   const safeLimit = Math.max(1, Math.min(PULL_PAGE_SIZE, Math.floor(limit) || PULL_PAGE_SIZE));
   const result = await db.execute(sql`
-    with candidates as (
-      select r.kind, r.id, r.data, r.updated_at, r.deleted, r.seq,
-             row_number() over (order by r.seq) as row_number,
-             sum(
-               octet_length(jsonb_build_object(
-                 'kind', r.kind,
-                 'id', r.id,
-                 'data', r.data,
-                 'updatedAt', r.updated_at,
-                 'deleted', r.deleted,
-                 'seq', r.seq
-               )::text) + 1
-             ) over (order by r.seq) as cumulative_bytes
-        from records r
-       where r.user_id = ${userId}::uuid and r.seq > ${safeCursor}::bigint
-       order by r.seq
-       limit ${safeLimit}
-    ), selected as (
-      select * from candidates
-       where row_number = 1 or cumulative_bytes <= ${PULL_RECORDS_BYTE_BUDGET}
-    ), boundary as (
-      select max(seq) as last_seq from selected
-    )
-    select s.kind, s.id, s.data, s.updated_at, s.deleted, s.seq,
-           exists (
-             select 1 from records later
-              where later.user_id = ${userId}::uuid
-                and later.seq > (select last_seq from boundary)
-           ) as has_more
-      from selected s
-     order by s.seq
+    select r.kind, r.id, r.data, r.updated_at, r.deleted, r.seq
+      from records r
+     where r.user_id = ${userId}::uuid and r.seq > ${safeCursor}::bigint
+     order by r.seq
+     limit ${safeLimit}
   `);
   const rows = rowsOf<{
     kind: string;
@@ -435,22 +464,33 @@ export async function pullRecords(
     updated_at: string | number;
     deleted: boolean;
     seq: string | number;
-    has_more: boolean;
   }>(result);
-  const hasMore = rows[0]?.has_more ?? false;
-
-  return {
-    records: rows.map((r) => ({
+  const candidates = rows.map(
+    (r): PullRecord => ({
       kind: r.kind,
       id: r.id,
       data: r.data,
       updatedAt: Number(r.updated_at),
       deleted: r.deleted,
       seq: Number(r.seq),
-    })),
-    cursor: rows.length ? Number(rows[rows.length - 1]!.seq) : safeCursor,
-    hasMore,
-    reset: false,
+    }),
+  );
+  const selected = selectPullPage(candidates, safeLimit, PULL_RECORDS_BYTE_BUDGET);
+  // `cursor` is non-zero whenever a stored row was selected, including a
+  // valid empty archive. Preserve the caller's cursor only for an empty query.
+  const nextCursor = selected.cursor || safeCursor;
+  const later = await db.execute(sql`
+    select exists (
+      select 1 from records
+       where user_id = ${userId}::uuid and seq > ${nextCursor}::bigint
+    ) as has_more
+  `);
+  const [laterRow] = rowsOf<{ has_more: boolean }>(later);
+
+  return {
+    ...selected,
+    cursor: nextCursor,
+    hasMore: selected.hasMore || Boolean(laterRow?.has_more),
   };
 }
 

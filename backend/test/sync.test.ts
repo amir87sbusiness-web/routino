@@ -5,7 +5,12 @@
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
-import { isAccountQuotaError, PULL_RESPONSE_MAX_UTF8_BYTES } from "../src/services/sync.js";
+import {
+  isAccountQuotaError,
+  PULL_RESPONSE_MAX_UTF8_BYTES,
+  selectPullPage,
+  type PullRecord,
+} from "../src/services/sync.js";
 
 let h: Harness;
 
@@ -107,7 +112,166 @@ const month = (
   };
 };
 
+const archivedTask = (id: string, dateKey: string, updatedAt: number, title = "آرشیوی") => ({
+  id,
+  dateKey,
+  title,
+  type: "binary",
+  target: 1,
+  value: 0,
+  done: false,
+  updatedAt,
+});
+
+function taskArchive(
+  monthKey: string,
+  items: ReturnType<typeof archivedTask>[],
+  version = 1,
+) {
+  return {
+    v: version,
+    monthKey,
+    count: items.length,
+    checksum: "a".repeat(32),
+    items: items.map(({ updatedAt, ...item }) => [item.id, updatedAt, item]),
+  };
+}
+
+async function allowTaskMonthArchives() {
+  // The production migration that installs this future stored-only kind is not
+  // part of this test fixture yet, so make only this test database accept it.
+  await h.raw(`
+    alter table records drop constraint records_kind_valid;
+    alter table records add constraint records_kind_valid check (kind in
+      ('categories','habits','habitMonths','tasks','timerSessions','journal','taskMonths'));
+  `);
+}
+
+async function seedTaskArchive(
+  userId: string,
+  seq: number,
+  id: string,
+  data: ReturnType<typeof taskArchive>,
+) {
+  await h.raw(`
+    insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+    values ('${userId}', 'taskMonths', '${id}', '${JSON.stringify(data)}'::jsonb,
+            ${seq}, false, ${seq});
+    update users set seq = greatest(seq, ${seq}) where id = '${userId}';
+  `);
+}
+
 describe("sync", () => {
+  it("keeps the next task archive atomic when its expanded rows exceed the remaining byte budget", () => {
+    const first: PullRecord = {
+      kind: "tasks",
+      id: "before-archive",
+      data: null,
+      updatedAt: 1000,
+      deleted: true,
+      seq: 1,
+    };
+    const archive: PullRecord = {
+      kind: "taskMonths",
+      id: "2026-01|0001",
+      data: taskArchive("2026-01", [archivedTask("t-next", "2026-01-02", 2000)]),
+      updatedAt: 2000,
+      deleted: false,
+      seq: 2,
+    };
+    const onlyFirstFits = Buffer.byteLength(JSON.stringify([first]), "utf8") + 1;
+
+    // A page boundary may never split an archive: otherwise returning cursor 2
+    // would make the remaining expanded task unreachable forever.
+    expect(selectPullPage([first, archive], 500, onlyFirstFits)).toMatchObject({
+      records: [first],
+      cursor: 1,
+      hasMore: true,
+      reset: false,
+    });
+  });
+
+  it("expands task archives for fresh and existing cursors without leaking the stored kind", async () => {
+    const a = await signIn("09120000030");
+    const b = await signIn("09120000031");
+    await allowTaskMonthArchives();
+    await seedTaskArchive(
+      a.user.id,
+      1,
+      "2026-01|0001",
+      taskArchive("2026-01", [archivedTask("t-archived", "2026-01-02", 1000)]),
+    );
+    await h.raw(`
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      values ('${a.user.id}', 'tasks', 't-archived', null, 2000, true, 2);
+      update users set seq = 2 where id = '${a.user.id}';
+    `);
+
+    const response = await pull(a.access, 0);
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as { records: PullRecord[]; cursor: number };
+    expect(body.records).toEqual([
+      expect.objectContaining({ kind: "tasks", id: "t-archived", updatedAt: 1000 }),
+      expect.objectContaining({
+        kind: "tasks",
+        id: "t-archived",
+        updatedAt: 2000,
+        deleted: true,
+      }),
+    ]);
+    expect(body.records.some((row) => row.kind === "taskMonths")).toBe(false);
+    expect(Buffer.byteLength(response.body, "utf8")).toBeLessThanOrEqual(
+      PULL_RESPONSE_MAX_UTF8_BYTES,
+    );
+
+    const existing = (await pull(a.access, 1)).json() as { records: PullRecord[] };
+    expect(existing.records).toEqual([
+      expect.objectContaining({ kind: "tasks", id: "t-archived", updatedAt: 2000, deleted: true }),
+    ]);
+    expect(((await pull(b.access, 0)).json() as { records: PullRecord[] }).records).toEqual([]);
+  });
+
+  it("pages whole task archive chunks and fails closed for an unsupported archive version", async () => {
+    const { access, user } = await signIn("09120000032");
+    await allowTaskMonthArchives();
+    await seedTaskArchive(
+      user.id,
+      1,
+      "2026-01|0001",
+      taskArchive("2026-01", [
+        archivedTask("t-1", "2026-01-02", 1000),
+        archivedTask("t-2", "2026-01-03", 1001),
+      ]),
+    );
+    await seedTaskArchive(
+      user.id,
+      2,
+      "2026-02|0001",
+      taskArchive("2026-02", [archivedTask("t-3", "2026-02-02", 1002)]),
+    );
+
+    const first = (await pull(access, 0, 1)).json() as {
+      records: PullRecord[];
+      cursor: number;
+      hasMore: boolean;
+    };
+    expect(first.records.map((record) => record.id)).toEqual(["t-1", "t-2"]);
+    expect(first.cursor).toBe(1);
+    expect(first.hasMore).toBe(true);
+
+    const second = (await pull(access, first.cursor, 1)).json() as { records: PullRecord[] };
+    expect(second.records.map((record) => record.id)).toEqual(["t-3"]);
+
+    await h.raw(`
+      update records
+         set data = jsonb_set(data, '{v}', '2'::jsonb)
+       where user_id = '${user.id}' and kind = 'taskMonths' and id = '2026-02|0001';
+    `);
+    const malformed = await pull(access, 1, 1);
+    expect(malformed.statusCode).toBe(500);
+    expect((malformed.json() as { error: string }).error).toBe("internal");
+  });
+
   it("recognises postgres-js quota constraints without swallowing unrelated database errors", () => {
     expect(
       isAccountQuotaError({
