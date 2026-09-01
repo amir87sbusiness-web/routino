@@ -204,7 +204,7 @@ describe("migrateLegacyBlob", () => {
     localStorage.setItem(LEGACY_KEY, JSON.stringify(legacyBlob()));
     await migrateLegacyBlob(9_000_000);
     const rows = await idb.categories.toArray();
-    expect(rows.every((r) => r.data.isDefault)).toBe(true);
+    expect(rows.every((r) => r.data?.isDefault === true)).toBe(true);
     expect(rows.every((r) => r.updatedAt === 0)).toBe(true);
   });
 

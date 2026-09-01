@@ -271,6 +271,24 @@ describe("sync engine, two devices on one account", () => {
     expect(await idb.syncMeta.get("cursor")).not.toHaveProperty("quotaRetryAt");
   });
 
+  it("reports a paused row as pending exactly when its retry time is due", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(5_000);
+    await localDirtyTask("quota-due", "موعد بازگشت");
+    await idb.tasks.where("key").equals("quota-due").modify({ dirty: 2 });
+    await idb.syncMeta.put({
+      key: "cursor",
+      owner: OWNER,
+      cursor: 0,
+      lastSyncedAt: 1,
+      quotaRetryAt: 10_000,
+    });
+
+    expect(await hasPendingChanges(OWNER)).toBe(false);
+    now.mockReturnValue(10_000);
+    expect(await hasPendingChanges(OWNER)).toBe(true);
+    expect(await hasPendingChanges("another-owner")).toBe(false);
+  });
+
   it("lets an ordinary edit immediately unblock a quota-paused version", async () => {
     await localDirtyTask("quota-edit", "نسخه قبلی", 1_000);
     server.refuse.add("quota-edit");
@@ -367,7 +385,7 @@ describe("sync engine, two devices on one account", () => {
     server.refuseRetryAt.set("quota-reset", 10_000);
     server.resetNextPull = true;
 
-    await syncNow(OWNER);
+    const outcome = await syncNow(OWNER);
 
     expect(await idb.tasks.get("quota-reset")).toMatchObject({
       data: taskData("quota-reset", "نباید پاک شود"),
@@ -378,6 +396,7 @@ describe("sync engine, two devices on one account", () => {
       owner: OWNER,
       quotaRetryAt: 10_000,
     });
+    expect(outcome).toMatchObject({ rejected: 1, quotaExceeded: true });
   });
 
   it("expands a pulled server month into the unchanged local daily rows", async () => {

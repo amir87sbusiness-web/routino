@@ -41,9 +41,11 @@ function packetFor(
   for (const row of rows) {
     const dateKey = row.key.slice(row.key.lastIndexOf("|") + 1);
     const day = dateKey.slice(8, 10);
-    cells[day] = row.deleted
-      ? { updatedAt: row.updatedAt, deleted: true }
-      : {
+    if (row.deleted) {
+      cells[day] = { updatedAt: row.updatedAt, deleted: true };
+    } else {
+      if (row.data === null) throw new Error("live_habit_log_missing_data");
+      cells[day] = {
           updatedAt: row.updatedAt,
           deleted: false,
           value: row.data.value,
@@ -51,6 +53,7 @@ function packetFor(
           ...(row.data.note === undefined ? {} : { note: row.data.note }),
           ...(row.data.mood === undefined ? {} : { mood: row.data.mood }),
         };
+    }
     updatedAt = Math.max(updatedAt, row.updatedAt);
   }
   return {

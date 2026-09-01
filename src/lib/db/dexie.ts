@@ -24,7 +24,7 @@ import type {
 /** One stored record. `data` is the entity exactly as the UI knows it. */
 export interface RecordRow<T> {
   key: string;
-  data: T;
+  data: T | null;
   /** Epoch ms, client-assigned. The LWW key. The server clamps this on push —
    * a device with a clock set to 2099 would otherwise win every conflict forever. */
   updatedAt: number;

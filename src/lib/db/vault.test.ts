@@ -46,11 +46,11 @@ describe("account vault lifecycle", () => {
     await db.habits.put(row("habit-b", habit("habit-b", "B")));
 
     await switchOwnerVault("user-a");
-    expect((await db.habits.get("habit-a"))?.data.name).toBe("A");
+    expect((await db.habits.get("habit-a"))?.data?.name).toBe("A");
     expect(await db.habits.get("habit-b")).toBeUndefined();
 
     await switchOwnerVault("user-b");
-    expect((await db.habits.get("habit-b"))?.data.name).toBe("B");
+    expect((await db.habits.get("habit-b"))?.data?.name).toBe("B");
     expect(await db.habits.get("habit-a")).toBeUndefined();
   });
 
@@ -67,7 +67,7 @@ describe("account vault lifecycle", () => {
     expect(claimed.vaultId).toBe(LEGACY_VAULT_ID);
     expect(databaseNameForVault(claimed.vaultId)).toBe("routino");
     expect(getActiveVaultId()).toBe(LEGACY_VAULT_ID);
-    expect((await db.habits.get("legacy-habit"))?.data.name).toBe("Legacy");
+    expect((await db.habits.get("legacy-habit"))?.data?.name).toBe("Legacy");
   });
 
   it("does not let a different first account claim a legacy vault known to belong to another phone", async () => {
@@ -79,7 +79,7 @@ describe("account vault lifecycle", () => {
     expect(assigned.claimedCurrent).toBe(false);
     expect(await db.habits.get("legacy-habit")).toBeUndefined();
     await activateVault(LEGACY_VAULT_ID);
-    expect((await db.habits.get("legacy-habit"))?.data.name).toBe("A");
+    expect((await db.habits.get("legacy-habit"))?.data?.name).toBe("A");
   });
 
   it("isolates device-local auth, subscription and notifications with the vault", async () => {

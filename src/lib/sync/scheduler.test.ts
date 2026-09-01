@@ -41,6 +41,7 @@ describe("10-second lifecycle sync scheduler", () => {
     const scheduler = createSyncScheduler({ flush, hasPending });
     await scheduler.onOnline("u1");
     expect(flush).not.toHaveBeenCalled();
+    expect(hasPending).toHaveBeenCalledWith("u1");
   });
 
   it("retries a failed run when connectivity returns", async () => {

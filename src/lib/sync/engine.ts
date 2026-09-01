@@ -423,8 +423,26 @@ export function syncNow(owner: string, options: SyncOptions = {}): Promise<SyncO
   return promise;
 }
 
-export async function hasPendingChanges(): Promise<boolean> {
-  return (await collectOutbox()).length > 0;
+export async function hasPendingChanges(owner?: string): Promise<boolean> {
+  if ((await collectOutbox()).length > 0) return true;
+  try {
+    const state = await idb.syncMeta.get("cursor");
+    if (
+      !state ||
+      (owner !== undefined && state.owner !== owner) ||
+      !isValidRetryAt(state.quotaRetryAt) ||
+      state.quotaRetryAt > Date.now()
+    ) {
+      return false;
+    }
+    for (const table of SYNCABLE_TABLES) {
+      if ((await tableOf(table).where("dirty").equals(2).count()) > 0) return true;
+    }
+  } catch {
+    // Treat unavailable local storage as no schedulable outbox. A later boot or
+    // foreground run rechecks it; this predicate must never throw from events.
+  }
+  return false;
 }
 
 async function run(owner: string, options: SyncOptions): Promise<SyncOutcome> {
@@ -446,6 +464,9 @@ async function run(owner: string, options: SyncOptions): Promise<SyncOutcome> {
   let accountStateReceived = false;
 
   const applyPage = async (page: ExchangeResponse): Promise<void> => {
+    rejected += page.rejectedRecords?.length ?? 0;
+    quotaExceeded ||=
+      page.rejectedRecords?.some((record) => record.code === "account_quota_exceeded") ?? false;
     if (page.reset) {
       await wipeSyncedTables();
       resetApplied = true;
@@ -459,9 +480,6 @@ async function run(owner: string, options: SyncOptions): Promise<SyncOutcome> {
       entitlement = page.entitlement;
       accountStateReceived = true;
     }
-    rejected += page.rejectedRecords?.length ?? 0;
-    quotaExceeded ||=
-      page.rejectedRecords?.some((record) => record.code === "account_quota_exceeded") ?? false;
   };
 
   const exchangePage = async (

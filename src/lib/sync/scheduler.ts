@@ -4,7 +4,7 @@ export const EDIT_SYNC_DELAY_MS = 10_000;
 
 export interface SyncSchedulerDeps {
   flush: (owner: string, options: SyncOptions) => Promise<unknown>;
-  hasPending: () => Promise<boolean>;
+  hasPending: (owner: string) => Promise<boolean>;
   setTimer?: typeof setTimeout;
   clearTimer?: typeof clearTimeout;
 }
@@ -51,12 +51,12 @@ export function createSyncScheduler({
     },
 
     async onOnline(owner: string) {
-      if (!failed.has(owner) && !(await hasPending())) return;
+      if (!failed.has(owner) && !(await hasPending(owner))) return;
       return run(owner, { pullRequired: failed.has(owner) });
     },
 
     async onForeground(owner: string) {
-      const pending = await hasPending();
+      const pending = await hasPending(owner);
       const last = lastCompletedAt.get(owner) ?? 0;
       if (!pending && Date.now() - last < EDIT_SYNC_DELAY_MS) return;
       return run(owner, { pullRequired: true });

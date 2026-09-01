@@ -29,9 +29,14 @@ import { activateStoredVault } from "./vault";
  *
  * Correct for collections the UI APPENDS to (habits, tasks, categories). For
  * anything prepended, see `liveNewestFirst`. */
+type LiveRow<T> = RecordRow<T> & { data: T; deleted: 0 };
+
+const isLiveRow = <T>(row: RecordRow<T>): row is LiveRow<T> =>
+  row.deleted === 0 && row.data !== null;
+
 function live<T>(rows: RecordRow<T>[]): T[] {
   return rows
-    .filter((r) => !r.deleted)
+    .filter(isLiveRow)
     .sort((a, b) => a.seq - b.seq)
     .map((r) => r.data);
 }
@@ -45,7 +50,7 @@ function live<T>(rows: RecordRow<T>[]): T[] {
  * devices once sync merges two histories. */
 function liveNewestFirst<T>(rows: RecordRow<T>[], at: (x: T) => number): T[] {
   return rows
-    .filter((r) => !r.deleted)
+    .filter(isLiveRow)
     .map((r) => r.data)
     .sort((a, b) => at(b) - at(a));
 }
@@ -54,7 +59,7 @@ function liveNewestFirst<T>(rows: RecordRow<T>[], at: (x: T) => number): T[] {
  * order carries no meaning. */
 function keyed<T>(rows: RecordRow<T>[]): Record<string, T> {
   const out: Record<string, T> = {};
-  for (const r of rows) if (!r.deleted) out[r.key] = r.data;
+  for (const r of rows) if (isLiveRow(r)) out[r.key] = r.data;
   return out;
 }
 
