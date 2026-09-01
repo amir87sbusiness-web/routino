@@ -19,6 +19,7 @@ do $restore$
 declare
   v_owner_id constant uuid := '00000000-0000-0000-0000-000000000000';
   v_owner_seq bigint;
+  v_gc_seq bigint;
   v_owner_record_count integer;
   v_owner_data_bytes bigint;
   v_annual_started_at timestamptz;
@@ -37,11 +38,13 @@ begin
   end if;
 
   select owner.seq,
+         owner.gc_seq,
          owner.sync_record_count,
          owner.sync_data_bytes,
          owner.sync_growth_period_started_at,
          owner.sync_growth_bytes
     into v_owner_seq,
+         v_gc_seq,
          v_owner_record_count,
          v_owner_data_bytes,
          v_annual_started_at,
@@ -51,6 +54,12 @@ begin
    for update;
   if not found then
     raise exception 'task archive restore refused: owner not found';
+  end if;
+  if v_gc_seq is null or v_gc_seq not between 0 and 9007199254740991 then
+    raise exception 'task archive restore refused: GC watermark out of bounds';
+  end if;
+  if v_gc_seq > v_owner_seq then
+    raise exception 'task archive restore refused: GC watermark exceeds owner sequence';
   end if;
 
   select count(record.*)::integer,
@@ -526,11 +535,12 @@ begin
     select 1 from users owner
      where owner.id = v_owner_id
        and (
-         owner.sync_growth_period_started_at is distinct from v_annual_started_at
-         or owner.sync_growth_bytes is distinct from v_annual_bytes
-       )
+          owner.sync_growth_period_started_at is distinct from v_annual_started_at
+          or owner.sync_growth_bytes is distinct from v_annual_bytes
+          or owner.gc_seq is distinct from v_gc_seq
+        )
   ) then
-    raise exception 'task archive restore refused: annual usage changed';
+    raise exception 'task archive restore refused: annual usage or GC watermark changed';
   end if;
 
   raise notice 'task archive restore complete: restored %, retained newer %, deleted archives %',

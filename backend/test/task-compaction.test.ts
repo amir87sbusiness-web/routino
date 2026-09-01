@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { validateTaskPayload } from "../src/services/sync-record-validation.js";
+import { pullRecords } from "../src/services/sync.js";
 import { expandTaskMonthArchive } from "../src/services/task-month-archive.js";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
 
@@ -128,15 +129,17 @@ async function semanticTaskCount(): Promise<number> {
 async function usage() {
   const [row] = await h.query<{
     seq: number;
+    gc_seq: number;
     sync_record_count: number;
     sync_data_bytes: number;
     sync_growth_bytes: number;
   }>(`
-    select seq, sync_record_count, sync_data_bytes, sync_growth_bytes
+    select seq, gc_seq, sync_record_count, sync_data_bytes, sync_growth_bytes
       from users where id = '${OWNER}'
   `);
   return {
     seq: Number(row!.seq),
+    gc: Number(row!.gc_seq),
     rows: Number(row!.sync_record_count),
     bytes: Number(row!.sync_data_bytes),
     annual: Number(row!.sync_growth_bytes),
@@ -686,6 +689,7 @@ describe("task archive restore tooling", () => {
     expect(compacted.reduce((sum, row) => sum + Number(row.archived_tasks), 0)).toBe(60);
     expect(await rawKindCount("tasks")).toBe(0);
     expect(await rawKindCount("taskMonths")).toBe(60);
+    await h.raw(`update users set gc_seq = 1 where id = '${OWNER}'`);
 
     const [postcheck] = await h.query<Record<string, unknown>>(recoverySql(POSTCHECK_SQL_PATH));
     expect(postcheck).toBeDefined();
@@ -702,7 +706,22 @@ describe("task archive restore tooling", () => {
     expect(restoredTuples).toEqual(originalTuples);
     expect(await rawKindCount("taskMonths")).toBe(0);
     expect((await usage()).annual).toBe(beforeRestoreUsage.annual);
+    expect((await usage()).gc).toBe(beforeRestoreUsage.gc);
     await assertExactPhysicalCounters();
+
+    let cursor = 0;
+    let pages = 0;
+    const restoredIds = new Set<string>();
+    do {
+      const page = await pullRecords(h.db, OWNER, cursor, 7);
+      expect(page.reset).toBe(false);
+      for (const record of page.records) restoredIds.add(record.id);
+      cursor = page.cursor;
+      pages += 1;
+      if (!page.hasMore) break;
+    } while (pages < 20);
+    expect(pages).toBeGreaterThan(1);
+    expect(restoredIds.size).toBe(60);
 
     console.info(
       `[task-archive-recovery] tuples=${restoredTuples.length} semanticHash=${String(after?.task_semantic_hash)} annualBytes=${(await usage()).annual}`,
@@ -925,6 +944,96 @@ describe("task archive restore tooling", () => {
         insert into users (id, phone, sync_growth_period_started_at)
         values ('${OWNER}', '989122288880', '2026-01-01T00:00:00Z')
       `);
+    }
+  });
+
+  it("refuses a negative GC watermark before restoring an archive", async () => {
+    await compactOneTask("negative-gc-watermark");
+    await h.raw(`update users set gc_seq = -1 where id = '${OWNER}'`);
+
+    const [precheck] = await h.query<Record<string, unknown>>(recoverySql(PRECHECK_SQL_PATH));
+    const [postcheck] = await h.query<Record<string, unknown>>(recoverySql(POSTCHECK_SQL_PATH));
+    expect(Number(precheck?.gc_sequence_out_of_bounds)).toBe(1);
+    expect(Number(postcheck?.gc_sequence_out_of_bounds)).toBe(1);
+    await expectRestoreToAbortWithoutMutation(/gc|watermark/i);
+  });
+
+  it("refuses a GC watermark above the owner sequence before restoring an archive", async () => {
+    await compactOneTask("gc-above-owner");
+    await h.raw(`update users set gc_seq = seq + 1 where id = '${OWNER}'`);
+
+    const [precheck] = await h.query<Record<string, unknown>>(recoverySql(PRECHECK_SQL_PATH));
+    const [postcheck] = await h.query<Record<string, unknown>>(recoverySql(POSTCHECK_SQL_PATH));
+    expect(Number(precheck?.gc_sequence_above_owner)).toBe(1);
+    expect(Number(postcheck?.gc_sequence_above_owner)).toBe(1);
+    await expectRestoreToAbortWithoutMutation(/gc|watermark/i);
+  });
+
+  it("refuses an unsafe GC watermark before restoring an archive", async () => {
+    await compactOneTask("unsafe-gc-watermark");
+    await h.raw(`update users set gc_seq = 9007199254740992 where id = '${OWNER}'`);
+
+    const [precheck] = await h.query<Record<string, unknown>>(recoverySql(PRECHECK_SQL_PATH));
+    const [postcheck] = await h.query<Record<string, unknown>>(recoverySql(POSTCHECK_SQL_PATH));
+    expect(Number(precheck?.gc_sequence_out_of_bounds)).toBe(1);
+    expect(Number(postcheck?.gc_sequence_out_of_bounds)).toBe(1);
+    await expectRestoreToAbortWithoutMutation(/gc|watermark/i);
+  });
+
+  it("proves an above-tail GC watermark would reset a fresh multi-page pull and leaves recovery unchanged", async () => {
+    await insertTask("gc-loop-a", task("gc-loop-a", { dateKey: "2026-04-01" }));
+    await insertTask("gc-loop-b", task("gc-loop-b", { dateKey: "2026-05-01" }));
+    await h.query(`select * from routino_compact_task_months('${NOW}', 10)`);
+
+    const fresh = await pullRecords(h.db, OWNER, 0, 1);
+    expect(fresh.reset).toBe(false);
+    expect(fresh.hasMore).toBe(true);
+    expect(fresh.cursor).toBeGreaterThan(0);
+
+    await h.raw(`update users set gc_seq = seq + 1 where id = '${OWNER}'`);
+    const loop = await pullRecords(h.db, OWNER, fresh.cursor, 1);
+    expect(loop).toMatchObject({ records: [], cursor: 0, hasMore: true, reset: true });
+
+    await expectRestoreToAbortWithoutMutation(/gc|watermark/i);
+  });
+
+  it("reports a huge digit-only archive count without throwing or hashing it", async () => {
+    await compactOneTask("huge-archive-count");
+    await h.raw(`
+      update records
+         set data = jsonb_set(data, '{count}', '${"9".repeat(200)}'::jsonb)
+       where user_id = '${OWNER}' and kind = 'taskMonths'
+    `);
+
+    const [precheck] = await h.query<Record<string, unknown>>(recoverySql(PRECHECK_SQL_PATH));
+    const [postcheck] = await h.query<Record<string, unknown>>(recoverySql(POSTCHECK_SQL_PATH));
+    expect(Number(precheck?.invalid_archive_rows)).toBeGreaterThan(0);
+    expect(precheck?.task_semantic_hash).toBeNull();
+    expect(Number(postcheck?.malformed_archive_rows)).toBeGreaterThan(0);
+  });
+
+  it("reports a huge digit-only archive timestamp without throwing or hashing it", async () => {
+    await compactOneTask("huge-archive-timestamp");
+    await h.raw(`
+      update records
+         set data = jsonb_set(data, '{items,0,1}', '${"9".repeat(200)}'::jsonb)
+       where user_id = '${OWNER}' and kind = 'taskMonths'
+    `);
+
+    const [precheck] = await h.query<Record<string, unknown>>(recoverySql(PRECHECK_SQL_PATH));
+    const [postcheck] = await h.query<Record<string, unknown>>(recoverySql(POSTCHECK_SQL_PATH));
+    expect(Number(precheck?.invalid_archive_rows)).toBeGreaterThan(0);
+    expect(precheck?.task_semantic_hash).toBeNull();
+    expect(Number(postcheck?.malformed_archive_tuples)).toBeGreaterThan(0);
+  });
+
+  it("uses bounded integer columns instead of casting untrusted archive numerics", () => {
+    for (const path of [PRECHECK_SQL_PATH, POSTCHECK_SQL_PATH]) {
+      const sql = recoverySql(path);
+      expect(sql).not.toContain("count_numeric::integer");
+      expect(sql).not.toContain("updated_numeric::bigint");
+      expect(sql).toContain("safe_count");
+      expect(sql).toContain("safe_updated_at");
     }
   });
 });

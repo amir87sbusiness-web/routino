@@ -31,27 +31,32 @@ with archives as (
          case when jsonb_typeof(archive.items_value) = 'array' then jsonb_array_length(archive.items_value) end as item_array_length
     from archive_fields archive
 ), archive_numbers as (
-  -- Numeric casts are only reachable after JSON type and lexical guards.
+  -- The two-digit lexical bound makes this integer cast intrinsically safe.
   select archive.*,
-         case when archive.count_is_number and archive.count_text ~ '^[0-9]+$'
-              then archive.count_text::numeric end as count_numeric
+         case when archive.count_is_number and archive.count_text ~ '^[0-9]{1,2}$'
+              then archive.count_text::integer end as count_candidate
     from archive_shapes archive
+), archive_bounds as (
+  select archive.*,
+         case when archive.count_candidate between 1 and 32
+              then archive.count_candidate end as safe_count
+    from archive_numbers archive
 ), archive_metadata as (
   select archive.*,
          not coalesce((
            archive.object_data
            and archive.version_value = '1'::jsonb
            and archive.extra_fields = '{}'::jsonb
-           and archive.month_key_is_string
-           and archive.month_key_text ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'
-           and archive.count_is_number
-           and archive.count_numeric between 1 and 32
+            and archive.month_key_is_string
+            and archive.month_key_text ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'
+            and archive.count_is_number
+            and archive.safe_count is not null
            and archive.checksum_is_string
-           and archive.checksum_text ~ '^[a-f0-9]{32}$'
-           and archive.items_is_array
-           and archive.item_array_length = archive.count_numeric::integer
-         ), false) as metadata_invalid
-    from archive_numbers archive
+            and archive.checksum_text ~ '^[a-f0-9]{32}$'
+            and archive.items_is_array
+            and archive.item_array_length = archive.safe_count
+          ), false) as metadata_invalid
+    from archive_bounds archive
 ), archive_items_raw as (
   select archive.user_id, archive.archive_id, archive.seq, archive.metadata_invalid,
          item.value as item
@@ -73,18 +78,23 @@ with archives as (
   select item.*,
          case when jsonb_typeof(item.id_value) = 'string' then item.id_value #>> '{}' end as task_id,
          case when jsonb_typeof(item.updated_value) = 'number' then item.updated_value #>> '{}' end as updated_text,
-         case when jsonb_typeof(item.updated_value) = 'number'
-                   and (item.updated_value #>> '{}') ~ '^[0-9]+$'
-              then (item.updated_value #>> '{}')::numeric end as updated_numeric,
-         case when jsonb_typeof(item.data_value) = 'object' then item.data_value end as task_data
+          case when jsonb_typeof(item.updated_value) = 'number'
+                    and (item.updated_value #>> '{}') ~ '^[0-9]{1,16}$'
+               then (item.updated_value #>> '{}')::bigint end as updated_candidate,
+          case when jsonb_typeof(item.data_value) = 'object' then item.data_value end as task_data
     from archive_item_fields item
+), archive_item_bounds as (
+  select item.*,
+         case when item.updated_candidate between 0 and 9007199254740991
+              then item.updated_candidate end as safe_updated_at
+    from archive_item_numbers item
 ), archive_item_validation as (
   select item.*,
          item.task_id is not null
-         and item.updated_numeric between 0 and 9007199254740991
+         and item.safe_updated_at is not null
          and item.task_data is not null
          and coalesce(routino_task_archive_candidate_valid(item.task_id, item.task_data), false) as item_valid
-    from archive_item_numbers item
+    from archive_item_bounds item
 ), duplicate_archive_ids as (
   select item.user_id, item.task_id
     from archive_item_validation item
@@ -106,7 +116,7 @@ with archives as (
       on duplicate.user_id = item.user_id and duplicate.task_id = item.task_id
 ), valid_archive_items as (
   select item.user_id, item.archive_id, item.seq, item.task_id as id,
-         item.updated_numeric::bigint as updated_at, item.task_data as data
+         item.safe_updated_at as updated_at, item.task_data as data
     from archive_item_validation item
    where item.item_valid
      and not exists (
@@ -166,7 +176,9 @@ with archives as (
          count(*) filter (where owner.sync_growth_period_started_at is null) as annual_period_start_missing,
          count(*) filter (where owner.sync_growth_period_started_at > now()) as annual_period_start_in_future,
          count(*) filter (where owner.seq not between 0 and 9007199254740991) as sequence_owner_out_of_bounds,
-         count(*) filter (where owner.seq < actual.maximum_record_seq) as sequence_owner_behind_records
+         count(*) filter (where owner.seq < actual.maximum_record_seq) as sequence_owner_behind_records,
+         count(*) filter (where owner.gc_seq is null or owner.gc_seq not between 0 and 9007199254740991) as gc_sequence_out_of_bounds,
+         count(*) filter (where owner.gc_seq > owner.seq) as gc_sequence_above_owner
     from users owner
     join actual_usage actual on actual.user_id = owner.id
 ), sequence_bounds as (
@@ -186,6 +198,8 @@ select raw_summary.ordinary_task_rows, raw_summary.archive_rows, raw_summary.mal
        counter_bounds.annual_period_start_in_future,
        counter_bounds.sequence_owner_out_of_bounds,
        counter_bounds.sequence_owner_behind_records,
+       counter_bounds.gc_sequence_out_of_bounds,
+       counter_bounds.gc_sequence_above_owner,
        sequence_bounds.sequence_record_out_of_bounds,
        sequence_bounds.duplicate_record_sequence_groups
   from raw_summary
