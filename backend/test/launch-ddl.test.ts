@@ -152,6 +152,23 @@ describe("launch schema repairs", () => {
     ).toEqual(before);
   });
 
+  it("does not expose internal task archive helpers to PUBLIC", async () => {
+    const publicExecute = await h.query<{ routine_name: string }>(`
+      select routine_name
+        from information_schema.routine_privileges
+       where specific_schema = 'public'
+         and grantee = 'PUBLIC'
+         and privilege_type = 'EXECUTE'
+         and routine_name in (
+           'routino_js_string_length',
+           'routino_task_archive_candidate_valid',
+           'routino_compact_task_months'
+         )
+       order by routine_name
+    `);
+    expect(publicExecute).toEqual([]);
+  });
+
   it("expands annual quota fields without rewriting grandfathered sync content", async () => {
     await h.raw(`
       alter table records drop constraint records_kind_valid;

@@ -532,8 +532,13 @@ declare
   v_day integer;
   v_max_day integer;
 begin
-  if jsonb_typeof(p_data) <> 'object'
-     or p_id !~ '^[A-Za-z0-9_:.-]{1,128}$'
+  -- Bound attacker/legacy work before any per-character UTF-16 scan. This is a
+  -- separate statement because SQL does not guarantee boolean evaluation order.
+  if jsonb_typeof(p_data) <> 'object' or octet_length(p_data::text) > 20480 then
+    return false;
+  end if;
+
+  if p_id !~ '^[A-Za-z0-9_:.-]{1,128}$'
      or not (p_data ?& array['id','dateKey','title','type','target','value','done'])
      or p_data - array[
        'id','dateKey','title','type','target','value','done',
@@ -583,8 +588,7 @@ begin
          jsonb_typeof(p_data->'icon') <> 'string'
          or routino_js_string_length(p_data->>'icon') > 64
        )
-     )
-     or octet_length(p_data::text) > 20480 then
+     ) then
     return false;
   end if;
 
@@ -676,10 +680,13 @@ begin
        and source.deleted = false
        and source.data->>'done' = 'true'
        and routino_task_archive_candidate_valid(source.id, source.data)
+       and source.updated_at between 0 and 9007199254740991
        and left(source.data->>'dateKey', 7) < to_char(
          (p_now - interval '7 days') at time zone 'UTC', 'YYYY-MM'
        )
-       and to_timestamp(source.updated_at / 1000.0) <= p_now - interval '7 days'
+       and source.updated_at <= floor(
+         extract(epoch from (p_now - interval '7 days')) * 1000
+       )::bigint
        and not exists (
          select 1
            from records archive
@@ -896,6 +903,8 @@ begin
 end
 $function$;
 
+revoke execute on function routino_js_string_length(text) from public;
+revoke execute on function routino_task_archive_candidate_valid(text, jsonb) from public;
 revoke execute on function routino_compact_task_months(timestamptz, integer) from public;
 
 create table if not exists otp_codes (

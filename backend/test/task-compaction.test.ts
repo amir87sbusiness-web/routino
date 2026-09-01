@@ -95,6 +95,23 @@ async function semanticTasks(): Promise<unknown[]> {
   `);
 }
 
+async function semanticTaskCount(): Promise<number> {
+  const [row] = await h.query<{ count: number }>(`
+    with candidates as (
+      select r.id
+        from records r
+       where r.user_id = '${OWNER}' and r.kind = 'tasks' and not r.deleted
+      union all
+      select item->>0
+        from records a
+        cross join lateral jsonb_array_elements(a.data->'items') item
+       where a.user_id = '${OWNER}' and a.kind = 'taskMonths' and not a.deleted
+    )
+    select count(distinct id)::integer as count from candidates
+  `);
+  return Number(row!.count);
+}
+
 async function usage() {
   const [row] = await h.query<{
     seq: number;
@@ -165,9 +182,67 @@ describe("task archive SQL predicate", () => {
       expect(row!.valid, name).toBe(validateTaskPayload(id, data));
     }
   });
+
+  it("rejects an oversized legacy payload before invoking character scanning", async () => {
+    await h.raw(`
+      begin;
+      create or replace function routino_js_string_length(p_text text)
+      returns integer language plpgsql immutable strict as $$
+      begin
+        raise exception 'length scanner called';
+      end
+      $$;
+    `);
+    try {
+      const oversized = task("oversized-legacy", { title: "x".repeat(21 * 1024) });
+      const [row] = await h.query<{ valid: boolean }>(`
+        select routino_task_archive_candidate_valid(
+          'oversized-legacy', ${sqlJson(oversized)}
+        ) as valid
+      `);
+      expect(row!.valid).toBe(false);
+    } finally {
+      await h.raw("rollback");
+    }
+  });
 });
 
 describe("bounded transactional task compaction", () => {
+  it("skips unsafe legacy timestamps while valid cold work still progresses", async () => {
+    await insertTask("valid-timestamp", task("valid-timestamp"));
+    await insertTask("legacy-negative", task("legacy-negative"), -1);
+    await insertTask(
+      "legacy-over-safe",
+      task("legacy-over-safe"),
+      Number.MAX_SAFE_INTEGER + 1,
+    );
+    await h.raw(`
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      values (
+        '${OWNER}', 'tasks', 'legacy-bigint-max',
+        ${sqlJson(task("legacy-bigint-max"))},
+        9223372036854775807, false, 0
+      )
+    `);
+
+    const result = await h.query<{ archived_tasks: number }>(
+      `select * from routino_compact_task_months('${NOW}', 500)`,
+    );
+    expect(result.map((row) => Number(row.archived_tasks))).toEqual([1]);
+    expect(
+      await h.query<{ id: string; updated_at: string }>(`
+        select id, updated_at::text from records
+         where user_id = '${OWNER}' and kind = 'tasks'
+         order by id
+      `),
+    ).toEqual([
+      { id: "legacy-bigint-max", updated_at: "9223372036854775807" },
+      { id: "legacy-negative", updated_at: "-1" },
+      { id: "legacy-over-safe", updated_at: "9007199254740992" },
+    ]);
+    expect(await semanticTaskCount()).toBe(4);
+  });
+
   it("uses UTC month boundaries regardless of the database session timezone", async () => {
     await insertTask("utc-boundary", task("utc-boundary"), Date.parse("2026-05-01T00:00:00Z"));
     await h.raw("set timezone = 'Pacific/Kiritimati'");
@@ -438,4 +513,76 @@ describe("bounded transactional task compaction", () => {
     expect(chunks.every((chunk) => Number(chunk.expanded_bytes) <= 96 * 1024)).toBe(true);
     expect(chunks.filter((chunk) => chunk.month_key === "2026-04")).toHaveLength(2);
   });
+
+  it("clamps a request for 501 tasks to exactly 500 source rows", async () => {
+    await h.raw(`
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      select '${OWNER}', 'tasks', task_id,
+             jsonb_build_object(
+               'id', task_id,
+               'dateKey', '2026-05-01',
+               'title', task_id,
+               'type', 'binary',
+               'target', 1,
+               'value', 1,
+               'done', true
+             ),
+             ${OLD_UPDATED_AT}, false, 0
+        from (
+          select 'clamp-' || lpad(value::text, 3, '0') as task_id
+            from generate_series(1, 501) value
+        ) seeded
+    `);
+
+    const result = await h.query<{ archived_tasks: number }>(
+      `select * from routino_compact_task_months('${NOW}', 501)`,
+    );
+    expect(result.reduce((sum, row) => sum + Number(row.archived_tasks), 0)).toBe(500);
+    expect(await rawKindCount("tasks")).toBe(1);
+    expect(await semanticTaskCount()).toBe(501);
+    await assertExactPhysicalCounters();
+  });
+
+  it("compacts safely at the exact 50000-row ceiling without changing annual state", async () => {
+    await insertTask("at-row-cap", task("at-row-cap"));
+    await h.raw(`
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      select '${OWNER}', 'journal', 'cap-filler-' || lpad(value::text, 5, '0'),
+             null, 0, true, 0
+        from generate_series(1, 49999) value;
+      update users
+         set sync_growth_period_started_at = '2026-02-03T04:05:06Z',
+             sync_growth_bytes = 7777
+       where id = '${OWNER}';
+    `);
+    const [annualBefore] = await h.query<{
+      period_start: string;
+      used: number;
+    }>(`
+      select sync_growth_period_started_at::text as period_start,
+             sync_growth_bytes as used
+        from users where id = '${OWNER}'
+    `);
+    expect((await usage()).rows).toBe(50_000);
+    const before = await semanticTasks();
+
+    const [result] = await h.query<{ archived_tasks: number; archive_rows: number }>(
+      `select * from routino_compact_task_months('${NOW}', 1)`,
+    );
+
+    expect({
+      tasks: Number(result!.archived_tasks),
+      archives: Number(result!.archive_rows),
+    }).toEqual({ tasks: 1, archives: 1 });
+    expect(await semanticTasks()).toEqual(before);
+    expect((await usage()).rows).toBe(50_000);
+    await assertExactPhysicalCounters();
+    expect(
+      await h.query(`
+        select sync_growth_period_started_at::text as period_start,
+               sync_growth_bytes as used
+          from users where id = '${OWNER}'
+      `),
+    ).toEqual([annualBefore]);
+  }, 20_000);
 });
