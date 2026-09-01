@@ -174,6 +174,38 @@ async function ordinaryTaskTuples(): Promise<unknown[]> {
   `);
 }
 
+async function archiveRows(): Promise<unknown[]> {
+  return h.query(`
+    select id, md5(data::text) as archive_hash, updated_at::text, deleted, seq::text
+      from records
+     where user_id = '${OWNER}' and kind = 'taskMonths'
+     order by id
+  `);
+}
+
+async function expectRestoreToAbortWithoutMutation(error: RegExp): Promise<void> {
+  const beforeArchives = await archiveRows();
+  const beforeUsage = await usage();
+  const beforeTasks = await ordinaryTaskTuples();
+
+  try {
+    await expect(h.raw(restoreSqlFor(OWNER))).rejects.toThrow(error);
+  } finally {
+    await h.raw("rollback");
+  }
+
+  expect(await archiveRows()).toEqual(beforeArchives);
+  expect(await ordinaryTaskTuples()).toEqual(beforeTasks);
+  expect(await usage()).toEqual(beforeUsage);
+  await assertExactPhysicalCounters();
+}
+
+async function compactOneTask(id: string, month = "2026-05"): Promise<void> {
+  await insertTask(id, task(id, { dateKey: `${month}-01` }));
+  await h.query(`select * from routino_compact_task_months('${NOW}', 10)`);
+  expect(await rawKindCount("taskMonths")).toBe(1);
+}
+
 describe("task archive SQL predicate", () => {
   it("agrees with the canonical TypeScript validator for valid and malformed task fixtures", async () => {
     const fixtures: Array<[string, string, unknown]> = [
@@ -724,5 +756,175 @@ describe("task archive restore tooling", () => {
     const [postcheck] = await h.query<Record<string, unknown>>(recoverySql(POSTCHECK_SQL_PATH));
     expect(Number(postcheck?.malformed_archive_rows)).toBe(1);
     expect(Number(postcheck?.archive_count_mismatches)).toBe(1);
+  });
+
+  it("refuses a negative owner sequence before restoring an archive", async () => {
+    await compactOneTask("negative-owner-seq");
+    await h.raw(`update users set seq = -1 where id = '${OWNER}'`);
+
+    const [precheck] = await h.query<Record<string, unknown>>(recoverySql(PRECHECK_SQL_PATH));
+    expect(Number(precheck?.sequence_owner_out_of_bounds)).toBe(1);
+    await expectRestoreToAbortWithoutMutation(/sequence/i);
+  });
+
+  it("refuses a negative archive sequence before restoring an archive", async () => {
+    await compactOneTask("negative-archive-seq");
+    await h.raw(`
+      update records set seq = -1
+       where user_id = '${OWNER}' and kind = 'taskMonths'
+    `);
+
+    const [precheck] = await h.query<Record<string, unknown>>(recoverySql(PRECHECK_SQL_PATH));
+    expect(Number(precheck?.sequence_record_out_of_bounds)).toBe(1);
+    await expectRestoreToAbortWithoutMutation(/sequence/i);
+  });
+
+  it("refuses an unsafe owner sequence before restoring an archive", async () => {
+    await compactOneTask("unsafe-owner-seq");
+    await h.raw(`update users set seq = 9007199254740992 where id = '${OWNER}'`);
+
+    const [precheck] = await h.query<Record<string, unknown>>(recoverySql(PRECHECK_SQL_PATH));
+    expect(Number(precheck?.sequence_owner_out_of_bounds)).toBe(1);
+    await expectRestoreToAbortWithoutMutation(/sequence/i);
+  });
+
+  it("refuses an unsafe archive sequence before restoring an archive", async () => {
+    await compactOneTask("unsafe-archive-seq");
+    await h.raw(`
+      update records set seq = 9007199254740992
+       where user_id = '${OWNER}' and kind = 'taskMonths'
+    `);
+
+    const [precheck] = await h.query<Record<string, unknown>>(recoverySql(PRECHECK_SQL_PATH));
+    expect(Number(precheck?.sequence_record_out_of_bounds)).toBe(1);
+    await expectRestoreToAbortWithoutMutation(/sequence/i);
+  });
+
+  it("refuses duplicate archive sequences before restoring archives", async () => {
+    await insertTask(
+      "duplicate-archive-seq-a",
+      task("duplicate-archive-seq-a", { dateKey: "2026-04-01" }),
+    );
+    await insertTask(
+      "duplicate-archive-seq-b",
+      task("duplicate-archive-seq-b", { dateKey: "2026-05-01" }),
+    );
+    await h.query(`select * from routino_compact_task_months('${NOW}', 10)`);
+    expect(await rawKindCount("taskMonths")).toBe(2);
+    await h.raw(`
+      update records set seq = (
+        select min(seq) from records
+         where user_id = '${OWNER}' and kind = 'taskMonths'
+      )
+       where user_id = '${OWNER}' and kind = 'taskMonths'
+    `);
+
+    const [precheck] = await h.query<Record<string, unknown>>(recoverySql(PRECHECK_SQL_PATH));
+    expect(Number(precheck?.duplicate_record_sequence_groups)).toBe(1);
+    await expectRestoreToAbortWithoutMutation(/sequence/i);
+  });
+
+  it("refuses an archive sequence colliding with a current ordinary record", async () => {
+    await compactOneTask("archive-seq-collision");
+    const [archive] = await h.query<{ seq: number }>(`
+      select seq from records
+       where user_id = '${OWNER}' and kind = 'taskMonths'
+    `);
+    await insertTask(
+      "ordinary-seq-collision",
+      task("ordinary-seq-collision", { dateKey: "2026-06-01" }),
+    );
+    await h.raw(`
+      update records set seq = ${Number(archive!.seq)}
+       where user_id = '${OWNER}' and kind = 'tasks' and id = 'ordinary-seq-collision';
+      update users set seq = ${Number(archive!.seq)} where id = '${OWNER}';
+    `);
+
+    const [precheck] = await h.query<Record<string, unknown>>(recoverySql(PRECHECK_SQL_PATH));
+    expect(Number(precheck?.duplicate_record_sequence_groups)).toBe(1);
+    await expectRestoreToAbortWithoutMutation(/sequence/i);
+  });
+
+  it("flags a 33-item archive and leaves it untouched when restore aborts", async () => {
+    const items = Array.from({ length: 33 }, (_, index) => {
+      const id = `over-bound-${String(index).padStart(2, "0")}`;
+      return [id, OLD_UPDATED_AT + index, task(id, { dateKey: "2026-05-01" })];
+    });
+    await h.raw(`
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      values (
+        '${OWNER}',
+        'taskMonths',
+        'pending-over-bound',
+        ${sqlJson({ v: 1, monthKey: "2026-05", count: 33, checksum: "00000000000000000000000000000000", items })},
+        ${OLD_UPDATED_AT + 32},
+        false,
+        33
+      );
+      with expanded as (
+        select archive_item.task_item
+          from records archive
+          cross join lateral jsonb_array_elements(archive.data->'items') as archive_item(task_item)
+         where archive.user_id = '${OWNER}' and archive.kind = 'taskMonths'
+      ), calculated as (
+        select md5(string_agg((task_item->>0), E'\\n' order by (task_item->>0))) as id_checksum,
+                md5(string_agg(
+                 (task_item->>0) || E'\\n' || (task_item->>1) || E'\\n' || (task_item->2)::text,
+                 E'\\n' order by (task_item->>0)
+               )) as checksum,
+               max((task_item->>1)::bigint) as maximum_updated_at
+          from expanded
+      )
+      update records archive
+         set id = '2026-05|' || calculated.id_checksum,
+             data = jsonb_set(archive.data, '{checksum}', to_jsonb(calculated.checksum)),
+             updated_at = calculated.maximum_updated_at
+        from calculated
+       where archive.user_id = '${OWNER}' and archive.kind = 'taskMonths';
+      update users set seq = 33 where id = '${OWNER}';
+    `);
+
+    const [postcheck] = await h.query<Record<string, unknown>>(recoverySql(POSTCHECK_SQL_PATH));
+    expect(Number(postcheck?.malformed_archive_rows)).toBeGreaterThan(0);
+    await expectRestoreToAbortWithoutMutation(/malformed|verification|archive/i);
+  });
+
+  it("reports malformed JSON archive shapes without trusting a semantic hash", async () => {
+    const malformedArchives = [
+      '"scalar"',
+      "null",
+      '{"v":1,"items":"scalar"}',
+      '{"v":2,"items":[]}',
+    ];
+
+    for (const archiveData of malformedArchives) {
+      await h.raw(`
+        insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+        values (
+          '${OWNER}',
+          'taskMonths',
+          'malformed-' || md5(${sqlText(archiveData)}::text),
+          ${sqlText(archiveData)}::jsonb,
+          1,
+          false,
+          1
+        );
+        update users set seq = 1 where id = '${OWNER}';
+      `);
+
+      const [precheck] = await h.query<Record<string, unknown>>(recoverySql(PRECHECK_SQL_PATH));
+      const [postcheck] = await h.query<Record<string, unknown>>(recoverySql(POSTCHECK_SQL_PATH));
+      expect(Number(precheck?.invalid_archive_rows)).toBeGreaterThan(0);
+      expect(precheck?.task_semantic_hash).toBeNull();
+      expect(
+        Number(postcheck?.malformed_archive_rows) + Number(postcheck?.unknown_archive_versions),
+      ).toBeGreaterThan(0);
+
+      await h.truncate();
+      await h.raw(`
+        insert into users (id, phone, sync_growth_period_started_at)
+        values ('${OWNER}', '989122288880', '2026-01-01T00:00:00Z')
+      `);
+    }
   });
 });

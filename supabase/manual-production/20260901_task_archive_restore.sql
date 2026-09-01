@@ -25,11 +25,11 @@ declare
   v_annual_bytes bigint;
   v_actual_record_count integer;
   v_actual_data_bytes bigint;
+  v_max_record_seq bigint;
   v_archive_count integer;
   v_apply_count integer;
   v_insert_count integer;
   v_seq_base bigint;
-  v_end_seq bigint;
   v_affected integer;
 begin
   if v_owner_id = '00000000-0000-0000-0000-000000000000'::uuid then
@@ -54,8 +54,9 @@ begin
   end if;
 
   select count(record.*)::integer,
-         coalesce(sum(octet_length(record.data::text)), 0)::bigint
-    into v_actual_record_count, v_actual_data_bytes
+         coalesce(sum(octet_length(record.data::text)), 0)::bigint,
+         coalesce(max(record.seq), 0)::bigint
+    into v_actual_record_count, v_actual_data_bytes, v_max_record_seq
     from records record
    where record.user_id = v_owner_id;
   if v_owner_record_count is distinct from v_actual_record_count
@@ -92,6 +93,30 @@ begin
   get diagnostics v_archive_count = row_count;
   if v_archive_count = 0 then
     raise exception 'task archive restore refused: owner has no archives';
+  end if;
+
+  -- A recovery-created sequence is sent to JavaScript clients as a number.
+  -- Validate the complete current owner stream before any persistent mutation.
+  if v_owner_seq not between 1 and 9007199254740991 then
+    raise exception 'task archive restore refused: owner sequence out of bounds';
+  end if;
+  if exists (
+    select 1 from records record
+     where record.user_id = v_owner_id
+       and record.seq not between 1 and 9007199254740991
+  ) then
+    raise exception 'task archive restore refused: record sequence out of bounds';
+  end if;
+  if exists (
+    select 1 from records record
+     where record.user_id = v_owner_id
+     group by record.seq
+    having count(*) > 1
+  ) then
+    raise exception 'task archive restore refused: duplicate record sequence';
+  end if;
+  if v_owner_seq < v_max_record_seq then
+    raise exception 'task archive restore refused: owner sequence trails records';
   end if;
 
   -- Layer validation so no array function or numeric cast can run on an
@@ -327,13 +352,7 @@ begin
             candidate.task_deleted desc,
             candidate.source_priority desc;
 
-  select greatest(
-           v_owner_seq,
-           coalesce(max(record.seq), 0)
-         )
-    into v_seq_base
-    from records record
-   where record.user_id = v_owner_id;
+  v_seq_base := v_owner_seq;
   select count(*)::integer
     into v_apply_count
     from pg_temp.routino_restore_expected expected
@@ -355,34 +374,46 @@ begin
   if v_seq_base > 9223372036854775807::bigint - v_apply_count::bigint then
     raise exception 'task archive restore refused: sequence space exhausted';
   end if;
+  if v_seq_base > 9007199254740991::bigint - v_apply_count::bigint then
+    raise exception 'task archive restore refused: sequence range exceeds client safety';
+  end if;
 
   create temp table routino_restore_apply (
     task_id text primary key,
     task_updated_at bigint not null,
     task_data jsonb not null,
     position bigint not null,
-    assigned_seq bigint
+    assigned_seq bigint not null
   ) on commit drop;
   insert into pg_temp.routino_restore_apply
-    (task_id, task_updated_at, task_data, position)
+    (task_id, task_updated_at, task_data, position, assigned_seq)
   select expected.task_id,
          expected.task_updated_at,
          expected.task_data,
-         row_number() over (order by expected.task_id)::bigint
+         row_number() over (order by expected.task_id)::bigint,
+         v_seq_base + row_number() over (order by expected.task_id)::bigint
     from pg_temp.routino_restore_expected expected
    where expected.winner_source = 'archive'
    order by expected.task_id;
+
+  if exists (
+    select 1 from pg_temp.routino_restore_apply apply
+     where apply.assigned_seq not between 1 and 9007199254740991
+  ) or exists (
+    select 1
+      from pg_temp.routino_restore_apply apply
+      join records existing
+        on existing.user_id = v_owner_id and existing.seq = apply.assigned_seq
+  ) then
+    raise exception 'task archive restore refused: reserved sequence range is unsafe';
+  end if;
 
   -- Temporarily reserve the archive rows in the physical row counter so the
   -- trigger-enforced 50k cap is evaluated against the final representation.
   update users owner
      set seq = v_seq_base + v_apply_count,
          sync_record_count = owner.sync_record_count - v_archive_count
-   where owner.id = v_owner_id
-   returning owner.seq into v_end_seq;
-  update pg_temp.routino_restore_apply apply
-     set assigned_seq = v_end_seq - v_apply_count + apply.position;
-
+   where owner.id = v_owner_id;
   insert into records (user_id, kind, id, data, updated_at, deleted, seq)
   select v_owner_id,
          'tasks',
