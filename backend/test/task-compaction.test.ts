@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { validateTaskPayload } from "../src/services/sync-record-validation.js";
 import { expandTaskMonthArchive } from "../src/services/task-month-archive.js";
@@ -6,6 +9,20 @@ import { makeHarness, type Harness } from "./helpers/pglite.js";
 const OWNER = "c1111111-1111-4111-8111-111111111111";
 const NOW = "2026-06-15T12:00:00.000Z";
 const OLD_UPDATED_AT = Date.parse("2026-06-01T00:00:00.000Z");
+const root = resolve(fileURLToPath(new URL("../..", import.meta.url)));
+const PRECHECK_SQL_PATH = resolve(
+  root,
+  "supabase/manual-production/20260901_task_archive_precheck.sql",
+);
+const POSTCHECK_SQL_PATH = resolve(
+  root,
+  "supabase/manual-production/20260901_task_archive_postcheck.sql",
+);
+const RESTORE_SQL_PATH = resolve(
+  root,
+  "supabase/manual-production/20260901_task_archive_restore.sql",
+);
+const RESTORE_OWNER_SENTINEL = "00000000-0000-0000-0000-000000000000";
 
 let h: Harness;
 
@@ -58,11 +75,7 @@ function task(
   };
 }
 
-async function insertTask(
-  id: string,
-  data: unknown,
-  updatedAt = OLD_UPDATED_AT,
-): Promise<void> {
+async function insertTask(id: string, data: unknown, updatedAt = OLD_UPDATED_AT): Promise<void> {
   await h.raw(`
     insert into records (user_id, kind, id, data, updated_at, deleted, seq)
     values ('${OWNER}', 'tasks', ${sqlText(id)}, ${sqlJson(data)}, ${updatedAt}, false, 0)
@@ -141,6 +154,26 @@ async function assertExactPhysicalCounters(): Promise<void> {
   expect(actual.bytes).toBe(Number(expected!.bytes));
 }
 
+function recoverySql(path: string): string {
+  return readFileSync(path, "utf8");
+}
+
+function restoreSqlFor(ownerId: string): string {
+  const sql = recoverySql(RESTORE_SQL_PATH);
+  expect(sql).toContain(RESTORE_OWNER_SENTINEL);
+  return sql.replace(RESTORE_OWNER_SENTINEL, ownerId);
+}
+
+async function ordinaryTaskTuples(): Promise<unknown[]> {
+  return h.query(`
+    select user_id::text as user_id, id, updated_at::text as updated_at,
+           deleted, data
+      from records
+     where user_id = '${OWNER}' and kind = 'tasks'
+     order by id
+  `);
+}
+
 describe("task archive SQL predicate", () => {
   it("agrees with the canonical TypeScript validator for valid and malformed task fixtures", async () => {
     const fixtures: Array<[string, string, unknown]> = [
@@ -211,11 +244,7 @@ describe("bounded transactional task compaction", () => {
   it("skips unsafe legacy timestamps while valid cold work still progresses", async () => {
     await insertTask("valid-timestamp", task("valid-timestamp"));
     await insertTask("legacy-negative", task("legacy-negative"), -1);
-    await insertTask(
-      "legacy-over-safe",
-      task("legacy-over-safe"),
-      Number.MAX_SAFE_INTEGER + 1,
-    );
+    await insertTask("legacy-over-safe", task("legacy-over-safe"), Number.MAX_SAFE_INTEGER + 1);
     await h.raw(`
       insert into records (user_id, kind, id, data, updated_at, deleted, seq)
       values (
@@ -258,7 +287,10 @@ describe("bounded transactional task compaction", () => {
     for (let index = 0; index < 32; index += 1) {
       await insertTask(
         `eligible-${String(index).padStart(2, "0")}`,
-        task(`eligible-${String(index).padStart(2, "0")}`, index === 0 ? { note: "😀".repeat(2_000) } : {}),
+        task(
+          `eligible-${String(index).padStart(2, "0")}`,
+          index === 0 ? { note: "😀".repeat(2_000) } : {},
+        ),
       );
     }
     await insertTask("recent-edit", task("recent-edit"), Date.parse("2026-06-10T00:00:00Z"));
@@ -361,9 +393,9 @@ describe("bounded transactional task compaction", () => {
         execute function routino_test_corrupt_task_archive();
     `);
 
-    await expect(
-      h.query(`select * from routino_compact_task_months('${NOW}', 1)`),
-    ).rejects.toThrow(/task archive verification failed/i);
+    await expect(h.query(`select * from routino_compact_task_months('${NOW}', 1)`)).rejects.toThrow(
+      /task archive verification failed/i,
+    );
 
     expect(await rawKindCount("tasks")).toBe(1);
     expect(await rawKindCount("taskMonths")).toBe(0);
@@ -386,9 +418,9 @@ describe("bounded transactional task compaction", () => {
         execute function routino_test_strip_task_archive();
     `);
 
-    await expect(
-      h.query(`select * from routino_compact_task_months('${NOW}', 1)`),
-    ).rejects.toThrow(/task archive verification failed/i);
+    await expect(h.query(`select * from routino_compact_task_months('${NOW}', 1)`)).rejects.toThrow(
+      /task archive verification failed/i,
+    );
 
     expect(await rawKindCount("tasks")).toBe(1);
     expect(await rawKindCount("taskMonths")).toBe(0);
@@ -426,9 +458,9 @@ describe("bounded transactional task compaction", () => {
         execute function routino_test_duplicate_task_archive();
     `);
 
-    await expect(
-      h.query(`select * from routino_compact_task_months('${NOW}', 1)`),
-    ).rejects.toThrow(/task archive verification failed/i);
+    await expect(h.query(`select * from routino_compact_task_months('${NOW}', 1)`)).rejects.toThrow(
+      /task archive verification failed/i,
+    );
 
     expect(await rawKindCount("tasks")).toBe(1);
     expect(await rawKindCount("taskMonths")).toBe(0);
@@ -455,9 +487,9 @@ describe("bounded transactional task compaction", () => {
         execute function routino_test_delay_task_archive();
     `);
 
-    await expect(
-      h.query(`select * from routino_compact_task_months('${NOW}', 1)`),
-    ).rejects.toThrow(/statement timeout|canceling statement/i);
+    await expect(h.query(`select * from routino_compact_task_months('${NOW}', 1)`)).rejects.toThrow(
+      /statement timeout|canceling statement/i,
+    );
     await h.raw("set statement_timeout = 0");
 
     expect(await rawKindCount("tasks")).toBe(1);
@@ -472,19 +504,14 @@ describe("bounded transactional task compaction", () => {
     }
     for (let index = 0; index < 12; index += 1) {
       const id = `large-${String(index).padStart(2, "0")}`;
-      await insertTask(
-        id,
-        task(id, { dateKey: "2026-04-01", note: "😀".repeat(2_000) }),
-      );
+      await insertTask(id, task(id, { dateKey: "2026-04-01", note: "😀".repeat(2_000) }));
     }
 
     const results = await h.query<{
       month_key: string;
       archived_tasks: number;
       archive_rows: number;
-    }>(
-      `select * from routino_compact_task_months('${NOW}', 500)`,
-    );
+    }>(`select * from routino_compact_task_months('${NOW}', 500)`);
     expect(
       results.map((result) => ({
         month: result.month_key,
@@ -585,4 +612,117 @@ describe("bounded transactional task compaction", () => {
       `),
     ).toEqual([annualBefore]);
   }, 20_000);
+});
+
+describe("task archive restore tooling", () => {
+  it("restores five years exactly with the same semantic hash and unchanged annual usage", async () => {
+    await h.raw(`
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      select '${OWNER}', 'tasks', task_id,
+             jsonb_build_object(
+               'id', task_id,
+               'dateKey', month_key || '-01',
+               'title', 'task ' || task_id,
+               'type', 'binary',
+               'target', 1,
+               'value', 1,
+               'done', true
+             ),
+             ${Date.parse("2025-12-01T00:00:00.000Z")} + month_index,
+             false,
+             month_index
+        from (
+          select month_index,
+                 to_char(date '2021-01-01' + (month_index || ' months')::interval, 'YYYY-MM') as month_key,
+                 'five-year-' || lpad(month_index::text, 2, '0') as task_id
+            from generate_series(0, 59) month_index
+        ) seeded;
+      update users
+         set sync_growth_period_started_at = '2026-01-01T00:00:00Z',
+             sync_growth_bytes = 4321
+       where id = '${OWNER}';
+    `);
+
+    const originalTuples = await ordinaryTaskTuples();
+    const [before] = await h.query<Record<string, unknown>>(recoverySql(PRECHECK_SQL_PATH));
+    expect(originalTuples).toHaveLength(60);
+    expect(before?.task_semantic_hash).toMatch(/^[a-f0-9]{32}$/);
+
+    const compacted = await h.query<{ archived_tasks: number }>(
+      `select * from routino_compact_task_months('2026-06-15T12:00:00Z', 500)`,
+    );
+    expect(compacted.reduce((sum, row) => sum + Number(row.archived_tasks), 0)).toBe(60);
+    expect(await rawKindCount("tasks")).toBe(0);
+    expect(await rawKindCount("taskMonths")).toBe(60);
+
+    const [postcheck] = await h.query<Record<string, unknown>>(recoverySql(POSTCHECK_SQL_PATH));
+    expect(postcheck).toBeDefined();
+    for (const [name, value] of Object.entries(postcheck!)) {
+      expect(Number(value), name).toBe(0);
+    }
+
+    const beforeRestoreUsage = await usage();
+    await h.raw(restoreSqlFor(OWNER));
+
+    const [after] = await h.query<Record<string, unknown>>(recoverySql(PRECHECK_SQL_PATH));
+    const restoredTuples = await ordinaryTaskTuples();
+    expect(after?.task_semantic_hash).toBe(before?.task_semantic_hash);
+    expect(restoredTuples).toEqual(originalTuples);
+    expect(await rawKindCount("taskMonths")).toBe(0);
+    expect((await usage()).annual).toBe(beforeRestoreUsage.annual);
+    await assertExactPhysicalCounters();
+
+    console.info(
+      `[task-archive-recovery] tuples=${restoredTuples.length} semanticHash=${String(after?.task_semantic_hash)} annualBytes=${(await usage()).annual}`,
+    );
+  }, 20_000);
+
+  it("rolls back a corrupt checksum without deleting its archive", async () => {
+    await insertTask("corrupt-restore", task("corrupt-restore"));
+    await h.query(`select * from routino_compact_task_months('${NOW}', 1)`);
+    await h.raw(`
+      update records
+         set data = jsonb_set(data, '{checksum}', to_jsonb(repeat('0', 32)))
+       where user_id = '${OWNER}' and kind = 'taskMonths'
+    `);
+    const beforeRows = await h.query(`
+      select id, md5(data::text) as archive_hash, updated_at::text, seq::text
+        from records
+       where user_id = '${OWNER}' and kind = 'taskMonths'
+    `);
+    const beforeUsage = await usage();
+
+    try {
+      await expect(h.raw(restoreSqlFor(OWNER))).rejects.toThrow(
+        /archive|checksum|verification|malformed/i,
+      );
+    } finally {
+      await h.raw("rollback");
+    }
+
+    expect(await rawKindCount("tasks")).toBe(0);
+    expect(
+      await h.query(`
+        select id, md5(data::text) as archive_hash, updated_at::text, seq::text
+          from records
+         where user_id = '${OWNER}' and kind = 'taskMonths'
+      `),
+    ).toEqual(beforeRows);
+    expect(await usage()).toEqual(beforeUsage);
+    await assertExactPhysicalCounters();
+  });
+
+  it("reports corrupt nonnumeric metadata as counts instead of aborting postcheck", async () => {
+    await insertTask("corrupt-count", task("corrupt-count"));
+    await h.query(`select * from routino_compact_task_months('${NOW}', 1)`);
+    await h.raw(`
+      update records
+         set data = jsonb_set(data, '{count}', '"not-a-number"'::jsonb)
+       where user_id = '${OWNER}' and kind = 'taskMonths'
+    `);
+
+    const [postcheck] = await h.query<Record<string, unknown>>(recoverySql(POSTCHECK_SQL_PATH));
+    expect(Number(postcheck?.malformed_archive_rows)).toBe(1);
+    expect(Number(postcheck?.archive_count_mismatches)).toBe(1);
+  });
 });
