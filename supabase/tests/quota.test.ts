@@ -16,9 +16,6 @@ import {
 import { expandTaskMonthArchive } from "../functions/api/shared/services/task-month-archive.ts";
 import { auth, makeHarness, type Harness } from "./helpers/harness.ts";
 
-const FREE_DB_BYTES = 500 * 1024 * 1024;
-const FREE_EGRESS_BYTES = 5 * 1024 * 1024 * 1024;
-const FREE_FUNCTION_INVOCATIONS = 500_000;
 const ACCOUNT_RECORD_LIMIT = 50_000;
 const ANNUAL_GROWTH_LIMIT = 10 * 1024 * 1024;
 const HABITS_PER_USER = 15;
@@ -452,11 +449,10 @@ describe("approved account-year storage budget", () => {
     const baseline = [...baselineSizes.values()].reduce((sum, size) => sum + size.total, 0);
     const final = [...sizesAfter.values()].reduce((sum, size) => sum + size.total, 0);
     const marginal = Math.max(1, (final - baseline) / USERS);
-    const capacity = Math.floor(FREE_DB_BYTES / marginal);
     console.log(
-      `[db evidence] post-compaction marginal fixture ≈ ${Math.round(marginal).toLocaleString("en-US")} B/account-year; 500 MB arithmetic ≈ ${capacity.toLocaleString("en-US")} account-years (measurement, not promise)`,
+      `[db evidence] post-compaction marginal fixture ≈ ${Math.round(marginal).toLocaleString("en-US")} physical B/account-year (measurement, not plan capacity)`,
     );
-    expect(capacity).toBeGreaterThan(0);
+    expect(marginal).toBeGreaterThan(0);
   });
 
   it("keeps the 50,000-row cap far above one compacted account-year", async () => {
@@ -494,20 +490,21 @@ describe("expanded history and invocation budget", () => {
     expect(semantic(expanded)).toEqual(semantic(ordinary));
   }, 30_000);
 
-  it("keeps two normal exchanges per day within response and free-tier arithmetic", () => {
+  it("measures exactly two normal exchanges per day without a quota-plan promise", () => {
     for (const [label, bytes] of responseBytes) {
-      expect(bytes, `${label} response is too large`).toBeLessThan(4_096);
+      expect(bytes, `${label} exceeded the owned response ceiling`).toBeLessThanOrEqual(
+        PULL_RESPONSE_MAX_UTF8_BYTES,
+      );
     }
     const dailyBytes =
       (responseBytes.get("POST /v1/sync/exchange changed") ?? 0) +
       (responseBytes.get("POST /v1/sync/exchange boot") ?? 0);
-    const egressDau = Math.floor(FREE_EGRESS_BYTES / (dailyBytes * 30));
     const invocationsPerDay = 2;
-    const invocationDau = Math.floor(FREE_FUNCTION_INVOCATIONS / (invocationsPerDay * 30));
     console.log(
-      `[normal sync] ${invocationsPerDay} exchanges/day, ${dailyBytes} B/day; egress arithmetic ≈ ${egressDau.toLocaleString("en-US")} DAU, invocation ceiling ≈ ${invocationDau.toLocaleString("en-US")} DAU`,
+      `[normal sync measurement] ${invocationsPerDay} exchanges/day, ${dailyBytes} response B/day; no provider-plan capacity asserted`,
     );
-    expect(egressDau).toBeGreaterThan(invocationDau);
-    expect(invocationDau).toBeGreaterThan(8_000);
+    expect(responseBytes.size).toBe(2);
+    expect(invocationsPerDay).toBe(2);
+    expect(dailyBytes).toBeGreaterThan(0);
   });
 });

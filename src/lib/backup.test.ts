@@ -8,19 +8,11 @@ import {
   restoreDb,
 } from "./backup";
 import { DEFAULT_CATEGORIES } from "./presets";
-import { defaultDb, logKey, type Db, type Task } from "./store";
-
-function oneYearTaskFixture(): Task[] {
-  return Array.from({ length: 365 * 10 }, (_, index) => ({
-    id: `task-${index}`,
-    dateKey: new Date(Date.UTC(2025, 0, Math.floor(index / 10) + 1)).toISOString().slice(0, 10),
-    title: index % 2 === 0 ? `مطالعه ${index}` : `کار ${index}`,
-    type: "binary",
-    target: 1,
-    value: 1,
-    done: true,
-  }));
-}
+import { defaultDb, logKey, type Db } from "./store";
+import {
+  archiveExpandedOneYearTasks,
+  oneYearTaskFixture,
+} from "../../test/helpers/task-archive-compat";
 
 function seed(): Db {
   const db = defaultDb(DEFAULT_CATEGORIES);
@@ -65,7 +57,7 @@ describe("buildBackup", () => {
       const beforeDb = { ...seed(), tasks: oneYearTaskFixture() };
       const afterDb: Db = {
         ...beforeDb,
-        tasks: beforeDb.tasks.map((task) => ({ ...task })),
+        tasks: archiveExpandedOneYearTasks(),
       };
       expect(afterDb.tasks).toEqual(beforeDb.tasks);
       expect(buildBackup(afterDb)).toEqual(buildBackup(beforeDb));

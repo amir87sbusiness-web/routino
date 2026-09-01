@@ -12,6 +12,8 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { auth, makeHarness, signIn, type Harness } from "./helpers/harness.ts";
 import {
   isAccountQuotaError,
+  isLegacyAccountQuotaError,
+  isUndefinedRoutinoPushRecordsError,
   PULL_RESPONSE_MAX_UTF8_BYTES,
   type PullRecord,
 } from "../functions/api/shared/services/sync.ts";
@@ -80,6 +82,97 @@ async function seedTaskArchive(
 }
 
 describe("edge sync", () => {
+  it("keeps non-empty public sync working when code is deployed before the archive quota migration", async () => {
+    const legacy = await makeHarness();
+    try {
+      await legacy.raw(`
+        drop function routino_push_records(uuid, timestamptz, jsonb);
+        alter table records drop constraint records_kind_valid;
+        alter table records add constraint records_kind_valid check (kind in
+          ('categories','habits','habitMonths','tasks','timerSessions','journal'));
+        alter table users drop constraint users_sync_growth_bytes_bounds;
+        alter table users drop column sync_growth_bytes;
+        alter table users drop column sync_growth_period_started_at;
+      `);
+      const { access } = await signIn(legacy, "09120001129");
+
+      const response = await legacy.call("POST", "/v1/sync/exchange", {
+        headers: auth(access),
+        body: {
+          protocolVersion: 2,
+          cursor: 0,
+          records: [habit("legacy-schema-habit", "سازگار")],
+          includeAccountState: false,
+        },
+      });
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        applied: 1,
+        skipped: 0,
+        records: [expect.objectContaining({ kind: "habits", id: "legacy-schema-habit" })],
+      });
+
+    } finally {
+      await legacy.close();
+    }
+  });
+
+  it("fails closed when a missing writer meets a partially migrated annual schema", async () => {
+    const partial = await makeHarness();
+    try {
+      await partial.raw(`
+        drop function routino_push_records(uuid, timestamptz, jsonb);
+        alter table users drop column sync_growth_period_started_at;
+      `);
+      const { access } = await signIn(partial, "09120001128");
+      const response = await partial.call("POST", "/v1/sync/exchange", {
+        headers: auth(access),
+        body: {
+          protocolVersion: 2,
+          cursor: 0,
+          records: [habit("partial-annual", "نباید دور زده شود")],
+          includeAccountState: false,
+        },
+      });
+      expect(response.status).toBe(500);
+      expect(await response.json()).toMatchObject({ error: "internal" });
+    } finally {
+      await partial.close();
+    }
+  });
+
+  it("only accepts the nested undefined-function error for this exact writer", () => {
+    expect(
+      isUndefinedRoutinoPushRecordsError({
+        cause: { code: "42883", message: "function routino_push_records(uuid, timestamptz, jsonb) does not exist" },
+      }),
+    ).toBe(true);
+    expect(
+      isUndefinedRoutinoPushRecordsError({ code: "42883", message: "function other_writer() does not exist" }),
+    ).toBe(false);
+    expect(
+      isUndefinedRoutinoPushRecordsError({ code: "23505", message: "function routino_push_records() does not exist" }),
+    ).toBe(false);
+  });
+
+  it("recognises only nested legacy row and data-byte quota constraints", () => {
+    expect(
+      isLegacyAccountQuotaError({
+        cause: { code: "23514", constraint_name: "users_sync_record_count_bounds" },
+      }),
+    ).toBe(true);
+    expect(
+      isLegacyAccountQuotaError({ code: "23514", constraint: "users_sync_data_bytes_bounds" }),
+    ).toBe(true);
+    expect(
+      isLegacyAccountQuotaError({ code: "23514", constraint_name: "users_sync_growth_bytes_bounds" }),
+    ).toBe(false);
+    expect(isLegacyAccountQuotaError({ code: "23505", constraint: "users_sync_data_bytes_bounds" })).toBe(
+      false,
+    );
+  });
+
   it("expands internal task months and lets a newer ordinary override converge", async () => {
     const { access, user } = await signIn(h, "09120001130");
     await seedTaskArchive(

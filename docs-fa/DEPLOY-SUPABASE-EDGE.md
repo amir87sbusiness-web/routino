@@ -28,18 +28,23 @@ npm run test:edge -- --maxWorkers=1
 node scripts/gen-setup-sql.mjs
 ```
 
-بعد از backup غیرخالی و dry-run، migrationهای `supabase/migrations/` را به ترتیب
-نام اجرا کن. migration پرداخت قبل از حذف ستون قدیمی روی وضعیت مبهم متوقف می‌شود.
-`20260831120000_compact_habit_logs_by_month.sql` نیز همهٔ `logs`های legacy را در
-یک تراکنش به `habitMonths` تبدیل می‌کند، cursorهای عقب‌مانده را با `gc_seq` به reset
-امن می‌فرستد و روی ردیف malformed کامل rollback می‌کند.
-`20260831130000_account_sync_budgets.sql` سپس تعداد ردیف و بایت JSON هر حساب را
-یک‌بار از دیتای موجود بک‌فیل می‌کند؛ اگر حسابی از ۵۰٬۰۰۰ ردیف یا ۱۲۸ MiB عبور کرده
-باشد، migration بدون حذف یا حدس کامل rollback می‌شود تا بررسی دستی انجام شود.
+برای release archive/quota این توالی ایمن و دقیق است؛ هیچ مرحله‌ای از تست محلی
+اجازهٔ اجرای production نمی‌دهد:
+
+1. کد سازگار را اول deploy کن. تا وقتی `routino_push_records` وجود ندارد فقط schema کاملاً قدیمی از fallback اتمیک استفاده می‌کند؛ schema نیمه‌مهاجرت‌کرده عمداً fail-closed است.
+2. روی همان project ref، backup قابل‌بازیابی و غیرخالی بگیر و restore/read-only check آن را ثبت کن. سپس migrationهای pending را روی clone یا dry-run بررسی کن؛ `setup.sql` جای migration production نیست.
+3. فقط migrationهای افزایشیِ ازپیش‌بررسی‌شده را به ترتیب نام اجرا کن. برای archive/quota، `20260901150000_task_archive_quota_expand.sql` ستون‌های annual را اضافه و constraint قدیمی data-byte را حذف می‌کند؛ دادهٔ موجود را بازنویسی یا حذف نمی‌کند. سپس `20260901151000_task_month_compactor.sql` فقط functionهای compaction را نصب می‌کند.
+4. با یک canary کنترل‌شده، `health/ready` و یک endpoint function-backed مانند `/v1/plans` و sync نسخه‌های قدیمی/جدید را بررسی کن. فقط بعد از شاهد backup، migration و canary، زمان‌بندی cron compactor را جداگانه فعال کن.
+
+`20260831120000_compact_habit_logs_by_month.sql` همهٔ `logs`های legacy را در یک
+تراکنش به `habitMonths` تبدیل می‌کند، cursorهای عقب‌مانده را با `gc_seq` به reset
+امن می‌فرستد و روی ردیف malformed کامل rollback می‌کند. هر migration قدیمی budget
+باید پیش از اجرا روی clone با schema فعلی بررسی شود؛ این راهنما هیچ سقف ذخیره‌سازی
+مادام‌العمر یا ظرفیت provider را تضمین نمی‌کند.
 
 کد Edge این release ستون‌های accounting را در queryهای عمومی `users` انتخاب
 نمی‌کند؛ بنابراین می‌توان ابتدا Edge را روی schema قدیمی smoke-test کرد، بعد migration
-budget را اجرا کرد و دوباره sync را آزمود. نسخهٔ قدیمی Edge نیز با ستون/trigger جدید
+افزایشی را اجرا و دوباره sync را آزمود. نسخهٔ قدیمی Edge نیز با ستون/trigger جدید
 سازگار است. اجرای migration قبل از backup معتبر یا روی پروژهٔ اشتباه ممنوع است.
 
 این پروژه اکنون داده و پرداخت واقعی دارد؛ بنابراین فرض pre-launch دیگر معتبر نیست.

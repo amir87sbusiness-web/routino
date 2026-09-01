@@ -7,8 +7,12 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
 import {
   isAccountQuotaError,
+  PULL_DB_FETCH_MAX_UTF8_BYTES,
+  PULL_DB_FETCH_ROW_LIMIT,
   PULL_RESPONSE_MAX_UTF8_BYTES,
+  pullRecords,
   selectPullPage,
+  type PullDbMetrics,
   type PullRecord,
 } from "../src/services/sync.js";
 
@@ -162,6 +166,162 @@ async function seedTaskArchive(
 }
 
 describe("sync", () => {
+  it("fetches a byte-bounded prefix plus lookahead for near-96 KiB archives in one query", async () => {
+    const { user } = await signIn("09120000035");
+    await allowTaskMonthArchives();
+    for (let archiveIndex = 0; archiveIndex < 12; archiveIndex += 1) {
+      await seedTaskArchive(
+        user.id,
+        archiveIndex + 1,
+        `2026-01|pressure-${archiveIndex}`,
+        taskArchive(
+          "2026-01",
+          Array.from({ length: 12 }, (_, taskIndex) => ({
+            ...archivedTask(
+              `pressure-${archiveIndex}-${taskIndex}`,
+              "2026-01-02",
+              1_000 + archiveIndex * 20 + taskIndex,
+            ),
+            note: "x".repeat(4_000),
+          })),
+        ),
+      );
+    }
+
+    const metrics: PullDbMetrics = {
+      queries: 0,
+      candidateRows: 0,
+      rawPrefixUtf8Bytes: 0,
+      lookaheadRows: 0,
+      lookaheadUtf8Bytes: 0,
+    };
+    const page = await pullRecords(
+      h.db,
+      user.id,
+      0,
+      500,
+      PULL_RESPONSE_MAX_UTF8_BYTES - 8 * 1024,
+      PULL_RESPONSE_MAX_UTF8_BYTES - 8 * 1024,
+      metrics,
+    );
+
+    expect(page.records.length).toBeGreaterThan(0);
+    expect(page.hasMore).toBe(true);
+    expect(metrics.queries).toBe(1);
+    expect(metrics.candidateRows).toBeLessThanOrEqual(PULL_DB_FETCH_ROW_LIMIT + 1);
+    expect(metrics.rawPrefixUtf8Bytes).toBeLessThanOrEqual(PULL_DB_FETCH_MAX_UTF8_BYTES);
+    expect(metrics.lookaheadRows).toBeLessThanOrEqual(1);
+    expect(metrics.lookaheadUtf8Bytes).toBeLessThanOrEqual(100 * 1024);
+  });
+
+  it("keeps one lookahead when the raw prefix ends exactly on the DB byte boundary", async () => {
+    const { user } = await signIn("09120000037");
+    await h.raw(`
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      values ('${user.id}', 'journal', '2026-01-01', jsonb_build_object('text', ''), 1, false, 1);
+    `);
+    const [base] = await h.query<{ bytes: number }>(`
+      select octet_length(kind) + octet_length(id) + octet_length(data::text) + 64 as bytes
+        from records where user_id = '${user.id}' and id = '2026-01-01'
+    `);
+    const padding = PULL_DB_FETCH_MAX_UTF8_BYTES - Number(base!.bytes);
+    await h.raw(`
+      update records set data = jsonb_build_object('text', repeat('x', ${padding}))
+       where user_id = '${user.id}' and id = '2026-01-01';
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      values ('${user.id}', 'journal', '2026-01-02', jsonb_build_object('text', 'later'), 2, false, 2);
+      update users set seq = 2 where id = '${user.id}';
+    `);
+
+    const metrics: PullDbMetrics = {
+      queries: 0,
+      candidateRows: 0,
+      rawPrefixUtf8Bytes: 0,
+      lookaheadRows: 0,
+      lookaheadUtf8Bytes: 0,
+    };
+    const page = await pullRecords(
+      h.db,
+      user.id,
+      0,
+      500,
+      PULL_RESPONSE_MAX_UTF8_BYTES - 8 * 1024,
+      PULL_RESPONSE_MAX_UTF8_BYTES - 8 * 1024,
+      metrics,
+    );
+
+    expect(page.records.map((record) => record.id)).toEqual(["2026-01-01"]);
+    expect(page.hasMore).toBe(true);
+    expect(metrics.rawPrefixUtf8Bytes).toBe(PULL_DB_FETCH_MAX_UTF8_BYTES);
+    expect(metrics.lookaheadRows).toBe(1);
+  });
+
+  it("pages five archive years without skipping while each page keeps DB transfer bounded", async () => {
+    const { user } = await signIn("09120000036");
+    await allowTaskMonthArchives();
+    let seq = 0;
+    const expected = new Set<string>();
+    for (let year = 2020; year < 2025; year += 1) {
+      for (let monthIndex = 0; monthIndex < 12; monthIndex += 1) {
+        const monthKey = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
+        for (let chunk = 0; chunk < 10; chunk += 1) {
+          const items = Array.from({ length: 32 }, (_, taskIndex) => {
+            const id = `history-${year}-${monthIndex}-${chunk}-${taskIndex}`;
+            expected.add(id);
+            return archivedTask(id, `${monthKey}-02`, 10_000 + seq * 40 + taskIndex);
+          });
+          seq += 1;
+          await seedTaskArchive(
+            user.id,
+            seq,
+            `${monthKey}|history-${chunk}`,
+            taskArchive(monthKey, items),
+          );
+        }
+      }
+    }
+
+    let cursor = 0;
+    let hasMore = true;
+    let pages = 0;
+    const seen = new Set<string>();
+    while (hasMore) {
+      const metrics: PullDbMetrics = {
+        queries: 0,
+        candidateRows: 0,
+        rawPrefixUtf8Bytes: 0,
+        lookaheadRows: 0,
+        lookaheadUtf8Bytes: 0,
+      };
+      const page = await pullRecords(
+        h.db,
+        user.id,
+        cursor,
+        500,
+        PULL_RESPONSE_MAX_UTF8_BYTES - 8 * 1024,
+        PULL_RESPONSE_MAX_UTF8_BYTES - 8 * 1024,
+        metrics,
+      );
+      expect(metrics.queries).toBe(1);
+      expect(metrics.candidateRows).toBeLessThanOrEqual(PULL_DB_FETCH_ROW_LIMIT + 1);
+      expect(metrics.rawPrefixUtf8Bytes).toBeLessThanOrEqual(PULL_DB_FETCH_MAX_UTF8_BYTES);
+      expect(metrics.lookaheadRows).toBeLessThanOrEqual(1);
+      expect(metrics.lookaheadUtf8Bytes).toBeLessThanOrEqual(100 * 1024);
+      expect(page.cursor).toBeGreaterThan(cursor);
+      for (const record of page.records) {
+        expect(seen.has(record.id)).toBe(false);
+        seen.add(record.id);
+      }
+      pages += 1;
+      cursor = page.cursor;
+      hasMore = page.hasMore;
+    }
+    console.log(
+      `[pull db pressure] five archive years = ${pages} queries/pages, ${seen.size} expanded tasks`,
+    );
+    expect(seen).toEqual(expected);
+  }, 30_000);
+
   it("keeps the next task archive atomic when its expanded rows exceed the remaining byte budget", () => {
     const first: PullRecord = {
       kind: "tasks",
@@ -782,9 +942,7 @@ describe("sync", () => {
     await push(access, [habit("h1", "ورزش"), habit("h2", "مطالعه")]);
 
     // The app reads its paywall from this instead of calling
-    // GET /subscriptions/me, which is one fewer Supabase invocation on every
-    // single app open. Invocations are what the free tier runs out of first, so
-    // this is a cost guarantee, not a convenience.
+    // GET /subscriptions/me, which avoids one extra request on every app open.
     const last = (await pull(access, 0)).json() as {
       hasMore: boolean;
       entitlement?: { status: string };

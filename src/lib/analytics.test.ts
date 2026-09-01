@@ -21,7 +21,11 @@ import {
   weeklyReview,
 } from "./logic";
 import { DEFAULT_CATEGORIES } from "./presets";
-import { defaultDb, logKey, type Db, type Habit, type HabitLog, type Task } from "./store";
+import { defaultDb, logKey, type Db, type Habit, type HabitLog } from "./store";
+import {
+  archiveExpandedOneYearTasks,
+  oneYearTaskFixture,
+} from "../../test/helpers/task-archive-compat";
 
 /** A Wednesday in both calendars, so "first day of the week" never triggers by
  * accident and the Jalali (Sat) and Gregorian (Sun) week starts both fall
@@ -68,28 +72,13 @@ function dbWith(habits: Habit[], doneKeys: string[], partial: Record<string, num
 const daysBefore = (today: string, n: number): string[] =>
   Array.from({ length: n }, (_, i) => addDays(today, -(n - i)));
 
-function oneYearTaskFixture(): Task[] {
-  return Array.from({ length: 365 * 10 }, (_, index) => {
-    const dateKey = addDays("2025-01-01", Math.floor(index / 10));
-    return {
-      id: `task-${index}`,
-      dateKey,
-      title: index % 2 === 0 ? `مطالعه ${index}` : `کار ${index}`,
-      type: "binary",
-      target: 1,
-      value: 1,
-      done: true,
-    };
-  });
-}
-
 describe("dayScore", () => {
   it("is unchanged when an identical task year originated from archive expansion", () => {
     const beforeDb = dbWith([habit()], [TODAY]);
     beforeDb.tasks = oneYearTaskFixture();
     const afterDb: Db = {
       ...beforeDb,
-      tasks: beforeDb.tasks.map((task) => ({ ...task })),
+      tasks: archiveExpandedOneYearTasks(),
     };
 
     expect(afterDb.tasks).toEqual(beforeDb.tasks);

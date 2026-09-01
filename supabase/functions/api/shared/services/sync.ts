@@ -56,6 +56,10 @@ export const PULL_PAGE_SIZE = 500;
  * envelope reserve for cursor/reset/entitlement metadata. */
 export const PULL_RESPONSE_MAX_UTF8_BYTES = 512 * 1024;
 const PULL_RECORDS_BYTE_BUDGET = PULL_RESPONSE_MAX_UTF8_BYTES - 8 * 1024;
+/** One public page of stored rows plus a lookahead is scanned server-side. The
+ * returned prefix is additionally byte-bounded before crossing into Edge. */
+export const PULL_DB_FETCH_ROW_LIMIT = PULL_PAGE_SIZE;
+export const PULL_DB_FETCH_MAX_UTF8_BYTES = 256 * 1024;
 
 const SYNC_QUOTA_CONSTRAINTS = new Set([
   "users_sync_record_count_bounds",
@@ -86,6 +90,53 @@ export function isAccountQuotaError(error: unknown): boolean {
     current = candidate.cause;
   }
   return false;
+}
+
+function hasPgError(
+  error: unknown,
+  predicate: (candidate: {
+    code?: unknown;
+    constraint?: unknown;
+    constraint_name?: unknown;
+    message?: unknown;
+  }) => boolean,
+): boolean {
+  let current: unknown = error;
+  for (let depth = 0; depth < 3 && current && typeof current === "object"; depth += 1) {
+    const candidate = current as {
+      code?: unknown;
+      constraint?: unknown;
+      constraint_name?: unknown;
+      message?: unknown;
+      cause?: unknown;
+    };
+    if (predicate(candidate)) return true;
+    current = candidate.cause;
+  }
+  return false;
+}
+
+/** Only absence of this release's exact function may enter the old-schema
+ * compatibility writer. An unrelated PostgreSQL 42883 remains a server error. */
+export function isUndefinedRoutinoPushRecordsError(error: unknown): boolean {
+  return hasPgError(
+    error,
+    (candidate) =>
+      candidate.code === "42883" &&
+      typeof candidate.message === "string" &&
+      /\broutino_push_records\s*\(/i.test(candidate.message),
+  );
+}
+
+export function isLegacyAccountQuotaError(error: unknown): boolean {
+  return hasPgError(error, (candidate) => {
+    const constraint = candidate.constraint ?? candidate.constraint_name;
+    return (
+      candidate.code === "23514" &&
+      (constraint === "users_sync_record_count_bounds" ||
+        constraint === "users_sync_data_bytes_bounds")
+    );
+  });
 }
 
 export interface PullRecord {
@@ -265,6 +316,169 @@ function clampRecordClock(record: PushRecord, ceiling: number): PushRecord {
   };
 }
 
+type StampedPushRecord = PushRecord & { originalUpdatedAt: number };
+
+/** Atomic writer for the schema immediately before annual quota/task archives.
+ * `legacy_guard` refuses to write if annual columns already exist, preventing a
+ * missing function on a migrated database from bypassing the annual allowance. */
+async function pushRecordsLegacySchema(
+  db: Database,
+  userId: string,
+  all: StampedPushRecord[],
+  rejectedRecords: RejectedSyncRecord[],
+): Promise<PushResult> {
+  const values = all.map(
+    (record, index) =>
+      sql`(${record.kind}::text, ${record.id}::text, ${record.deleted ? null : JSON.stringify(record.data ?? null)}::jsonb, ${record.updatedAt}::bigint, ${record.deleted}::boolean, ${index}::bigint)`,
+  );
+  let result: Awaited<ReturnType<Database["execute"]>>;
+  try {
+    result = await db.execute(sql`
+      with legacy_guard as (
+        select 1 as ok
+         where not exists (
+           select 1 from information_schema.columns
+            where table_schema = 'public' and table_name = 'users'
+              and column_name in ('sync_growth_period_started_at', 'sync_growth_bytes')
+         )
+      ),
+      incoming (kind, id, data, updated_at, deleted, ord) as (
+        values ${sql.join(values, sql`, `)}
+      ),
+      cascaded (kind, id, data, updated_at, deleted, ord) as (
+        select 'habitMonths'::text, child.id, null::jsonb,
+               parent.updated_at, true,
+               ${all.length}::bigint + row_number() over (order by child.id)
+          from incoming parent
+          join records child
+            on child.user_id = ${userId}::uuid
+           and child.kind = 'habitMonths'
+           and child.deleted = false
+           and child.id like parent.id || '|%'
+         where parent.kind = 'habits' and parent.deleted = true
+      ),
+      combined as (
+        select * from incoming
+        union all
+        select * from cascaded
+      ),
+      deduped as (
+        select distinct on (kind, id)
+               kind, id, data, updated_at, deleted, ord
+          from combined
+         order by kind, id, updated_at desc, deleted desc, ord
+      ),
+      numbered as (
+        select kind, id, data, updated_at, deleted,
+               row_number() over (order by ord, kind, id)::bigint as position
+          from deduped
+      ),
+      sized as (
+        select count(*)::bigint as total from numbered
+      ),
+      bump as (
+        update users u set seq = u.seq + sized.total
+          from sized cross join legacy_guard
+         where u.id = ${userId}::uuid
+        returning u.seq
+      ),
+      upserted as (
+        insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+        select ${userId}::uuid, incoming.kind, incoming.id, incoming.data,
+               incoming.updated_at, incoming.deleted,
+               bump.seq - sized.total + incoming.position
+          from numbered incoming cross join sized cross join bump
+        on conflict (user_id, kind, id) do update
+          set data = case
+                when excluded.kind = 'habitMonths'
+                 and excluded.deleted = false
+                 and records.deleted = false
+                then jsonb_build_object(
+                  'habitId', excluded.data->'habitId',
+                  'monthKey', excluded.data->'monthKey',
+                  'cells', coalesce(records.data->'cells', '{}'::jsonb) || coalesce((
+                    select jsonb_object_agg(incoming_cell.key, incoming_cell.value)
+                      from jsonb_each(excluded.data->'cells') incoming_cell
+                     where coalesce(
+                       (records.data->'cells'->incoming_cell.key->>'updatedAt')::bigint,
+                       -1
+                     ) < (incoming_cell.value->>'updatedAt')::bigint
+                  ), '{}'::jsonb)
+                )
+                else excluded.data
+              end,
+              updated_at = case
+                when excluded.kind = 'habitMonths'
+                 and excluded.deleted = false
+                 and records.deleted = false
+                then greatest(records.updated_at, excluded.updated_at)
+                else excluded.updated_at
+              end,
+              deleted = case
+                when excluded.kind = 'habitMonths'
+                 and excluded.deleted = false
+                 and records.deleted = false
+                then false
+                else excluded.deleted
+              end,
+              seq = excluded.seq
+          where case
+            when excluded.kind = 'habitMonths' then case
+              when excluded.deleted = true or records.deleted = true
+                then records.updated_at < excluded.updated_at
+              else exists (
+                select 1
+                  from jsonb_each(excluded.data->'cells') incoming_cell
+                 where coalesce(
+                   (records.data->'cells'->incoming_cell.key->>'updatedAt')::bigint,
+                   -1
+                 ) < (incoming_cell.value->>'updatedAt')::bigint
+              )
+            end
+            else records.updated_at < excluded.updated_at
+          end
+        returning 1 as ok
+      )
+      select (select seq from bump) as cursor,
+             (select count(*) from upserted) as applied,
+             (select total from sized) as total
+    `);
+  } catch (error) {
+    if (!isLegacyAccountQuotaError(error)) throw error;
+    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    return {
+      cursor: Number(user?.seq ?? 0),
+      applied: 0,
+      skipped: 0,
+      rejectedRecords: [
+        ...rejectedRecords,
+        ...all.map((record) => ({
+          kind: record.kind,
+          id: record.id,
+          updatedAt: record.originalUpdatedAt,
+          code: "account_quota_exceeded" as const,
+        })),
+      ],
+    };
+  }
+
+  const [row] = rowsOf<{
+    cursor: string | number | null;
+    applied: string | number;
+    total: string | number;
+  }>(result);
+  if (!row || row.cursor === null) {
+    throw new Error("legacy sync fallback refused migrated schema");
+  }
+  const applied = Number(row.applied);
+  return {
+    cursor: Number(row.cursor),
+    applied,
+    skipped: Number(row.total) - applied,
+    rejectedRecords,
+  };
+}
+
 export async function pushRecords(
   db: Database,
   userId: string,
@@ -279,7 +493,7 @@ export async function pushRecords(
   }
 
   const ceiling = now.getTime() + CLOCK_SKEW_TOLERANCE_MS;
-  const stamped = valid.map((record) => ({
+  const stamped: StampedPushRecord[] = valid.map((record) => ({
     ...clampRecordClock(record, ceiling),
     // Quota backoff identifies the exact durable local version. The stored
     // timestamp is clamped for LWW safety, but rejections must echo this one.
@@ -317,6 +531,9 @@ export async function pushRecords(
         ) result
     `);
   } catch (error) {
+    if (isUndefinedRoutinoPushRecordsError(error)) {
+      return pushRecordsLegacySchema(db, userId, all, rejectedRecords);
+    }
     if (!isAccountQuotaError(error)) throw error;
     // The single write statement has already rolled back both its seq bump and
     // every record. Return bounded metadata only; private payloads never echo.
@@ -378,64 +595,125 @@ export async function pullRecords(
   limit = PULL_PAGE_SIZE,
   recordByteBudget = PULL_RECORDS_BYTE_BUDGET,
   emptyPageMaxBytes = recordByteBudget,
+  metrics?: PullDbMetrics,
 ): Promise<PullResult> {
-  const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-  if (!user) throw badRequest("unknown_user", "No such user");
-
-  const gcSeq = Number(user.gcSeq);
   const safeCursor = Number.isFinite(cursor) && cursor >= 0 ? Math.floor(cursor) : 0;
+  const safeLimit = Math.max(1, Math.min(PULL_PAGE_SIZE, Math.floor(limit) || PULL_PAGE_SIZE));
+  const fetchLimit = Math.min(PULL_DB_FETCH_ROW_LIMIT, safeLimit);
+  if (metrics) metrics.queries += 1;
+  const result = await db.execute(sql`
+    with owner as (
+      select u.seq, u.gc_seq from users u where u.id = ${userId}::uuid
+    ),
+    fetched as (
+      select r.kind, r.id, r.data, r.updated_at, r.deleted, r.seq,
+             (
+               octet_length(r.kind) + octet_length(r.id) +
+               octet_length(coalesce(r.data::text, 'null')) + 64
+             )::bigint as stored_bytes
+        from records r cross join owner
+       where r.user_id = ${userId}::uuid
+         and r.seq > ${safeCursor}::bigint
+         and (${safeCursor}::bigint = 0 or ${safeCursor}::bigint >= owner.gc_seq)
+       order by r.seq
+       limit ${fetchLimit + 1}
+    ),
+    measured as (
+      select fetched.*,
+             row_number() over (order by fetched.seq)::integer as row_no,
+             sum(fetched.stored_bytes) over (order by fetched.seq)::bigint as running_bytes
+        from fetched
+    ),
+    bounded as (
+      select measured.*,
+             (
+               measured.row_no > ${fetchLimit} or
+               (
+                 measured.row_no > 1 and
+                 measured.running_bytes > ${PULL_DB_FETCH_MAX_UTF8_BYTES}::bigint
+               )
+       ) as is_lookahead
+        from measured
+       where measured.row_no = 1
+          or measured.running_bytes - measured.stored_bytes
+               <= ${PULL_DB_FETCH_MAX_UTF8_BYTES}::bigint
+    )
+    select owner.seq as owner_seq, owner.gc_seq,
+           bounded.kind, bounded.id, bounded.data, bounded.updated_at,
+           bounded.deleted, bounded.seq, bounded.stored_bytes,
+           bounded.is_lookahead
+      from owner left join bounded on true
+     order by bounded.row_no nulls last
+  `);
+  const rows = rowsOf<{
+    owner_seq: string | number;
+    gc_seq: string | number;
+    kind: string | null;
+    id: string | null;
+    data: unknown;
+    updated_at: string | number | null;
+    deleted: boolean | null;
+    seq: string | number | null;
+    stored_bytes: string | number | null;
+    is_lookahead: boolean | null;
+  }>(result);
+  const [ownerRow] = rows;
+  if (!ownerRow) throw badRequest("unknown_user", "No such user");
 
   // A cursor at or below the GC watermark cannot be trusted to have seen the
-  // tombstones that were purged below it. `0` is exempt: a device that has never
-  // synced has nothing to resurrect, and treating a first sync as a "reset"
-  // would send every new install through the wipe path for no reason.
+  // tombstones that were purged below it. Cursor zero is a fresh device and is
+  // exempt. The SQL above suppresses record fetches when a reset is required.
+  const gcSeq = Number(ownerRow.gc_seq);
   if (safeCursor > 0 && safeCursor < gcSeq) {
     return { records: [], cursor: 0, hasMore: true, reset: true };
   }
 
-  const safeLimit = Math.max(1, Math.min(PULL_PAGE_SIZE, Math.floor(limit) || PULL_PAGE_SIZE));
-  const result = await db.execute(sql`
-    select r.kind, r.id, r.data, r.updated_at, r.deleted, r.seq
-      from records r
-     where r.user_id = ${userId}::uuid and r.seq > ${safeCursor}::bigint
-     order by r.seq
-     limit ${safeLimit}
-  `);
-  const rows = rowsOf<{
-    kind: string;
-    id: string;
-    data: unknown;
-    updated_at: string | number;
-    deleted: boolean;
-    seq: string | number;
-  }>(result);
-  const candidates = rows.map(
-    (r): PullRecord => ({
-      kind: r.kind,
-      id: r.id,
-      data: r.data,
-      updatedAt: Number(r.updated_at),
-      deleted: r.deleted,
-      seq: Number(r.seq),
-    }),
-  );
+  const transferred = rows.filter((row) => row.kind !== null);
+  if (metrics) {
+    const lookahead = transferred.filter((row) => Boolean(row.is_lookahead));
+    const prefix = transferred.filter((row) => !row.is_lookahead);
+    metrics.candidateRows += transferred.length;
+    metrics.rawPrefixUtf8Bytes += prefix.reduce(
+      (sum, row) => sum + Number(row.stored_bytes ?? 0),
+      0,
+    );
+    metrics.lookaheadRows += lookahead.length;
+    metrics.lookaheadUtf8Bytes += lookahead.reduce(
+      (sum, row) => sum + Number(row.stored_bytes ?? 0),
+      0,
+    );
+  }
+  const hasLookahead = transferred.some((row) => Boolean(row.is_lookahead));
+  const candidates = transferred
+    .filter((row) => !row.is_lookahead)
+    .map(
+      (row): PullRecord => ({
+        kind: row.kind!,
+        id: row.id!,
+        data: row.data,
+        updatedAt: Number(row.updated_at!),
+        deleted: Boolean(row.deleted),
+        seq: Number(row.seq!),
+      }),
+    );
   const selected = selectPullPage(candidates, safeLimit, recordByteBudget, emptyPageMaxBytes);
   // `cursor` is non-zero whenever a stored row was selected, including a
   // valid empty archive. Preserve the caller's cursor only for an empty query.
   const nextCursor = selected.cursor || safeCursor;
-  const later = await db.execute(sql`
-    select exists (
-      select 1 from records
-       where user_id = ${userId}::uuid and seq > ${nextCursor}::bigint
-    ) as has_more
-  `);
-  const [laterRow] = rowsOf<{ has_more: boolean }>(later);
-
   return {
     ...selected,
     cursor: nextCursor,
-    hasMore: selected.hasMore || Boolean(laterRow?.has_more),
+    hasMore: selected.hasMore || hasLookahead,
   };
+}
+
+export interface PullDbMetrics {
+  /** Optional test instrumentation. It is never emitted in an HTTP response. */
+  queries: number;
+  candidateRows: number;
+  rawPrefixUtf8Bytes: number;
+  lookaheadRows: number;
+  lookaheadUtf8Bytes: number;
 }
 
 /** Applies this device's outbox and reads changes from its ORIGINAL cursor.

@@ -149,6 +149,7 @@ subscribe.tsx (فرانت)
 - جدول `records` منبع عمومی سرور برای delta sync است؛ cursor، LWW، tombstone و reset watermark جلوی گم‌شدن/زنده‌شدن دوبارهٔ دادهٔ حذف‌شده را می‌گیرند.
 - exchange فقط قرارداد `protocolVersion: 2` را می‌پذیرد. فرانت لاگ‌های dirty روزانه را در packet جزئی `habitMonths` می‌فرستد؛ سرور یک ردیف کامل به‌ازای هر عادت-ماه نگه می‌دارد و سلول‌ها را جدا merge می‌کند. پاسخ ماه کامل در فرانت به جدول محلی `logs` باز می‌شود، بنابراین UI/آفلاین/Export همچنان تاریخچهٔ روزانهٔ کامل می‌بینند.
 - taskهای تکمیل‌شدهٔ سرد ممکن است داخل DB در `taskMonths` تغییرناپذیر نگه‌داری شوند، اما این kind هرگز از API بیرون نمی‌آید: سرور آن را صفحه‌بندی‌شده و bounded به `tasks` معمولی باز می‌کند و task جدیدترِ همان id روی نسخهٔ archive غلبه می‌کند. بنابراین نمودار سالانه، جست‌وجو، Export، آفلاین و UI هیچ نمایش تازه‌ای نمی‌شناسند و همچنان روی آرایهٔ task فردی محلی کار می‌کنند.
+- برای هر صفحهٔ pull فقط یک query مالک+رکورد انجام می‌شود؛ prefix خام حداکثر ۲۵۶ KiB و lookahead فقط یک archive است. این سازوکار فشار DB/Edge را محدود می‌کند ولی اندازه‌گیری fixture هیچ تضمین DAU یا پلن provider نیست.
 - قرارداد پاسخ exchange شامل `rejectedRecords[{kind,id,updatedAt,code,retryAt?}]` است. سرور payload هر kind را دقیق validate می‌کند ولی متن رکورد ردشده را برنمی‌گرداند؛ فرانت فقط ردیف‌های تسویه‌شدهٔ همان نسخه را clean می‌کند. رد سهمیهٔ سالانه همان نسخه را با `dirty: 2` تا `retryAt` نگه می‌دارد؛ این wait state نه داده را پاک می‌کند و نه هر چند ثانیه retry می‌زند. این قرارداد در `backend/src/services/sync-record-validation.ts`، `backend/src/services/sync.ts`، `src/lib/api/sync.ts` و `src/lib/sync/engine.ts` باید با هم تغییر کند.
 - بدنهٔ JSON در Fastify و Edge حداکثر ۶۴ KiB است. Edge هم `Content-Length` و هم تعداد واقعی بایت‌های stream را قبل از `JSON.parse` کنترل می‌کند؛ خطای آن `413 payload_too_large` است.
 - هر حساب روی این مرورگر یک vault جدا دارد (`src/lib/db/vault.ts`)؛ A→B→A هیچ دیتایی را حذف یا قاطی نمی‌کند.
@@ -156,6 +157,7 @@ subscribe.tsx (فرانت)
 - قرارداد عمومی فقط شش kind `categories/habits/habitMonths/tasks/timerSessions/journal` دارد؛ جدول `records` علاوه بر آن می‌تواند `taskMonths` داخلی داشته باشد که فقط سرور می‌بیند. هیچ دستگاه یا تنظیماتی روی سرور ذخیره نمی‌شود. PostgREST با RLS بدون policy بسته است و فرانت فقط از Edge API احراز‌شده استفاده می‌کند.
 - سقف حساب ۵۰٬۰۰۰ ردیف است و سقف ۱۲۸ MiB مادام‌العمر وجود ندارد. محدودیت write برابر ۱۰ MiB رشد مثبت JSON در هر دورهٔ ۳۶۵روزهٔ خود حساب است؛ دادهٔ پیش از migration grandfathered می‌ماند. فشرده‌سازی taskهای قدیمی job دیتابیس است و هیچ request اضافه از اپ یا Edge تولید نمی‌کند.
 - ترتیب production اجباری است: کد سازگار اول؛ سپس backup، dry-run و migration افزایشی با canary؛ cron فشرده‌ساز در آخر. این ترتیب اجازه می‌دهد نسخه‌های نصب‌شدهٔ فعلی همیشه task معمولی دریافت کنند.
+- در schema قدیمی فقط نبودن دقیق `routino_push_records(` writer سازگار را فعال می‌کند؛ وجود ناقص ستون‌های سالانه عمداً ۵۰۰ می‌دهد تا allowance جدید دور زده نشود.
 
 ### 🎁 قرارداد ۹: دوره آزمایشی و گِیت اشتراک
 
