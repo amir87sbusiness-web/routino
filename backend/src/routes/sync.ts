@@ -89,11 +89,8 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
    *
    * The final page also carries the caller's entitlement, which is why the app
    * no longer calls `GET /v1/subscriptions/me` on boot. That endpoint still
-   * exists and still works — this is purely about cost. Supabase's free tier
-   * bills per FUNCTION INVOCATION, not per query, so a second round trip for one
-   * indexed row is the single most expensive way to learn whether someone has
-   * paid. Folding it in here removes one invocation from every app open, which
-   * is roughly a third of them.
+   * exists and still works — carrying the entitlement here avoids one separate
+   * network round trip for every app open.
    *
    * Only on the last page: a first sync of a year of history is several pages,
    * and the answer is identical on each.

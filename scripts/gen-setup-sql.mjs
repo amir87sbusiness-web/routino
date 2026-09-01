@@ -43,9 +43,8 @@ select cron.schedule(
 
 -- Tombstones, weekly. A deleted habit or log leaves a row behind on purpose: a
 -- delete has to be able to TRAVEL to the user's other devices, and an absence
--- cannot. But it only has to travel once, and \`records\` is the table that
--- decides when the 500 MB fills up — so a user who tidies up their habits every
--- month should not keep paying for every one of them forever.
+-- cannot. But it only has to travel once, so a user who tidies up their habits
+-- every month should not keep carrying every tombstone forever.
 --
 -- The two halves must happen together, which is why this is one statement.
 -- Raising \`users.gc_seq\` to the highest seq removed is what makes deleting a

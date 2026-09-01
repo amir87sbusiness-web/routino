@@ -73,9 +73,9 @@ export function syncRoutes(deps: Deps) {
     return c.json(await pushRecords(db, user.id, records as PushRecord[], now()));
   });
 
-  // The last page carries the entitlement too, so the app does not spend a
-  // second invocation on `GET /subscriptions/me` every time it opens. See the
-  // Fastify twin for the reasoning; on the free tier invocations are the ceiling.
+  // The last page carries the entitlement too, so the app does not make a
+  // separate `GET /subscriptions/me` request every time it opens. See the
+  // Fastify twin for the reasoning.
   r.get("/sync/pull", auth, async (c) => {
     const user = requireUser(c);
     const { cursor, limit } = pullQuery.parse({

@@ -82,7 +82,7 @@ Fixture per account-year: 15 habits, 10 completed tasks/day, one seven-line jour
 - One-year fresh sync after transparent expansion: `9 pages / 1,464,222 B`.
 - Five-year synthetic fresh sync after transparent expansion: `44 pages / 7,367,486 B`.
 - Normal steady state: `2 exchanges/day`, `331 response B/day` in this fixture.
-- Invocation arithmetic at 500,000/month: about `8,333 DAU`; egress arithmetic is higher (`540,655 DAU`) and therefore not the binding fixture ceiling.
+- Normal fixture measurement: `2 exchanges/day` and `331 response B/day`; it is not a provider-plan or user-capacity forecast.
 - Twenty-year synthetic archive round-trip compared every task id, timestamp, and payload and passed.
 
 The physical relation size increases after ordinary `VACUUM ANALYZE` despite the row reduction. This is expected PostgreSQL behavior: deleted pages become reusable but ordinary vacuum does not shrink the relation file. The test reports this honestly and does not claim immediate billed-byte shrinkage.
@@ -187,16 +187,35 @@ PASS
 - Raw rows: `16,840 -> 2,734`; compacted average `684` rows/account-year of `50,000`.
 - Records relation: table `5,201,920 -> 5,701,632 B`; indexes `2,621,440 -> 2,727,936 B` after ordinary vacuum/reuse.
 - Fresh expanded sync: one year `10 pages / 1,464,277 B`; five years `44 pages / 7,367,486 B`.
-- Normal fixture output: `2 exchanges/day`, `331 response B/day`; this is measurement only, with no provider-plan or DAU assertion.
+- Normal fixture output: `2 exchanges/day`, `331 response B/day`; this is measurement only, with no provider-plan or user-capacity assertion.
 
 ### Scoped changes
 
 - `backend/src/services/sync.ts` and generated `supabase/functions/api/shared/services/sync.ts`: exact nested old-function fallback, legacy quota recognition, fail-closed partial annual schema guard, single bounded pull query, and test-only pull metrics.
 - `backend/test/sync.test.ts`, `supabase/tests/sync.test.ts`, and `supabase/tests/quota.test.ts`: old-schema Edge, boundary/no-skip/query-bound, codec/annual, and measurement-only assertions.
 - `test/helpers/task-archive-compat.ts` plus the three frontend compatibility tests: the task array comes from the real archive expansion codec; no test helper remains under production `src/lib`.
-- `docs-fa/02-BACKEND.md`, `docs-fa/03-FRONT-BACK-CONNECTIONS.md`, `docs-fa/CODEBASE_GUIDE.md`, and `docs-fa/DEPLOY-SUPABASE-EDGE.md`: no free-tier/DAU guarantee; documented code-first, backup/restore, dry-run, additive migration, canary, and cron-last sequence.
+- `docs-fa/02-BACKEND.md`, `docs-fa/03-FRONT-BACK-CONNECTIONS.md`, `docs-fa/CODEBASE_GUIDE.md`, and `docs-fa/DEPLOY-SUPABASE-EDGE.md`: no provider-plan/user-capacity guarantee; documented code-first, backup/restore, dry-run, additive migration, canary, and cron-last sequence.
 
 ### Remaining rollout caveats
 
 - PGlite cannot prove native PostgreSQL trigger scheduling or two-connection contention for the old legacy row/data-byte checks; the strict error shape and Edge old-schema fallback are covered locally, but production rollout still needs the documented clone/canary validation.
-- No provider plan capacity, billed storage result, DAU ceiling, deploy, backup, dry-run, migration, cron activation, or live endpoint is claimed by these tests.
+- No provider plan capacity, billed storage result, user ceiling, deploy, backup, dry-run, migration, cron activation, or live endpoint is claimed by these tests.
+
+## Fix Round 2 — remove stale provider-capacity promises
+
+- Removed the historical provider-plan arithmetic from this report. The retained fixture facts are only bytes, pages, product-owned `10 MiB` annual positive JSON growth, `50,000` rows/account, and two measured exchanges/day.
+- Reworded the generated tombstone-compactor comment and both Fastify/Edge sync-route comments. Route control flow and response behavior are unchanged; the parity/setup tests below cover the canonical/generated and setup paths.
+- Regenerated `supabase/setup.sql` only with `node scripts/gen-setup-sql.mjs`.
+
+```text
+npm --prefix backend test -- test/edge-parity.test.ts test/launch-ddl.test.ts --maxWorkers=1
+Test Files 2 passed (2)
+Tests 48 passed (48)
+
+npm --prefix backend run typecheck
+npx tsc --noEmit
+git diff --check
+PASS
+```
+
+Search proof used the acceptance pattern set while excluding immutable review-package/diff snapshots that intentionally preserve prior review evidence. The only remaining match is an unrelated UUID segment in a backend test fixture; no provider-plan or user-capacity assertion remains in the active Task 6 sources, tests, docs, generated setup, or report.
