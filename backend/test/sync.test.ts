@@ -613,6 +613,37 @@ describe("sync", () => {
     expect(seen.size).toBe(20);
   });
 
+  it("keeps an exchange below the UTF-8 response cap with maximum rejected-record metadata", async () => {
+    const { access, user } = await signIn("09120000033");
+    await h.raw(`
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      values ('${user.id}', 'journal', '2026-08-01',
+              jsonb_build_object('text', repeat('x', 515000)), 1, false, 1);
+      update users set seq = 1 where id = '${user.id}';
+    `);
+    const rejected = Array.from({ length: 200 }, (_, index) => ({
+      kind: "tasks",
+      id: `rejected-${index}-${"x".repeat(115)}`,
+      data: {},
+      updatedAt: 1000 + index,
+      deleted: false,
+    }));
+
+    const response = await exchange(access, 0, rejected);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      records: [],
+      cursor: 0,
+      hasMore: true,
+      rejectedRecords: expect.arrayContaining([
+        expect.objectContaining({ kind: "tasks", code: "invalid_record" }),
+      ]),
+    });
+    expect(Buffer.byteLength(response.body, "utf8")).toBeLessThanOrEqual(
+      PULL_RESPONSE_MAX_UTF8_BYTES,
+    );
+  });
+
   it("tells a device that fell behind the tombstone purge to start over", async () => {
     const { access, user } = await signIn("09120000010");
     await push(access, [habit("h1", "ورزش")]);
