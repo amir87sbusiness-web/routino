@@ -73,6 +73,12 @@ describe("launch schema repairs", () => {
 
     await h.raw(TASK_ARCHIVE_QUOTA_MIGRATION_SQL);
 
+    const functions = await h.query<{ routine_name: string }>(`
+      select routine_name from information_schema.routines
+       where routine_schema = 'public' and routine_name = 'routino_push_records'
+    `);
+    expect(functions).toHaveLength(1);
+
     const [after] = await h.query<{ data: unknown; updated_at: string; seq: string }>(`
       select data, updated_at::text, seq::text from records
        where user_id = 'a1111111-1111-4111-8111-111111111111'

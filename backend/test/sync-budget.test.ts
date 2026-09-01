@@ -345,4 +345,96 @@ describe("per-account sync storage budget", () => {
     `);
     expect(rows.map((row) => row.id)).toEqual(["partial-a"]);
   });
+
+  it("still applies a later deletion after rejecting an earlier positive-growth row", async () => {
+    const existing = habit("delete-me", "old", 1_000);
+    await h.raw(`
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      values (
+        '${USER_ID}', 'habits', 'delete-me',
+        '${JSON.stringify(existing.data).replaceAll("'", "''")}'::jsonb,
+        1000, false, 1
+      );
+      update users
+         set seq = 1,
+             sync_growth_period_started_at = '${PERIOD_START.toISOString()}',
+             sync_growth_bytes = ${MAX_ANNUAL_GROWTH_BYTES}
+       where id = '${USER_ID}'
+    `);
+    const deletion: PushRecord = {
+      kind: "habits",
+      id: "delete-me",
+      data: null,
+      updatedAt: 3_000,
+      deleted: true,
+    };
+
+    const result = await pushRecords(
+      h.db,
+      USER_ID,
+      [habit("too-large", "positive", 2_000), deletion],
+      PERIOD_START,
+    );
+    expect(result).toMatchObject({
+      applied: 1,
+      skipped: 0,
+      rejectedRecords: [
+        expect.objectContaining({ id: "too-large", code: "account_quota_exceeded" }),
+      ],
+    });
+    const [stored] = await h.query<{ deleted: boolean; data: unknown }>(`
+      select deleted, data from records
+       where user_id = '${USER_ID}' and kind = 'habits' and id = 'delete-me'
+    `);
+    expect(stored).toEqual({ deleted: true, data: null });
+  });
+
+  it("accepts a later smaller growth after an earlier record does not fit", async () => {
+    const large = habit("greedy-large", "x".repeat(100), 2_000);
+    const small = habit("greedy-small", "x", 2_000);
+    const smallBytes = await jsonBytes(small.data);
+    expect(await jsonBytes(large.data)).toBeGreaterThan(smallBytes);
+    await h.raw(`
+      update users
+         set sync_growth_period_started_at = '${PERIOD_START.toISOString()}',
+             sync_growth_bytes = ${MAX_ANNUAL_GROWTH_BYTES - smallBytes}
+       where id = '${USER_ID}'
+    `);
+
+    const result = await pushRecords(h.db, USER_ID, [large, small], PERIOD_START);
+    expect(result).toMatchObject({
+      applied: 1,
+      rejectedRecords: [
+        expect.objectContaining({ id: "greedy-large", code: "account_quota_exceeded" }),
+      ],
+    });
+    const rows = await h.query<{ id: string }>(`
+      select id from records where user_id = '${USER_ID}' order by id
+    `);
+    expect(rows.map((row) => row.id)).toEqual(["greedy-small"]);
+  });
+
+  it("uses the original local timestamp in quota rejection identity after clock clamping", async () => {
+    const originalUpdatedAt = PERIOD_START.getTime() + 86_400_000;
+    await h.raw(`
+      update users
+         set sync_growth_period_started_at = '${PERIOD_START.toISOString()}',
+             sync_growth_bytes = ${MAX_ANNUAL_GROWTH_BYTES}
+       where id = '${USER_ID}'
+    `);
+
+    const result = await pushRecords(
+      h.db,
+      USER_ID,
+      [habit("future-local", "future", originalUpdatedAt)],
+      PERIOD_START,
+    );
+    expect(result.rejectedRecords).toEqual([
+      expect.objectContaining({
+        id: "future-local",
+        updatedAt: originalUpdatedAt,
+        code: "account_quota_exceeded",
+      }),
+    ]);
+  });
 });

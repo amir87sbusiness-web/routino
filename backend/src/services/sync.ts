@@ -227,8 +227,8 @@ const keyOf = (r: PushRecord) => `${r.kind} ${r.id}`;
  * that account, permanently. Newer wins; on an exact tie a tombstone wins so a
  * pending cell cannot keep a month alive beside a habit deleted in the same tick.
  */
-function dedupe(rows: PushRecord[]): PushRecord[] {
-  const byKey = new Map<string, PushRecord>();
+function dedupe<T extends PushRecord>(rows: T[]): T[] {
+  const byKey = new Map<string, T>();
   for (const r of rows) {
     const existing = byKey.get(keyOf(r));
     if (
@@ -278,218 +278,42 @@ export async function pushRecords(
   }
 
   const ceiling = now.getTime() + CLOCK_SKEW_TOLERANCE_MS;
-  const stamped = valid.map((record) => clampRecordClock(record, ceiling));
+  const stamped = valid.map((record) => ({
+    ...clampRecordClock(record, ceiling),
+    // Quota backoff identifies the exact durable local version. The stored
+    // timestamp is clamped for LWW safety, but rejections must echo this one.
+    originalUpdatedAt: record.updatedAt,
+  }));
 
   // Incoming work is capped at 200, so this bounded JS dedupe is safe. Habit
   // month cascades are intentionally NOT materialised here: one long-lived
   // habit can own thousands of rows, and production Edge memory must not scale
   // with account history.
   const all = dedupe(stamped);
+  const packet = all.map((record) => ({
+    kind: record.kind,
+    id: record.id,
+    data: record.deleted ? null : (record.data ?? null),
+    updatedAt: record.updatedAt,
+    originalUpdatedAt: record.originalUpdatedAt,
+    deleted: record.deleted,
+  }));
 
-  const values = all.map(
-    (r, i) =>
-      sql`(${r.kind}::text, ${r.id}::text, ${r.deleted ? null : JSON.stringify(r.data ?? null)}::jsonb, ${r.updatedAt}::bigint, ${r.deleted}::boolean, ${i}::bigint)`,
-  );
-
-  // ONE statement, and that is the whole point of the shape below.
-  //
-  // `bump` takes the row lock on `users`, and because the insert reads `bump`
-  // in the SAME statement, that lock is still held when the record rows commit.
-  // That is what actually makes seq order match commit order (invariant 1).
-  // Split across two statements — reserve, then insert — the lock is released
-  // at the first semicolon, so a push holding a LOWER block can commit AFTER a
-  // reader has already advanced past it, and those rows are then invisible to
-  // that device forever. A regression test covers exactly this.
-  //
-  // Last-write-wins lives in the WHERE of the DO UPDATE: an older copy simply
-  // does not land. Equal timestamps also lose, which keeps a device replaying
-  // its outbox from churning `seq` — and therefore from waking every other
-  // device up for a row that did not change.
+  // One database round trip. The volatile PL/pgSQL function first locks the
+  // owner row, then performs its record read/write as a later command with a
+  // fresh READ COMMITTED snapshot. Keeping those as two server-side commands is
+  // essential: a single CTE statement keeps its original snapshot even after
+  // waiting for the user lock and can otherwise overwrite a newer concurrent
+  // record. The function holds the lock until this transaction finishes.
   let res: Awaited<ReturnType<Database["execute"]>>;
   try {
     res = await db.execute(sql`
-      with incoming (kind, id, data, updated_at, deleted, ord) as (
-      values ${sql.join(values, sql`, `)}
-      ),
-      cascaded (kind, id, data, updated_at, deleted, ord) as (
-        select 'habitMonths'::text, child.id, null::jsonb,
-               parent.updated_at, true,
-               ${all.length}::bigint + row_number() over (order by child.id)
-          from incoming parent
-          join records child
-            on child.user_id = ${userId}::uuid
-           and child.kind = 'habitMonths'
-           and child.deleted = false
-           and child.id like parent.id || '|%'
-         where parent.kind = 'habits' and parent.deleted = true
-      ),
-      deduped as (
-        select distinct on (kind, id)
-               kind, id, data, updated_at, deleted, ord
-          from (
-            select * from incoming
-            union all
-            select * from cascaded
-          ) combined
-         order by kind, id, updated_at desc, deleted desc, ord
-      ),
-      current_state as materialized (
-        select u.seq, u.sync_growth_period_started_at, u.sync_growth_bytes
-          from users u
-         where u.id = ${userId}::uuid
-         for update
-      ),
-      effective_period as (
-        select case
-                 when cs.sync_growth_period_started_at + interval '365 days'
-                        <= ${now.toISOString()}::timestamptz
-                   then ${now.toISOString()}::timestamptz
-                 else cs.sync_growth_period_started_at
-               end as period_start,
-               case
-                 when cs.sync_growth_period_started_at + interval '365 days'
-                        <= ${now.toISOString()}::timestamptz
-                   then 0::bigint
-                 else cs.sync_growth_bytes
-               end as base_used
-          from current_state cs
-      ),
-      prepared as (
-        select d.kind, d.id,
-               final.final_data as data,
-               final.final_updated_at as updated_at,
-               final.final_deleted as deleted,
-               d.ord,
-               decision.will_apply,
-               greatest(
-                 coalesce(octet_length(final.final_data::text), 0) -
-                 coalesce(octet_length(existing.data::text), 0),
-                 0
-               )::bigint as positive_growth
-          from deduped d
-          cross join current_state cs
-          left join records existing
-            on existing.user_id = ${userId}::uuid
-           and existing.kind = d.kind
-           and existing.id = d.id
-          cross join lateral (
-            select case
-                     when d.kind = 'habitMonths'
-                      and d.deleted = false
-                      and existing.user_id is not null
-                      and existing.deleted = false
-                     then jsonb_build_object(
-                       'habitId', d.data->'habitId',
-                       'monthKey', d.data->'monthKey',
-                       'cells', coalesce(existing.data->'cells', '{}'::jsonb) || coalesce((
-                         select jsonb_object_agg(incoming_cell.key, incoming_cell.value)
-                           from jsonb_each(d.data->'cells') incoming_cell
-                          where coalesce(
-                            (existing.data->'cells'->incoming_cell.key->>'updatedAt')::bigint,
-                            -1
-                          ) < (incoming_cell.value->>'updatedAt')::bigint
-                       ), '{}'::jsonb)
-                     )
-                     else d.data
-                   end as final_data,
-                   case
-                     when d.kind = 'habitMonths'
-                      and d.deleted = false
-                      and existing.user_id is not null
-                      and existing.deleted = false
-                     then greatest(existing.updated_at, d.updated_at)
-                     else d.updated_at
-                   end as final_updated_at,
-                   case
-                     when d.kind = 'habitMonths'
-                      and d.deleted = false
-                      and existing.user_id is not null
-                      and existing.deleted = false
-                     then false
-                     else d.deleted
-                   end as final_deleted
-          ) final
-          cross join lateral (
-            select case
-                     when existing.user_id is null then true
-                     when d.kind = 'habitMonths' then case
-                       when d.deleted = true or existing.deleted = true
-                         then existing.updated_at < d.updated_at
-                       else exists (
-                         select 1
-                           from jsonb_each(d.data->'cells') incoming_cell
-                          where coalesce(
-                            (existing.data->'cells'->incoming_cell.key->>'updatedAt')::bigint,
-                            -1
-                          ) < (incoming_cell.value->>'updatedAt')::bigint
-                       )
-                     end
-                     else existing.updated_at < d.updated_at
-                   end as will_apply
-          ) decision
-      ),
-      ranked as (
-        select p.*,
-               sum(case when p.will_apply then p.positive_growth else 0 end)
-                 over (order by p.ord, p.kind, p.id) as cumulative_growth,
-               10485760::bigint - ep.base_used as allowance_remaining
-          from prepared p cross join effective_period ep
-      ),
-      accepted as (
-        select r.*,
-               row_number() over (order by r.ord, r.kind, r.id)::bigint as position
-          from ranked r
-         where r.will_apply
-           and r.cumulative_growth <= r.allowance_remaining
-      ),
-      budget_rejected as (
-        select r.kind, r.id, r.updated_at, r.ord
-          from ranked r
-         where r.will_apply
-           and r.cumulative_growth > r.allowance_remaining
-      ),
-      sized as (
-        select count(*)::bigint as total,
-               coalesce(sum(a.positive_growth), 0)::bigint as positive_growth
-          from accepted a
-      ),
-      bump as (
-        update users u
-           set seq = u.seq + sized.total,
-               sync_growth_period_started_at = ep.period_start,
-               sync_growth_bytes = ep.base_used + sized.positive_growth
-          from sized cross join effective_period ep
-         where u.id = ${userId}::uuid
-        returning u.seq,
-                  u.sync_growth_period_started_at + interval '365 days' as retry_at
-      ),
-      upserted as (
-      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
-      select ${userId}::uuid, i.kind, i.id, i.data, i.updated_at, i.deleted,
-             b.seq - s.total + i.position
-        from accepted i cross join sized s cross join bump b
-      on conflict (user_id, kind, id) do update
-        set data = excluded.data,
-            updated_at = excluded.updated_at,
-            deleted = excluded.deleted,
-            seq = excluded.seq
-      returning 1 as ok
-      )
-      select (select seq from bump) as cursor,
-             (select count(*) from upserted) as applied,
-             (select count(*) from prepared where not will_apply) as skipped,
-             coalesce((
-               select jsonb_agg(
-                 jsonb_build_object(
-                   'kind', rejected.kind,
-                   'id', rejected.id,
-                   'updatedAt', rejected.updated_at,
-                   'code', 'account_quota_exceeded',
-                   'retryAt', floor(extract(epoch from b.retry_at) * 1000)::bigint
-                 ) order by rejected.ord, rejected.kind, rejected.id
-               )
-                 from budget_rejected rejected cross join bump b
-             ), '[]'::jsonb) as quota_rejected
+      select result.cursor, result.applied, result.skipped, result.quota_rejected
+        from routino_push_records(
+          ${userId}::uuid,
+          ${now.toISOString()}::timestamptz,
+          ${JSON.stringify(packet)}::jsonb
+        ) result
     `);
   } catch (error) {
     if (!isAccountQuotaError(error)) throw error;
