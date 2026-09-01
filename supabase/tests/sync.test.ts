@@ -10,6 +10,11 @@
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { auth, makeHarness, signIn, type Harness } from "./helpers/harness.ts";
+import {
+  isAccountQuotaError,
+  PULL_RESPONSE_MAX_UTF8_BYTES,
+  type PullRecord,
+} from "../functions/api/shared/services/sync.ts";
 
 let h: Harness;
 
@@ -39,7 +44,142 @@ const habit = (id: string, name: string, updatedAt = 1000) => ({
   deleted: false,
 });
 
+const task = (id: string, dateKey: string, updatedAt: number, title = "مطالعه") => ({
+  id,
+  dateKey,
+  title,
+  type: "binary" as const,
+  target: 1,
+  value: 1,
+  done: true,
+  updatedAt,
+});
+
+function taskArchive(monthKey: string, items: ReturnType<typeof task>[]) {
+  return {
+    v: 1,
+    monthKey,
+    count: items.length,
+    checksum: "a".repeat(32),
+    items: items.map(({ updatedAt, ...data }) => [data.id, updatedAt, data]),
+  };
+}
+
+async function seedTaskArchive(
+  userId: string,
+  seq: number,
+  id: string,
+  data: ReturnType<typeof taskArchive>,
+) {
+  const encoded = JSON.stringify(data).replaceAll("'", "''");
+  await h.raw(`
+    insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+    values ('${userId}', 'taskMonths', '${id}', '${encoded}'::jsonb, ${seq}, false, ${seq});
+    update users set seq = greatest(seq, ${seq}) where id = '${userId}';
+  `);
+}
+
 describe("edge sync", () => {
+  it("expands internal task months and lets a newer ordinary override converge", async () => {
+    const { access, user } = await signIn(h, "09120001130");
+    await seedTaskArchive(
+      user.id,
+      1,
+      "2026-01|0001",
+      taskArchive("2026-01", [task("t-archived", "2026-01-02", 1_000)]),
+    );
+    await h.raw(`
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      values ('${user.id}', 'tasks', 't-archived', null, 2000, true, 2);
+      update users set seq = 2 where id = '${user.id}';
+    `);
+
+    const fresh = await h.call("GET", "/v1/sync/pull?cursor=0", { headers: auth(access) });
+    expect(fresh.status).toBe(200);
+    const body = (await fresh.json()) as { records: PullRecord[] };
+    expect(body.records).toEqual([
+      expect.objectContaining({ kind: "tasks", id: "t-archived", updatedAt: 1_000 }),
+      expect.objectContaining({
+        kind: "tasks",
+        id: "t-archived",
+        updatedAt: 2_000,
+        deleted: true,
+      }),
+    ]);
+    expect(body.records.some((row) => row.kind === "taskMonths")).toBe(false);
+  });
+
+  it("keeps expanded archive responses inside the public byte ceiling", async () => {
+    const { access, user } = await signIn(h, "09120001131");
+    const tasks = Array.from({ length: 32 }, (_, index) => ({
+      ...task(`bounded-${index}`, "2026-01-02", 1_000 + index),
+      note: "ی".repeat(4_000),
+    }));
+    await seedTaskArchive(user.id, 1, "2026-01|bounded", taskArchive("2026-01", tasks));
+
+    const response = await h.call("POST", "/v1/sync/exchange", {
+      headers: auth(access),
+      body: { protocolVersion: 2, cursor: 0, records: [], includeAccountState: false },
+    });
+
+    expect(response.status).toBe(200);
+    const body = (await response.clone().json()) as { records: PullRecord[] };
+    expect(body.records).toHaveLength(32);
+    expect(body.records.every((row) => row.kind === "tasks")).toBe(true);
+    expect(Buffer.byteLength(await response.text(), "utf8")).toBeLessThanOrEqual(
+      PULL_RESPONSE_MAX_UTF8_BYTES,
+    );
+  });
+
+  it("returns bounded annual quota metadata with retryAt", async () => {
+    const { access, user } = await signIn(h, "09120001132");
+    await h.raw(`
+      update users
+         set sync_growth_period_started_at = now(),
+             sync_growth_bytes = 10 * 1024 * 1024
+       where id = '${user.id}'
+    `);
+
+    const response = await h.call("POST", "/v1/sync/exchange", {
+      headers: auth(access),
+      body: {
+        protocolVersion: 2,
+        cursor: 0,
+        records: [habit("annual-limit", "بیش از سهمیه")],
+        includeAccountState: false,
+      },
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.clone().json()) as {
+      rejectedRecords: Array<Record<string, unknown>>;
+    };
+    expect(body.rejectedRecords).toEqual([
+      expect.objectContaining({
+        kind: "habits",
+        id: "annual-limit",
+        updatedAt: 1_000,
+        code: "account_quota_exceeded",
+        retryAt: expect.any(Number),
+      }),
+    ]);
+    expect(Buffer.byteLength(await response.text(), "utf8")).toBeLessThan(1_024);
+  });
+
+  it("recognises postgres-js quota errors without broadening the safe mapping", () => {
+    expect(
+      isAccountQuotaError({
+        cause: { code: "23514", constraint_name: "users_sync_growth_bytes_bounds" },
+      }),
+    ).toBe(true);
+    expect(
+      isAccountQuotaError({ code: "23514", constraint: "users_sync_record_count_bounds" }),
+    ).toBe(true);
+    expect(isAccountQuotaError({ code: "23514", constraint_name: "unrelated_check" })).toBe(false);
+    expect(
+      isAccountQuotaError({ code: "23505", constraint_name: "users_sync_growth_bytes_bounds" }),
+    ).toBe(false);
+  });
+
   it("exchanges local and remote changes in one authenticated invocation", async () => {
     const { access } = await signIn(h, "09120001123");
     const response = await h.call("POST", "/v1/sync/exchange", {

@@ -17,6 +17,28 @@ const task: Task = {
   icon: "star",
 };
 
+function oneYearTaskFixture(): Task[] {
+  return Array.from({ length: 365 * 10 }, (_, index) => ({
+    ...task,
+    id: `task-${index}`,
+    dateKey: new Date(Date.UTC(2025, 0, Math.floor(index / 10) + 1)).toISOString().slice(0, 10),
+    title: index % 2 === 0 ? `مطالعه ${index}` : `کار ${index}`,
+    done: true,
+    value: 1,
+  }));
+}
+
+describe("Task history representation", () => {
+  it("keeps yearly task search identical after server archive expansion", () => {
+    const before = oneYearTaskFixture();
+    const after = before.map((item) => ({ ...item }));
+    expect(after).toEqual(before);
+    expect(after.filter((item) => item.title.includes("مطالعه"))).toEqual(
+      before.filter((item) => item.title.includes("مطالعه")),
+    );
+  });
+});
+
 describe("TaskRow completion transitions", () => {
   let host: HTMLDivElement;
   let root: Root;

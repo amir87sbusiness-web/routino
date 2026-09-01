@@ -135,6 +135,12 @@ const taskSchema = z
   })
   .strict();
 
+/** Canonical task payload contract, shared with server-only task archives. */
+export function validateTaskPayload(id: string, data: unknown): boolean {
+  const parsed = taskSchema.safeParse(data);
+  return parsed.success && parsed.data.id === id;
+}
+
 const timerSessionSchema = z
   .object({
     id: entityId,
@@ -197,6 +203,9 @@ export interface RejectedSyncRecord {
   id: string;
   updatedAt: number;
   code: SyncRejectionCode;
+  /** Present for annual account quota refusals so the durable client outbox can
+   * pause this exact version instead of retrying it on every app lifecycle. */
+  retryAt?: number;
 }
 
 const isSyncKind = (kind: string): kind is SyncKind =>
@@ -265,7 +274,10 @@ export function validateSyncRecord(record: PushRecord): RecordValidation {
   }
 
   const parsed = schemas[record.kind].safeParse(record.data);
-  if (!parsed.success || !payloadMatchesId(record.kind, record.id, parsed.data, record.updatedAt)) {
+  if (
+    !parsed.success ||
+    !payloadMatchesId(record.kind, record.id, parsed.data, record.updatedAt)
+  ) {
     return { ok: false, code: "invalid_record" };
   }
 

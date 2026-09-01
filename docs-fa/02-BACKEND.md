@@ -187,15 +187,18 @@ Fastify رو می‌سازه، CORS و فشرده‌سازی و helmet رو فع
 ### `backend/src/services/sync.ts` — sync فعالِ دادهٔ شخصی
 
 - مسیر اصلی `POST /v1/sync/exchange` در یک invocation اول dirty rowها را push و سپس از cursor قبلی pull می‌کند؛ مسیرهای قدیمی push/pull فعلاً برای تست/سازگاری باقی‌اند. اشتراک هرگز شرط sync نیست.
-- kindهای کلادی پروتکل ۲ دقیقاً `categories`، `habits`، `habitMonths`، `tasks`، `timerSessions` و `journal` هستند؛ `logs` فقط مدل روزانهٔ IndexedDB است و تنظیمات همگی local-only هستند. exchange بدون `protocolVersion: 2` رد می‌شود.
+- kindهای عمومی پروتکل ۲ دقیقاً `categories`، `habits`، `habitMonths`، `tasks`، `timerSessions` و `journal` هستند؛ `taskMonths` فقط نمایش داخلی دیتابیس برای کارهای تکمیل‌شدهٔ قدیمی است و پیش از خروج API به همان `tasks` معمولی باز می‌شود. `logs` فقط مدل روزانهٔ IndexedDB است و تنظیمات همگی local-only هستند. exchange بدون `protocolVersion: 2` رد می‌شود.
 - هر `habitMonths` حداکثر ۳۱ سلول روزِ تخت و bounded دارد. push می‌تواند فقط روزهای dirty را بفرستد؛ SQL همان سلول‌ها را با timestamp مستقل داخل ماه کامل merge می‌کند. بنابراین روز جدید با envelope قدیمی‌تر هم گم نمی‌شود، replay مساوی seq ردیف را عوض نمی‌کند و حذف عادت به‌جای صدها روز فقط ماه‌های همان عادت را tombstone می‌کند.
 - `sync-record-validation.ts` شکل دقیق هر kind، کلید طبیعی، enumها، عددهای finite، طول رشته و حجم واقعی UTF-8 را قبل از نوشتن بررسی می‌کند. ژورنال حداکثر ۴۰۰۰ کاراکتر و ۱۶ KiB متن UTF-8 دارد؛ packet ماه سقف ۴۴ KiB و بقیهٔ رکوردهای زنده سقف ۲۰ KiB دارند. `data: unknown` دیگر به معنی JSON دلخواه نیست.
 - رد semantic به‌صورت `rejectedRecords` و بدون بازتاب متن/دادهٔ خصوصی برمی‌گردد؛ رکوردهای سالم همان batch همچنان ذخیره و pull می‌شوند. فقط envelope خراب یا بیش از ۲۰۰ رکورد، خطای کل درخواست است.
-- برای هر حساب دو شمارندهٔ دقیق DB داریم: حداکثر ۵۰٬۰۰۰ ردیف کلادی (tombstone هم حساب می‌شود) و ۱۲۸ MiB متن JSON. triggerهای statement-level در همان تراکنش و بدون query شبکه‌ای اضافه، delta هر batch را روی `users` ثبت می‌کنند؛ check constraint حتی نوشتن مستقیم خارج از API را هم متوقف می‌کند. بک‌فیل فقط بار اول/در migration انجام می‌شود و بوت‌های بعدی اسکن حساب ندارند.
-- اگر batch سالم از سقف حساب عبور کند، کل write و افزایش `seq` rollback می‌شود، pull همچنان ادامه دارد و فقط metadata محدود با کد `account_quota_exceeded` برمی‌گردد. کلاینت منبع محلی را dirty نگه می‌دارد؛ متن ژورنال یا payload خصوصی هرگز echo نمی‌شود.
+- برای هر حساب سقف سخت ۵۰٬۰۰۰ ردیف کلادی (با tombstone) باقی است. `sync_data_bytes` هنوز شمارندهٔ دقیق و غیرمنفی حجم جاری است، اما سقف مادام‌العمر ۱۲۸ MiB حذف شده. به‌جایش هر دورهٔ ۳۶۵روزهٔ حساب حداکثر ۱۰ MiB **رشد مثبت JSON** می‌پذیرد؛ کم‌کردن حجم یا حذف چیزی سهمیه را پس نمی‌دهد. دادهٔ موجود هنگام migration دست‌نخورده و grandfathered است و مصرف دورهٔ تازه از صفر شروع می‌شود.
+- اگر یک رکورد سالم از سهمیه عبور کند، همان نسخه با metadata محدود `account_quota_exceeded` و `retryAt` رد می‌شود و pull و رکوردهای قابل‌قبول دیگر ادامه دارند. کلاینت آن نسخه را با `dirty: 2` تا زمان دورهٔ بعد نگه می‌دارد؛ این حالت انتظار محلی است، نه حذف داده، و متن ژورنال یا payload خصوصی هرگز echo نمی‌شود.
+- `routino_compact_task_months` فقط task تکمیل‌شده‌ای را برمی‌دارد که هم پایان ماهش حداقل ۷ روز گذشته و هم آخرین ویرایشش حداقل ۷ روز قدیمی است. archive تغییرناپذیر است؛ ویرایش/حذف جدید به‌صورت task معمولی و جدیدتر روی آن غلبه می‌کند. job روزانه کاملاً داخل Postgres اجرا می‌شود و **صفر درخواست اپلیکیشن/Edge** می‌سازد. نمودار، جست‌وجو، Export و آفلاین همچنان روی taskهای فردی محلی کار می‌کنند.
 - client با push-before-pull، LWW بر اساس `updatedAt`، clamp ساعت، tombstone، pagination، GC reset و تسویهٔ مستقل هر رکورد کار می‌کند.
 - صفحهٔ نهایی pull entitlement را هم برمی‌گرداند تا کاربرِ منقضی هم بتواند تاریخچه‌اش را بازیابی کند.
 - Fastify و Hono/Edge هر دو JSON را پیش از parse روی ۶۴ KiB می‌بندند؛ Hono علاوه بر `Content-Length`، stream واقعی را هم بایت‌به‌بایت محدود می‌کند تا هدر حذف‌شده یا دروغین راه دورزدن نباشد.
+
+> ترتیب rollout امن: ابتدا کد سازگار با schema قدیمی deploy می‌شود؛ سپس backup و dry-run، migration افزایشی و canary؛ و فقط بعد از تأیید داده و endpointها cron فشرده‌ساز فعال می‌شود. اجرای migration/cron پیش از کد ممنوع است.
 
 ### `backend/src/services/payment-flow.ts` — 💳 ماشین حالت پرداخت (منطق واقعی مسیر پول)
 

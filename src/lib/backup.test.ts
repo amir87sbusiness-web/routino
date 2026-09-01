@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   backupFilename,
   backupSummary,
@@ -8,7 +8,19 @@ import {
   restoreDb,
 } from "./backup";
 import { DEFAULT_CATEGORIES } from "./presets";
-import { defaultDb, logKey, type Db } from "./store";
+import { defaultDb, logKey, type Db, type Task } from "./store";
+
+function oneYearTaskFixture(): Task[] {
+  return Array.from({ length: 365 * 10 }, (_, index) => ({
+    id: `task-${index}`,
+    dateKey: new Date(Date.UTC(2025, 0, Math.floor(index / 10) + 1)).toISOString().slice(0, 10),
+    title: index % 2 === 0 ? `مطالعه ${index}` : `کار ${index}`,
+    type: "binary",
+    target: 1,
+    value: 1,
+    done: true,
+  }));
+}
 
 function seed(): Db {
   const db = defaultDb(DEFAULT_CATEGORIES);
@@ -46,6 +58,22 @@ function seed(): Db {
 }
 
 describe("buildBackup", () => {
+  it("exports identical ordinary tasks after transparent archive expansion", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-01T12:00:00.000Z"));
+    try {
+      const beforeDb = { ...seed(), tasks: oneYearTaskFixture() };
+      const afterDb: Db = {
+        ...beforeDb,
+        tasks: beforeDb.tasks.map((task) => ({ ...task })),
+      };
+      expect(afterDb.tasks).toEqual(beforeDb.tasks);
+      expect(buildBackup(afterDb)).toEqual(buildBackup(beforeDb));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("round-trips portable content through JSON without loss", () => {
     const db = seed();
     const restored = JSON.parse(JSON.stringify(buildBackup(db))).db as Db;

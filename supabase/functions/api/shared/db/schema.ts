@@ -37,7 +37,10 @@ export const SYNC_KINDS = [
   "timerSessions",
   "journal",
 ] as const;
+/** Internal-only kinds which may exist in `records` but must never be pushed by a client. */
+export const STORED_SYNC_KINDS = [...SYNC_KINDS, "taskMonths"] as const;
 export type SyncKind = (typeof SYNC_KINDS)[number];
+export type StoredSyncKind = (typeof STORED_SYNC_KINDS)[number];
 
 /** `sync_record_count` and `sync_data_bytes` deliberately stay DB-only. Keeping
  * them out of Drizzle's broad `select().from(users)` projection lets the new
@@ -97,7 +100,7 @@ export const records = pgTable(
     index("records_pull").on(t.userId, t.seq),
     check(
       "records_kind_valid",
-      sql`${t.kind} IN ('categories','habits','habitMonths','tasks','timerSessions','journal')`,
+      sql`${t.kind} IN ('categories','habits','habitMonths','tasks','timerSessions','journal','taskMonths')`,
     ),
   ],
 );

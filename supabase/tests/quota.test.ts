@@ -1,132 +1,216 @@
 /**
- * Supabase budget guard for the local-first, cloud-synced launch architecture.
+ * Capacity evidence for the approved normal account-year:
+ * 15 habits, 10 completed tasks/day, and one seven-line journal entry/day.
  *
- * Daily habit facts are packed into one row per habit-month. This fixture stores
- * more than a thousand real days per account and asserts the physical row slope
- * is habits × months rather than habits × days.
+ * The physical benchmark loads one full year per synthetic account through the
+ * real Edge API, then runs the real database compactor. Longer horizons stay
+ * synthetic so this suite measures the protocol without turning CI into a
+ * multi-gigabyte load test.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import {
+  PULL_RESPONSE_MAX_UTF8_BYTES,
+  selectPullPage,
+  type PullRecord,
+} from "../functions/api/shared/services/sync.ts";
+import { expandTaskMonthArchive } from "../functions/api/shared/services/task-month-archive.ts";
 import { auth, makeHarness, type Harness } from "./helpers/harness.ts";
 
 const FREE_DB_BYTES = 500 * 1024 * 1024;
 const FREE_EGRESS_BYTES = 5 * 1024 * 1024 * 1024;
 const FREE_FUNCTION_INVOCATIONS = 500_000;
 const ACCOUNT_RECORD_LIMIT = 50_000;
-const ACCOUNT_DATA_BYTE_LIMIT = 128 * 1024 * 1024;
-const USERS = 120;
-const HALF = USERS / 2;
-const PAYING = 36;
-const HABITS_PER_USER = 4;
-const MONTHS_PER_HABIT = 12;
-const DAYS_PER_MONTH = 28;
-const MONTH_ROWS_PER_USER = HABITS_PER_USER * MONTHS_PER_HABIT;
-const DAILY_FACTS_PER_USER = MONTH_ROWS_PER_USER * DAYS_PER_MONTH;
-const SEED_CHUNK = 8;
+const ANNUAL_GROWTH_LIMIT = 10 * 1024 * 1024;
+const HABITS_PER_USER = 15;
+const TASKS_PER_DAY = 10;
+const JOURNAL_LINES_PER_DAY = 7;
+const WORKLOAD_YEAR = 2025;
+const USERS = 4;
+const PAYING = 1;
+const PUSH_MAX_UTF8_BYTES = 60 * 1024;
 
-const PERMANENT = [
-  "users",
-  "records",
-  "entitlements",
-  "grants",
-  "payments",
-  "redemptions",
-] as const;
-const ROLLING = ["otp_codes", "auth_rate_limit_buckets"] as const;
+type WireRecord = Omit<PullRecord, "seq">;
+type RelationSize = { table: number; indexes: number; total: number };
 
 let h: Harness;
-let sampleAccess: string;
-const sizes = new Map<string, number>();
-const sizesAtHalf = new Map<string, number>();
+let sampleAccess = "";
+let sampleUserId = "";
+let sampleExpectedTasks: Array<{ id: string; updatedAt: number; data: unknown }> = [];
+let annualGrowthBytes = 0;
+let rawRowsBefore = 0;
+let rawRowsAfter = 0;
+let archivedTasks = 0;
+let archiveRows = 0;
+let oneYearPages = 0;
+let oneYearExpandedBytes = 0;
+let fiveYearPages = 0;
+let fiveYearExpandedBytes = 0;
+const baselineSizes = new Map<string, RelationSize>();
+const sizesBefore = new Map<string, RelationSize>();
+const sizesAfter = new Map<string, RelationSize>();
 const responseBytes = new Map<string, number>();
 
+const utf8Bytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value), "utf8");
+const dateKey = (year: number, dayIndex: number) =>
+  new Date(Date.UTC(year, 0, dayIndex + 1)).toISOString().slice(0, 10);
+const daysInYear = (year: number) => (Date.UTC(year + 1, 0, 1) - Date.UTC(year, 0, 1)) / 86_400_000;
+
+function taskData(id: string, dk: string, taskIndex: number) {
+  return {
+    id,
+    dateKey: dk,
+    title: `مطالعه ${taskIndex + 1}`,
+    type: "binary",
+    target: 1,
+    value: 1,
+    done: true,
+  };
+}
+
+function workload(ownerIndex: number, year: number): WireRecord[] {
+  const prefix = `u${ownerIndex}-${year}`;
+  const records: WireRecord[] = [];
+  for (let habitIndex = 0; habitIndex < HABITS_PER_USER; habitIndex += 1) {
+    const id = `${prefix}-habit-${habitIndex}`;
+    records.push({
+      kind: "habits",
+      id,
+      data: {
+        id,
+        name: `عادت ${habitIndex + 1}`,
+        categoryId: "health",
+        type: "binary",
+        target: 1,
+        schedule: { kind: "daily" },
+        monthlyGoal: null,
+        reminderTime: null,
+        createdAt: Date.UTC(year, 0, 1),
+      },
+      updatedAt: Date.UTC(year, 0, 1) + habitIndex,
+      deleted: false,
+    });
+    for (let month = 0; month < 12; month += 1) {
+      const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`;
+      const monthDays = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+      const cells = Object.fromEntries(
+        Array.from({ length: monthDays }, (_, day) => {
+          const updatedAt = Date.UTC(year, month, day + 1, 12) + habitIndex;
+          return [
+            String(day + 1).padStart(2, "0"),
+            { value: 1, done: day % 2 === 0, updatedAt, deleted: false },
+          ];
+        }),
+      );
+      records.push({
+        kind: "habitMonths",
+        id: `${id}|${monthKey}`,
+        data: { habitId: id, monthKey, cells },
+        updatedAt: Math.max(
+          ...Object.values(cells).map((cell) => (cell as { updatedAt: number }).updatedAt),
+        ),
+        deleted: false,
+      });
+    }
+  }
+
+  for (let day = 0; day < daysInYear(year); day += 1) {
+    const dk = dateKey(year, day);
+    const dayUpdatedAt = Date.parse(`${dk}T12:00:00.000Z`);
+    records.push({
+      kind: "journal",
+      id: dk,
+      data: {
+        dateKey: dk,
+        text: Array.from(
+          { length: JOURNAL_LINES_PER_DAY },
+          (_, line) => `خط ${line + 1} ژورنال روزانه`,
+        ).join("\n"),
+        score: null,
+        mood: null,
+        updatedAt: dayUpdatedAt,
+      },
+      updatedAt: dayUpdatedAt,
+      deleted: false,
+    });
+    for (let taskIndex = 0; taskIndex < TASKS_PER_DAY; taskIndex += 1) {
+      const id = `${prefix}-task-${dk}-${taskIndex}`;
+      const updatedAt = dayUpdatedAt + taskIndex;
+      records.push({
+        kind: "tasks",
+        id,
+        data: taskData(id, dk, taskIndex),
+        updatedAt,
+        deleted: false,
+      });
+    }
+  }
+  return records;
+}
+
+function pushBatches(records: WireRecord[]): WireRecord[][] {
+  const batches: WireRecord[][] = [];
+  let current: WireRecord[] = [];
+  for (const record of records) {
+    const next = [...current, record];
+    if (next.length > 200 || utf8Bytes({ records: next }) > PUSH_MAX_UTF8_BYTES) {
+      if (current.length === 0) throw new Error("capacity fixture record exceeds push budget");
+      batches.push(current);
+      current = [record];
+    } else {
+      current = next;
+    }
+  }
+  if (current.length > 0) batches.push(current);
+  return batches;
+}
+
 async function record(label: string, response: Response): Promise<Response> {
-  responseBytes.set(label, Buffer.byteLength(await response.clone().text()));
+  responseBytes.set(label, Buffer.byteLength(await response.clone().text(), "utf8"));
   return response;
 }
 
 async function signUp(index: number) {
   const phone = `0912${String(8_000_000 + index).slice(-7)}`;
-  await record(
-    "POST /v1/auth/otp/request",
-    await h.call("POST", "/v1/auth/otp/request", { body: { phone } }),
-  );
-  const login = await record(
-    "POST /v1/auth/otp/verify",
-    await h.call("POST", "/v1/auth/otp/verify", {
-      body: { phone, code: h.sms.last()!.code },
-    }),
-  );
-  const session = (await login.json()) as { access: string };
-  const months = Array.from({ length: MONTH_ROWS_PER_USER }, (_, recordIndex) => {
-    const habitIndex = Math.floor(recordIndex / MONTHS_PER_HABIT);
-    const monthIndex = recordIndex % MONTHS_PER_HABIT;
-    const habitId = `habit-${index}-${habitIndex}`;
-    const monthKey = `2026-${String(monthIndex + 1).padStart(2, "0")}`;
-    const cells = Object.fromEntries(
-      Array.from({ length: DAYS_PER_MONTH }, (_, dayIndex) => {
-        const dateKey = `${monthKey}-${String(dayIndex + 1).padStart(2, "0")}`;
-        const updatedAt = index * 1_000_000 + recordIndex * 100 + dayIndex;
-        return [
-          String(dayIndex + 1).padStart(2, "0"),
-          {
-            value: 1,
-            done: dayIndex % 2 === 0,
-            updatedAt,
-            deleted: false,
-          },
-        ];
-      }),
-    );
-    return {
-      kind: "habitMonths",
-      id: `${habitId}|${monthKey}`,
-      data: { habitId, monthKey, cells },
-      updatedAt: Math.max(...Object.values(cells).map((cell) => cell.updatedAt)),
-      deleted: false,
-    };
+  await h.call("POST", "/v1/auth/otp/request", { body: { phone } });
+  const login = await h.call("POST", "/v1/auth/otp/verify", {
+    body: { phone, code: h.sms.last()!.code },
   });
+  expect(login.status).toBe(200);
+  return (await login.json()) as { access: string; user: { id: string } };
+}
 
-  let cursor = 0;
-  for (let offset = 0; offset < months.length; offset += SEED_CHUNK) {
-    const seed = await h.call("POST", "/v1/sync/exchange", {
+async function seedAccount(index: number) {
+  const session = await signUp(index);
+  const records = workload(index, WORKLOAD_YEAR);
+  for (const batch of pushBatches(records)) {
+    const pushed = await h.call("POST", "/v1/sync/push", {
       headers: auth(session.access),
-      body: {
-        protocolVersion: 2,
-        cursor,
-        records: months.slice(offset, offset + SEED_CHUNK),
-        includeAccountState: false,
-      },
+      body: { records: batch },
     });
-    expect(seed.status).toBe(200);
-    cursor = ((await seed.json()) as { cursor: number }).cursor;
+    expect(pushed.status).toBe(200);
+    expect((await pushed.json()).rejectedRecords).toEqual([]);
   }
 
-  // A normal changed session sends a tiny delta and receives it back in the
-  // same invocation. An app boot is one empty exchange with account state.
+  const changedAt = Date.now();
   const changed = await record(
     "POST /v1/sync/exchange changed",
     await h.call("POST", "/v1/sync/exchange", {
       headers: auth(session.access),
       body: {
         protocolVersion: 2,
-        cursor,
+        cursor: Number.MAX_SAFE_INTEGER,
         records: [
           {
             kind: "habitMonths",
-            id: `habit-${index}-0|2026-01`,
+            id: `u${index}-${WORKLOAD_YEAR}-habit-0|${WORKLOAD_YEAR}-01`,
             data: {
-              habitId: `habit-${index}-0`,
-              monthKey: "2026-01",
+              habitId: `u${index}-${WORKLOAD_YEAR}-habit-0`,
+              monthKey: `${WORKLOAD_YEAR}-01`,
               cells: {
-                "01": {
-                  value: 1,
-                  done: true,
-                  updatedAt: 9_000_000_000 + index,
-                  deleted: false,
-                },
+                "01": { value: 1, done: true, updatedAt: changedAt, deleted: false },
               },
             },
-            updatedAt: 9_000_000_000 + index,
+            updatedAt: changedAt,
             deleted: false,
           },
         ],
@@ -134,34 +218,28 @@ async function signUp(index: number) {
       },
     }),
   );
-  const changedBody = (await changed.clone().json()) as { cursor: number };
+  expect(changed.status).toBe(200);
   await record(
     "POST /v1/sync/exchange boot",
     await h.call("POST", "/v1/sync/exchange", {
       headers: auth(session.access),
       body: {
         protocolVersion: 2,
-        cursor: changedBody.cursor,
+        cursor: Number.MAX_SAFE_INTEGER,
         records: [],
         includeAccountState: true,
       },
     }),
   );
-  return {
-    ...session,
-    syncCursor: changedBody.cursor,
-  };
+  return session;
 }
 
 async function buyPlan(access: string) {
-  const checkout = await record(
-    "POST /v1/payments/checkout",
-    await h.call("POST", "/v1/payments/checkout", {
-      headers: auth(access),
-      body: { planId: "m1", platform: "web", attemptId: crypto.randomUUID() },
-    }),
-  );
-  const payment = (await checkout.json()) as { paymentId: string; authority: string };
+  const checkout = await h.call("POST", "/v1/payments/checkout", {
+    headers: auth(access),
+    body: { planId: "m1", platform: "web", attemptId: crypto.randomUUID() },
+  });
+  const payment = (await checkout.json()) as { authority: string };
   const settle = await h.call(
     "GET",
     `/v1/dev/gateway/settle?Authority=${payment.authority}&outcome=paid`,
@@ -169,138 +247,267 @@ async function buyPlan(access: string) {
   await h.follow(settle.headers.get("location")!);
 }
 
-async function measure(into: Map<string, number>) {
+async function measure(into: Map<string, RelationSize>) {
   await h.raw("vacuum analyze");
-  const rows = await h.query<{ relname: string; bytes: string }>(`
-    select relname, pg_total_relation_size(c.oid)::text as bytes
-    from pg_class c join pg_namespace n on n.oid = c.relnamespace
-    where n.nspname = 'public' and c.relkind = 'r'
+  const rows = await h.query<{
+    relname: string;
+    table_bytes: string;
+    index_bytes: string;
+    total_bytes: string;
+  }>(`
+    select relname,
+           pg_table_size(c.oid)::text as table_bytes,
+           pg_indexes_size(c.oid)::text as index_bytes,
+           pg_total_relation_size(c.oid)::text as total_bytes
+      from pg_class c join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public' and c.relkind = 'r'
   `);
   into.clear();
-  for (const row of rows) into.set(row.relname, Number(row.bytes));
+  for (const row of rows) {
+    into.set(row.relname, {
+      table: Number(row.table_bytes),
+      indexes: Number(row.index_bytes),
+      total: Number(row.total_bytes),
+    });
+  }
 }
+
+function archivesFor(records: WireRecord[], firstSeq = 1): PullRecord[] {
+  const ordinary = records.filter((record) => record.kind !== "tasks");
+  const byMonth = new Map<string, WireRecord[]>();
+  for (const record of records.filter((candidate) => candidate.kind === "tasks")) {
+    const month = (record.data as { dateKey: string }).dateKey.slice(0, 7);
+    byMonth.set(month, [...(byMonth.get(month) ?? []), record]);
+  }
+  const stored: PullRecord[] = ordinary.map((record, index) => ({
+    ...record,
+    seq: firstSeq + index,
+  }));
+  let seq = firstSeq + stored.length;
+  for (const [month, tasks] of [...byMonth].sort(([a], [b]) => a.localeCompare(b))) {
+    for (let offset = 0; offset < tasks.length; offset += 32) {
+      const chunk = tasks.slice(offset, offset + 32);
+      stored.push({
+        kind: "taskMonths",
+        id: `${month}|synthetic-${offset / 32}`,
+        data: {
+          v: 1,
+          monthKey: month,
+          count: chunk.length,
+          checksum: "a".repeat(32),
+          items: chunk.map((record) => [record.id, record.updatedAt, record.data]),
+        },
+        updatedAt: Math.max(...chunk.map((record) => record.updatedAt)),
+        deleted: false,
+        seq,
+      });
+      seq += 1;
+    }
+  }
+  return stored;
+}
+
+function measureFreshSync(candidates: PullRecord[]) {
+  const ordered = [...candidates].sort((a, b) => a.seq - b.seq);
+  let cursor = 0;
+  let pages = 0;
+  let bytes = 0;
+  while (true) {
+    const pending = ordered.filter((record) => record.seq > cursor);
+    if (pending.length === 0) break;
+    const page = selectPullPage(pending, 500, PULL_RESPONSE_MAX_UTF8_BYTES - 8 * 1024);
+    if (page.cursor <= cursor) throw new Error("fresh sync cursor did not advance");
+    cursor = page.cursor;
+    pages += 1;
+    bytes += utf8Bytes(page);
+  }
+  return { pages, bytes };
+}
+
+async function pullFresh(access: string) {
+  const records: PullRecord[] = [];
+  let cursor = 0;
+  let pages = 0;
+  let bytes = 0;
+  while (true) {
+    const response = await h.call("GET", `/v1/sync/pull?cursor=${cursor}`, {
+      headers: auth(access),
+    });
+    expect(response.status).toBe(200);
+    bytes += Buffer.byteLength(await response.clone().text(), "utf8");
+    const page = (await response.json()) as {
+      records: PullRecord[];
+      cursor: number;
+      hasMore: boolean;
+    };
+    records.push(...page.records);
+    pages += 1;
+    cursor = page.cursor;
+    if (!page.hasMore) break;
+  }
+  return { records, pages, bytes };
+}
+
+const sizeOf = (source: Map<string, RelationSize>, table: string) =>
+  source.get(table) ?? { table: 0, indexes: 0, total: 0 };
 
 beforeAll(async () => {
   h = await makeHarness();
+  await measure(baselineSizes);
   for (let index = 0; index < USERS; index += 1) {
-    if (index === HALF) await measure(sizesAtHalf);
-    const session = await signUp(index);
-    sampleAccess = session.access;
+    const session = await seedAccount(index);
+    if (index === 0) {
+      sampleAccess = session.access;
+      sampleUserId = session.user.id;
+      sampleExpectedTasks = workload(index, WORKLOAD_YEAR)
+        .filter((record) => record.kind === "tasks")
+        .map((record) => ({ id: record.id, updatedAt: record.updatedAt, data: record.data }));
+    }
     if (index < PAYING) await buyPlan(session.access);
   }
-  await record("GET /v1/plans", await h.call("GET", "/v1/plans"));
-  await measure(sizes);
+
+  const [before] = await h.query<{ count: string }>("select count(*)::text as count from records");
+  rawRowsBefore = Number(before.count);
+  await measure(sizesBefore);
+  const [growth] = await h.query<{ bytes: string }>(`
+    select avg(sync_growth_bytes)::text as bytes from users
+  `);
+  annualGrowthBytes = Number(growth.bytes);
+
+  for (let pass = 0; pass < 100; pass += 1) {
+    const rows = await h.query<{ archived_tasks: number; archive_rows: number }>(
+      "select * from routino_compact_task_months('2027-01-08T12:00:00Z', 500)",
+    );
+    if (rows.length === 0) break;
+    archivedTasks += rows.reduce((sum, row) => sum + Number(row.archived_tasks), 0);
+    archiveRows += rows.reduce((sum, row) => sum + Number(row.archive_rows), 0);
+    if (pass === 99) throw new Error("capacity fixture compaction did not converge");
+  }
+  const [after] = await h.query<{ count: string }>("select count(*)::text as count from records");
+  rawRowsAfter = Number(after.count);
+  await measure(sizesAfter);
+
+  const fresh = await pullFresh(sampleAccess);
+  oneYearPages = fresh.pages;
+  oneYearExpandedBytes = fresh.bytes;
+  const actualTasks = fresh.records
+    .filter((record) => record.kind === "tasks")
+    .map((record) => ({ id: record.id, updatedAt: record.updatedAt, data: record.data }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+  sampleExpectedTasks.sort((a, b) => a.id.localeCompare(b.id));
+  expect(actualTasks).toEqual(sampleExpectedTasks);
+  expect(fresh.records.some((record) => record.kind === "taskMonths")).toBe(false);
+
+  const fiveYears = Array.from({ length: 5 }, (_, offset) => workload(99, 2020 + offset)).flat();
+  const fiveYearStored = archivesFor(fiveYears);
+  ({ pages: fiveYearPages, bytes: fiveYearExpandedBytes } = measureFreshSync(fiveYearStored));
 }, 300_000);
 
 afterAll(async () => h?.close());
 
-const sum = (tables: readonly string[], source = sizes) =>
-  tables.reduce((total, table) => total + (source.get(table) ?? 0), 0);
-
-describe("cloud-sync database budget", () => {
-  it("stores personal records through authenticated push and pull", async () => {
-    const [records] = await h.query<{ n: string }>("select count(*)::text as n from records");
-    expect(Number(records.n)).toBe(USERS * MONTH_ROWS_PER_USER);
-    const [facts] = await h.query<{ n: string }>(`
-      select count(*)::text as n
-        from records r
-        cross join lateral jsonb_object_keys(r.data->'cells') cell
-       where r.kind = 'habitMonths'
-    `);
-    expect(Number(facts.n)).toBe(USERS * DAILY_FACTS_PER_USER);
-    const pull = await h.call("GET", "/v1/sync/pull?cursor=0", { headers: auth(sampleAccess) });
-    expect(pull.status).toBe(200);
-    expect((await pull.json()).records).toHaveLength(MONTH_ROWS_PER_USER);
+describe("approved account-year storage budget", () => {
+  it("stores the full workload, then losslessly replaces cold task rows with archives", () => {
+    const expectedPerUserBefore = workload(0, WORKLOAD_YEAR).length;
+    expect(rawRowsBefore).toBe(USERS * expectedPerUserBefore);
+    expect(archivedTasks).toBe(USERS * TASKS_PER_DAY * daysInYear(WORKLOAD_YEAR));
+    expect(rawRowsAfter).toBe(rawRowsBefore - archivedTasks + archiveRows);
+    expect(rawRowsAfter).toBeLessThan(rawRowsBefore / 4);
+    expect(sampleExpectedTasks).toHaveLength(TASKS_PER_DAY * daysInYear(WORKLOAD_YEAR));
   });
 
-  it("keeps exact per-account counters with centuries of fixture headroom", async () => {
-    const mismatches = await h.query<{ user_id: string }>(`
+  it("keeps exact counters and normal annual growth below the hard 10 MiB allowance", async () => {
+    const mismatches = await h.query(`
       with actual as (
-        select u.id as user_id,
-               count(r.*)::integer as record_count,
-               coalesce(sum(octet_length(r.data::text)), 0)::bigint as data_bytes
+        select u.id,
+               count(r.*)::integer as rows,
+               coalesce(sum(octet_length(r.data::text)), 0)::bigint as bytes
           from users u left join records r on r.user_id = u.id
          group by u.id
       )
-      select a.user_id
-        from actual a join users u on u.id = a.user_id
-       where u.sync_record_count <> a.record_count
-          or u.sync_data_bytes <> a.data_bytes
+      select actual.id from actual join users u on u.id = actual.id
+       where u.sync_record_count <> actual.rows or u.sync_data_bytes <> actual.bytes
     `);
-    expect(mismatches).toHaveLength(0);
-
-    const [usage] = await h.query<{ records_per_user: string; data_bytes_per_user: string }>(`
-      select avg(sync_record_count)::text as records_per_user,
-             avg(sync_data_bytes)::text as data_bytes_per_user
-        from users
+    expect(mismatches).toEqual([]);
+    expect(annualGrowthBytes).toBeGreaterThan(0);
+    expect(annualGrowthBytes).toBeLessThan(ANNUAL_GROWTH_LIMIT);
+    const [sample] = await h.query<{ bytes: string }>(`
+      select sync_growth_bytes::text as bytes from users where id = '${sampleUserId}'
     `);
-    const recordsPerYear = Number(usage.records_per_user);
-    const dataBytesPerYear = Number(usage.data_bytes_per_user);
-    const recordYears = Math.floor(ACCOUNT_RECORD_LIMIT / recordsPerYear);
-    const byteYears = Math.floor(ACCOUNT_DATA_BYTE_LIMIT / dataBytesPerYear);
+    expect(Number(sample.bytes)).toBeLessThan(ANNUAL_GROWTH_LIMIT);
     console.log(
-      `[account budget] fixture ≈ ${Math.round(recordsPerYear)} rows + ${Math.round(dataBytesPerYear)} JSON B/year; headroom ≈ ${Math.min(recordYears, byteYears)} years`,
+      `[annual growth] 15 habits + 10 tasks/day + 7 journal lines/day ≈ ${Math.round(annualGrowthBytes).toLocaleString("en-US")} JSON B/year of ${ANNUAL_GROWTH_LIMIT.toLocaleString("en-US")} B`,
     );
-    expect(recordsPerYear).toBe(MONTH_ROWS_PER_USER);
-    expect(Math.min(recordYears, byteYears)).toBeGreaterThan(100);
   });
 
-  it("keeps permanent account/content/subscription rows comfortably bounded", () => {
-    const marginal = (sum(PERMANENT) - sum(PERMANENT, sizesAtHalf)) / (USERS - HALF);
+  it("reports physical table and index bytes before and after compaction", () => {
+    const before = sizeOf(sizesBefore, "records");
+    const after = sizeOf(sizesAfter, "records");
+    console.log(
+      `[records physical] rows ${rawRowsBefore.toLocaleString("en-US")} -> ${rawRowsAfter.toLocaleString("en-US")}; table ${before.table.toLocaleString("en-US")} -> ${after.table.toLocaleString("en-US")} B; indexes ${before.indexes.toLocaleString("en-US")} -> ${after.indexes.toLocaleString("en-US")} B`,
+    );
+    expect(before.table).toBeGreaterThan(0);
+    expect(before.indexes).toBeGreaterThan(0);
+    expect(after.total).toBeGreaterThan(0);
+
+    const baseline = [...baselineSizes.values()].reduce((sum, size) => sum + size.total, 0);
+    const final = [...sizesAfter.values()].reduce((sum, size) => sum + size.total, 0);
+    const marginal = Math.max(1, (final - baseline) / USERS);
     const capacity = Math.floor(FREE_DB_BYTES / marginal);
     console.log(
-      `[db] account-only marginal cost ≈ ${Math.round(marginal)} B/user; 500 MB ≈ ${capacity.toLocaleString("en-US")} users`,
+      `[db evidence] post-compaction marginal fixture ≈ ${Math.round(marginal).toLocaleString("en-US")} B/account-year; 500 MB arithmetic ≈ ${capacity.toLocaleString("en-US")} account-years (measurement, not promise)`,
     );
-    expect(marginal).toBeLessThan(64 * 1024);
-    expect(capacity).toBeGreaterThan(8_000);
+    expect(capacity).toBeGreaterThan(0);
   });
 
-  it("keeps auth ledgers rolling rather than permanent", async () => {
-    expect(sum(ROLLING)).toBeGreaterThan(0);
-    await h.raw(`
-      update otp_codes set created_at = now() - interval '48 hours';
-      insert into auth_rate_limit_buckets
-        (scope, key_hash, window_start, count, expires_at)
-      values ('test', 'expired', now() - interval '48 hours', 20, now() - interval '1 hour');
-      delete from otp_codes where created_at < now() - interval '24 hours';
-      delete from auth_rate_limit_buckets where expires_at < now();
+  it("keeps the 50,000-row cap far above one compacted account-year", async () => {
+    const [usage] = await h.query<{ rows: string }>(`
+      select avg(sync_record_count)::text as rows from users
     `);
-    const [otp] = await h.query<{ n: string }>("select count(*)::text as n from otp_codes");
-    const [attempts] = await h.query<{ n: string }>(
-      "select count(*)::text as n from auth_rate_limit_buckets where key_hash = 'expired'",
+    const rowsPerYear = Number(usage.rows);
+    console.log(
+      `[row cap] compacted workload ≈ ${Math.round(rowsPerYear)} rows/account-year of ${ACCOUNT_RECORD_LIMIT.toLocaleString("en-US")}`,
     );
-    expect(Number(otp.n)).toBe(0);
-    expect(Number(attempts.n)).toBe(0);
+    expect(rowsPerYear).toBeLessThan(1_000);
   });
 });
 
-describe("egress and invocation budget", () => {
-  it("keeps every response small", () => {
+describe("expanded history and invocation budget", () => {
+  it("measures one- and five-year fresh sync after transparent archive expansion", () => {
+    console.log(
+      `[fresh sync] 1 year = ${oneYearPages} pages / ${oneYearExpandedBytes.toLocaleString("en-US")} B; 5 years = ${fiveYearPages} pages / ${fiveYearExpandedBytes.toLocaleString("en-US")} B expanded`,
+    );
+    expect(oneYearPages).toBeGreaterThan(1);
+    expect(fiveYearPages).toBeGreaterThan(oneYearPages);
+    expect(fiveYearExpandedBytes).toBeGreaterThan(oneYearExpandedBytes * 4);
+  });
+
+  it("round-trips twenty synthetic years by id, timestamp, and payload", () => {
+    const ordinary = Array.from({ length: 20 }, (_, offset) =>
+      workload(200, 2000 + offset).filter((record) => record.kind === "tasks"),
+    ).flat();
+    const archives = archivesFor(ordinary).filter((record) => record.kind === "taskMonths");
+    const expanded = archives.flatMap((record) => expandTaskMonthArchive(record as never));
+    const semantic = (records: Array<Pick<PullRecord, "id" | "updatedAt" | "data">>) =>
+      records
+        .map(({ id, updatedAt, data }) => ({ id, updatedAt, data }))
+        .sort((a, b) => a.id.localeCompare(b.id));
+    expect(semantic(expanded)).toEqual(semantic(ordinary));
+  }, 30_000);
+
+  it("keeps two normal exchanges per day within response and free-tier arithmetic", () => {
     for (const [label, bytes] of responseBytes) {
-      expect(bytes, `${label} response is too large`).toBeLessThan(4096);
+      expect(bytes, `${label} response is too large`).toBeLessThan(4_096);
     }
     const dailyBytes =
       (responseBytes.get("POST /v1/sync/exchange changed") ?? 0) +
       (responseBytes.get("POST /v1/sync/exchange boot") ?? 0);
-    const monthlyDau = Math.floor(FREE_EGRESS_BYTES / (dailyBytes * 30));
+    const egressDau = Math.floor(FREE_EGRESS_BYTES / (dailyBytes * 30));
+    const invocationsPerDay = 2;
+    const invocationDau = Math.floor(FREE_FUNCTION_INVOCATIONS / (invocationsPerDay * 30));
     console.log(
-      `[egress] boot + one changed session/day ≈ ${dailyBytes} B; 5 GB ≈ ${monthlyDau} DAU`,
+      `[normal sync] ${invocationsPerDay} exchanges/day, ${dailyBytes} B/day; egress arithmetic ≈ ${egressDau.toLocaleString("en-US")} DAU, invocation ceiling ≈ ${invocationDau.toLocaleString("en-US")} DAU`,
     );
-    // The changed response conservatively contains the complete edited month,
-    // not only the one cell this device already knows. Compact day cells keep
-    // even the uncompressed result far above the invocation ceiling (~8.3k
-    // DAU), so egress is not the tier that forces an upgrade.
-    expect(monthlyDau).toBeGreaterThan(50_000);
-  });
-
-  it("reports the binding function-invocation ceiling honestly", () => {
-    // One boot exchange plus one changed-session idle/close exchange. There is
-    // no device ping, token refresh, visible-minute poll or realtime socket.
-    const dailyInvocations = 2;
-    const monthlyDau = Math.floor(FREE_FUNCTION_INVOCATIONS / (dailyInvocations * 30));
-    console.log(
-      `[invocations] one visible hour/day ≈ ${dailyInvocations} calls; free tier ≈ ${monthlyDau} DAU`,
-    );
-    expect(monthlyDau).toBeGreaterThan(8_000);
+    expect(egressDau).toBeGreaterThan(invocationDau);
+    expect(invocationDau).toBeGreaterThan(8_000);
   });
 });

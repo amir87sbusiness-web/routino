@@ -28,6 +28,11 @@ import { rowsOf, type Database } from "../db/client.ts";
 import { users } from "../db/schema.ts";
 import { badRequest } from "../lib/http-errors.ts";
 import {
+  expandTaskMonthArchive,
+  isTaskMonthArchiveKind,
+  type StoredTaskMonthRecord,
+} from "./task-month-archive.ts";
+import {
   validateSyncRecord,
   type PushRecord,
   type RejectedSyncRecord,
@@ -54,7 +59,7 @@ const PULL_RECORDS_BYTE_BUDGET = PULL_RESPONSE_MAX_UTF8_BYTES - 8 * 1024;
 
 const SYNC_QUOTA_CONSTRAINTS = new Set([
   "users_sync_record_count_bounds",
-  "users_sync_data_bytes_bounds",
+  "users_sync_growth_bytes_bounds",
 ]);
 
 /** Drizzle preserves the native Postgres error either directly or as `cause`,
@@ -124,6 +129,70 @@ export interface ExchangeResult extends PullResult {
   rejectedRecords: RejectedSyncRecord[];
 }
 
+const utf8Bytes = (value: string) => new TextEncoder().encode(value).byteLength;
+
+/** Converts a server-only archive row into the ordinary task rows understood by
+ * every released client. Stored archives never cross the HTTP boundary raw. */
+export function expandStoredPullRecord(record: PullRecord): PullRecord[] {
+  return isTaskMonthArchiveKind(record.kind)
+    ? expandTaskMonthArchive(record as StoredTaskMonthRecord)
+    : [record];
+}
+
+/**
+ * Chooses complete stored rows for one public pull page. A task archive has one
+ * database sequence number but many client-visible tasks, so it must be either
+ * included in full or left for the next request; advancing past part of one
+ * would make the omitted tasks permanently unreachable.
+ */
+export function selectPullPage(
+  candidates: PullRecord[],
+  safeLimit: number,
+  byteBudget: number,
+  emptyPageMaxBytes = byteBudget,
+): PullResult {
+  const records: PullRecord[] = [];
+  let cursor = 0;
+  let usedBytes = 0;
+  let selectedStoredRows = 0;
+
+  for (const stored of candidates) {
+    const expanded = expandStoredPullRecord(stored);
+    const nextBytes = utf8Bytes(JSON.stringify(expanded)) + 1;
+    if (
+      selectedStoredRows > 0 &&
+      (records.length + expanded.length > safeLimit || usedBytes + nextBytes > byteBudget)
+    ) {
+      break;
+    }
+    if (nextBytes > byteBudget) {
+      // Exchange metadata can temporarily leave less room than this otherwise
+      // valid stored row needs. Return an empty page only when the same row
+      // fits the normal pull budget; a permanently oversized archive must
+      // remain fail-closed instead of producing an endless empty-page loop.
+      if (
+        selectedStoredRows === 0 &&
+        byteBudget < emptyPageMaxBytes &&
+        nextBytes <= emptyPageMaxBytes
+      ) {
+        break;
+      }
+      throw new Error("task_archive_chunk_exceeds_pull_budget");
+    }
+    records.push(...expanded);
+    usedBytes += nextBytes;
+    selectedStoredRows += 1;
+    cursor = stored.seq;
+  }
+
+  return {
+    records,
+    cursor,
+    hasMore: selectedStoredRows < candidates.length,
+    reset: false,
+  };
+}
+
 function partitionIncoming(rows: PushRecord[]): {
   valid: PushRecord[];
   rejectedRecords: RejectedSyncRecord[];
@@ -159,8 +228,8 @@ const keyOf = (r: PushRecord) => `${r.kind} ${r.id}`;
  * that account, permanently. Newer wins; on an exact tie a tombstone wins so a
  * pending cell cannot keep a month alive beside a habit deleted in the same tick.
  */
-function dedupe(rows: PushRecord[]): PushRecord[] {
-  const byKey = new Map<string, PushRecord>();
+function dedupe<T extends PushRecord>(rows: T[]): T[] {
+  const byKey = new Map<string, T>();
   for (const r of rows) {
     const existing = byKey.get(keyOf(r));
     if (
@@ -210,139 +279,56 @@ export async function pushRecords(
   }
 
   const ceiling = now.getTime() + CLOCK_SKEW_TOLERANCE_MS;
-  const stamped = valid.map((record) => clampRecordClock(record, ceiling));
+  const stamped = valid.map((record) => ({
+    ...clampRecordClock(record, ceiling),
+    // Quota backoff identifies the exact durable local version. The stored
+    // timestamp is clamped for LWW safety, but rejections must echo this one.
+    originalUpdatedAt: record.updatedAt,
+  }));
 
   // Incoming work is capped at 200, so this bounded JS dedupe is safe. Habit
   // month cascades are intentionally NOT materialised here: one long-lived
   // habit can own thousands of rows, and production Edge memory must not scale
   // with account history.
   const all = dedupe(stamped);
+  const packet = all.map((record) => ({
+    kind: record.kind,
+    id: record.id,
+    data: record.deleted ? null : (record.data ?? null),
+    updatedAt: record.updatedAt,
+    originalUpdatedAt: record.originalUpdatedAt,
+    deleted: record.deleted,
+  }));
 
-  const values = all.map(
-    (r, i) =>
-      sql`(${r.kind}::text, ${r.id}::text, ${r.deleted ? null : JSON.stringify(r.data ?? null)}::jsonb, ${r.updatedAt}::bigint, ${r.deleted}::boolean, ${i}::bigint)`,
-  );
-
-  // ONE statement, and that is the whole point of the shape below.
-  //
-  // `bump` takes the row lock on `users`, and because the insert reads `bump`
-  // in the SAME statement, that lock is still held when the record rows commit.
-  // That is what actually makes seq order match commit order (invariant 1).
-  // Split across two statements — reserve, then insert — the lock is released
-  // at the first semicolon, so a push holding a LOWER block can commit AFTER a
-  // reader has already advanced past it, and those rows are then invisible to
-  // that device forever. A regression test covers exactly this.
-  //
-  // Last-write-wins lives in the WHERE of the DO UPDATE: an older copy simply
-  // does not land. Equal timestamps also lose, which keeps a device replaying
-  // its outbox from churning `seq` — and therefore from waking every other
-  // device up for a row that did not change.
+  // One database round trip. The volatile PL/pgSQL function first locks the
+  // owner row, then performs its record read/write as a later command with a
+  // fresh READ COMMITTED snapshot. Keeping those as two server-side commands is
+  // essential: a single CTE statement keeps its original snapshot even after
+  // waiting for the user lock and can otherwise overwrite a newer concurrent
+  // record. The function holds the lock until this transaction finishes.
   let res: Awaited<ReturnType<Database["execute"]>>;
   try {
     res = await db.execute(sql`
-      with incoming (kind, id, data, updated_at, deleted, ord) as (
-      values ${sql.join(values, sql`, `)}
-      ),
-      cascaded (kind, id, data, updated_at, deleted, ord) as (
-        select 'habitMonths'::text, child.id, null::jsonb,
-               parent.updated_at, true,
-               ${all.length}::bigint + row_number() over (order by child.id)
-          from incoming parent
-          join records child
-            on child.user_id = ${userId}::uuid
-           and child.kind = 'habitMonths'
-           and child.deleted = false
-           and child.id like parent.id || '|%'
-         where parent.kind = 'habits' and parent.deleted = true
-      ),
-      combined as (
-        select * from incoming
-        union all
-        select * from cascaded
-      ),
-      deduped as (
-        select distinct on (kind, id)
-               kind, id, data, updated_at, deleted, ord
-          from combined
-         order by kind, id, updated_at desc, deleted desc, ord
-      ),
-      numbered as (
-        select kind, id, data, updated_at, deleted,
-               row_number() over (order by ord, kind, id)::bigint as position
-          from deduped
-      ),
-      sized as (
-        select count(*)::bigint as total from numbered
-      ),
-      bump as (
-        update users u set seq = u.seq + sized.total
-          from sized where u.id = ${userId} returning u.seq
-      ),
-      upserted as (
-      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
-      select ${userId}::uuid, i.kind, i.id, i.data, i.updated_at, i.deleted,
-             b.seq - s.total + i.position
-        from numbered i cross join sized s cross join bump b
-      on conflict (user_id, kind, id) do update
-        set data = case
-              when excluded.kind = 'habitMonths'
-               and excluded.deleted = false
-               and records.deleted = false
-              then jsonb_build_object(
-                'habitId', excluded.data->'habitId',
-                'monthKey', excluded.data->'monthKey',
-                'cells', coalesce(records.data->'cells', '{}'::jsonb) || coalesce((
-                  select jsonb_object_agg(incoming_cell.key, incoming_cell.value)
-                    from jsonb_each(excluded.data->'cells') incoming_cell
-                   where coalesce(
-                     (records.data->'cells'->incoming_cell.key->>'updatedAt')::bigint,
-                     -1
-                   ) < (incoming_cell.value->>'updatedAt')::bigint
-                ), '{}'::jsonb)
-              )
-              else excluded.data
-            end,
-            updated_at = case
-              when excluded.kind = 'habitMonths'
-               and excluded.deleted = false
-               and records.deleted = false
-              then greatest(records.updated_at, excluded.updated_at)
-              else excluded.updated_at
-            end,
-            deleted = case
-              when excluded.kind = 'habitMonths'
-               and excluded.deleted = false
-               and records.deleted = false
-              then false
-              else excluded.deleted
-            end,
-            seq = excluded.seq
-        where case
-          when excluded.kind = 'habitMonths' then case
-            when excluded.deleted = true or records.deleted = true
-              then records.updated_at < excluded.updated_at
-            else exists (
-              select 1
-                from jsonb_each(excluded.data->'cells') incoming_cell
-               where coalesce(
-                 (records.data->'cells'->incoming_cell.key->>'updatedAt')::bigint,
-                 -1
-               ) < (incoming_cell.value->>'updatedAt')::bigint
-            )
-          end
-          else records.updated_at < excluded.updated_at
-        end
-      returning 1 as ok
-      )
-      select (select seq from bump) as cursor,
-             (select count(*) from upserted) as applied,
-             (select total from sized) as total
+      select result.cursor, result.applied, result.skipped, result.quota_rejected
+        from routino_push_records(
+          ${userId}::uuid,
+          ${now.toISOString()}::timestamptz,
+          ${JSON.stringify(packet)}::jsonb
+        ) result
     `);
   } catch (error) {
     if (!isAccountQuotaError(error)) throw error;
     // The single write statement has already rolled back both its seq bump and
     // every record. Return bounded metadata only; private payloads never echo.
-    const [u] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    const quotaState = await db.execute(sql`
+      select seq,
+             floor(extract(epoch from (
+               sync_growth_period_started_at + interval '365 days'
+             )) * 1000)::bigint as retry_at
+        from users where id = ${userId}::uuid
+    `);
+    const [u] = rowsOf<{ seq: string | number; retry_at: string | number }>(quotaState);
+    const retryAt = Number(u?.retry_at);
     return {
       cursor: Number(u?.seq ?? 0),
       applied: 0,
@@ -354,6 +340,7 @@ export async function pushRecords(
           id: record.id,
           updatedAt: record.updatedAt,
           code: "account_quota_exceeded" as const,
+          ...(Number.isFinite(retryAt) ? { retryAt } : {}),
         })),
       ],
     };
@@ -362,7 +349,8 @@ export async function pushRecords(
   const [row] = rowsOf<{
     cursor: string | number;
     applied: string | number;
-    total: string | number;
+    skipped: string | number;
+    quota_rejected: RejectedSyncRecord[];
   }>(res);
   if (!row) throw new Error("sync push produced no result row");
   // bigint and count() arrive as strings on node-postgres, numbers on PGlite.
@@ -370,8 +358,16 @@ export async function pushRecords(
   return {
     cursor: Number(row.cursor),
     applied,
-    skipped: Number(row.total) - applied,
-    rejectedRecords,
+    skipped: Number(row.skipped),
+    rejectedRecords: [
+      ...rejectedRecords,
+      ...(Array.isArray(row.quota_rejected)
+        ? row.quota_rejected.map((rejection) => ({
+            ...rejection,
+            retryAt: Number(rejection.retryAt),
+          }))
+        : []),
+    ],
   };
 }
 
@@ -380,6 +376,8 @@ export async function pullRecords(
   userId: string,
   cursor: number,
   limit = PULL_PAGE_SIZE,
+  recordByteBudget = PULL_RECORDS_BYTE_BUDGET,
+  emptyPageMaxBytes = recordByteBudget,
 ): Promise<PullResult> {
   const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
   if (!user) throw badRequest("unknown_user", "No such user");
@@ -397,37 +395,11 @@ export async function pullRecords(
 
   const safeLimit = Math.max(1, Math.min(PULL_PAGE_SIZE, Math.floor(limit) || PULL_PAGE_SIZE));
   const result = await db.execute(sql`
-    with candidates as (
-      select r.kind, r.id, r.data, r.updated_at, r.deleted, r.seq,
-             row_number() over (order by r.seq) as row_number,
-             sum(
-               octet_length(jsonb_build_object(
-                 'kind', r.kind,
-                 'id', r.id,
-                 'data', r.data,
-                 'updatedAt', r.updated_at,
-                 'deleted', r.deleted,
-                 'seq', r.seq
-               )::text) + 1
-             ) over (order by r.seq) as cumulative_bytes
-        from records r
-       where r.user_id = ${userId}::uuid and r.seq > ${safeCursor}::bigint
-       order by r.seq
-       limit ${safeLimit}
-    ), selected as (
-      select * from candidates
-       where row_number = 1 or cumulative_bytes <= ${PULL_RECORDS_BYTE_BUDGET}
-    ), boundary as (
-      select max(seq) as last_seq from selected
-    )
-    select s.kind, s.id, s.data, s.updated_at, s.deleted, s.seq,
-           exists (
-             select 1 from records later
-              where later.user_id = ${userId}::uuid
-                and later.seq > (select last_seq from boundary)
-           ) as has_more
-      from selected s
-     order by s.seq
+    select r.kind, r.id, r.data, r.updated_at, r.deleted, r.seq
+      from records r
+     where r.user_id = ${userId}::uuid and r.seq > ${safeCursor}::bigint
+     order by r.seq
+     limit ${safeLimit}
   `);
   const rows = rowsOf<{
     kind: string;
@@ -436,22 +408,33 @@ export async function pullRecords(
     updated_at: string | number;
     deleted: boolean;
     seq: string | number;
-    has_more: boolean;
   }>(result);
-  const hasMore = rows[0]?.has_more ?? false;
-
-  return {
-    records: rows.map((r) => ({
+  const candidates = rows.map(
+    (r): PullRecord => ({
       kind: r.kind,
       id: r.id,
       data: r.data,
       updatedAt: Number(r.updated_at),
       deleted: r.deleted,
       seq: Number(r.seq),
-    })),
-    cursor: rows.length ? Number(rows[rows.length - 1]!.seq) : safeCursor,
-    hasMore,
-    reset: false,
+    }),
+  );
+  const selected = selectPullPage(candidates, safeLimit, recordByteBudget, emptyPageMaxBytes);
+  // `cursor` is non-zero whenever a stored row was selected, including a
+  // valid empty archive. Preserve the caller's cursor only for an empty query.
+  const nextCursor = selected.cursor || safeCursor;
+  const later = await db.execute(sql`
+    select exists (
+      select 1 from records
+       where user_id = ${userId}::uuid and seq > ${nextCursor}::bigint
+    ) as has_more
+  `);
+  const [laterRow] = rowsOf<{ has_more: boolean }>(later);
+
+  return {
+    ...selected,
+    cursor: nextCursor,
+    hasMore: selected.hasMore || Boolean(laterRow?.has_more),
   };
 }
 
@@ -470,7 +453,21 @@ export async function exchangeRecords(
   const pushed = incoming.length
     ? await pushRecords(db, userId, incoming, now)
     : { applied: 0, skipped: 0, rejectedRecords: [] };
-  const pulled = await pullRecords(db, userId, cursor, limit);
+  // `pullRecords` reserves 8 KiB for its normal response envelope. Exchange
+  // adds client-controlled (but bounded) rejection metadata, so reserve its
+  // actual UTF-8 JSON size too before choosing public records.
+  const rejectedBytes = utf8Bytes(JSON.stringify(pushed.rejectedRecords));
+  const exchangeRecordBudget = pushed.rejectedRecords.length
+    ? Math.max(0, PULL_RECORDS_BYTE_BUDGET - rejectedBytes)
+    : PULL_RECORDS_BYTE_BUDGET;
+  const pulled = await pullRecords(
+    db,
+    userId,
+    cursor,
+    limit,
+    exchangeRecordBudget,
+    PULL_RECORDS_BYTE_BUDGET,
+  );
   return {
     ...pulled,
     applied: pushed.applied,
