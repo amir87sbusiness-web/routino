@@ -275,12 +275,15 @@ describe("sync", () => {
   it("recognises postgres-js quota constraints without swallowing unrelated database errors", () => {
     expect(
       isAccountQuotaError({
-        cause: { code: "23514", constraint_name: "users_sync_data_bytes_bounds" },
+        cause: { code: "23514", constraint_name: "users_sync_growth_bytes_bounds" },
       }),
     ).toBe(true);
     expect(isAccountQuotaError({ code: "23514", constraint_name: "some_other_check" })).toBe(false);
     expect(
-      isAccountQuotaError({ code: "23505", constraint_name: "users_sync_data_bytes_bounds" }),
+      isAccountQuotaError({ code: "23505", constraint_name: "users_sync_growth_bytes_bounds" }),
+    ).toBe(false);
+    expect(
+      isAccountQuotaError({ code: "23514", constraint_name: "users_sync_data_bytes_nonnegative" }),
     ).toBe(false);
   });
   it("returns a bounded per-record quota refusal and keeps the rolled-back batch pullable", async () => {

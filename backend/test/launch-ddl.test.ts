@@ -31,6 +31,10 @@ const PAYMENT_BACKOFF_MIGRATION_SQL = readFileSync(
   resolve(root, "supabase/migrations/20260831142000_payment_verify_backoff.sql"),
   "utf8",
 );
+const TASK_ARCHIVE_QUOTA_MIGRATION_SQL = readFileSync(
+  resolve(root, "supabase/migrations/20260901150000_task_archive_quota_expand.sql"),
+  "utf8",
+);
 
 let h: Harness;
 
@@ -43,6 +47,58 @@ afterAll(async () => {
 });
 
 describe("launch schema repairs", () => {
+  it("expands annual quota fields without rewriting grandfathered sync content", async () => {
+    await h.raw(`
+      alter table records drop constraint records_kind_valid;
+      alter table records add constraint records_kind_valid check (kind in
+        ('categories','habits','habitMonths','tasks','timerSessions','journal'));
+      alter table users drop constraint users_sync_growth_bytes_bounds;
+      alter table users drop constraint users_sync_data_bytes_nonnegative;
+      alter table users add constraint users_sync_data_bytes_bounds check
+        (sync_data_bytes between 0 and 134217728);
+      alter table users drop column sync_growth_bytes;
+      alter table users drop column sync_growth_period_started_at;
+      insert into users (id, phone, seq)
+      values ('a1111111-1111-4111-8111-111111111111', '989122299994', 1);
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      values (
+        'a1111111-1111-4111-8111-111111111111', 'tasks', 't1',
+        '{"id":"t1","title":"keep"}'::jsonb, 1000, false, 1
+      );
+    `);
+    const [before] = await h.query<{ data: unknown; updated_at: string; seq: string }>(`
+      select data, updated_at::text, seq::text from records
+       where user_id = 'a1111111-1111-4111-8111-111111111111'
+    `);
+
+    await h.raw(TASK_ARCHIVE_QUOTA_MIGRATION_SQL);
+
+    const [after] = await h.query<{ data: unknown; updated_at: string; seq: string }>(`
+      select data, updated_at::text, seq::text from records
+       where user_id = 'a1111111-1111-4111-8111-111111111111'
+    `);
+    expect(after).toEqual(before);
+    const [quota] = await h.query<{
+      sync_growth_bytes: number;
+      period_started: boolean;
+    }>(`
+      select sync_growth_bytes,
+             sync_growth_period_started_at is not null as period_started
+        from users where id = 'a1111111-1111-4111-8111-111111111111'
+    `);
+    expect(Number(quota!.sync_growth_bytes)).toBe(0);
+    expect(quota!.period_started).toBe(true);
+
+    await h.raw(`
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      values (
+        'a1111111-1111-4111-8111-111111111111', 'taskMonths', '2026-01|0001',
+        '{}'::jsonb, 2, false, 2
+      );
+      update users set sync_data_bytes = 134217729
+       where id = 'a1111111-1111-4111-8111-111111111111';
+    `);
+  });
   it("adds payment cooldown state without changing paid rows or grants", async () => {
     await h.raw(`
       alter table payments drop constraint payments_verify_attempts_nonnegative;
@@ -151,7 +207,8 @@ describe("launch schema repairs", () => {
       drop trigger records_sync_usage_after_update on records;
       drop trigger records_sync_usage_after_delete on records;
       alter table users drop constraint users_sync_record_count_bounds;
-      alter table users drop constraint users_sync_data_bytes_bounds;
+      alter table users drop constraint if exists users_sync_data_bytes_bounds;
+      alter table users drop constraint if exists users_sync_data_bytes_nonnegative;
       alter table users drop column sync_record_count;
       alter table users drop column sync_data_bytes;
 

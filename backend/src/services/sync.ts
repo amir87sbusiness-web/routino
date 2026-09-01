@@ -58,7 +58,7 @@ const PULL_RECORDS_BYTE_BUDGET = PULL_RESPONSE_MAX_UTF8_BYTES - 8 * 1024;
 
 const SYNC_QUOTA_CONSTRAINTS = new Set([
   "users_sync_record_count_bounds",
-  "users_sync_data_bytes_bounds",
+  "users_sync_growth_bytes_bounds",
 ]);
 
 /** Drizzle preserves the native Postgres error either directly or as `cause`,
@@ -323,94 +323,187 @@ export async function pushRecords(
            and child.id like parent.id || '|%'
          where parent.kind = 'habits' and parent.deleted = true
       ),
-      combined as (
-        select * from incoming
-        union all
-        select * from cascaded
-      ),
       deduped as (
         select distinct on (kind, id)
                kind, id, data, updated_at, deleted, ord
-          from combined
+          from (
+            select * from incoming
+            union all
+            select * from cascaded
+          ) combined
          order by kind, id, updated_at desc, deleted desc, ord
       ),
-      numbered as (
-        select kind, id, data, updated_at, deleted,
-               row_number() over (order by ord, kind, id)::bigint as position
-          from deduped
+      current_state as materialized (
+        select u.seq, u.sync_growth_period_started_at, u.sync_growth_bytes
+          from users u
+         where u.id = ${userId}::uuid
+         for update
+      ),
+      effective_period as (
+        select case
+                 when cs.sync_growth_period_started_at + interval '365 days'
+                        <= ${now.toISOString()}::timestamptz
+                   then ${now.toISOString()}::timestamptz
+                 else cs.sync_growth_period_started_at
+               end as period_start,
+               case
+                 when cs.sync_growth_period_started_at + interval '365 days'
+                        <= ${now.toISOString()}::timestamptz
+                   then 0::bigint
+                 else cs.sync_growth_bytes
+               end as base_used
+          from current_state cs
+      ),
+      prepared as (
+        select d.kind, d.id,
+               final.final_data as data,
+               final.final_updated_at as updated_at,
+               final.final_deleted as deleted,
+               d.ord,
+               decision.will_apply,
+               greatest(
+                 coalesce(octet_length(final.final_data::text), 0) -
+                 coalesce(octet_length(existing.data::text), 0),
+                 0
+               )::bigint as positive_growth
+          from deduped d
+          cross join current_state cs
+          left join records existing
+            on existing.user_id = ${userId}::uuid
+           and existing.kind = d.kind
+           and existing.id = d.id
+          cross join lateral (
+            select case
+                     when d.kind = 'habitMonths'
+                      and d.deleted = false
+                      and existing.user_id is not null
+                      and existing.deleted = false
+                     then jsonb_build_object(
+                       'habitId', d.data->'habitId',
+                       'monthKey', d.data->'monthKey',
+                       'cells', coalesce(existing.data->'cells', '{}'::jsonb) || coalesce((
+                         select jsonb_object_agg(incoming_cell.key, incoming_cell.value)
+                           from jsonb_each(d.data->'cells') incoming_cell
+                          where coalesce(
+                            (existing.data->'cells'->incoming_cell.key->>'updatedAt')::bigint,
+                            -1
+                          ) < (incoming_cell.value->>'updatedAt')::bigint
+                       ), '{}'::jsonb)
+                     )
+                     else d.data
+                   end as final_data,
+                   case
+                     when d.kind = 'habitMonths'
+                      and d.deleted = false
+                      and existing.user_id is not null
+                      and existing.deleted = false
+                     then greatest(existing.updated_at, d.updated_at)
+                     else d.updated_at
+                   end as final_updated_at,
+                   case
+                     when d.kind = 'habitMonths'
+                      and d.deleted = false
+                      and existing.user_id is not null
+                      and existing.deleted = false
+                     then false
+                     else d.deleted
+                   end as final_deleted
+          ) final
+          cross join lateral (
+            select case
+                     when existing.user_id is null then true
+                     when d.kind = 'habitMonths' then case
+                       when d.deleted = true or existing.deleted = true
+                         then existing.updated_at < d.updated_at
+                       else exists (
+                         select 1
+                           from jsonb_each(d.data->'cells') incoming_cell
+                          where coalesce(
+                            (existing.data->'cells'->incoming_cell.key->>'updatedAt')::bigint,
+                            -1
+                          ) < (incoming_cell.value->>'updatedAt')::bigint
+                       )
+                     end
+                     else existing.updated_at < d.updated_at
+                   end as will_apply
+          ) decision
+      ),
+      ranked as (
+        select p.*,
+               sum(case when p.will_apply then p.positive_growth else 0 end)
+                 over (order by p.ord, p.kind, p.id) as cumulative_growth,
+               10485760::bigint - ep.base_used as allowance_remaining
+          from prepared p cross join effective_period ep
+      ),
+      accepted as (
+        select r.*,
+               row_number() over (order by r.ord, r.kind, r.id)::bigint as position
+          from ranked r
+         where r.will_apply
+           and r.cumulative_growth <= r.allowance_remaining
+      ),
+      budget_rejected as (
+        select r.kind, r.id, r.updated_at, r.ord
+          from ranked r
+         where r.will_apply
+           and r.cumulative_growth > r.allowance_remaining
       ),
       sized as (
-        select count(*)::bigint as total from numbered
+        select count(*)::bigint as total,
+               coalesce(sum(a.positive_growth), 0)::bigint as positive_growth
+          from accepted a
       ),
       bump as (
-        update users u set seq = u.seq + sized.total
-          from sized where u.id = ${userId} returning u.seq
+        update users u
+           set seq = u.seq + sized.total,
+               sync_growth_period_started_at = ep.period_start,
+               sync_growth_bytes = ep.base_used + sized.positive_growth
+          from sized cross join effective_period ep
+         where u.id = ${userId}::uuid
+        returning u.seq,
+                  u.sync_growth_period_started_at + interval '365 days' as retry_at
       ),
       upserted as (
       insert into records (user_id, kind, id, data, updated_at, deleted, seq)
       select ${userId}::uuid, i.kind, i.id, i.data, i.updated_at, i.deleted,
              b.seq - s.total + i.position
-        from numbered i cross join sized s cross join bump b
+        from accepted i cross join sized s cross join bump b
       on conflict (user_id, kind, id) do update
-        set data = case
-              when excluded.kind = 'habitMonths'
-               and excluded.deleted = false
-               and records.deleted = false
-              then jsonb_build_object(
-                'habitId', excluded.data->'habitId',
-                'monthKey', excluded.data->'monthKey',
-                'cells', coalesce(records.data->'cells', '{}'::jsonb) || coalesce((
-                  select jsonb_object_agg(incoming_cell.key, incoming_cell.value)
-                    from jsonb_each(excluded.data->'cells') incoming_cell
-                   where coalesce(
-                     (records.data->'cells'->incoming_cell.key->>'updatedAt')::bigint,
-                     -1
-                   ) < (incoming_cell.value->>'updatedAt')::bigint
-                ), '{}'::jsonb)
-              )
-              else excluded.data
-            end,
-            updated_at = case
-              when excluded.kind = 'habitMonths'
-               and excluded.deleted = false
-               and records.deleted = false
-              then greatest(records.updated_at, excluded.updated_at)
-              else excluded.updated_at
-            end,
-            deleted = case
-              when excluded.kind = 'habitMonths'
-               and excluded.deleted = false
-               and records.deleted = false
-              then false
-              else excluded.deleted
-            end,
+        set data = excluded.data,
+            updated_at = excluded.updated_at,
+            deleted = excluded.deleted,
             seq = excluded.seq
-        where case
-          when excluded.kind = 'habitMonths' then case
-            when excluded.deleted = true or records.deleted = true
-              then records.updated_at < excluded.updated_at
-            else exists (
-              select 1
-                from jsonb_each(excluded.data->'cells') incoming_cell
-               where coalesce(
-                 (records.data->'cells'->incoming_cell.key->>'updatedAt')::bigint,
-                 -1
-               ) < (incoming_cell.value->>'updatedAt')::bigint
-            )
-          end
-          else records.updated_at < excluded.updated_at
-        end
       returning 1 as ok
       )
       select (select seq from bump) as cursor,
              (select count(*) from upserted) as applied,
-             (select total from sized) as total
+             (select count(*) from prepared where not will_apply) as skipped,
+             coalesce((
+               select jsonb_agg(
+                 jsonb_build_object(
+                   'kind', rejected.kind,
+                   'id', rejected.id,
+                   'updatedAt', rejected.updated_at,
+                   'code', 'account_quota_exceeded',
+                   'retryAt', floor(extract(epoch from b.retry_at) * 1000)::bigint
+                 ) order by rejected.ord, rejected.kind, rejected.id
+               )
+                 from budget_rejected rejected cross join bump b
+             ), '[]'::jsonb) as quota_rejected
     `);
   } catch (error) {
     if (!isAccountQuotaError(error)) throw error;
     // The single write statement has already rolled back both its seq bump and
     // every record. Return bounded metadata only; private payloads never echo.
-    const [u] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    const quotaState = await db.execute(sql`
+      select seq,
+             floor(extract(epoch from (
+               sync_growth_period_started_at + interval '365 days'
+             )) * 1000)::bigint as retry_at
+        from users where id = ${userId}::uuid
+    `);
+    const [u] = rowsOf<{ seq: string | number; retry_at: string | number }>(quotaState);
+    const retryAt = Number(u?.retry_at);
     return {
       cursor: Number(u?.seq ?? 0),
       applied: 0,
@@ -422,6 +515,7 @@ export async function pushRecords(
           id: record.id,
           updatedAt: record.updatedAt,
           code: "account_quota_exceeded" as const,
+          ...(Number.isFinite(retryAt) ? { retryAt } : {}),
         })),
       ],
     };
@@ -430,7 +524,8 @@ export async function pushRecords(
   const [row] = rowsOf<{
     cursor: string | number;
     applied: string | number;
-    total: string | number;
+    skipped: string | number;
+    quota_rejected: RejectedSyncRecord[];
   }>(res);
   if (!row) throw new Error("sync push produced no result row");
   // bigint and count() arrive as strings on node-postgres, numbers on PGlite.
@@ -438,8 +533,16 @@ export async function pushRecords(
   return {
     cursor: Number(row.cursor),
     applied,
-    skipped: Number(row.total) - applied,
-    rejectedRecords,
+    skipped: Number(row.skipped),
+    rejectedRecords: [
+      ...rejectedRecords,
+      ...(Array.isArray(row.quota_rejected)
+        ? row.quota_rejected.map((rejection) => ({
+            ...rejection,
+            retryAt: Number(rejection.retryAt),
+          }))
+        : []),
+    ],
   };
 }
 

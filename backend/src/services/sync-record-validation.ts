@@ -202,6 +202,9 @@ export interface RejectedSyncRecord {
   id: string;
   updatedAt: number;
   code: SyncRejectionCode;
+  /** Present for annual account quota refusals so the durable client outbox can
+   * pause this exact version instead of retrying it on every app lifecycle. */
+  retryAt?: number;
 }
 
 const isSyncKind = (kind: string): kind is SyncKind =>
