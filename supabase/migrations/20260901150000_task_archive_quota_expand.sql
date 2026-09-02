@@ -96,7 +96,7 @@ begin
               combined.deleted desc, combined.ord
   ),
   current_state as (
-    select u.sync_growth_period_started_at, u.sync_growth_bytes
+    select u.sync_growth_period_started_at, u.sync_growth_bytes, u.sync_record_count
       from users u where u.id = p_user_id
   ),
   effective_period as (
@@ -109,7 +109,8 @@ begin
              when cs.sync_growth_period_started_at + interval '365 days' <= p_now
                then 0::bigint
              else cs.sync_growth_bytes
-           end as base_used
+           end as base_used,
+           greatest(50000::bigint - cs.sync_record_count, 0::bigint) as row_slots
       from current_state cs
   ),
   prepared as (
@@ -119,6 +120,7 @@ begin
            d.original_updated_at,
            final.final_deleted as deleted,
            d.ord,
+           (existing.user_id is null) as is_insert,
            decision.will_apply,
            greatest(
              coalesce(octet_length(final.final_data::text), 0) -
@@ -188,7 +190,8 @@ begin
   ),
   ranked as (
     select p.*,
-           10485760::bigint - ep.base_used as allowance_remaining
+           10485760::bigint - ep.base_used as allowance_remaining,
+           ep.row_slots
       from prepared p cross join effective_period ep
   ),
   positive_candidates as (
@@ -215,26 +218,52 @@ begin
       join positive_candidates pc
         on pc.budget_position = walk.budget_position + 1
   ),
-  accepted_pre as (
+  budget_accepted_pre as (
     select r.kind, r.id, r.data, r.updated_at, r.original_updated_at,
-           r.deleted, r.ord, r.positive_growth
+           r.deleted, r.ord, r.positive_growth, r.is_insert, r.row_slots
       from ranked r
      where r.will_apply and r.positive_growth = 0
     union all
     select walk.kind, walk.id, walk.data, walk.updated_at,
-           walk.original_updated_at, walk.deleted, walk.ord, walk.positive_growth
+           walk.original_updated_at, walk.deleted, walk.ord, walk.positive_growth,
+           walk.is_insert, walk.row_slots
       from budget_walk walk where walk.budget_accepted
   ),
-  accepted as (
+  capacity_candidates as (
     select accepted_pre.*,
+           row_number() over (order by accepted_pre.ord, accepted_pre.kind, accepted_pre.id)::bigint as capacity_position
+      from budget_accepted_pre accepted_pre
+  ),
+  capacity_walk as (
+    select cc.*,
+           (not cc.is_insert or cc.row_slots >= 1) as capacity_accepted,
+           case when cc.is_insert and cc.row_slots >= 1 then 1::bigint else 0::bigint end as accepted_inserts
+      from capacity_candidates cc where cc.capacity_position = 1
+    union all
+    select cc.*,
+           (not cc.is_insert or walk.accepted_inserts + 1 <= cc.row_slots),
+           case
+             when cc.is_insert and walk.accepted_inserts + 1 <= cc.row_slots
+               then walk.accepted_inserts + 1
+             else walk.accepted_inserts
+           end
+      from capacity_walk walk
+      join capacity_candidates cc on cc.capacity_position = walk.capacity_position + 1
+  ),
+  accepted as (
+    select capacity.*,
            row_number() over (
-             order by accepted_pre.ord, accepted_pre.kind, accepted_pre.id
+             order by capacity.ord, capacity.kind, capacity.id
            )::bigint as position
-      from accepted_pre
+      from capacity_walk capacity where capacity.capacity_accepted
   ),
   budget_rejected as (
     select walk.kind, walk.id, walk.original_updated_at, walk.ord
       from budget_walk walk where not walk.budget_accepted
+  ),
+  capacity_rejected as (
+    select walk.kind, walk.id, walk.original_updated_at, walk.ord
+      from capacity_walk walk where not walk.capacity_accepted
   ),
   sized as (
     select count(*)::bigint as total,
@@ -318,10 +347,17 @@ begin
                'id', rejected.id,
                'updatedAt', rejected.original_updated_at,
                'code', 'account_quota_exceeded',
-               'retryAt', floor(extract(epoch from bump.retry_at) * 1000)::bigint
+               'retryAt', rejected.retry_at
              ) order by rejected.ord, rejected.kind, rejected.id
-           )
-             from budget_rejected rejected
+           ) from (
+             select annual.kind, annual.id, annual.original_updated_at, annual.ord,
+                    floor(extract(epoch from bump.retry_at) * 1000)::bigint as retry_at
+               from budget_rejected annual cross join bump
+             union all
+             select row_cap.kind, row_cap.id, row_cap.original_updated_at, row_cap.ord,
+                    floor(extract(epoch from (p_now + interval '1 day')) * 1000)::bigint
+               from capacity_rejected row_cap
+           ) rejected
          ), '[]'::jsonb)
     from bump;
 end

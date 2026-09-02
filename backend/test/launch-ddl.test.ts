@@ -713,12 +713,36 @@ describe("launch schema repairs", () => {
     const schedule = `select cron.schedule(
   'routino-task-month-compaction',
   '17 4 * * *',
-  $$select * from routino_compact_task_months(now(), 500)$$
+  $$begin;
+set local statement_timeout = '5000ms';
+set local lock_timeout = '1000ms';
+select * from routino_run_task_month_compaction(now(), 500);
+commit;$$
 );`;
 
     expect(sql).toContain(unschedule);
     expect(sql).toContain(schedule);
     expect(sql.indexOf(unschedule)).toBeLessThan(sql.indexOf(schedule));
     expect(sql.match(/'routino-task-month-compaction'/g)).toHaveLength(2);
+  });
+
+  it("claims owners before task rows and schedules the timeout-bounded compactor wrapper", () => {
+    const ownerClaim = SCHEMA_SQL.indexOf("locked_owners as materialized");
+    const sourceLock = SCHEMA_SQL.indexOf("for update of source skip locked");
+    expect(ownerClaim).toBeGreaterThan(-1);
+    expect(sourceLock).toBeGreaterThan(ownerClaim);
+    expect(SCHEMA_SQL).toContain("for update of u skip locked");
+    expect(SCHEMA_SQL).toContain("create or replace function routino_run_task_month_compaction");
+    execFileSync(process.execPath, ["scripts/gen-setup-sql.mjs"], { cwd: root, stdio: "pipe" });
+    const sql = readFileSync(resolve(root, "supabase/setup.sql"), "utf8");
+    const timedSchedule = `$$begin;
+set local statement_timeout = '5000ms';
+set local lock_timeout = '1000ms';
+select * from routino_run_task_month_compaction(now(), 500);
+commit;$$`;
+    expect(sql).toContain(timedSchedule);
+    expect(sql.indexOf("set local statement_timeout")).toBeLessThan(
+      sql.indexOf("routino_run_task_month_compaction(now(), 500)"),
+    );
   });
 });

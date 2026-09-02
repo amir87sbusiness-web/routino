@@ -328,10 +328,23 @@ async function applyRemote(records: RemoteRecord[]): Promise<number> {
           }
         }
       }
+      // A single pull page may contain an archive-expanded task and a normal
+      // override for the same key. Merge against the state produced by the
+      // preceding remote row, not the stale pre-page snapshot, so LWW is
+      // deterministic regardless of whether both records share a page.
       const locals = await tableOf(table).bulkGet(remotes.map((r) => r.id));
-      const rows = remotes
-        .map((remote, i) => mergeRemote(locals[i], remote, nextSeq))
-        .filter((r): r is RecordRow<unknown> => r !== null);
+      const currentByKey = new Map<string, RecordRow<unknown> | undefined>();
+      remotes.forEach((remote, index) => {
+        if (!currentByKey.has(remote.id)) currentByKey.set(remote.id, locals[index]);
+      });
+      const rowsByKey = new Map<string, RecordRow<unknown>>();
+      for (const remote of remotes) {
+        const merged = mergeRemote(currentByKey.get(remote.id), remote, nextSeq);
+        if (!merged) continue;
+        currentByKey.set(remote.id, merged);
+        rowsByKey.set(remote.id, merged);
+      }
+      const rows = [...rowsByKey.values()];
       if (rows.length) {
         await tableOf(table).bulkPut(rows);
         written += rows.length;

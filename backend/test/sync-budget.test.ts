@@ -384,6 +384,50 @@ describe("per-account sync storage budget", () => {
     expect(stored).toEqual({ deleted: true, data: null });
   });
 
+  it("at 49,999 rows accepts updates/deletes and one safe insert while returning a daily row-cap retry only for the other insert", async () => {
+    const existing = habit("row-update", "قدیمی", 1_000);
+    const deleted = habit("row-delete", "برای حذف", 1_000);
+    await h.raw(`
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      values
+        ('${USER_ID}', 'habits', 'row-update', '${JSON.stringify(existing.data).replaceAll("'", "''")}'::jsonb, 1000, false, 1),
+        ('${USER_ID}', 'habits', 'row-delete', '${JSON.stringify(deleted.data).replaceAll("'", "''")}'::jsonb, 1000, false, 2);
+      update users set seq = 2, sync_record_count = 49999 where id = '${USER_ID}';
+    `);
+
+    const result = await pushRecords(
+      h.db,
+      USER_ID,
+      [
+        habit("row-new-a", "اول", 2_000),
+        habit("row-new-b", "دوم", 2_000),
+        habit("row-update", "ویرایش مجاز", 2_000),
+        { kind: "habits", id: "row-delete", data: null, updatedAt: 2_000, deleted: true },
+      ],
+      PERIOD_START,
+    );
+
+    expect(result).toMatchObject({ applied: 3, skipped: 0 });
+    expect(result.rejectedRecords).toEqual([
+      expect.objectContaining({
+        kind: "habits",
+        id: "row-new-b",
+        updatedAt: 2_000,
+        code: "account_quota_exceeded",
+        retryAt: PERIOD_START.getTime() + 24 * 60 * 60_000,
+      }),
+    ]);
+    expect(
+      await h.query<{ id: string; deleted: boolean }>(`
+      select id, deleted from records where user_id = '${USER_ID}' order by id
+    `),
+    ).toEqual([
+      { id: "row-delete", deleted: true },
+      { id: "row-new-a", deleted: false },
+      { id: "row-update", deleted: false },
+    ]);
+  });
+
   it("accepts a later smaller growth after an earlier record does not fit", async () => {
     const large = habit("greedy-large", "x".repeat(100), 2_000);
     const small = habit("greedy-small", "x", 2_000);

@@ -538,6 +538,97 @@ describe("sync engine, two devices on one account", () => {
     expect((await idb.table("habits").get("h1"))?.deleted).toBe(1);
   });
 
+  it("pauses a row-cap rejection until its bounded retry instead of sending an immediate hot loop", async () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(5_000);
+    await localDirtyTask("row-cap", "در صف ظرفیت");
+    server.refuse.add("row-cap");
+    server.refuseCode = "account_quota_exceeded";
+    server.refuseRetryAt.set("row-cap", 10_000);
+
+    await syncNow(OWNER);
+
+    expect((await idb.tasks.get("row-cap"))?.dirty).toBe(2);
+    expect(await hasPendingChanges(OWNER)).toBe(false);
+    await syncNow(OWNER, { pullRequired: true });
+    expect(server.exchanges.at(-1)?.records).toEqual([]);
+
+    server.refuse.clear();
+    now.mockReturnValue(10_000);
+    await syncNow(OWNER, { pullRequired: true });
+    expect(server.exchanges.at(-1)?.records).toEqual([
+      expect.objectContaining({ id: "row-cap", updatedAt: 1000 }),
+    ]);
+  });
+
+  it("converges duplicate same-page archive/ordinary rows by their evolving LWW state", async () => {
+    await idb.habits.put({
+      key: "archive-override",
+      data: habitData("archive-override", "محلی قدیمی"),
+      updatedAt: 500,
+      deleted: 0,
+      dirty: 0,
+      seq: 1,
+    });
+    server.log.push(
+      {
+        kind: "habits",
+        id: "archive-override",
+        data: habitData("archive-override", "نسخه آرشیو جدیدتر"),
+        updatedAt: 2_000,
+        deleted: false,
+        seq: 1,
+      },
+      {
+        kind: "habits",
+        id: "archive-override",
+        data: habitData("archive-override", "نسخه عادی قدیمی‌تر"),
+        updatedAt: 1_000,
+        deleted: false,
+        seq: 2,
+      },
+    );
+
+    const outcome = await syncNow(OWNER, { pullRequired: true });
+
+    expect(await idb.habits.get("archive-override")).toMatchObject({
+      data: { name: "نسخه آرشیو جدیدتر" },
+      updatedAt: 2_000,
+      deleted: 0,
+      dirty: 0,
+    });
+    expect(outcome.remoteChanged).toBe(true);
+  });
+
+  it("takes an equal remote tombstone after an ordinary same-page copy without resurrection", async () => {
+    server.log.push(
+      {
+        kind: "habits",
+        id: "equal-delete",
+        data: { id: "equal-delete", name: "زنده" },
+        updatedAt: 2_000,
+        deleted: false,
+        seq: 1,
+      },
+      {
+        kind: "habits",
+        id: "equal-delete",
+        data: null,
+        updatedAt: 2_000,
+        deleted: true,
+        seq: 2,
+      },
+    );
+
+    await syncNow(OWNER, { pullRequired: true });
+
+    expect(await idb.habits.get("equal-delete")).toMatchObject({
+      data: null,
+      updatedAt: 2_000,
+      deleted: 1,
+      dirty: 0,
+    });
+  });
+
   it("reports a reset as remote storage change even when the server is empty", async () => {
     await idb.table("habits").put({
       key: "stale",

@@ -38,7 +38,11 @@ select cron.unschedule(jobid) from cron.job where jobname = 'routino-task-month-
 select cron.schedule(
   'routino-task-month-compaction',
   '17 4 * * *',
-  $$select * from routino_compact_task_months(now(), 500)$$
+  $$begin;
+set local statement_timeout = '5000ms';
+set local lock_timeout = '1000ms';
+select * from routino_run_task_month_compaction(now(), 500);
+commit;$$
 );
 
 -- Tombstones, weekly. A deleted habit or log leaves a row behind on purpose: a

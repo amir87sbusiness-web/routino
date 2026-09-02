@@ -8,6 +8,7 @@
  * multi-gigabyte load test.
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import {
   PULL_RESPONSE_MAX_UTF8_BYTES,
   selectPullPage,
@@ -48,6 +49,19 @@ const sizesAfter = new Map<string, RelationSize>();
 const responseBytes = new Map<string, number>();
 
 const utf8Bytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value), "utf8");
+const md5 = (value: string) => createHash("md5").update(value).digest("hex");
+const postgresJsonbText = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(postgresJsonbText).join(", ")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>).sort(
+      ([left], [right]) => left.length - right.length || (left < right ? -1 : left > right ? 1 : 0),
+    );
+    return `{${entries
+      .map(([key, item]) => `${JSON.stringify(key)}: ${postgresJsonbText(item)}`)
+      .join(", ")}}`;
+  }
+  return JSON.stringify(value);
+};
 const dateKey = (year: number, dayIndex: number) =>
   new Date(Date.UTC(year, 0, dayIndex + 1)).toISOString().slice(0, 10);
 const daysInYear = (year: number) => (Date.UTC(year + 1, 0, 1) - Date.UTC(year, 0, 1)) / 86_400_000;
@@ -283,16 +297,23 @@ function archivesFor(records: WireRecord[], firstSeq = 1): PullRecord[] {
   let seq = firstSeq + stored.length;
   for (const [month, tasks] of [...byMonth].sort(([a], [b]) => a.localeCompare(b))) {
     for (let offset = 0; offset < tasks.length; offset += 32) {
-      const chunk = tasks.slice(offset, offset + 32);
+      const chunk = tasks
+        .slice(offset, offset + 32)
+        .sort((left, right) => left.id.localeCompare(right.id));
+      const items = chunk.map((record) => [record.id, record.updatedAt, record.data] as const);
       stored.push({
         kind: "taskMonths",
-        id: `${month}|synthetic-${offset / 32}`,
+        id: `${month}|${md5(items.map(([id]) => id).join("\n"))}`,
         data: {
           v: 1,
           monthKey: month,
           count: chunk.length,
-          checksum: "a".repeat(32),
-          items: chunk.map((record) => [record.id, record.updatedAt, record.data]),
+          checksum: md5(
+            items
+              .map(([id, updatedAt, data]) => `${id}\n${updatedAt}\n${postgresJsonbText(data)}`)
+              .join("\n"),
+          ),
+          items,
         },
         updatedAt: Math.max(...chunk.map((record) => record.updatedAt)),
         deleted: false,

@@ -44,6 +44,17 @@ describe("mergeRemote — last write wins", () => {
     expect(mergeRemote(local(1000), remote(1000), alloc)).toBeNull();
   });
 
+  it("takes an exact-timestamp remote tombstone over a live local row", () => {
+    // A delete must win this deterministic tie: otherwise archive expansion and
+    // a later ordinary tombstone can resurrect content depending on page shape.
+    const row = mergeRemote(local(1000), remote(1000, { deleted: true, data: null }), alloc);
+    expect(row).toMatchObject({ deleted: 1, data: null, updatedAt: 1000, dirty: 0 });
+  });
+
+  it("keeps an exact-timestamp local tombstone over a live remote row", () => {
+    expect(mergeRemote(local(1000, { deleted: 1, data: null }), remote(1000), alloc)).toBeNull();
+  });
+
   it("accepts anything for a record this device has never seen", () => {
     expect(mergeRemote(undefined, remote(1), alloc)).not.toBeNull();
   });

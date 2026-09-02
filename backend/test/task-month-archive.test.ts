@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   expandTaskMonthArchive,
@@ -16,20 +17,42 @@ const task = (id: string, dateKey: string, title: string) => ({
   done: false,
 });
 
+// PostgreSQL jsonb renders object keys by key length then byte order, with
+// comma/colon spaces. The production decoder must implement the same portable
+// convention without Node crypto; this local fixture only gives its checksum a
+// hand-independent source of truth.
+const pgJsonbText = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(pgJsonbText).join(", ")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>).sort(
+      ([a], [b]) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0),
+    );
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}: ${pgJsonbText(item)}`).join(", ")}}`;
+  }
+  return JSON.stringify(value);
+};
+const md5 = (value: string) => createHash("md5").update(value).digest("hex");
+
+const archiveItems = [
+  ["t-1", 1000, task("t-1", "2026-01-02", "الف")],
+  ["t-2", 2000, task("t-2", "2026-01-03", "ب")],
+] as [string, number, unknown][];
+
 const archiveData = {
   v: 1 as const,
   monthKey: "2026-01",
   count: 2,
-  checksum: "9a17d18c4f06c7b86034020c9714db8b",
-  items: [
-    ["t-1", 1000, task("t-1", "2026-01-02", "الف")],
-    ["t-2", 2000, task("t-2", "2026-01-03", "ب")],
-  ] as [string, number, unknown][],
+  checksum: md5(
+    archiveItems
+      .map(([id, updatedAt, data]) => `${id}\n${updatedAt}\n${pgJsonbText(data)}`)
+      .join("\n"),
+  ),
+  items: archiveItems,
 };
 
 const archive: StoredTaskMonthRecord = {
   kind: "taskMonths",
-  id: "2026-01|0001",
+  id: `2026-01|${md5("t-1\nt-2")}`,
   data: archiveData,
   updatedAt: 2000,
   deleted: false,
@@ -107,6 +130,37 @@ describe("task-month archive codec", () => {
       },
     ],
   ])("rejects %s", (_reason, malformed) => {
+    expect(() => expandTaskMonthArchive(malformed as StoredTaskMonthRecord)).toThrow(
+      "invalid_task_month_archive",
+    );
+  });
+
+  it.each([
+    ["deleted archive row", { ...archive, deleted: true }],
+    ["zero items", { ...archive, data: { ...archiveData, count: 0, items: [] } }],
+    [
+      "more than 32 items",
+      {
+        ...archive,
+        data: {
+          ...archiveData,
+          count: 33,
+          items: Array.from({ length: 33 }, (_, index) => [
+            `many-${index}`,
+            index + 1,
+            task(`many-${index}`, "2026-01-02", "کار"),
+          ]),
+        },
+      },
+    ],
+    ["id with non-MD5 suffix", { ...archive, id: "2026-01|not-a-checksum" }],
+    [
+      "fake checksum with valid shape",
+      { ...archive, data: { ...archiveData, checksum: "0".repeat(32) } },
+    ],
+    ["extra v1 field", { ...archive, data: { ...archiveData, unknown: true } }],
+    ["record timestamp below item maximum", { ...archive, updatedAt: 1999 }],
+  ])("fails closed for %s", (_reason, malformed) => {
     expect(() => expandTaskMonthArchive(malformed as StoredTaskMonthRecord)).toThrow(
       "invalid_task_month_archive",
     );

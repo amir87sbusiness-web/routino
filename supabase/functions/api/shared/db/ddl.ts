@@ -263,7 +263,7 @@ begin
               combined.deleted desc, combined.ord
   ),
   current_state as (
-    select u.sync_growth_period_started_at, u.sync_growth_bytes
+    select u.sync_growth_period_started_at, u.sync_growth_bytes, u.sync_record_count
       from users u where u.id = p_user_id
   ),
   effective_period as (
@@ -276,7 +276,8 @@ begin
              when cs.sync_growth_period_started_at + interval '365 days' <= p_now
                then 0::bigint
              else cs.sync_growth_bytes
-           end as base_used
+           end as base_used,
+           greatest(50000::bigint - cs.sync_record_count, 0::bigint) as row_slots
       from current_state cs
   ),
   prepared as (
@@ -286,6 +287,7 @@ begin
            d.original_updated_at,
            final.final_deleted as deleted,
            d.ord,
+           (existing.user_id is null) as is_insert,
            decision.will_apply,
            greatest(
              coalesce(octet_length(final.final_data::text), 0) -
@@ -355,7 +357,8 @@ begin
   ),
   ranked as (
     select p.*,
-           10485760::bigint - ep.base_used as allowance_remaining
+           10485760::bigint - ep.base_used as allowance_remaining,
+           ep.row_slots
       from prepared p cross join effective_period ep
   ),
   positive_candidates as (
@@ -382,26 +385,52 @@ begin
       join positive_candidates pc
         on pc.budget_position = walk.budget_position + 1
   ),
-  accepted_pre as (
+  budget_accepted_pre as (
     select r.kind, r.id, r.data, r.updated_at, r.original_updated_at,
-           r.deleted, r.ord, r.positive_growth
+           r.deleted, r.ord, r.positive_growth, r.is_insert, r.row_slots
       from ranked r
      where r.will_apply and r.positive_growth = 0
     union all
     select walk.kind, walk.id, walk.data, walk.updated_at,
-           walk.original_updated_at, walk.deleted, walk.ord, walk.positive_growth
+           walk.original_updated_at, walk.deleted, walk.ord, walk.positive_growth,
+           walk.is_insert, walk.row_slots
       from budget_walk walk where walk.budget_accepted
   ),
-  accepted as (
+  capacity_candidates as (
     select accepted_pre.*,
+           row_number() over (order by accepted_pre.ord, accepted_pre.kind, accepted_pre.id)::bigint as capacity_position
+      from budget_accepted_pre accepted_pre
+  ),
+  capacity_walk as (
+    select cc.*,
+           (not cc.is_insert or cc.row_slots >= 1) as capacity_accepted,
+           case when cc.is_insert and cc.row_slots >= 1 then 1::bigint else 0::bigint end as accepted_inserts
+      from capacity_candidates cc where cc.capacity_position = 1
+    union all
+    select cc.*,
+           (not cc.is_insert or walk.accepted_inserts + 1 <= cc.row_slots),
+           case
+             when cc.is_insert and walk.accepted_inserts + 1 <= cc.row_slots
+               then walk.accepted_inserts + 1
+             else walk.accepted_inserts
+           end
+      from capacity_walk walk
+      join capacity_candidates cc on cc.capacity_position = walk.capacity_position + 1
+  ),
+  accepted as (
+    select capacity.*,
            row_number() over (
-             order by accepted_pre.ord, accepted_pre.kind, accepted_pre.id
+             order by capacity.ord, capacity.kind, capacity.id
            )::bigint as position
-      from accepted_pre
+      from capacity_walk capacity where capacity.capacity_accepted
   ),
   budget_rejected as (
     select walk.kind, walk.id, walk.original_updated_at, walk.ord
       from budget_walk walk where not walk.budget_accepted
+  ),
+  capacity_rejected as (
+    select walk.kind, walk.id, walk.original_updated_at, walk.ord
+      from capacity_walk walk where not walk.capacity_accepted
   ),
   sized as (
     select count(*)::bigint as total,
@@ -485,10 +514,17 @@ begin
                'id', rejected.id,
                'updatedAt', rejected.original_updated_at,
                'code', 'account_quota_exceeded',
-               'retryAt', floor(extract(epoch from bump.retry_at) * 1000)::bigint
+               'retryAt', rejected.retry_at
              ) order by rejected.ord, rejected.kind, rejected.id
-           )
-             from budget_rejected rejected
+           ) from (
+             select annual.kind, annual.id, annual.original_updated_at, annual.ord,
+                    floor(extract(epoch from bump.retry_at) * 1000)::bigint as retry_at
+               from budget_rejected annual cross join bump
+             union all
+             select row_cap.kind, row_cap.id, row_cap.original_updated_at, row_cap.ord,
+                    floor(extract(epoch from (p_now + interval '1 day')) * 1000)::bigint
+               from capacity_rejected row_cap
+           ) rejected
          ), '[]'::jsonb)
     from bump;
 end
@@ -663,7 +699,44 @@ begin
   truncate pg_temp.routino_compaction_selected;
   truncate pg_temp.routino_compaction_items;
 
-  with locked as (
+  -- Claim owners before source tasks. Foreground sync takes this same owner
+  -- lock first, so a busy owner is skipped without retaining any task locks.
+  with candidate_owners as materialized (
+    select source.user_id
+      from records source
+     where source.kind = 'tasks'
+       and source.deleted = false
+       and source.data->>'done' = 'true'
+       and routino_task_archive_candidate_valid(source.id, source.data)
+       and source.updated_at between 0 and 9007199254740991
+       and left(source.data->>'dateKey', 7) < to_char(
+         (p_now - interval '7 days') at time zone 'UTC', 'YYYY-MM'
+       )
+       and source.updated_at <= floor(
+         extract(epoch from (p_now - interval '7 days')) * 1000
+       )::bigint
+       and not exists (
+         select 1 from records archive
+         cross join lateral jsonb_array_elements(
+           case when jsonb_typeof(archive.data->'items') = 'array'
+             then archive.data->'items' else '[]'::jsonb end
+         ) item
+          where archive.user_id = source.user_id
+            and archive.kind = 'taskMonths'
+            and item->>0 = source.id
+       )
+     group by source.user_id
+     order by source.user_id
+     limit v_limit
+  ),
+  locked_owners as materialized (
+    select u.id
+      from users u
+      join candidate_owners candidate on candidate.user_id = u.id
+     order by u.id
+     for update of u skip locked
+  ),
+  locked as (
     select source.user_id,
            source.id as task_id,
            source.data as task_data,
@@ -677,6 +750,7 @@ begin
              'deleted', false
            )::text)::integer as envelope_bytes
       from records source
+      join locked_owners owner on owner.id = source.user_id
      where source.kind = 'tasks'
        and source.deleted = false
        and source.data->>'done' = 'true'
@@ -716,11 +790,6 @@ begin
      group by selected.user_id, selected.month_key
      order by selected.user_id, selected.month_key
   loop
-    -- Never wait behind foreground sync while holding task-row locks. A busy
-    -- owner is skipped and becomes eligible again on the next bounded run.
-    perform 1 from users u where u.id = v_group.user_id for update skip locked;
-    if not found then continue; end if;
-
     v_chunk := 1;
     v_chunk_count := 0;
     v_chunk_bytes := 0;
@@ -904,9 +973,31 @@ begin
 end
 $function$;
 
+-- The scheduled command sets transaction-local timeouts BEFORE it invokes this
+-- thin wrapper. Keeping the call target named makes the cron contract auditable
+-- without pretending a timeout set inside an already-running SELECT is enough.
+create or replace function routino_run_task_month_compaction(
+  p_now timestamptz,
+  p_max_tasks integer
+)
+returns table (
+  owner_id uuid,
+  month_key text,
+  archived_tasks integer,
+  archive_rows integer
+)
+language sql
+volatile
+security invoker
+set search_path = public, pg_temp
+as $function$
+  select * from routino_compact_task_months(p_now, p_max_tasks)
+$function$;
+
 revoke execute on function routino_js_string_length(text) from public;
 revoke execute on function routino_task_archive_candidate_valid(text, jsonb) from public;
 revoke execute on function routino_compact_task_months(timestamptz, integer) from public;
+revoke execute on function routino_run_task_month_compaction(timestamptz, integer) from public;
 
 create table if not exists otp_codes (
   id uuid primary key default gen_random_uuid(),

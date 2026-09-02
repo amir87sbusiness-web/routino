@@ -60,10 +60,16 @@ export function mergeRemote(
 ): RecordRow<unknown> | null {
   if (!acceptsRemote(remote)) return null;
 
-  // Ties go to the local copy. Two devices that genuinely wrote the same value
-  // in the same millisecond agree anyway, and preferring local keeps a device
-  // replaying its outbox from rewriting rows it already has.
-  if (local && local.updatedAt >= remote.updatedAt) return null;
+  // Equal timestamps are stable except for delete-vs-live: a tombstone wins
+  // that tie so archive expansion plus an ordinary override cannot resurrect
+  // content based on pagination. Equal tombstones remain untouched (no churn).
+  if (
+    local &&
+    (local.updatedAt > remote.updatedAt ||
+      (local.updatedAt === remote.updatedAt && !(remote.deleted && !local.deleted)))
+  ) {
+    return null;
+  }
 
   return {
     key: remote.id,

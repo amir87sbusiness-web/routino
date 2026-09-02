@@ -167,7 +167,44 @@ begin
   truncate pg_temp.routino_compaction_selected;
   truncate pg_temp.routino_compaction_items;
 
-  with locked as (
+  -- Claim owners before source tasks. Foreground sync takes this same owner
+  -- lock first, so a busy owner is skipped without retaining any task locks.
+  with candidate_owners as materialized (
+    select source.user_id
+      from records source
+     where source.kind = 'tasks'
+       and source.deleted = false
+       and source.data->>'done' = 'true'
+       and routino_task_archive_candidate_valid(source.id, source.data)
+       and source.updated_at between 0 and 9007199254740991
+       and left(source.data->>'dateKey', 7) < to_char(
+         (p_now - interval '7 days') at time zone 'UTC', 'YYYY-MM'
+       )
+       and source.updated_at <= floor(
+         extract(epoch from (p_now - interval '7 days')) * 1000
+       )::bigint
+       and not exists (
+         select 1 from records archive
+         cross join lateral jsonb_array_elements(
+           case when jsonb_typeof(archive.data->'items') = 'array'
+             then archive.data->'items' else '[]'::jsonb end
+         ) item
+          where archive.user_id = source.user_id
+            and archive.kind = 'taskMonths'
+            and item->>0 = source.id
+       )
+     group by source.user_id
+     order by source.user_id
+     limit v_limit
+  ),
+  locked_owners as materialized (
+    select u.id
+      from users u
+      join candidate_owners candidate on candidate.user_id = u.id
+     order by u.id
+     for update of u skip locked
+  ),
+  locked as (
     select source.user_id,
            source.id as task_id,
            source.data as task_data,
@@ -181,6 +218,7 @@ begin
              'deleted', false
            )::text)::integer as envelope_bytes
       from records source
+      join locked_owners owner on owner.id = source.user_id
      where source.kind = 'tasks'
        and source.deleted = false
        and source.data->>'done' = 'true'
@@ -220,11 +258,6 @@ begin
      group by selected.user_id, selected.month_key
      order by selected.user_id, selected.month_key
   loop
-    -- Never wait behind foreground sync while holding task-row locks. A busy
-    -- owner is skipped and becomes eligible again on the next bounded run.
-    perform 1 from users u where u.id = v_group.user_id for update skip locked;
-    if not found then continue; end if;
-
     v_chunk := 1;
     v_chunk_count := 0;
     v_chunk_bytes := 0;
@@ -408,8 +441,30 @@ begin
 end
 $function$;
 
+-- The scheduled command sets transaction-local timeouts BEFORE it invokes this
+-- thin wrapper. Keeping the call target named makes the cron contract auditable
+-- without pretending a timeout set inside an already-running SELECT is enough.
+create or replace function routino_run_task_month_compaction(
+  p_now timestamptz,
+  p_max_tasks integer
+)
+returns table (
+  owner_id uuid,
+  month_key text,
+  archived_tasks integer,
+  archive_rows integer
+)
+language sql
+volatile
+security invoker
+set search_path = public, pg_temp
+as $function$
+  select * from routino_compact_task_months(p_now, p_max_tasks)
+$function$;
+
 revoke execute on function routino_js_string_length(text) from public;
 revoke execute on function routino_task_archive_candidate_valid(text, jsonb) from public;
 revoke execute on function routino_compact_task_months(timestamptz, integer) from public;
+revoke execute on function routino_run_task_month_compaction(timestamptz, integer) from public;
 
 commit;

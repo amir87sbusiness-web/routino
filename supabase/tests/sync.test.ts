@@ -9,6 +9,7 @@
  * thing standing between that mistake and a deploy.
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import { auth, makeHarness, signIn, type Harness } from "./helpers/harness.ts";
 import {
   isAccountQuotaError,
@@ -57,26 +58,52 @@ const task = (id: string, dateKey: string, updatedAt: number, title = "مطال�
   updatedAt,
 });
 
+const md5 = (value: string) => createHash("md5").update(value).digest("hex");
+const postgresJsonbText = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(postgresJsonbText).join(", ")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>).sort(
+      ([left], [right]) => left.length - right.length || (left < right ? -1 : left > right ? 1 : 0),
+    );
+    return `{${entries
+      .map(([key, item]) => `${JSON.stringify(key)}: ${postgresJsonbText(item)}`)
+      .join(", ")}}`;
+  }
+  return JSON.stringify(value);
+};
+
 function taskArchive(monthKey: string, items: ReturnType<typeof task>[]) {
+  const sorted = [...items].sort((left, right) => left.id.localeCompare(right.id));
+  const archiveItems = sorted.map(({ updatedAt, ...data }) => [data.id, updatedAt, data] as const);
   return {
     v: 1,
     monthKey,
-    count: items.length,
-    checksum: "a".repeat(32),
-    items: items.map(({ updatedAt, ...data }) => [data.id, updatedAt, data]),
+    count: archiveItems.length,
+    checksum: md5(
+      archiveItems
+        .map(([id, updatedAt, data]) => `${id}\n${updatedAt}\n${postgresJsonbText(data)}`)
+        .join("\n"),
+    ),
+    items: archiveItems,
   };
+}
+
+function taskArchiveId(data: ReturnType<typeof taskArchive>) {
+  return `${data.monthKey}|${md5(data.items.map(([id]) => id).join("\n"))}`;
 }
 
 async function seedTaskArchive(
   userId: string,
   seq: number,
-  id: string,
+  _id: string,
   data: ReturnType<typeof taskArchive>,
 ) {
+  const id = taskArchiveId(data);
+  const updatedAt = Math.max(...data.items.map(([, itemUpdatedAt]) => itemUpdatedAt));
   const encoded = JSON.stringify(data).replaceAll("'", "''");
   await h.raw(`
     insert into records (user_id, kind, id, data, updated_at, deleted, seq)
-    values ('${userId}', 'taskMonths', '${id}', '${encoded}'::jsonb, ${seq}, false, ${seq});
+    values ('${userId}', 'taskMonths', '${id}', '${encoded}'::jsonb, ${updatedAt}, false, ${seq});
     update users set seq = greatest(seq, ${seq}) where id = '${userId}';
   `);
 }

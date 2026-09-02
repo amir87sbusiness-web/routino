@@ -4,6 +4,7 @@
  * between users.
  */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
 import {
   isAccountQuotaError,
@@ -127,14 +128,38 @@ const archivedTask = (id: string, dateKey: string, updatedAt: number, title = "Ø
   updatedAt,
 });
 
+const md5 = (value: string) => createHash("md5").update(value).digest("hex");
+const postgresJsonbText = (value: unknown): string => {
+  if (Array.isArray(value)) return `[${value.map(postgresJsonbText).join(", ")}]`;
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>).sort(
+      ([left], [right]) => left.length - right.length || (left < right ? -1 : left > right ? 1 : 0),
+    );
+    return `{${entries
+      .map(([key, item]) => `${JSON.stringify(key)}: ${postgresJsonbText(item)}`)
+      .join(", ")}}`;
+  }
+  return JSON.stringify(value);
+};
+
 function taskArchive(monthKey: string, items: ReturnType<typeof archivedTask>[], version = 1) {
+  const sorted = [...items].sort((left, right) => left.id.localeCompare(right.id));
+  const archiveItems = sorted.map(({ updatedAt, ...item }) => [item.id, updatedAt, item] as const);
   return {
     v: version,
     monthKey,
-    count: items.length,
-    checksum: "a".repeat(32),
-    items: items.map(({ updatedAt, ...item }) => [item.id, updatedAt, item]),
+    count: archiveItems.length,
+    checksum: md5(
+      archiveItems
+        .map(([id, updatedAt, item]) => `${id}\n${updatedAt}\n${postgresJsonbText(item)}`)
+        .join("\n"),
+    ),
+    items: archiveItems,
   };
+}
+
+function taskArchiveId(data: ReturnType<typeof taskArchive>) {
+  return `${data.monthKey}|${md5(data.items.map(([id]) => id).join("\n"))}`;
 }
 
 async function allowTaskMonthArchives() {
@@ -150,13 +175,15 @@ async function allowTaskMonthArchives() {
 async function seedTaskArchive(
   userId: string,
   seq: number,
-  id: string,
+  _id: string,
   data: ReturnType<typeof taskArchive>,
 ) {
+  const id = taskArchiveId(data);
+  const updatedAt = Math.max(...data.items.map(([, itemUpdatedAt]) => itemUpdatedAt));
   await h.raw(`
     insert into records (user_id, kind, id, data, updated_at, deleted, seq)
     values ('${userId}', 'taskMonths', '${id}', '${JSON.stringify(data)}'::jsonb,
-            ${seq}, false, ${seq});
+            ${updatedAt}, false, ${seq});
     update users set seq = greatest(seq, ${seq}) where id = '${userId}';
   `);
 }
@@ -329,7 +356,7 @@ describe("sync", () => {
     };
     const archive: PullRecord = {
       kind: "taskMonths",
-      id: "2026-01|0001",
+      id: taskArchiveId(taskArchive("2026-01", [archivedTask("t-next", "2026-01-02", 2000)])),
       data: taskArchive("2026-01", [archivedTask("t-next", "2026-01-02", 2000)]),
       updatedAt: 2000,
       deleted: false,
@@ -421,7 +448,7 @@ describe("sync", () => {
     await h.raw(`
       update records
          set data = jsonb_set(data, '{v}', '2'::jsonb)
-       where user_id = '${user.id}' and kind = 'taskMonths' and id = '2026-02|0001';
+       where user_id = '${user.id}' and kind = 'taskMonths' and data->>'monthKey' = '2026-02';
     `);
     const malformed = await pull(access, 1, 1);
     expect(malformed.statusCode).toBe(500);
@@ -455,12 +482,16 @@ describe("sync", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toMatchObject({
-      applied: 0,
+      applied: 1,
       skipped: 0,
-      records: [],
+      records: [expect.objectContaining({ kind: "habits", id: "quota-h1" })],
       rejectedRecords: [
-        { kind: "habits", id: "quota-h1", code: "account_quota_exceeded" },
-        { kind: "habits", id: "quota-h2", code: "account_quota_exceeded" },
+        expect.objectContaining({
+          kind: "habits",
+          id: "quota-h2",
+          code: "account_quota_exceeded",
+          retryAt: expect.any(Number),
+        }),
       ],
     });
     const [state] = await h.query<{ n: number; seq: number; sync_record_count: number }>(`
@@ -469,9 +500,9 @@ describe("sync", () => {
        where u.id = '${user.id}'
        group by u.id
     `);
-    expect(Number(state!.n)).toBe(0);
-    expect(Number(state!.seq)).toBe(0);
-    expect(Number(state!.sync_record_count)).toBe(49999);
+    expect(Number(state!.n)).toBe(1);
+    expect(Number(state!.seq)).toBe(1);
+    expect(Number(state!.sync_record_count)).toBe(50000);
   });
 
   it("accepts valid rows even when another row in the exchange is rejected", async () => {
