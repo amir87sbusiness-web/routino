@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { decodeJwt } from "jose";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
 
 let h: Harness;
@@ -197,12 +198,28 @@ describe("GET /v1/subscriptions/me", () => {
       headers: { authorization: `Bearer ${access}` },
     });
     const body = res.json() as {
-      entitlement: { status: string; planId: string; issuedAt: string };
+      entitlement: { status: string; planId: string; issuedAt: string; deletionAt: string };
     };
     expect(body.entitlement.status).toBe("none");
     expect(body.entitlement.planId).toBeNull();
     // issuedAt lets the client detect its own clock skew without trusting it.
     expect(Date.parse(body.entitlement.issuedAt)).toBeGreaterThan(0);
+    expect(
+      Date.parse(body.entitlement.deletionAt) - Date.parse(body.entitlement.issuedAt),
+    ).toBeCloseTo(30 * DAY, -3);
+  });
+
+  it("rejects a still-signed token after its user row is gone", async () => {
+    const { access, user } = await signIn();
+    await h.raw(`delete from users where id = '${user.id}'`);
+
+    const res = await h.app.inject({
+      method: "GET",
+      url: "/v1/subscriptions/me",
+      headers: { authorization: `Bearer ${access}` },
+    });
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).toMatchObject({ error: "unknown_user" });
   });
 });
 
@@ -217,7 +234,8 @@ describe("POST /v1/subscriptions/trial/start", () => {
     const { access, user } = await signIn();
     const first = (await startTrial(access)).json() as {
       started: boolean;
-      entitlement: { status: string; planId: string; expiresAt: string };
+      access: string;
+      entitlement: { status: string; planId: string; expiresAt: string; deletionAt: string };
     };
     const second = (await startTrial(access)).json() as typeof first & { reason: string };
     expect(first.started).toBe(true);
@@ -225,7 +243,25 @@ describe("POST /v1/subscriptions/trial/start", () => {
     expect((Date.parse(first.entitlement.expiresAt) - Date.now()) / DAY).toBeCloseTo(7, 1);
     expect(second).toMatchObject({ started: false, reason: "previous_grant" });
     expect(second.entitlement.expiresAt).toBe(first.entitlement.expiresAt);
+    expect(second.access).toEqual(expect.any(String));
     expect(await h.query(`select id from grants where user_id = '${user.id}'`)).toHaveLength(1);
+  });
+
+  it("refreshes a late trial token up to the later seven-day deadline", async () => {
+    const { access, user } = await signIn("09123334445");
+    await h.raw(`update users set created_at = now() - interval '29 days' where id = '${user.id}'`);
+
+    const response = await startTrial(access);
+    expect(response.statusCode).toBe(200);
+    const body = response.json() as {
+      access: string;
+      entitlement: { expiresAt: string; deletionAt: string };
+    };
+    const payload = decodeJwt(body.access);
+
+    expect(body.entitlement.deletionAt).toBe(body.entitlement.expiresAt);
+    expect(Number(payload.exp) * 1000).toBeLessThanOrEqual(Date.parse(body.entitlement.deletionAt));
+    expect(Number(payload.exp) * 1000).toBeGreaterThan(Date.now() + 6 * DAY);
   });
 
   it("lets concurrent sessions produce only one trial grant", async () => {

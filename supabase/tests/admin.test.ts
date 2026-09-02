@@ -46,7 +46,7 @@ describe("admin auth", () => {
 });
 
 describe("overview + users", () => {
-  it("counts users and finds them by local-format phone search", async () => {
+  it("counts users but hides registration-only accounts from phone search", async () => {
     await signIn(h, "09123334444");
     await signIn(h, "09351112222");
 
@@ -59,8 +59,7 @@ describe("overview + users", () => {
     const found = await (
       await h.call("GET", "/v1/admin/users?q=0912333", { headers: admin })
     ).json();
-    expect(found.users).toHaveLength(1);
-    expect(found.users[0].phone).toBe("989123334444");
+    expect(found.users).toEqual([]);
   });
 
   it("surfaces a verify_failed payment as an alert (never should happen)", async () => {

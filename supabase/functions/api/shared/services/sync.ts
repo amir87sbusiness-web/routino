@@ -26,7 +26,7 @@
 import { eq, sql } from "drizzle-orm";
 import { rowsOf, type Database } from "../db/client.ts";
 import { users } from "../db/schema.ts";
-import { badRequest } from "../lib/http-errors.ts";
+import { badRequest, unauthorized } from "../lib/http-errors.ts";
 import {
   expandTaskMonthArchive,
   isTaskMonthArchiveKind,
@@ -569,7 +569,7 @@ export async function pushRecords(
     skipped: string | number;
     quota_rejected: RejectedSyncRecord[];
   }>(res);
-  if (!row) throw new Error("sync push produced no result row");
+  if (!row) throw unauthorized("unknown_user", "User no longer exists");
   // bigint and count() arrive as strings on node-postgres, numbers on PGlite.
   const applied = Number(row.applied);
   return {
@@ -658,7 +658,7 @@ export async function pullRecords(
     is_lookahead: boolean | null;
   }>(result);
   const [ownerRow] = rows;
-  if (!ownerRow) throw badRequest("unknown_user", "No such user");
+  if (!ownerRow) throw unauthorized("unknown_user", "User no longer exists");
 
   // A cursor at or below the GC watermark cannot be trusted to have seen the
   // tombstones that were purged below it. Cursor zero is a fresh device and is

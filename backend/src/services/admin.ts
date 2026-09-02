@@ -8,9 +8,18 @@
  * table is scanned at most once. The per-user detail view still fans out its
  * independent, on-demand history reads.
  */
-import { desc, eq, ilike, sql } from "drizzle-orm";
+import { and, desc, eq, ilike, sql } from "drizzle-orm";
 import { rowsOf, type Database } from "../db/client.js";
-import { discounts, entitlements, otpCodes, payments, users } from "../db/schema.js";
+import {
+  anonymousCounters,
+  discounts,
+  entitlements,
+  grants,
+  otpCodes,
+  payments,
+  redemptions,
+  users,
+} from "../db/schema.js";
 import { badRequest, notFound } from "../lib/http-errors.js";
 import { normalizePhone, toAsciiDigits } from "../lib/phone.js";
 import { grantInterval, listGrants, readEntitlement } from "./entitlement.js";
@@ -25,6 +34,7 @@ export async function adminOverview(db: Database, now: Date) {
     total_users: number | string | bigint;
     new_users: number | string | bigint;
     active_subscriptions: number | string | bigint;
+    trial_starts: number | string | bigint;
     paid_total: number | string | bigint;
     revenue_toman: number | string | bigint;
     paid_last_24h: number | string | bigint;
@@ -45,8 +55,18 @@ export async function adminOverview(db: Database, now: Date) {
     ), subscription_stats as (
       select count(*) filter (
         where ${entitlements.expiresAt} > ${now.toISOString()}::timestamptz
+          and exists (
+            select 1 from ${grants}
+            where ${grants.userId} = ${entitlements.userId}
+              and ${grants.source} <> ${"trial"}
+          )
       ) as active_subscriptions
       from ${entitlements}
+    ), counter_stats as (
+      select coalesce(max(${anonymousCounters.value}) filter (
+        where ${anonymousCounters.key} = ${"trial_starts"}
+      ), 0) as trial_starts
+      from ${anonymousCounters}
     ), payment_stats as (
       select
         count(*) filter (where ${payments.status} = ${"paid"}) as paid_total,
@@ -70,13 +90,14 @@ export async function adminOverview(db: Database, now: Date) {
       ) as otp_sent_last_24h
       from ${otpCodes}
     )
-    select * from user_stats, subscription_stats, payment_stats, otp_stats
+    select * from user_stats, subscription_stats, counter_stats, payment_stats, otp_stats
   `);
   const row = rowsOf<AggregateRow>(result)[0];
   const metric = (value: number | string | bigint | undefined) => Number(value ?? 0);
 
   return {
     users: { total: metric(row?.total_users), last24h: metric(row?.new_users) },
+    trialStarts: metric(row?.trial_starts),
     activeSubscriptions: metric(row?.active_subscriptions),
     payments: {
       paidTotal: metric(row?.paid_total),
@@ -92,12 +113,49 @@ export async function adminOverview(db: Database, now: Date) {
   };
 }
 
+/** The panel may identify only accounts with durable or financial history.
+ * Registration-only and valid trial-only accounts remain aggregate-only. */
+function adminUserIsVisible() {
+  return sql<boolean>`
+    exists (
+      select 1 from ${grants}
+       where ${grants.userId} = ${users.id} and ${grants.source} <> ${"trial"}
+    )
+    or exists (
+      select 1 from ${payments} where ${payments.userId} = ${users.id}
+    )
+    or exists (
+      select 1 from ${redemptions} where ${redemptions.userId} = ${users.id}
+    )
+    or exists (
+      select 1 from ${entitlements}
+       where ${entitlements.userId} = ${users.id} and ${entitlements.planId} <> ${"trial"}
+    )
+    or exists (
+      select 1 from ${discounts}
+       where ${discounts.phone} = ${users.phone}
+         and (
+           ${discounts.usedCount} > 0
+           or exists (
+             select 1 from ${payments}
+              where ${payments.discountCode} = ${discounts.code}
+           )
+           or exists (
+             select 1 from ${redemptions}
+              where ${redemptions.code} = ${discounts.code}
+           )
+         )
+    )
+  `;
+}
+
 export async function adminListUsers(
   db: Database,
   opts: { q?: string; limit?: number },
   now: Date,
 ) {
   const n = Math.min(opts.limit || 50, 200);
+  const visibleInAdmin = adminUserIsVisible();
 
   const base = db
     .select({
@@ -116,7 +174,9 @@ export async function adminListUsers(
   // leading zero makes the obvious search work.
   let digits = opts.q ? toAsciiDigits(opts.q).replace(/\D/g, "") : "";
   if (digits.startsWith("0")) digits = digits.slice(1);
-  const rows = digits ? await base.where(ilike(users.phone, `%${digits}%`)) : await base;
+  const rows = digits
+    ? await base.where(and(visibleInAdmin, ilike(users.phone, `%${digits}%`)))
+    : await base.where(visibleInAdmin);
 
   return rows.map((r) => ({ ...r, subscriptionActive: !!r.expiresAt && r.expiresAt > now }));
 }
@@ -125,7 +185,12 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 export async function adminUserDetail(db: Database, id: string, now: Date) {
   if (!UUID_RE.test(id)) throw badRequest("bad_id", "Malformed user id");
-  const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  const visibleInAdmin = adminUserIsVisible();
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(and(eq(users.id, id), visibleInAdmin))
+    .limit(1);
   if (!user) throw notFound("unknown_user", "No such user");
 
   const [userPayments, userGrants, entitlement] = await Promise.all([

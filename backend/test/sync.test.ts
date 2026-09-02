@@ -972,10 +972,11 @@ describe("sync", () => {
     // GET /subscriptions/me, which avoids one extra request on every app open.
     const last = (await pull(access, 0)).json() as {
       hasMore: boolean;
-      entitlement?: { status: string };
+      entitlement?: { status: string; deletionAt: string | null };
     };
     expect(last.hasMore).toBe(false);
     expect(last.entitlement?.status).toBe("active");
+    expect(Date.parse(last.entitlement!.deletionAt!)).toBeGreaterThan(Date.now());
 
     // A first sync of a year of history is several pages and the answer is the
     // same on each, so the earlier pages must not pay for it.
@@ -985,6 +986,15 @@ describe("sync", () => {
     };
     expect(paged.hasMore).toBe(true);
     expect(paged.entitlement).toBeUndefined();
+  });
+
+  it("rejects a valid token whose user row has been deleted", async () => {
+    const { access, user } = await signIn("09120000014");
+    await h.raw(`delete from users where id = '${user.id}'`);
+
+    const res = await pull(access, 0);
+    expect(res.statusCode).toBe(401);
+    expect(res.json()).toMatchObject({ error: "unknown_user" });
   });
 
   it("requires a signed-in user", async () => {

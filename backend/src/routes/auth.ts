@@ -142,8 +142,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         .where(eq(users.id, user.id));
     }
 
-    const tokens = await issueAccessToken(env, user.id, t);
     const entitlement = await readEntitlement(db, user.id, t);
+    const tokens = await issueAccessToken(env, user.id, t, {
+      notAfter: entitlement.deletionAt ? new Date(entitlement.deletionAt) : null,
+    });
 
     return {
       access: tokens.access,
@@ -193,8 +195,10 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       throw unauthorized("bad_credentials", "Wrong phone/username or password");
     }
     await clearLoginFailures(db, env, key);
-    const tokens = await issueAccessToken(env, user.id, t);
     const entitlement = await readEntitlement(db, user.id, t);
+    const tokens = await issueAccessToken(env, user.id, t, {
+      notAfter: entitlement.deletionAt ? new Date(entitlement.deletionAt) : null,
+    });
 
     return {
       access: tokens.access,
@@ -231,12 +235,18 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     if (taken && taken.id !== u.id)
       throw badRequest("username_taken", "That username is already taken");
 
+    let updated: (typeof users.$inferSelect)[];
     try {
-      await db.update(users).set({ username: v.value }).where(eq(users.id, u.id));
+      updated = await db
+        .update(users)
+        .set({ username: v.value })
+        .where(eq(users.id, u.id))
+        .returning();
     } catch {
       // Unique-index violation from a concurrent claim of the same name.
       throw badRequest("username_taken", "That username is already taken");
     }
+    if (!updated.length) throw unauthorized("unknown_user", "User no longer exists");
     return { ok: true, username: v.value };
   });
 

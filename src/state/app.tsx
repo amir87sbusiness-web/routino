@@ -399,7 +399,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
         const outcome = await syncNow(owner, options);
         const entitlementChecked = outcome.entitlement !== undefined;
-        if (entitlementChecked) markEntitlementChecked();
+        if (outcome.entitlement) markEntitlementChecked(outcome.entitlement);
 
         const pendingForOwner = pendingReconcile.current?.owner === owner;
         if (outcome.remoteChanged || pendingForOwner) {

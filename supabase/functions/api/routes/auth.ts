@@ -145,8 +145,10 @@ export function authRoutes(deps: Deps) {
         .where(eq(users.id, user.id));
     }
 
-    const tokens = await issueAccessToken(env, user.id, t);
     const entitlement = await readEntitlement(db, user.id, t);
+    const tokens = await issueAccessToken(env, user.id, t, {
+      notAfter: entitlement.deletionAt ? new Date(entitlement.deletionAt) : null,
+    });
 
     return c.json({
       access: tokens.access,
@@ -192,8 +194,10 @@ export function authRoutes(deps: Deps) {
       throw unauthorized("bad_credentials", "Wrong phone/username or password");
     }
     await clearLoginFailures(db, env, key);
-    const tokens = await issueAccessToken(env, user.id, t);
     const entitlement = await readEntitlement(db, user.id, t);
+    const tokens = await issueAccessToken(env, user.id, t, {
+      notAfter: entitlement.deletionAt ? new Date(entitlement.deletionAt) : null,
+    });
 
     return c.json({
       access: tokens.access,
@@ -233,11 +237,17 @@ export function authRoutes(deps: Deps) {
     if (taken && taken.id !== u.id)
       throw badRequest("username_taken", "That username is already taken");
 
+    let updated: (typeof users.$inferSelect)[];
     try {
-      await db.update(users).set({ username: v.value }).where(eq(users.id, u.id));
+      updated = await db
+        .update(users)
+        .set({ username: v.value })
+        .where(eq(users.id, u.id))
+        .returning();
     } catch {
       throw badRequest("username_taken", "That username is already taken");
     }
+    if (!updated.length) throw unauthorized("unknown_user", "User no longer exists");
     return c.json({ ok: true, username: v.value });
   });
 

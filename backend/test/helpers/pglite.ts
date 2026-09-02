@@ -49,6 +49,7 @@ export interface Harness {
   /** Raw SQL returning rows. Drizzle's `.execute()` yields `{ rows }` on PGlite
    * and a bare array on node-postgres, so tests use this instead of guessing. */
   query<T = Record<string, unknown>>(sql: string): Promise<T[]>;
+  script(sql: string): Promise<Array<{ rows?: unknown[] }>>;
   truncate(): Promise<void>;
   close(): Promise<void>;
 }
@@ -102,12 +103,20 @@ export async function makeHarness(overrides: Partial<NodeJS.ProcessEnv> = {}): P
       const res = await pglite.query<T>(sql);
       return res.rows;
     },
+    async script(query: string) {
+      return (await pglite.exec(query)) as Array<{ rows?: unknown[] }>;
+    },
     async truncate() {
       // Fresh PGlite per file is ~150ms; truncating between tests is ~1ms.
       await db.execute(sql`
         truncate users, records, otp_codes, auth_rate_limit_buckets, discounts,
-                 redemptions, payments, grants, entitlements, feedback
+                 redemptions, payments, grants, entitlements, feedback, anonymous_counters
         restart identity cascade
+      `);
+      await db.execute(sql`
+        update account_retention_policy
+           set deployed_at = '-infinity', preexisting_grace_until = '-infinity'
+         where key = 'trial_cleanup_v1'
       `);
       await db.delete(schema.plans);
       await seedPlans(db);

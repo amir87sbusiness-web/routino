@@ -13,7 +13,8 @@
  */
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { rowsOf, type Database, type DatabaseExecutor } from "../db/client.js";
-import { entitlements, grants } from "../db/schema.js";
+import { entitlements, grants, users } from "../db/schema.js";
+import { unauthorized } from "../lib/http-errors.js";
 
 export interface Entitlement {
   status: "active" | "expired" | "none";
@@ -21,6 +22,8 @@ export interface Entitlement {
   expiresAt: string | null;
   /** Server clock, so the client can detect a skewed device without trusting it. */
   issuedAt: string;
+  /** NULL means the account has durable/suspicious history and is protected. */
+  deletionAt: string | null;
 }
 
 /** Sources that mean "this account has already been settled" — either the user
@@ -39,17 +42,42 @@ export async function readEntitlement(
   userId: string,
   now: Date,
 ): Promise<Entitlement> {
-  const [row] = await db
-    .select()
-    .from(entitlements)
-    .where(eq(entitlements.userId, userId))
-    .limit(1);
-  if (!row) return { status: "none", planId: null, expiresAt: null, issuedAt: now.toISOString() };
+  const result = await db.execute(sql`
+    select e.plan_id, e.expires_at,
+           routino_account_deletion_at(u.id) as deletion_at
+      from users u
+      left join entitlements e on e.user_id = u.id
+     where u.id = ${userId}
+     limit 1
+  `);
+  const row = rowsOf<{
+    plan_id: string | null;
+    expires_at: Date | string | null;
+    deletion_at: Date | string | null;
+  }>(result)[0];
+  if (!row) throw unauthorized("unknown_user", "User no longer exists");
+  const deletionAt =
+    row.deletion_at == null
+      ? null
+      : row.deletion_at instanceof Date
+        ? row.deletion_at
+        : new Date(row.deletion_at);
+  if (!row.plan_id || row.expires_at == null) {
+    return {
+      status: "none",
+      planId: null,
+      expiresAt: null,
+      issuedAt: now.toISOString(),
+      deletionAt: deletionAt?.toISOString() ?? null,
+    };
+  }
+  const expiresAt = row.expires_at instanceof Date ? row.expires_at : new Date(row.expires_at);
   return {
-    status: row.expiresAt > now ? "active" : "expired",
-    planId: row.planId,
-    expiresAt: row.expiresAt.toISOString(),
+    status: expiresAt > now ? "active" : "expired",
+    planId: row.plan_id,
+    expiresAt: expiresAt.toISOString(),
     issuedAt: now.toISOString(),
+    deletionAt: deletionAt?.toISOString() ?? null,
   };
 }
 
@@ -170,7 +198,7 @@ export async function startTrialOnce(
     const locked = rowsOf<{ id: string }>(
       await tx.execute(sql`select id from users where id = ${userId} for update`),
     );
-    if (!locked.length) throw new Error("trial user no longer exists");
+    if (!locked.length) throw unauthorized("unknown_user", "User no longer exists");
 
     const [previousGrant] = await tx
       .select({ id: grants.id })
@@ -204,6 +232,12 @@ export async function startTrialOnce(
       { planId: "trial", days: 7, source: "trial" },
       now,
     );
+    await tx.execute(sql`
+      insert into anonymous_counters (key, value)
+      values ('trial_starts', 1)
+      on conflict (key) do update
+      set value = anonymous_counters.value + 1
+    `);
     return { entitlement, started: true };
   });
 }
@@ -272,13 +306,25 @@ export async function ensureExpiresAt(
  * Guards the import endpoint against being replayed for free time. */
 export async function hasSettledGrant(db: Database, userId: string): Promise<boolean> {
   const [row] = await db
-    .select({ id: grants.id })
-    .from(grants)
-    .where(and(eq(grants.userId, userId), inArray(grants.source, [...SETTLED_SOURCES])))
+    .select({ accountId: users.id, grantId: grants.id })
+    .from(users)
+    .leftJoin(
+      grants,
+      and(eq(grants.userId, users.id), inArray(grants.source, [...SETTLED_SOURCES])),
+    )
+    .where(eq(users.id, userId))
     .limit(1);
-  return !!row;
+  if (!row) throw unauthorized("unknown_user", "User no longer exists");
+  return !!row.grantId;
 }
 
 export async function listGrants(db: Database, userId: string) {
-  return db.select().from(grants).where(eq(grants.userId, userId)).orderBy(desc(grants.createdAt));
+  const rows = await db
+    .select({ accountId: users.id, grant: grants })
+    .from(users)
+    .leftJoin(grants, eq(grants.userId, users.id))
+    .where(eq(users.id, userId))
+    .orderBy(desc(grants.createdAt));
+  if (!rows.length) throw unauthorized("unknown_user", "User no longer exists");
+  return rows.flatMap((row) => (row.grant ? [row.grant] : []));
 }

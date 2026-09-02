@@ -61,6 +61,27 @@ describe("account vault lifecycle", () => {
     expect(second.changed).toBe(false);
   });
 
+  it("gives a recreated account with the same phone a new empty onboarding vault", async () => {
+    await switchOwnerVault("deleted-user-id");
+    const old = defaultLocal();
+    old.settings.onboarded = true;
+    old.auth = {
+      userId: "deleted-user-id",
+      phone: "989123334444",
+      verifiedAt: 1,
+    };
+    saveLocal(old);
+    await db.habits.put(row("old-habit", habit("old-habit", "Old account")));
+
+    const recreated = await switchOwnerVault("new-user-id");
+    const fresh = loadLocal();
+
+    expect(recreated.changed).toBe(true);
+    expect(fresh.settings.onboarded).toBe(false);
+    expect(fresh.auth).toBeNull();
+    expect(await db.habits.get("old-habit")).toBeUndefined();
+  });
+
   it("keeps the legacy database name when the first account claims existing data", async () => {
     await db.habits.put(row("legacy-habit", habit("legacy-habit", "Legacy")));
     const claimed = await switchOwnerVault("user-a");

@@ -45,6 +45,21 @@ select * from routino_run_task_month_compaction(now(), 500);
 commit;$$
 );
 
+-- A small daily batch. The function itself also carries these timeouts and
+-- FOR UPDATE SKIP LOCKED is also enforced by the function; duplicating the
+-- limits in the job keeps an operator
+-- edit from accidentally creating an unbounded session.
+select cron.unschedule(jobid) from cron.job where jobname = 'routino-trial-account-cleanup';
+select cron.schedule(
+  'routino-trial-account-cleanup',
+  '37 3 * * *',
+  $$begin;
+set local statement_timeout = '5000ms';
+set local lock_timeout = '250ms';
+select * from routino_cleanup_trial_accounts(50, clock_timestamp());
+commit;$$
+);
+
 -- Tombstones, weekly. A deleted habit or log leaves a row behind on purpose: a
 -- delete has to be able to TRAVEL to the user's other devices, and an absence
 -- cannot. But it only has to travel once, so a user who tidies up their habits
@@ -99,6 +114,8 @@ const RLS_TABLES = [
   "grants",
   "entitlements",
   "feedback",
+  "anonymous_counters",
+  "account_retention_policy",
 ];
 
 const rls = `

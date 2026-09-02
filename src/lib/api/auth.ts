@@ -19,6 +19,8 @@ export interface Tokens {
   accessExpiresAt: number;
   /** Last successful subscription read; absent on sessions created by older builds. */
   lastEntitlementCheckedAt?: number;
+  /** Account cleanup deadline returned alongside existing account-state responses. */
+  accountDeletionAt?: number;
 }
 
 export interface ServerEntitlement {
@@ -26,6 +28,8 @@ export interface ServerEntitlement {
   planId: string | null;
   expiresAt: string | null;
   issuedAt: string;
+  /** Missing on older servers; null means this account is protected from cleanup. */
+  deletionAt?: string | null;
 }
 
 const FALLBACK_ACCESS_TTL_MS = 60 * 60_000;
@@ -46,6 +50,8 @@ export interface TrialStartResult {
   entitlement: ServerEntitlement;
   started: boolean;
   reason?: "previous_grant" | "entitlement_exists";
+  /** Refreshed access token, capped to the account deletion deadline. */
+  access?: string;
 }
 
 export function accessExpiryAt(access: string, now = Date.now()): number {
@@ -80,6 +86,9 @@ export function loadTokens(): Tokens | null {
       ...(typeof parsed.lastEntitlementCheckedAt === "number"
         ? { lastEntitlementCheckedAt: parsed.lastEntitlementCheckedAt }
         : {}),
+      ...(typeof parsed.accountDeletionAt === "number" && Number.isFinite(parsed.accountDeletionAt)
+        ? { accountDeletionAt: parsed.accountDeletionAt }
+        : {}),
     };
     if (JSON.stringify(parsed) !== JSON.stringify(migrated)) saveTokens(migrated);
     return migrated;
@@ -108,20 +117,31 @@ export function clearTokens(): void {
  * must not accumulate a stale copy of `entitlement`/`user` alongside them. */
 const withExpiry = (
   t: { access: string },
-  previous?: Pick<Tokens, "lastEntitlementCheckedAt">,
+  previous?: Pick<Tokens, "lastEntitlementCheckedAt" | "accountDeletionAt">,
   entitlementCheckedAt?: number,
+  entitlement?: ServerEntitlement,
 ): Tokens => {
   const now = Date.now();
+  let deletionAt = previous?.accountDeletionAt;
+  if (entitlement && Object.hasOwn(entitlement, "deletionAt")) {
+    const parsed = entitlement.deletionAt ? Date.parse(entitlement.deletionAt) : Number.NaN;
+    deletionAt = Number.isFinite(parsed) ? parsed : undefined;
+  }
   return {
     access: t.access,
     accessExpiresAt: accessExpiryAt(t.access, now),
     lastEntitlementCheckedAt: entitlementCheckedAt ?? previous?.lastEntitlementCheckedAt,
+    ...(deletionAt !== undefined ? { accountDeletionAt: deletionAt } : {}),
   };
 };
 
-export function markEntitlementChecked(now = Date.now()): void {
+export function markEntitlementChecked(entitlement?: ServerEntitlement, now = Date.now()): void {
   const tokens = loadTokens();
-  if (tokens) saveTokens({ ...tokens, lastEntitlementCheckedAt: now });
+  if (tokens) saveTokens(withExpiry(tokens, tokens, now, entitlement));
+}
+
+export function accountDeletionAt(): number | null {
+  return loadTokens()?.accountDeletionAt ?? null;
 }
 
 /* ---------------- endpoints ---------------- */
@@ -155,7 +175,7 @@ export async function verifyOtp(
       ...(options.intent ? { intent: options.intent, newPassword: options.newPassword } : {}),
     },
   });
-  saveTokens(withExpiry(res, undefined, Date.now()));
+  saveTokens(withExpiry(res, undefined, Date.now(), res.entitlement));
   return res;
 }
 
@@ -167,7 +187,7 @@ export async function passwordLogin(identifier: string, password: string): Promi
     method: "POST",
     body: { identifier, password },
   });
-  saveTokens(withExpiry(res, undefined, Date.now()));
+  saveTokens(withExpiry(res, undefined, Date.now(), res.entitlement));
   return res;
 }
 
@@ -216,13 +236,22 @@ export async function importSubscription(
 
 export async function fetchEntitlement(): Promise<{ entitlement: ServerEntitlement }> {
   const result = await authedRequest<{ entitlement: ServerEntitlement }>("/subscriptions/me");
-  markEntitlementChecked();
+  markEntitlementChecked(result.entitlement);
   return result;
 }
 
 /** Starts the server-owned seven-day trial. The client never constructs dates. */
 export async function startTrial(): Promise<TrialStartResult> {
-  return authedRequest("/subscriptions/trial/start", { method: "POST" });
+  const result = await authedRequest<TrialStartResult>("/subscriptions/trial/start", {
+    method: "POST",
+  });
+  const current = loadTokens();
+  if (result.access && current) {
+    saveTokens(withExpiry(result as { access: string }, current, Date.now(), result.entitlement));
+  } else {
+    markEntitlementChecked(result.entitlement);
+  }
+  return result;
 }
 
 export async function logout(): Promise<void> {

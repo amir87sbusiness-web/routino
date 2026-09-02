@@ -2,6 +2,7 @@ import { Outlet, Link, createRootRoute, useRouter } from "@tanstack/react-router
 import { useEffect } from "react";
 import { Toaster } from "sonner";
 import { UpdateWatcher } from "../components/pwa";
+import { AccountDeletionWarning } from "../components/AccountDeletionWarning";
 import { AppProvider } from "../state/app";
 import { recordDiagnostic } from "../lib/diagnostics";
 import "../styles.css";
@@ -90,6 +91,7 @@ function RootComponent() {
     <AppProvider>
       {/* این Outlet محل قرارگیری صفحات فرزند است */}
       <Outlet />
+      <AccountDeletionWarning />
       {/* اعلان «نسخه‌ی جدید آماده‌ست» — داخل Provider تا به زبان کاربر باشد */}
       <UpdateWatcher />
       <Toaster position="bottom-center" dir="rtl" richColors closeButton />

@@ -5,6 +5,7 @@ import { ADMIN_PAGE } from "../src/lib/admin-page.js";
 const overview = {
   alerts: { verifyFailed: 0 },
   users: { total: 42, last24h: 0 },
+  trialStarts: 17,
   activeSubscriptions: 0,
   payments: {
     paidTotal: 0,
@@ -92,19 +93,21 @@ describe("admin page", () => {
       (document.querySelector("#enter") as { click: () => void }).click();
       await settlePage();
 
-      expect((document.querySelector("#panel") as { style: { display: string } }).style.display).toBe(
-        "",
-      );
-      expect((document.querySelector("#login") as { style: { display: string } }).style.display).toBe(
-        "none",
-      );
+      expect(
+        (document.querySelector("#panel") as { style: { display: string } }).style.display,
+      ).toBe("");
+      expect(
+        (document.querySelector("#login") as { style: { display: string } }).style.display,
+      ).toBe("none");
       expect(document.querySelector("#pageStatus")?.textContent).toContain("به‌روزرسانی");
       expect(fetch.mock.calls.filter(([path]) => path === "/v1/admin/overview")).toHaveLength(1);
 
-      const firstRefresh = (dom.window as unknown as { loadOverview: () => Promise<void> })
-        .loadOverview();
-      const secondRefresh = (dom.window as unknown as { loadOverview: () => Promise<void> })
-        .loadOverview();
+      const firstRefresh = (
+        dom.window as unknown as { loadOverview: () => Promise<void> }
+      ).loadOverview();
+      const secondRefresh = (
+        dom.window as unknown as { loadOverview: () => Promise<void> }
+      ).loadOverview();
       expect(fetch.mock.calls.filter(([path]) => path === "/v1/admin/overview")).toHaveLength(1);
 
       resolveOverview({ status: 200, ok: true, json: async () => overview });
@@ -113,6 +116,8 @@ describe("admin page", () => {
 
       expect(fetch.mock.calls.every(([, init]) => init?.credentials === "same-origin")).toBe(true);
       expect(document.querySelector("#ovCards")?.textContent).toContain("۴۲");
+      expect(document.querySelector("#ovCards")?.textContent).toContain("دفعات شروع تریال");
+      expect(document.querySelector("#ovCards")?.textContent).toContain("۱۷");
       expect(document.querySelector("#ovCards")?.textContent).toContain("امروز");
       expect(document.querySelector("#ovCards")?.textContent).toContain("کسب‌وکار");
       expect(document.querySelector("#ovCards")?.textContent).toContain("نیاز به توجه");
@@ -254,9 +259,10 @@ describe("admin page", () => {
     try {
       await settlePage();
       expect(sessionStorageOf(dom).getItem("routino_admin_overview_v1")).toBeNull();
-      expect((dom.window.document.querySelector("#login") as { style: { display: string } }).style.display).toBe(
-        "",
-      );
+      expect(
+        (dom.window.document.querySelector("#login") as { style: { display: string } }).style
+          .display,
+      ).toBe("");
     } finally {
       dom.window.close();
     }

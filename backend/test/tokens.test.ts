@@ -22,4 +22,20 @@ describe("stateless access tokens", () => {
 
     await expect(verifyAccessToken(env, access)).resolves.toEqual({ sub: USER_ID });
   });
+
+  it("never issues beyond an account deletion deadline", async () => {
+    const notAfter = new Date(now.getTime() + 3 * 86_400_000);
+    const { access } = await issueAccessToken(env, USER_ID, now, { notAfter });
+    const payload = decodeJwt(access);
+
+    expect(Number(payload.exp)).toBe(Math.floor(notAfter.getTime() / 1000));
+  });
+
+  it("keeps the normal 30-day lifetime when the deletion deadline is later", async () => {
+    const notAfter = new Date(now.getTime() + 60 * 86_400_000);
+    const { access } = await issueAccessToken(env, USER_ID, now, { notAfter });
+    const payload = decodeJwt(access);
+
+    expect(Number(payload.exp) - Number(payload.iat)).toBe(30 * 86_400);
+  });
 });

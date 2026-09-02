@@ -1,8 +1,15 @@
 // AUTO-GENERATED from backend/src — do not edit. Run `node scripts/sync-edge-shared.mjs`.
 import { and, count, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import type { Database } from "../db/client.ts";
-import { grants, payments } from "../db/schema.ts";
-import { badRequest, conflict, notFound, serviceUnavailable, tooMany } from "../lib/http-errors.ts";
+import { grants, payments, users } from "../db/schema.ts";
+import {
+  badRequest,
+  conflict,
+  notFound,
+  serviceUnavailable,
+  tooMany,
+  unauthorized,
+} from "../lib/http-errors.ts";
 import { toLocalPhone } from "../lib/phone.ts";
 import type { PspProvider, PspVerifyResult } from "../providers/psp/index.ts";
 import { extendEntitlement, readEntitlement, type Entitlement } from "./entitlement.ts";
@@ -507,14 +514,18 @@ export async function pollPayment(
   t: Date,
 ): Promise<PollResult> {
   if (!UUID_RE.test(id)) throw badRequest("bad_id", "Malformed payment id");
-  let [payment] = await db
-    .select()
-    .from(payments)
-    .where(and(eq(payments.id, id), eq(payments.userId, userId)))
+  const [owned] = await db
+    .select({ accountId: users.id, payment: payments })
+    .from(users)
+    .leftJoin(payments, and(eq(payments.id, id), eq(payments.userId, users.id)))
+    .where(eq(users.id, userId))
     .limit(1);
+  if (!owned) throw unauthorized("unknown_user", "User no longer exists");
+  let payment = owned.payment;
   if (!payment) throw notFound("unknown_payment", "No such payment");
   await settleOne(db, psp, payment, t);
-  [payment] = await db.select().from(payments).where(eq(payments.id, id)).limit(1);
+  const [refreshed] = await db.select().from(payments).where(eq(payments.id, id)).limit(1);
+  payment = refreshed ?? null;
   if (!payment) throw notFound("unknown_payment", "No such payment");
   return {
     payment: {

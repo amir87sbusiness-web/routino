@@ -46,34 +46,38 @@ export type StoredSyncKind = (typeof STORED_SYNC_KINDS)[number];
  * them out of Drizzle's broad `select().from(users)` projection lets the new
  * Edge code run against the old schema during the pre-migration smoke window;
  * DDL/migrations/triggers remain the sole owners of those accounting fields. */
-export const users = pgTable("users", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  /** Canonical `989xxxxxxxxx`. MUST be produced by the same normalizePhone as
-   * the client — a divergence forks one human into two accounts. */
-  phone: text("phone").notNull().unique(),
-  /** Optional login handle, stored lowercased. Lets a user sign in with a name
-   * instead of a phone number. NULL for accounts that never set one; Postgres
-   * allows many NULLs under a unique index. Always starts with a letter, so it
-   * can never be mistaken for a phone number at login. */
-  username: text("username").unique(),
-  /** scrypt hash (`scrypt$N$r$p$saltB64$hashB64`), or NULL for OTP-only accounts.
-   * The raw password is never stored, logged, or returned. */
-  passwordHash: text("password_hash"),
-  /**
-   * Per-user monotonic change counter. Incremented with
-   * `UPDATE users SET seq = seq + $n ... RETURNING seq`, which takes a row lock
-   * and thereby serialises this user's writes — guaranteeing seq order matches
-   * commit order. A plain SEQUENCE cannot: a slower txn can grab a lower seq and
-   * commit AFTER a reader has already advanced past it, hiding that row from
-   * that device forever.
-   */
-  seq: bigint("seq", { mode: "number" }).notNull().default(0),
-  /** Watermark for tombstone GC. A device whose cursor is below this may have
-   * missed a tombstone that has since been purged, so it must full-resync or it
-   * would resurrect deleted records. */
-  gcSeq: bigint("gc_seq", { mode: "number" }).notNull().default(0),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** Canonical `989xxxxxxxxx`. MUST be produced by the same normalizePhone as
+     * the client — a divergence forks one human into two accounts. */
+    phone: text("phone").notNull().unique(),
+    /** Optional login handle, stored lowercased. Lets a user sign in with a name
+     * instead of a phone number. NULL for accounts that never set one; Postgres
+     * allows many NULLs under a unique index. Always starts with a letter, so it
+     * can never be mistaken for a phone number at login. */
+    username: text("username").unique(),
+    /** scrypt hash (`scrypt$N$r$p$saltB64$hashB64`), or NULL for OTP-only accounts.
+     * The raw password is never stored, logged, or returned. */
+    passwordHash: text("password_hash"),
+    /**
+     * Per-user monotonic change counter. Incremented with
+     * `UPDATE users SET seq = seq + $n ... RETURNING seq`, which takes a row lock
+     * and thereby serialises this user's writes — guaranteeing seq order matches
+     * commit order. A plain SEQUENCE cannot: a slower txn can grab a lower seq and
+     * commit AFTER a reader has already advanced past it, hiding that row from
+     * that device forever.
+     */
+    seq: bigint("seq", { mode: "number" }).notNull().default(0),
+    /** Watermark for tombstone GC. A device whose cursor is below this may have
+     * missed a tombstone that has since been purged, so it must full-resync or it
+     * would resurrect deleted records. */
+    gcSeq: bigint("gc_seq", { mode: "number" }).notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("users_created_at").on(t.createdAt, t.id)],
+);
 
 export const records = pgTable(
   "records",
@@ -152,17 +156,25 @@ export const plans = pgTable("plans", {
   active: boolean("active").notNull().default(true),
 });
 
-export const discounts = pgTable("discounts", {
-  code: text("code").primaryKey(),
-  percent: integer("percent").notNull(),
-  /** Restrict to one user's phone, optional. */
-  phone: text("phone"),
-  active: boolean("active").notNull().default(true),
-  /** A code reaches Telegram within a week of launch. These are not optional. */
-  maxUses: integer("max_uses"),
-  usedCount: integer("used_count").notNull().default(0),
-  expiresAt: timestamp("expires_at", { withTimezone: true }),
-});
+export const discounts = pgTable(
+  "discounts",
+  {
+    code: text("code").primaryKey(),
+    percent: integer("percent").notNull(),
+    /** Restrict to one user's phone, optional. */
+    phone: text("phone"),
+    active: boolean("active").notNull().default(true),
+    /** A code reaches Telegram within a week of launch. These are not optional. */
+    maxUses: integer("max_uses"),
+    usedCount: integer("used_count").notNull().default(0),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("discounts_phone")
+      .on(t.phone)
+      .where(sql`${t.phone} is not null`),
+  ],
+);
 
 /** One redemption per user per code, enforced by the composite PK. */
 export const redemptions = pgTable(
@@ -177,7 +189,7 @@ export const redemptions = pgTable(
     paymentId: uuid("payment_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [primaryKey({ columns: [t.code, t.userId] })],
+  (t) => [primaryKey({ columns: [t.code, t.userId] }), index("redemptions_user").on(t.userId)],
 );
 
 export const payments = pgTable(
@@ -282,15 +294,49 @@ export const entitlements = pgTable("entitlements", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const feedback = pgTable("feedback", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
-  rating: integer("rating").notNull(),
-  section: text("section"),
-  comment: text("comment"),
-  at: timestamp("at", { withTimezone: true }).notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const feedback = pgTable(
+  "feedback",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    rating: integer("rating").notNull(),
+    section: text("section"),
+    comment: text("comment"),
+    at: timestamp("at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("feedback_user")
+      .on(t.userId)
+      .where(sql`${t.userId} is not null`),
+  ],
+);
+
+/** Lifetime aggregates with no user-, device-, network-, or time-level detail. */
+export const anonymousCounters = pgTable(
+  "anonymous_counters",
+  {
+    key: text("key").primaryKey(),
+    value: bigint("value", { mode: "number" }).notNull().default(0),
+  },
+  (t) => [check("anonymous_counters_value_nonnegative", sql`${t.value} >= 0`)],
+);
+
+/** Singleton rollout boundary. It contains no user-linked information. */
+export const accountRetentionPolicy = pgTable(
+  "account_retention_policy",
+  {
+    key: text("key").primaryKey(),
+    deployedAt: timestamp("deployed_at", { withTimezone: true }).notNull(),
+    preexistingGraceUntil: timestamp("preexisting_grace_until", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    check(
+      "account_retention_policy_window_valid",
+      sql`${t.preexistingGraceUntil} >= ${t.deployedAt}`,
+    ),
+  ],
+);
 
 export const usersRelations = relations(users, ({ many, one }) => ({
   records: many(records),
@@ -310,5 +356,7 @@ export const schema = {
   grants,
   entitlements,
   feedback,
+  anonymousCounters,
+  accountRetentionPolicy,
   usersRelations,
 };

@@ -49,6 +49,45 @@ describe("admin auth", () => {
 });
 
 describe("admin endpoints", () => {
+  it("shows only the anonymous trial-start count, not trial-only account details", async () => {
+    const { user, access } = await signIn("09124445566");
+
+    const first = await h.app.inject({
+      method: "POST",
+      url: "/v1/subscriptions/trial/start",
+      headers: { authorization: `Bearer ${access}` },
+    });
+    const retry = await h.app.inject({
+      method: "POST",
+      url: "/v1/subscriptions/trial/start",
+      headers: { authorization: `Bearer ${access}` },
+    });
+    expect(first.json().started).toBe(true);
+    expect(retry.json().started).toBe(false);
+
+    const overview = await h.app.inject({
+      method: "GET",
+      url: "/v1/admin/overview",
+      headers: admin,
+    });
+    expect(overview.json().trialStarts).toBe(1);
+    expect(overview.json().activeSubscriptions).toBe(0);
+
+    const list = await h.app.inject({
+      method: "GET",
+      url: "/v1/admin/users?q=09124445566",
+      headers: admin,
+    });
+    expect(list.json().users).toEqual([]);
+
+    const detail = await h.app.inject({
+      method: "GET",
+      url: `/v1/admin/users/${user.id}`,
+      headers: admin,
+    });
+    expect(detail.statusCode).toBe(404);
+  });
+
   it("overview counts users, subscriptions and revenue", async () => {
     const { user, access } = await signIn();
     const checkout = (
@@ -81,7 +120,7 @@ describe("admin endpoints", () => {
     expect(user.id).toBeTruthy();
   });
 
-  it("finds users by partial phone and reports their entitlement", async () => {
+  it("hides registration-only users from phone search", async () => {
     await signIn("09123334444");
     await signIn("09351112222");
     const res = await h.app.inject({
@@ -90,9 +129,7 @@ describe("admin endpoints", () => {
       headers: admin,
     });
     const { users } = res.json() as { users: { phone: string; subscriptionActive: boolean }[] };
-    expect(users).toHaveLength(1);
-    expect(users[0]!.phone).toBe("989123334444");
-    expect(users[0]!.subscriptionActive).toBe(false); // pre-activation account
+    expect(users).toEqual([]);
   });
 
   it("does not expose account blocking", async () => {

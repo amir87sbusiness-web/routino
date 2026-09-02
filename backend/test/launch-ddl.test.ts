@@ -35,6 +35,10 @@ const TASK_ARCHIVE_QUOTA_MIGRATION_SQL = readFileSync(
   resolve(root, "supabase/migrations/20260901150000_task_archive_quota_expand.sql"),
   "utf8",
 );
+const ACCOUNT_RETENTION_MIGRATION_SQL = readFileSync(
+  resolve(root, "supabase/migrations/20260903120000_trial_account_retention.sql"),
+  "utf8",
+);
 
 let h: Harness;
 
@@ -47,6 +51,53 @@ afterAll(async () => {
 });
 
 describe("launch schema repairs", () => {
+  it("installs retention additively and gives every preexisting account 30 safe days", async () => {
+    const owner = "a0000000-0000-4000-8000-000000000099";
+    await h.raw(`
+      insert into users (id, phone, created_at)
+      values ('${owner}', '989122299999', '2026-01-01T00:00:00Z');
+      insert into records (user_id, kind, id, data, updated_at, seq)
+      values ('${owner}', 'taskMonths', '2026-01', '{"version":1,"tasks":[]}', 1, 1);
+      drop function routino_cleanup_trial_accounts(integer, timestamptz, uuid);
+      drop function routino_account_deletion_at(uuid);
+      drop table account_retention_policy;
+      drop table anonymous_counters;
+    `);
+    const before = Date.now();
+
+    await h.raw(ACCOUNT_RETENTION_MIGRATION_SQL);
+
+    const [policy] = await h.query<{
+      deployed_ms: number;
+      grace_ms: number;
+      deletion_ms: number;
+      deleted_count: number;
+    }>(`
+      select
+        (extract(epoch from deployed_at) * 1000)::bigint as deployed_ms,
+        (extract(epoch from preexisting_grace_until) * 1000)::bigint as grace_ms,
+        (extract(epoch from routino_account_deletion_at('${owner}')) * 1000)::bigint
+          as deletion_ms,
+        (select deleted_count from routino_cleanup_trial_accounts(100, now()))
+          as deleted_count
+      from account_retention_policy where key = 'trial_cleanup_v1'
+    `);
+    expect(Number(policy?.deployed_ms)).toBeGreaterThanOrEqual(before - 1_000);
+    expect(Number(policy?.grace_ms) - Number(policy?.deployed_ms)).toBe(30 * 86_400_000);
+    expect(Number(policy?.deletion_ms)).toBe(Number(policy?.grace_ms));
+    expect(Number(policy?.deleted_count)).toBe(0);
+    expect(await h.query(`select kind from records where user_id = '${owner}'`)).toEqual([
+      { kind: "taskMonths" },
+    ]);
+
+    await h.raw(ACCOUNT_RETENTION_MIGRATION_SQL);
+    const [afterRetry] = await h.query<{ deployed_ms: number }>(`
+      select (extract(epoch from deployed_at) * 1000)::bigint as deployed_ms
+        from account_retention_policy where key = 'trial_cleanup_v1'
+    `);
+    expect(Number(afterRetry?.deployed_ms)).toBe(Number(policy?.deployed_ms));
+  });
+
   it("bootstraps the task compactor without touching existing sync state", async () => {
     const owner = "a0111111-1111-4111-8111-111111111111";
     await h.raw(`
@@ -689,6 +740,8 @@ describe("launch schema repairs", () => {
       "grants",
       "entitlements",
       "feedback",
+      "anonymous_counters",
+      "account_retention_policy",
     ]) {
       expect(sql).toContain(`alter table ${table} enable row level security;`);
     }
@@ -703,6 +756,29 @@ describe("launch schema repairs", () => {
 
     expect(sql).not.toContain("routino-devices-purge");
     expect(sql).not.toContain("delete from devices");
+  });
+
+  it("keeps retention RPC private and generates one small daily cleanup schedule", async () => {
+    const publicExecute = await h.query<{ routine_name: string }>(`
+      select routine_name
+        from information_schema.routine_privileges
+       where specific_schema = 'public'
+         and grantee = 'PUBLIC'
+         and privilege_type = 'EXECUTE'
+         and routine_name in (
+           'routino_account_deletion_at',
+           'routino_cleanup_trial_accounts'
+         )
+       order by routine_name
+    `);
+    expect(publicExecute).toEqual([]);
+
+    execFileSync(process.execPath, ["scripts/gen-setup-sql.mjs"], { cwd: root, stdio: "pipe" });
+    const sql = readFileSync(resolve(root, "supabase/setup.sql"), "utf8");
+    expect(sql.match(/'routino-trial-account-cleanup'/g)).toHaveLength(2);
+    expect(sql).toContain("routino_cleanup_trial_accounts(50, clock_timestamp())");
+    expect(sql).toContain("set local statement_timeout = '5000ms'");
+    expect(sql).toContain("set local lock_timeout = '250ms'");
   });
 
   it("generates one idempotent low-impact task compaction schedule", () => {

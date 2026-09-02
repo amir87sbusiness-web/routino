@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "./client";
 import {
+  accountDeletionAt,
+  accessSubject,
   authedRequest,
   importSubscription,
   logout,
@@ -13,6 +15,9 @@ const tokenWith = (payload: object) => {
   const encode = (value: object) => btoa(JSON.stringify(value)).replaceAll("=", "");
   return `${encode({ alg: "none" })}.${encode(payload)}.`;
 };
+
+const localStorageToken = () =>
+  (JSON.parse(localStorage.getItem("routino:auth:v1") || "{}") as { access?: string }).access ?? "";
 
 describe("owner-bound authenticated requests", () => {
   beforeEach(() => {
@@ -52,19 +57,27 @@ describe("owner-bound authenticated requests", () => {
   });
 
   it("starts a trial only through the authenticated server endpoint", async () => {
+    const refreshedAccess = tokenWith({ sub: "user-a", exp: 4_000_000_100 });
     const entitlement = {
       status: "active",
       planId: "trial",
       expiresAt: "2026-08-28T00:00:00.000Z",
       issuedAt: "2026-08-21T00:00:00.000Z",
+      deletionAt: "2026-08-30T00:00:00.000Z",
     };
-    const fetch = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(
-        new Response(JSON.stringify({ entitlement, started: true }), { status: 200 }),
-      );
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ access: refreshedAccess, entitlement, started: true }), {
+        status: 200,
+      }),
+    );
 
-    await expect(startTrial()).resolves.toEqual({ entitlement, started: true });
+    await expect(startTrial()).resolves.toEqual({
+      access: refreshedAccess,
+      entitlement,
+      started: true,
+    });
+    expect(accessSubject(localStorageToken())).toBe("user-a");
+    expect(accountDeletionAt()).toBe(Date.parse(entitlement.deletionAt));
     expect(fetch).toHaveBeenCalledWith(
       "/v1/subscriptions/trial/start",
       expect.objectContaining({

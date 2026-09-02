@@ -36,6 +36,15 @@ node scripts/gen-setup-sql.mjs
 3. فقط migrationهای افزایشیِ ازپیش‌بررسی‌شده را به ترتیب نام اجرا کن. برای archive/quota، `20260901150000_task_archive_quota_expand.sql` ستون‌های annual را اضافه و constraint قدیمی data-byte را حذف می‌کند؛ دادهٔ موجود را بازنویسی یا حذف نمی‌کند. سپس `20260901151000_task_month_compactor.sql` فقط functionهای compaction را نصب می‌کند.
 4. با یک canary کنترل‌شده، `health/ready` و یک endpoint function-backed مانند `/v1/plans` و sync نسخه‌های قدیمی/جدید را بررسی کن. فقط بعد از شاهد backup، migration و canary، زمان‌بندی cron compactor را جداگانه فعال کن.
 
+برای retention حساب، قبل از هر write فایل
+`supabase/precheck/20260902_trial_account_cleanup_dry_run.sql` را اجرا کن و فقط آمار
+تجمیعی را ثبت کن. همهٔ `selected_with_*` باید صفر باشند. سپس migration افزایشی
+`20260903120000_trial_account_retention.sql` را اجرا کن؛ زمان همان اجرای اول، کف
+یک‌بارهٔ ۳۰روزهٔ کاربران قبلی است و retry آن را جابه‌جا نمی‌کند. cron جداگانهٔ
+`20260903121000_trial_account_cleanup_cron.sql` فقط بعد از postcheck نصب می‌شود،
+روزی یک بار batch=50 می‌گیرد و برای کاربران قبل از deploy تا پایان grace چیزی حذف
+نمی‌کند.
+
 `20260831120000_compact_habit_logs_by_month.sql` همهٔ `logs`های legacy را در یک
 تراکنش به `habitMonths` تبدیل می‌کند، cursorهای عقب‌مانده را با `gc_seq` به reset
 امن می‌فرستد و روی ردیف malformed کامل rollback می‌کند. هر migration قدیمی budget

@@ -12,6 +12,7 @@ import {
   startTrialOnce,
 } from "../shared/services/entitlement.ts";
 import { settleOpenPayments } from "../shared/services/payment-flow.ts";
+import { issueAccessToken } from "../shared/services/tokens.ts";
 
 /** The largest instant a JS `Date` can represent; past this it is Invalid Date. */
 const MAX_TIMESTAMP_MS = 8_640_000_000_000_000;
@@ -39,7 +40,12 @@ export function subscriptionRoutes(deps: Deps) {
 
   r.post("/subscriptions/trial/start", auth, async (c) => {
     const user = requireUser(c);
-    return c.json(await startTrialOnce(db, user.id, now()));
+    const t = now();
+    const result = await startTrialOnce(db, user.id, t);
+    const tokens = await issueAccessToken(env, user.id, t, {
+      notAfter: result.entitlement.deletionAt ? new Date(result.entitlement.deletionAt) : null,
+    });
+    return c.json({ ...result, ...tokens });
   });
 
   /** Imports a legacy client-side subscription — trusted exactly once, bounded

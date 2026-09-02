@@ -9,6 +9,7 @@ import {
   startTrialOnce,
 } from "../services/entitlement.js";
 import { settleOpenPayments } from "../services/payment-flow.js";
+import { issueAccessToken } from "../services/tokens.js";
 
 /** The largest instant a JS `Date` can represent; past this it is Invalid Date. */
 const MAX_TIMESTAMP_MS = 8_640_000_000_000_000;
@@ -34,7 +35,12 @@ export const subscriptionRoutes: FastifyPluginAsync = async (app) => {
 
   app.post("/subscriptions/trial/start", { preHandler: app.authenticate }, async (req) => {
     const user = requireUser(req);
-    return startTrialOnce(db, user.id, now());
+    const t = now();
+    const result = await startTrialOnce(db, user.id, t);
+    const tokens = await issueAccessToken(env, user.id, t, {
+      notAfter: result.entitlement.deletionAt ? new Date(result.entitlement.deletionAt) : null,
+    });
+    return { ...result, ...tokens };
   });
 
   /**
