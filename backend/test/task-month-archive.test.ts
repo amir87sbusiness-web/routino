@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   expandTaskMonthArchive,
   isTaskMonthArchiveKind,
+  postgresJsonbNumber,
   type StoredTaskMonthRecord,
 } from "../src/services/task-month-archive.js";
 import { validateSyncRecord } from "../src/services/sync-record-validation.js";
@@ -60,6 +61,28 @@ const archive: StoredTaskMonthRecord = {
 };
 
 describe("task-month archive codec", () => {
+  it.each([
+    [0, "0"],
+    [-0, "0"],
+    [1, "1"],
+    [1.125, "1.125"],
+    [1e-7, "0.0000001"],
+    [-1e-7, "-0.0000001"],
+    [Number.MIN_VALUE, `0.${"0".repeat(323)}5`],
+    [1e9, "1000000000"],
+    [1.2e21, "1200000000000000000000"],
+    [-1.2e21, "-1200000000000000000000"],
+  ])("renders PostgreSQL jsonb numeric text for %s", (value, expected) => {
+    expect(postgresJsonbNumber(value)).toBe(expected);
+  });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY])(
+    "rejects non-finite archive number %s",
+    (value) => {
+      expect(() => postgresJsonbNumber(value)).toThrow("invalid_task_month_archive");
+    },
+  );
+
   it("expands a v1 archive losslessly into ordinary task pull records", () => {
     expect(expandTaskMonthArchive(archive)).toEqual([
       {

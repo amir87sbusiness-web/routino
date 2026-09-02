@@ -242,11 +242,11 @@ begin
       join (
         select item.archive_id,
                count(*)::integer as item_count,
-               md5(string_agg(item.task_id, E'\n' order by item.task_id)) as id_checksum,
+               md5(string_agg(item.task_id, E'\n' order by item.task_id collate "C")) as id_checksum,
                md5(string_agg(
                  item.task_id || E'\n' || item.task_updated_at::text || E'\n'
                  || item.task_data::text,
-                 E'\n' order by item.task_id
+                 E'\n' order by item.task_id collate "C"
                )) as checksum,
                max(item.task_updated_at) as maximum_updated_at,
                sum(octet_length(jsonb_build_object(

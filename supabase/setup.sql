@@ -764,7 +764,7 @@ begin
             and archive.kind = 'taskMonths'
             and item->>0 = source.id
        )
-     order by source.user_id, left(source.data->>'dateKey', 7), source.id
+     order by source.user_id, left(source.data->>'dateKey', 7), source.id collate "C"
      limit v_limit
      for update of source skip locked
   )
@@ -789,7 +789,7 @@ begin
         from pg_temp.routino_compaction_selected selected
        where selected.user_id = v_group.user_id
          and selected.month_key = v_group.month_key
-       order by selected.task_id
+       order by selected.task_id collate "C"
     loop
       if v_chunk_count > 0 and (
         v_chunk_count >= 32 or v_chunk_bytes + v_task.envelope_bytes > 98304
@@ -833,18 +833,18 @@ begin
     insert into records (user_id, kind, id, data, updated_at, deleted, seq)
     select v_group.user_id,
            'taskMonths',
-           v_group.month_key || '|' || md5(string_agg(items.task_id, E'\n' order by items.task_id)),
+           v_group.month_key || '|' || md5(string_agg(items.task_id, E'\n' order by items.task_id collate "C")),
            jsonb_build_object(
              'v', 1,
              'monthKey', v_group.month_key,
              'count', count(*)::integer,
              'checksum', md5(string_agg(
                items.task_id || E'\n' || items.updated_at::text || E'\n' || items.task_data::text,
-               E'\n' order by items.task_id
+               E'\n' order by items.task_id collate "C"
              )),
              'items', jsonb_agg(
                jsonb_build_array(items.task_id, items.updated_at, items.task_data)
-               order by items.task_id
+               order by items.task_id collate "C"
              )
            ),
            max(items.updated_at),
@@ -861,11 +861,11 @@ begin
         from records archive
         join (
           select items.chunk_no,
-                 v_group.month_key || '|' || md5(string_agg(items.task_id, E'\n' order by items.task_id)) as archive_id,
+                 v_group.month_key || '|' || md5(string_agg(items.task_id, E'\n' order by items.task_id collate "C")) as archive_id,
                  count(*)::integer as item_count,
                  md5(string_agg(
                    items.task_id || E'\n' || items.updated_at::text || E'\n' || items.task_data::text,
-                   E'\n' order by items.task_id
+                   E'\n' order by items.task_id collate "C"
                  )) as checksum
             from pg_temp.routino_compaction_items items
            where items.user_id = v_group.user_id
@@ -885,7 +885,7 @@ begin
            or archive.data->>'checksum' is distinct from (
              select md5(string_agg(
                item->>0 || E'\n' || (item->>1)::bigint::text || E'\n' || (item->2)::text,
-               E'\n' order by item->>0
+               E'\n' order by (item->>0) collate "C"
              ))
                from jsonb_array_elements(archive.data->'items') item
            )
@@ -904,7 +904,7 @@ begin
         select item->>0, (item->>1)::bigint, item->2
           from records archive
           join (
-            select v_group.month_key || '|' || md5(string_agg(items.task_id, E'\n' order by items.task_id)) as archive_id
+            select v_group.month_key || '|' || md5(string_agg(items.task_id, E'\n' order by items.task_id collate "C")) as archive_id
               from pg_temp.routino_compaction_items items
              where items.user_id = v_group.user_id
                and items.month_key = v_group.month_key
@@ -918,7 +918,7 @@ begin
         select item->>0, (item->>1)::bigint, item->2
           from records archive
           join (
-            select v_group.month_key || '|' || md5(string_agg(items.task_id, E'\n' order by items.task_id)) as archive_id
+            select v_group.month_key || '|' || md5(string_agg(items.task_id, E'\n' order by items.task_id collate "C")) as archive_id
               from pg_temp.routino_compaction_items items
              where items.user_id = v_group.user_id
                and items.month_key = v_group.month_key

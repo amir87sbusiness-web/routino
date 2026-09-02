@@ -129,6 +129,23 @@ function md5Hex(value: string): string {
     .join("");
 }
 
+/** Expands JSON.stringify's canonical exponent token to PostgreSQL jsonb
+ * numeric text without changing any significant digit or applying rounding. */
+export function postgresJsonbNumber(value: number): string {
+  if (!Number.isFinite(value)) throw new Error("invalid_task_month_archive");
+  const token = JSON.stringify(value);
+  const match = /^(-?)(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$/.exec(token);
+  if (!match) return token;
+
+  const [, sign, integer, fraction = "", exponentToken] = match;
+  const digits = integer! + fraction;
+  const decimalIndex = integer!.length + Number(exponentToken);
+  if (decimalIndex <= 0) return `${sign}0.${"0".repeat(-decimalIndex)}${digits}`;
+  if (decimalIndex >= digits.length)
+    return `${sign}${digits}${"0".repeat(decimalIndex - digits.length)}`;
+  return `${sign}${digits.slice(0, decimalIndex)}.${digits.slice(decimalIndex)}`;
+}
+
 /** PostgreSQL jsonb's stable text representation: keys are stored by byte
  * length then byte order, and its output uses comma/colon spaces. Task payload
  * keys are ASCII by validation, so byte and code-point ordering are identical. */
@@ -140,6 +157,7 @@ function postgresJsonbText(value: unknown): string {
     );
     return `{${entries.map(([key, item]) => `${JSON.stringify(key)}: ${postgresJsonbText(item)}`).join(", ")}}`;
   }
+  if (typeof value === "number") return postgresJsonbNumber(value);
   return JSON.stringify(value);
 }
 

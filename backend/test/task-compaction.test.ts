@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { SCHEMA_SQL } from "../src/db/ddl.js";
 import { validateTaskPayload } from "../src/services/sync-record-validation.js";
 import { pullRecords } from "../src/services/sync.js";
 import { expandTaskMonthArchive } from "../src/services/task-month-archive.js";
@@ -574,6 +575,67 @@ describe("bounded transactional task compaction", () => {
     expect(chunks.every((chunk) => Number(chunk.count) <= 32)).toBe(true);
     expect(chunks.every((chunk) => Number(chunk.expanded_bytes) <= 96 * 1024)).toBe(true);
     expect(chunks.filter((chunk) => chunk.month_key === "2026-04")).toHaveLength(2);
+  });
+
+  it("pulls a real compacted quantity archive with PostgreSQL decimal numeric text", async () => {
+    const decimalTasks = [
+      ["Z-decimal", 1.125],
+      ["a-small", 1e-7],
+      ["b-tiny", 1e-10],
+    ] as const;
+    for (const [id, value] of decimalTasks) {
+      await insertTask(
+        id,
+        task(id, { type: "quantity", target: value, value, dateKey: "2026-05-01" }),
+        OLD_UPDATED_AT + decimalTasks.findIndex(([taskId]) => taskId === id),
+      );
+    }
+
+    await h.query(`select * from routino_compact_task_months('${NOW}', 10)`);
+
+    const [archive] = await h.query<{
+      id: string;
+      data: { items: [string, number, { target: number; value: number }][] };
+      updated_at: string;
+      seq: string;
+    }>(`
+      select id, data, updated_at::text, seq::text
+        from records
+       where user_id = '${OWNER}' and kind = 'taskMonths'
+    `);
+    expect(archive!.data.items.map(([id]) => id)).toEqual(["Z-decimal", "a-small", "b-tiny"]);
+    expect(archive!.data.items.map(([, , data]) => data.target)).toEqual([1.125, 1e-7, 1e-10]);
+
+    const page = await pullRecords(h.db, OWNER, 0, 10);
+    expect(page).toMatchObject({
+      cursor: Number(archive!.seq),
+      hasMore: false,
+      reset: false,
+    });
+    expect(page.records).toEqual(
+      archive!.data.items.map(([id, updatedAt, data]) => ({
+        kind: "tasks",
+        id,
+        data,
+        updatedAt,
+        deleted: false,
+        seq: Number(archive!.seq),
+      })),
+    );
+  });
+
+  it("uses C collation for every archive checksum and item-array ordering", () => {
+    const migration = readFileSync(
+      resolve(root, "supabase/migrations/20260901151000_task_month_compactor.sql"),
+      "utf8",
+    );
+    const restore = recoverySql(RESTORE_SQL_PATH);
+    for (const sql of [SCHEMA_SQL, migration]) {
+      expect(sql).toContain('order by selected.task_id collate "C"');
+      expect(sql).toContain('order by items.task_id collate "C"');
+      expect(sql).toContain('order by (item->>0) collate "C"');
+    }
+    expect(restore).toContain('order by item.task_id collate "C"');
   });
 
   it("clamps a request for 501 tasks to exactly 500 source rows", async () => {
