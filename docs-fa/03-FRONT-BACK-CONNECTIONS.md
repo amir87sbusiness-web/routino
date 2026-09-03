@@ -165,6 +165,7 @@ subscribe.tsx (فرانت)
 - فعال‌سازی فقط وقتی ممکن است که هیچ grant قبلی (trial/payment/migration/admin) و هیچ entitlement materialized وجود نداشته باشد. retry، نصب مجدد و دستگاه دوم همان جواب فعلی را می‌گیرند و زمان اضافه نمی‌شود.
 - گِیت اپ با `accessState` از auth، وضعیت نشست، فلگ حل‌شدن migration و کپی محلی entitlement تصمیم می‌گیرد: فقط `none` حل‌شده به `/activation` می‌رود؛ active-trial/active-paid نوشتن دارند؛ expired داخل اپ و sync می‌ماند ولی `AppProvider.update()` محتوای محصول را فقط‌خواندنی می‌کند. `tampered` بدون جواب authoritative حالت تأیید آنلاین است، نه paywall.
 - پاسخ entitlement یک `deletionAt` اختیاری دارد. موعد حساب بدون تریال `created_at + 30 days` و حساب trial-only دیرترینِ آن و پایان تریال است؛ فعالیت آن را تمدید نمی‌کند. migration انتشار برای کاربران موجود کف یک‌بارهٔ ۳۰روزه می‌گذارد. فرانت این مقدار را از پاسخ‌های موجود cache می‌کند و فقط در سه روز پایانی هشدار Export/خرید نشان می‌دهد؛ heartbeat، SMS یا endpoint تازه‌ای ندارد.
+- retention روی visibility پنل اثر مصنوعی ندارد: `GET /v1/admin/users` و جزئیات کاربر همهٔ ردیف‌های موجود `users`، شامل ثبت‌نام بدون تریال و تریال فعال/منقضی را برمی‌گردانند و grant ادمین همان قرارداد قبلی را دارد. حساب فقط بعد از حذف واقعی دیگر در پنل دیده نمی‌شود.
 
 ---
 

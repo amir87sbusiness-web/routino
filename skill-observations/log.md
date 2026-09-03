@@ -368,3 +368,18 @@ existing deployment-provenance observations cover this launch audit. -->
 **Suggested improvement:** Treat data retention and administrative visibility as separate controls. Preserve visibility for accounts that still exist, add a server-side scope filter for focused views, and let actual deletion remove the account from every view naturally.
 
 **Principle:** Privacy controls should minimize retained data without silently removing legitimate operational access to data that is still retained.
+
+### Observation 25: A final requirement supersedes an earlier option selection
+
+**Status:** OPEN
+**Date:** 2026-09-03
+**Session context:** A user first selected a filtered admin view, then clarified that the final design must restore the original unfiltered panel without adding controls.
+**Skill:** brainstorming
+**Type:** open-source
+**Phase/Area:** User review and design revision
+
+**Issue:** Treating an earlier multiple-choice answer as durable after a later explicit final specification would implement a compromise the user had withdrawn.
+
+**Suggested improvement:** In the user-review gate, compare the newest specification against every earlier design choice, revise the written spec before implementation, and explicitly list removed features as non-goals.
+
+**Principle:** The latest explicit final specification replaces earlier exploratory choices; implementation should preserve that precedence in both code and documentation.
