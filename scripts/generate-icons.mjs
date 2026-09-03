@@ -1,148 +1,288 @@
 /**
- * Generates every icon the web app needs.
+ * Generate every Routino brand asset from the two approved source images.
  *
  *   npm run icons
  *
- * This script is the source of truth for the artwork, and writes
- * `assets/icon.svg` as a human-readable preview of what it produced.
- *
- * Why the artwork lives here rather than in a static .svg: the plain icon and
- * the Android maskable icon are NOT the same picture. The plain one is a rounded
- * tile. The maskable one must be full-bleed background with the logo inset into
- * a safe zone — compositing the rounded tile onto a background instead leaves a
- * visible seam where its corners meet the padding. Both need to be built from
- * one definition of the logo, or they drift apart.
- *
- * To rebrand: change BRAND, re-run. Committed output, not a build step — icons
- * change roughly never, and making `npm run build` depend on a native image
- * library is a bad trade.
+ * The light source owns installed icons and native splash screens. The light
+ * and dark sources both produce compact in-app logos. Keep every platform
+ * output here so its framing cannot drift independently.
  */
-import { mkdir, writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import sharp from "sharp";
 
-const root = fileURLToPath(new URL("..", import.meta.url));
-const out = `${root}public/icons`;
+const DEFAULT_ROOT = fileURLToPath(new URL("..", import.meta.url));
+const SOURCE_SIZE = 1254;
+const LIGHT_BACKGROUND = { r: 248, g: 248, b: 248, alpha: 1 };
+const UI_CROP = { left: 140, top: 110, width: 974, height: 974 };
 
-const BRAND = { light: "#FB923C", dark: "#EA580C" };
-
-/**
- * The mark: a routine is a cycle, and a habit is something you check off. So an
- * open progress ring (repetition, still going) with a check inside (done). It
- * reads at 16px, which a letterform would not.
- *
- * Pure paths, no <text>, deliberately: rasterisers resolve fonts through the OS,
- * so a text-based icon renders differently — or not at all — depending on what
- * happens to be installed.
- */
-const LOGO = `
-  <path d="M 352 118 A 168 168 0 1 0 424 256"
-        fill="none" stroke="#fff" stroke-width="34" stroke-linecap="round" opacity="0.55" />
-  <polygon points="424,182 456,250 392,250" fill="#fff" opacity="0.55" />
-  <path d="M 178 258 L 234 314 L 342 206"
-        fill="none" stroke="#fff" stroke-width="52" stroke-linecap="round" stroke-linejoin="round" />
-`;
-
-const gradient = `
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="${BRAND.light}" />
-      <stop offset="1" stop-color="${BRAND.dark}" />
-    </linearGradient>
-  </defs>
-`;
-
-/** The app icon: a rounded tile. Radius ~22% approximates the platform squircle
- * closely enough to look intentional where the OS does not mask it. */
-const tileSvg =
-  () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-${gradient}
-  <rect width="512" height="512" rx="114" fill="url(#bg)" />
-${LOGO}
-</svg>`;
-
-/**
- * The Android adaptive icon.
- *
- * Launchers mask this to their own shape — circle, squircle, teardrop — and can
- * clip ~20% off every edge. So the background runs corner to corner (the mask
- * needs something to bite into) and the logo is scaled into the middle 80% safe
- * zone. Handing Android the plain tile is what produces those icons that look
- * shaved along the sides.
- */
-const maskableSvg = () => {
-  const scale = 0.72; // a little inside the 80% safe zone; masks vary
-  const offset = (512 * (1 - scale)) / 2;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-${gradient}
-  <rect width="512" height="512" fill="url(#bg)" />
-  <g transform="translate(${offset} ${offset}) scale(${scale})">
-${LOGO}
-  </g>
-</svg>`;
+const ANDROID_LAUNCHER_SIZES = {
+  ldpi: 36,
+  mdpi: 48,
+  hdpi: 72,
+  xhdpi: 96,
+  xxhdpi: 144,
+  xxxhdpi: 192,
 };
 
-/**
- * Native launcher icon sources for @capacitor/assets (`npx @capacitor/assets generate`).
- * Same artwork as the web favicon, split into the layers Android's adaptive icon needs:
- *   - background: the full-bleed gradient (masks bite into it)
- *   - foreground: just the mark, inset into the adaptive safe zone (center ~60%), transparent
- *   - icon-only:  the rounded tile, for launchers/OSes without adaptive icons
- */
-const backgroundSvg =
-  () => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="1024" height="1024">
-${gradient}
-  <rect width="512" height="512" fill="url(#bg)" />
-</svg>`;
-
-const foregroundSvg = () => {
-  const scale = 0.6; // inside Android's ~66% adaptive safe zone
-  const offset = (512 * (1 - scale)) / 2;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="1024" height="1024">
-  <g transform="translate(${offset} ${offset}) scale(${scale})">
-${LOGO}
-  </g>
-</svg>`;
+const ANDROID_SPLASH_SIZES = {
+  "drawable/splash.png": [320, 480],
+  "drawable-night/splash.png": [320, 240],
+  "drawable-land-ldpi/splash.png": [320, 240],
+  "drawable-land-mdpi/splash.png": [480, 320],
+  "drawable-land-hdpi/splash.png": [800, 480],
+  "drawable-land-xhdpi/splash.png": [1280, 720],
+  "drawable-land-xxhdpi/splash.png": [1600, 960],
+  "drawable-land-xxxhdpi/splash.png": [1920, 1280],
+  "drawable-land-night-ldpi/splash.png": [320, 240],
+  "drawable-land-night-mdpi/splash.png": [480, 320],
+  "drawable-land-night-hdpi/splash.png": [800, 480],
+  "drawable-land-night-xhdpi/splash.png": [1280, 720],
+  "drawable-land-night-xxhdpi/splash.png": [1600, 960],
+  "drawable-land-night-xxxhdpi/splash.png": [1920, 1280],
+  "drawable-port-ldpi/splash.png": [240, 320],
+  "drawable-port-mdpi/splash.png": [320, 480],
+  "drawable-port-hdpi/splash.png": [480, 800],
+  "drawable-port-xhdpi/splash.png": [720, 1280],
+  "drawable-port-xxhdpi/splash.png": [960, 1600],
+  "drawable-port-xxxhdpi/splash.png": [1280, 1920],
+  "drawable-port-night-ldpi/splash.png": [240, 320],
+  "drawable-port-night-mdpi/splash.png": [320, 480],
+  "drawable-port-night-hdpi/splash.png": [480, 800],
+  "drawable-port-night-xhdpi/splash.png": [720, 1280],
+  "drawable-port-night-xxhdpi/splash.png": [960, 1600],
+  "drawable-port-night-xxxhdpi/splash.png": [1280, 1920],
 };
 
-const render = (svg, size) => sharp(Buffer.from(svg)).resize(size, size).png().toBuffer();
-
-await mkdir(out, { recursive: true });
-
-const jobs = [
-  // Chrome's installability minimum: a 192 and a 512.
-  ["icon-192.png", render(tileSvg(), 192)],
-  ["icon-512.png", render(tileSvg(), 512)],
-  ["icon-maskable-192.png", render(maskableSvg(), 192)],
-  ["icon-maskable-512.png", render(maskableSvg(), 512)],
-  // iOS ignores manifest icons and reads this instead. It also does not honour
-  // transparency, so the opaque tile is the right source.
-  ["apple-touch-icon.png", render(tileSvg(), 180)],
-  ["favicon-32.png", render(tileSvg(), 32)],
-  ["favicon-16.png", render(tileSvg(), 16)],
+const IOS_SPLASH_NAMES = [
+  "splash-2732x2732.png",
+  "splash-2732x2732-1.png",
+  "splash-2732x2732-2.png",
 ];
 
-for (const [name, work] of jobs) {
-  await writeFile(`${out}/${name}`, await work);
-  console.log(`  ✓ icons/${name}`);
+async function ensureParent(path) {
+  await mkdir(dirname(path), { recursive: true });
 }
 
-// One SVG favicon covers modern browsers crisply at any size; the PNGs above are
-// the fallback for those that don't support it.
-await writeFile(`${root}public/favicon.svg`, tileSvg());
-console.log("  ✓ favicon.svg");
+async function writeOutput(path, data) {
+  await ensureParent(path);
+  await writeFile(path, data);
+}
 
-// Preview of what was generated, so the artwork is reviewable in a diff.
-await writeFile(`${root}assets/icon.svg`, tileSvg());
-console.log("  ✓ assets/icon.svg (preview — generated, edit this script instead)");
+async function loadApprovedSource(path) {
+  const source = await readFile(path);
+  const metadata = await sharp(source).metadata();
+  if (metadata.width !== SOURCE_SIZE || metadata.height !== SOURCE_SIZE) {
+    throw new Error(`Brand source must be ${SOURCE_SIZE}x${SOURCE_SIZE}: ${path}`);
+  }
+  return source;
+}
 
-// Native (Android/iOS) launcher icon sources, consumed by @capacitor/assets.
-const nativeJobs = [
-  ["assets/icon-background.png", render(backgroundSvg(), 1024)],
-  ["assets/icon-foreground.png", render(foregroundSvg(), 1024)],
-  ["assets/icon-only.png", render(tileSvg(), 1024)],
-];
-for (const [name, work] of nativeJobs) {
-  await writeFile(`${root}${name}`, await work);
-  console.log(`  ✓ ${name}`);
+async function renderUiLogo(source) {
+  return sharp(source)
+    .extract(UI_CROP)
+    .resize(256, 256, { kernel: sharp.kernel.lanczos3 })
+    .sharpen({ sigma: 0.45 })
+    .webp({ quality: 94, smartSubsample: true })
+    .toBuffer();
+}
+
+async function renderInstalledIcon(source, size, { palette = false } = {}) {
+  const pipeline = sharp(source)
+    .resize(size, size, { kernel: sharp.kernel.lanczos3 })
+    .sharpen({ sigma: size <= 32 ? 0.65 : 0.35 });
+  return pipeline
+    .png({ compressionLevel: 9, adaptiveFiltering: true, palette, quality: 92 })
+    .toBuffer();
+}
+
+async function renderSolid(size) {
+  return sharp({
+    create: { width: size, height: size, channels: 4, background: LIGHT_BACKGROUND },
+  })
+    .png({ compressionLevel: 9, adaptiveFiltering: true })
+    .toBuffer();
+}
+
+/** Remove the near-white source background without changing the mark geometry. */
+async function renderTransparentMark(source, size) {
+  const { data, info } = await sharp(source)
+    .resize(size, size, { kernel: sharp.kernel.lanczos3 })
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const output = Buffer.alloc(info.width * info.height * 4);
+  const bg = 248;
+
+  for (let input = 0, target = 0; input < data.length; input += 3, target += 4) {
+    const r = data[input];
+    const g = data[input + 1];
+    const b = data[input + 2];
+    const distance = Math.hypot(r - bg, g - bg, b - bg);
+    const alpha = Math.max(0, Math.min(1, (distance - 7) / 39));
+
+    if (alpha === 0) {
+      output[target] = 0;
+      output[target + 1] = 0;
+      output[target + 2] = 0;
+      output[target + 3] = 0;
+      continue;
+    }
+
+    output[target] = Math.max(0, Math.min(255, Math.round(bg + (r - bg) / alpha)));
+    output[target + 1] = Math.max(0, Math.min(255, Math.round(bg + (g - bg) / alpha)));
+    output[target + 2] = Math.max(0, Math.min(255, Math.round(bg + (b - bg) / alpha)));
+    output[target + 3] = Math.round(alpha * 255);
+  }
+
+  return sharp(output, {
+    raw: { width: info.width, height: info.height, channels: 4 },
+  })
+    .png({ compressionLevel: 9, adaptiveFiltering: true })
+    .toBuffer();
+}
+
+async function renderRoundIcon(source, size) {
+  const tile = await renderInstalledIcon(source, size);
+  const mask = Buffer.from(
+    `<svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}" fill="#fff"/></svg>`,
+  );
+  return sharp(tile)
+    .composite([{ input: mask, blend: "dest-in" }])
+    .png({ compressionLevel: 9, adaptiveFiltering: true })
+    .toBuffer();
+}
+
+async function renderSplash(transparentMark, width, height) {
+  const markBox = Math.round(Math.min(width, height) * 0.34);
+  const mark = await sharp(transparentMark)
+    .resize(markBox, markBox, { kernel: sharp.kernel.lanczos3 })
+    .png({ compressionLevel: 9, adaptiveFiltering: true })
+    .toBuffer();
+  return sharp({
+    create: { width, height, channels: 4, background: LIGHT_BACKGROUND },
+  })
+    .composite([{ input: mark, gravity: "centre" }])
+    .png({ compressionLevel: 9, adaptiveFiltering: true })
+    .toBuffer();
+}
+
+function createIco(pngs) {
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(0, 0);
+  header.writeUInt16LE(1, 2);
+  header.writeUInt16LE(pngs.length, 4);
+
+  const directory = Buffer.alloc(pngs.length * 16);
+  let offset = header.length + directory.length;
+  pngs.forEach(({ size, data }, index) => {
+    const entry = index * 16;
+    directory.writeUInt8(size === 256 ? 0 : size, entry);
+    directory.writeUInt8(size === 256 ? 0 : size, entry + 1);
+    directory.writeUInt8(0, entry + 2);
+    directory.writeUInt8(0, entry + 3);
+    directory.writeUInt16LE(1, entry + 4);
+    directory.writeUInt16LE(32, entry + 6);
+    directory.writeUInt32LE(data.length, entry + 8);
+    directory.writeUInt32LE(offset, entry + 12);
+    offset += data.length;
+  });
+
+  return Buffer.concat([header, directory, ...pngs.map(({ data }) => data)]);
+}
+
+export async function generateIcons({ root = DEFAULT_ROOT } = {}) {
+  const lightSource = await loadApprovedSource(
+    join(root, "assets", "brand", "logo-light-source.png"),
+  );
+  const darkSource = await loadApprovedSource(
+    join(root, "assets", "brand", "logo-dark-source.png"),
+  );
+
+  await writeOutput(
+    join(root, "public", "brand", "logo-light.webp"),
+    await renderUiLogo(lightSource),
+  );
+  await writeOutput(
+    join(root, "public", "brand", "logo-dark.webp"),
+    await renderUiLogo(darkSource),
+  );
+
+  const favicon16 = await renderInstalledIcon(lightSource, 16, { palette: true });
+  const favicon32 = await renderInstalledIcon(lightSource, 32, { palette: true });
+  const webIcons = [
+    ["favicon-16.png", favicon16],
+    ["favicon-32.png", favicon32],
+    ["icon-192.png", await renderInstalledIcon(lightSource, 192)],
+    ["icon-512.png", await renderInstalledIcon(lightSource, 512)],
+    ["icon-maskable-192.png", await renderInstalledIcon(lightSource, 192)],
+    ["icon-maskable-512.png", await renderInstalledIcon(lightSource, 512)],
+    ["apple-touch-icon.png", await renderInstalledIcon(lightSource, 180)],
+  ];
+  for (const [name, data] of webIcons) {
+    await writeOutput(join(root, "public", "icons", name), data);
+  }
+  await writeOutput(
+    join(root, "public", "favicon.ico"),
+    createIco([
+      { size: 16, data: favicon16 },
+      { size: 32, data: favicon32 },
+    ]),
+  );
+
+  const installed1024 = await renderInstalledIcon(lightSource, 1024);
+  const foreground1024 = await renderTransparentMark(lightSource, 1024);
+  const background1024 = await renderSolid(1024);
+  await writeOutput(join(root, "assets", "icon-only.png"), installed1024);
+  await writeOutput(join(root, "assets", "icon-foreground.png"), foreground1024);
+  await writeOutput(join(root, "assets", "icon-background.png"), background1024);
+
+  for (const [density, size] of Object.entries(ANDROID_LAUNCHER_SIZES)) {
+    const folder = join(root, "android", "app", "src", "main", "res", `mipmap-${density}`);
+    await writeOutput(
+      join(folder, "ic_launcher.png"),
+      await renderInstalledIcon(lightSource, size),
+    );
+    await writeOutput(
+      join(folder, "ic_launcher_round.png"),
+      await renderRoundIcon(lightSource, size),
+    );
+    await writeOutput(join(folder, "ic_launcher_background.png"), await renderSolid(size));
+    await writeOutput(
+      join(folder, "ic_launcher_foreground.png"),
+      await sharp(foreground1024)
+        .resize(size, size, { kernel: sharp.kernel.lanczos3 })
+        .png({ compressionLevel: 9, adaptiveFiltering: true })
+        .toBuffer(),
+    );
+  }
+
+  const androidRes = join(root, "android", "app", "src", "main", "res");
+  for (const [relativePath, [width, height]] of Object.entries(ANDROID_SPLASH_SIZES)) {
+    await writeOutput(
+      join(androidRes, relativePath),
+      await renderSplash(foreground1024, width, height),
+    );
+  }
+
+  await writeOutput(
+    join(root, "ios", "App", "App", "Assets.xcassets", "AppIcon.appiconset", "AppIcon-512@2x.png"),
+    installed1024,
+  );
+  const iosSplash = await renderSplash(foreground1024, 2732, 2732);
+  for (const name of IOS_SPLASH_NAMES) {
+    await writeOutput(
+      join(root, "ios", "App", "App", "Assets.xcassets", "Splash.imageset", name),
+      iosSplash,
+    );
+  }
+
+  await rm(join(root, "public", "favicon.svg"), { force: true });
+  await rm(join(root, "assets", "icon.svg"), { force: true });
+}
+
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  await generateIcons();
+  console.log("[icons] generated themed UI, favicon, PWA, Android, and iOS assets");
 }
