@@ -21,7 +21,10 @@ describe("landing build script", () => {
       copyInput("landing/index.template.html");
       copyInput("landing/legal.template.html");
       copyInput("landing/shots");
-      copyInput("public/favicon.svg");
+      copyInput("public/brand");
+      copyInput("public/icons/favicon-16.png");
+      copyInput("public/icons/favicon-32.png");
+      copyInput("public/favicon.ico");
       copyInput("src/lib/legal-info.ts");
       copyInput("src/lib/legal-text.json");
       symlinkSync(
@@ -41,6 +44,18 @@ describe("landing build script", () => {
       assert.match(legalHtml, /https:\/\/instagram\.com\/routino\.me/);
       assert.equal(legalHtml.includes(["mail", "to:"].join("")), false);
       assert.equal(legalHtml.includes(["amir.templates", "gmail.com"].join("@")), false);
+
+      const homeHtml = readFileSync(join(sandbox, "dist", "index.html"), "utf8");
+      for (const html of [homeHtml, legalHtml]) {
+        assert.match(html, /\/brand\/logo-dark\.webp/);
+        assert.match(html, /\/icons\/favicon-32\.png/);
+        assert.match(html, /\/favicon\.ico/);
+        assert.equal(html.includes("favicon.svg"), false);
+      }
+      assert.equal(existsSync(join(sandbox, "dist", "brand", "logo-dark.webp")), true);
+      assert.equal(existsSync(join(sandbox, "dist", "icons", "favicon-16.png")), true);
+      assert.equal(existsSync(join(sandbox, "dist", "icons", "favicon-32.png")), true);
+      assert.equal(existsSync(join(sandbox, "dist", "favicon.ico")), true);
 
       const headers = readFileSync(join(sandbox, "dist", "_headers"), "utf8");
       assert.match(
@@ -74,11 +89,12 @@ describe("landing build script", () => {
           "/app/",
           "/app/index.html",
           "/app/assets/*",
+          "/app/brand/*",
           "/app/icons/*",
           "/app/sw.js",
           "/app/workbox-*.js",
           "/app/manifest.webmanifest",
-          "/app/favicon.svg",
+          "/app/favicon.ico",
           "/app/robots.txt",
         ],
       });

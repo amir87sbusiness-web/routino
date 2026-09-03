@@ -64,30 +64,32 @@ export function CatIcon({ icon, className }: { icon: string; className?: string 
 /**
  * The app mark.
  *
- * Renders `public/favicon.svg` — the very file `scripts/generate-icons.mjs`
- * produces the home-screen icons from. Re-drawing the same shape inline would
- * create a second source of truth that drifts the first time the brand changes,
- * and the service worker already precaches this, so it costs no request offline.
- *
- * The SVG carries its own rounded orange tile, so it needs no background or
- * radius from the caller — only a size. It deliberately does NOT follow
- * `settings.brandColor`: this is the product's identity, and it should match the
- * icon the user tapped to open the app.
+ * Both approved theme variants are generated from `assets/brand/` by
+ * `scripts/generate-icons.mjs`. CSS follows the app's real `.dark` class rather
+ * than the operating-system preference, so a user's in-app choice stays in
+ * charge. The caller supplies only the rendered size.
  *
  * Decorative by default (`alt=""`). A clickable wrapper must supply its own
  * `aria-label`, or the link has no accessible name.
  */
 export function Logo({ className }: { className?: string }) {
-  // BASE_URL، نه یک اسلشِ ثابت. اپ روی وب زیر `/app/` سرو می‌شود و روی بیلد
-  // موبایل از ریشه‌ی WebView؛ مسیر مطلقِ `/favicon.svg` بعد از انتقال به /app
-  // در توسعه ۴۰۴ می‌شد و لوگوی هدر و سایدبار به شکل تصویرِ شکسته درمی‌آمد.
+  const base = import.meta.env.BASE_URL;
   return (
-    <img
-      src={`${import.meta.env.BASE_URL}favicon.svg`}
-      alt=""
-      aria-hidden
-      className={cn("shrink-0", className)}
-    />
+    <span
+      aria-hidden="true"
+      className={cn("relative inline-block shrink-0 overflow-hidden rounded-[22%]", className)}
+    >
+      <img
+        src={`${base}brand/logo-light.webp`}
+        alt=""
+        className="h-full w-full object-cover dark:hidden"
+      />
+      <img
+        src={`${base}brand/logo-dark.webp`}
+        alt=""
+        className="hidden h-full w-full object-cover dark:block"
+      />
+    </span>
   );
 }
 

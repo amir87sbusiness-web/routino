@@ -434,9 +434,9 @@ src/
   می‌گرفت.
 - `copyShots` فقط عکس‌هایی را منتشر می‌کند که HTML خروجی واقعاً به آن‌ها ارجاع
   داده؛ یک `landing/shots/*.webp` یتیم با سایت منتشر نمی‌شود.
-- لوگو همان `public/favicon.svg` خودِ اپ است (`copyLogo` آن را به ریشه‌ی سایت
-  کپی می‌کند)، نه یک تیکِ بازسازی‌شده با CSS — تا سایت و اپ هیچ‌وقت دو نشان
-  متفاوت نشان ندهند.
+- لوگوی صفحهٔ معرفی و قوانین از `public/brand/logo-dark.webp` می‌آید؛ این فایل
+  و نسخهٔ روشنِ داخل اپ هر دو با `npm run icons` مستقیماً از تصاویر تأییدشدهٔ
+  `assets/brand/` ساخته می‌شوند، نه با CSS یا بازطراحی تقریبی.
 - نوار چسبانِ پایین (`.dock`) فقط روی موبایل و بعد از ۷۰٪ ارتفاع صفحه ظاهر
   می‌شود.
 
@@ -464,8 +464,8 @@ src/
 | `eslint.config.js` / `.prettierrc`           | قوانین کیفیت و فرمت کد                                                                                                                                      |
 | `package.json`                               | دستورها: `dev`، `build`، `build:mobile`، `cap:android`، `test`، `icons`                                                                                     |
 | `public/`                                    | آیکون‌ها + `manifest.webmanifest` (مشخصات PWA)                                                                                                              |
-| `assets/` + `scripts/generate-icons.mjs`     | تصویر خام لوگو + اسکریپت ساخت همه سایزهای آیکون (`npm run icons`)                                                                                           |
-| `android/` و `ios/`                          | پروژه‌های نیتیو (خروجی Capacitor). فقط برای: مجوزها، آیکون نیتیو، امضای انتشار. دیپ‌لینک `routino://` در `android/app/src/main/AndroidManifest.xml` ثبت شده |
+| `assets/brand/` + `scripts/generate-icons.mjs` | دو تصویر اصلی روشن/تیره + خط تولید همهٔ خروجی‌ها (`npm run icons`): لوگوی رابط، favicon سبک، PWA، Android/iOS و splashها؛ خروجی را دستی جداگانه عوض نکن |
+| `android/` و `ios/`                          | پروژه‌های نیتیو (خروجی Capacitor). دارایی‌های آیکن و splash آن‌ها را `npm run icons` می‌سازد؛ بقیه فقط برای مجوزها و امضای انتشار است. دیپ‌لینک `routino://` در `android/app/src/main/AndroidManifest.xml` ثبت شده |
 | `www/` و `dist/`                             | ⛔ خروجی بیلد — دستی ویرایش نکن                                                                                                                             |
 
 ---

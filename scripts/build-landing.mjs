@@ -163,18 +163,24 @@ function copyFonts() {
   return bytes;
 }
 
-/**
- * لوگو را کنار صفحه‌های عمومی می‌گذارد.
- *
- * همان `public/favicon.svg` خودِ برنامه است، یعنی یک منبع برای هر دو: اگر روزی
- * لوگو عوض شد، سایت و اپ با هم عوض می‌شوند. صفحه‌ها به `/favicon.svg` اشاره
- * می‌کنند نه `/app/favicon.svg`، تا صفحه‌ی معرفی به خروجیِ بیلدِ اپ وابسته نباشد.
- */
-function copyLogo() {
-  const src = join(ROOT, "public", "favicon.svg");
-  if (!existsSync(src)) throw new Error("public/favicon.svg نیست — لوگوی سایت از همان می‌آید");
-  copyFileSync(src, join(OUT_DIR, "favicon.svg"));
-  return statSync(src).size;
+/** لوگوی تیرهٔ صفحات عمومی و faviconهای سبک را کنار خروجی لندینگ می‌گذارد. */
+function copyBrandAssets() {
+  const files = [
+    ["public/brand/logo-dark.webp", "brand/logo-dark.webp"],
+    ["public/icons/favicon-16.png", "icons/favicon-16.png"],
+    ["public/icons/favicon-32.png", "icons/favicon-32.png"],
+    ["public/favicon.ico", "favicon.ico"],
+  ];
+  let bytes = 0;
+  for (const [source, destination] of files) {
+    const src = join(ROOT, source);
+    if (!existsSync(src)) throw new Error(`${source} نیست — ابتدا npm run icons را اجرا کن`);
+    const dest = join(OUT_DIR, destination);
+    mkdirSync(dirname(dest), { recursive: true });
+    copyFileSync(src, dest);
+    bytes += statSync(src).size;
+  }
+  return bytes;
 }
 
 /** عکس‌های واقعیِ اپ که `scripts/shoot-landing.mjs` گرفته. اگر پوشه نبود، بیلد
@@ -323,7 +329,7 @@ async function main() {
   writeFileSync(join(OUT_DIR, "legal", "index.html"), legalHtml);
 
   const fontBytes = copyFonts();
-  const logoBytes = copyLogo();
+  const logoBytes = copyBrandAssets();
   const shots = copyShots([homeHtml, legalHtml]);
   const ogBytes = await makeOgImage();
   writeSeoFiles();
@@ -421,11 +427,12 @@ async function main() {
           "/app/",
           "/app/index.html",
           "/app/assets/*",
+          "/app/brand/*",
           "/app/icons/*",
           "/app/sw.js",
           "/app/workbox-*.js",
           "/app/manifest.webmanifest",
-          "/app/favicon.svg",
+          "/app/favicon.ico",
           "/app/robots.txt",
         ],
       },

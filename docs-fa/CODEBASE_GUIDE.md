@@ -4,7 +4,7 @@
 > ۱) برای خودت: بدون بلد بودن برنامه‌نویسی بفهمی هر بخش اپ کجاست و برای تغییر هر چیزی باید سراغ کدوم فایل بری.
 > ۲) برای Claude (هوش مصنوعی): در جلسات بعدی به‌جای خوندن کل کد، اول این فایل رو بخونه تا توکن کمتری مصرف بشه.
 >
-> آخرین به‌روزرسانی: **۲ شهریور ۱۴۰۵ (2026-08-24)**.
+> آخرین به‌روزرسانی: **۱۲ شهریور ۱۴۰۵ (2026-09-03)**.
 >
 > 📍 **دنبال «الان کجاییم و چی مونده؟» می‌گردی؟** ابتدا
 > [LAUNCH-READINESS.md](LAUNCH-READINESS.md) را بخوان؛ وضعیت عملیاتی و دستورهای
@@ -252,7 +252,7 @@ routino1.0/
 | 📊 درصدهای جشن (۷۰٪/۱۰۰٪)                   | [components/habits.tsx](../src/components/habits.tsx) تابع `applyLog` — آرایه `[70, 100]`                                                                                                             |
 | 🗓️ هدف ماهانه پیش‌فرض عادت جدید (۳۰ روز)    | [components/habits.tsx](../src/components/habits.tsx) تابع `emptyDraft` — `monthlyGoal: "30"`                                                                                                         |
 | 📱 اسم اپ / شناسه اندروید                   | [capacitor.config.ts](../capacitor.config.ts) — `appId` و `appName`                                                                                                                                   |
-| 🖼️ آیکون و لوگو                             | `public/icons/` + کامپوننت `Logo` در [ui.tsx](../src/components/ui.tsx) + دستور `npm run icons`                                                                                                       |
+| 🖼️ آیکون و لوگو                             | منبع‌های روشن/تیره در `assets/brand/` + کامپوننت `Logo` در [ui.tsx](../src/components/ui.tsx) + دستور `npm run icons`؛ این دستور favicon/PWA و آیکن/اسپلش Android/iOS را با هم می‌سازد              |
 | 📶 آدرس سرور                                | موبایل: `VITE_API_URL` موقع بیلد؛ وب development: proxy در [vite.config.ts](../vite.config.ts)؛ وب production: `functions/v1/[[path]].js`                                                             |
 | 📲 پیامک واقعی روشن کنی                     | env سرور: `SMS_PROVIDER=kavenegar` + `KAVENEGAR_API_KEY=...` (کد عوض نمی‌شه)                                                                                                                          |
 | 🔐 ورود پنل ادمین                           | `ADMIN_PHONE` و `ADMIN_SESSION_SECRET` در Secretهای سرور؛ شماره را در فرم وارد می‌کنی و OTP می‌گیری. هیچ secret مشترکی در مرورگر ذخیره نمی‌شود                                                       |

@@ -51,7 +51,7 @@ export default defineConfig({
       injectRegister: null, // ثبت را خودمان در client.tsx انجام می‌دهیم
 
       manifest: false, // مانیفست دستی در public/ نگه‌داری می‌شود
-      includeAssets: ["favicon.svg", "icons/*.png"],
+      includeAssets: ["favicon.ico", "brand/*.webp", "icons/*.png"],
 
       workbox: {
         // روتینگ سمت کلاینت: باز کردن مستقیم /habits در حالت آفلاین باید
