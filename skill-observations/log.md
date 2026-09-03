@@ -351,3 +351,20 @@ existing deployment-provenance observations cover this launch audit. -->
 **Suggested improvement:** Payment release checklists must record redirect, bank authorization, callback arrival, provider Verify result, local paid marker, grant count, and entitlement as separate gates. Before changing a provider host or wire contract, reconcile current official SDK behavior with current documentation and inspect the specific transaction's live state.
 
 **Principle:** A payment is complete only when provider verification and the local atomic grant agree; opening the hosted gateway proves neither.
+
+## 2026-09-03
+
+### Observation 24: Privacy filtering should preserve operational support workflows
+
+**Status:** OPEN
+**Date:** 2026-09-03
+**Session context:** Restoring Trial-only users to Routino's admin user list while retaining automatic account deletion and adding an explicit list filter.
+**Skill:** brainstorming / task-observer
+**Type:** open-source
+**Phase/Area:** Product requirements and admin operations
+
+**Issue:** Hiding Trial-only users globally protected privacy at the cost of an existing support workflow: administrators could no longer find a Trial user to grant a subscription before retention cleanup deleted the account.
+
+**Suggested improvement:** Treat data retention and administrative visibility as separate controls. Preserve visibility for accounts that still exist, add a server-side scope filter for focused views, and let actual deletion remove the account from every view naturally.
+
+**Principle:** Privacy controls should minimize retained data without silently removing legitimate operational access to data that is still retained.
