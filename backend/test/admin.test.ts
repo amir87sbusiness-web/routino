@@ -49,43 +49,67 @@ describe("admin auth", () => {
 });
 
 describe("admin endpoints", () => {
-  it("shows only the anonymous trial-start count, not trial-only account details", async () => {
-    const { user, access } = await signIn("09124445566");
+  it("shows active and expired Trial users alongside the anonymous start count", async () => {
+    const active = await signIn("09124445566");
+    const expired = await signIn("09125556677");
 
     const first = await h.app.inject({
       method: "POST",
       url: "/v1/subscriptions/trial/start",
-      headers: { authorization: `Bearer ${access}` },
+      headers: { authorization: `Bearer ${active.access}` },
     });
     const retry = await h.app.inject({
       method: "POST",
       url: "/v1/subscriptions/trial/start",
-      headers: { authorization: `Bearer ${access}` },
+      headers: { authorization: `Bearer ${active.access}` },
+    });
+    const expiredStart = await h.app.inject({
+      method: "POST",
+      url: "/v1/subscriptions/trial/start",
+      headers: { authorization: `Bearer ${expired.access}` },
     });
     expect(first.json().started).toBe(true);
     expect(retry.json().started).toBe(false);
+    expect(expiredStart.json().started).toBe(true);
+    await h.raw(`
+      update entitlements
+         set expires_at = '2026-01-08T00:00:00Z'
+       where user_id = '${expired.user.id}';
+      update grants
+         set expires_after = '2026-01-08T00:00:00Z'
+       where user_id = '${expired.user.id}' and source = 'trial';
+    `);
 
     const overview = await h.app.inject({
       method: "GET",
       url: "/v1/admin/overview",
       headers: admin,
     });
-    expect(overview.json().trialStarts).toBe(1);
+    expect(overview.json().trialStarts).toBe(2);
     expect(overview.json().activeSubscriptions).toBe(0);
 
     const list = await h.app.inject({
       method: "GET",
-      url: "/v1/admin/users?q=09124445566",
+      url: "/v1/admin/users?q=0912",
       headers: admin,
     });
-    expect(list.json().users).toEqual([]);
+    const ids = (list.json().users as { id: string }[]).map((row) => row.id).sort();
+    expect(ids).toEqual([active.user.id, expired.user.id].sort());
 
-    const detail = await h.app.inject({
+    const activeDetail = await h.app.inject({
       method: "GET",
-      url: `/v1/admin/users/${user.id}`,
+      url: `/v1/admin/users/${active.user.id}`,
       headers: admin,
     });
-    expect(detail.statusCode).toBe(404);
+    const expiredDetail = await h.app.inject({
+      method: "GET",
+      url: `/v1/admin/users/${expired.user.id}`,
+      headers: admin,
+    });
+    expect(activeDetail.statusCode).toBe(200);
+    expect(activeDetail.json().entitlement.planId).toBe("trial");
+    expect(expiredDetail.statusCode).toBe(200);
+    expect(expiredDetail.json().entitlement.status).toBe("expired");
   });
 
   it("overview counts users, subscriptions and revenue", async () => {
@@ -120,7 +144,7 @@ describe("admin endpoints", () => {
     expect(user.id).toBeTruthy();
   });
 
-  it("hides registration-only users from phone search", async () => {
+  it("finds registration-only users by phone", async () => {
     await signIn("09123334444");
     await signIn("09351112222");
     const res = await h.app.inject({
@@ -129,7 +153,8 @@ describe("admin endpoints", () => {
       headers: admin,
     });
     const { users } = res.json() as { users: { phone: string; subscriptionActive: boolean }[] };
-    expect(users).toEqual([]);
+    expect(users).toHaveLength(1);
+    expect(users[0]).toMatchObject({ phone: "989123334444", subscriptionActive: false });
   });
 
   it("does not expose account blocking", async () => {
