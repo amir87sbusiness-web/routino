@@ -2,172 +2,94 @@
   "enamadSeal": "<a referrerpolicy='origin' target='_blank' href='https://trustseal.enamad.ir/?id=7120907&Code=c94FiiaLDfaEUSRS1kltZQdAz8yRaQGr'><img referrerpolicy='origin' src='https://trustseal.enamad.ir/logo.aspx?id=7120907&Code=c94FiiaLDfaEUSRS1kltZQdAz8yRaQGr' alt='' style='cursor:pointer' code='c94FiiaLDfaEUSRS1kltZQdAz8yRaQGr'></a>",
   "terms": [
     {
-      "title": ["۱. پذیرش قوانین", "1. Acceptance of terms"],
+      "title": ["۱. استفاده از روتینو", "1. Using Routino"],
       "paras": [
         [
-          "با نصب یا استفاده از اپلیکیشن روتینو، شما این قوانین و مقررات را به‌طور کامل می‌پذیرید. اگر با بخشی از این قوانین موافق نیستید، لطفاً از سرویس استفاده نکنید.",
-          "By installing or using the Routino app, you fully accept these terms. If you disagree with any part, please do not use the service."
+          "با نصب یا استفاده از روتینو، یعنی این قوانین را قبول داری. روتینو برای مدیریت عادت‌ها و کارهای شخصی ساخته شده و قول نتیجهٔ مشخصی نمی‌دهد.",
+          "By installing or using Routino, you agree to these terms. Routino is made for managing personal habits and tasks and does not promise any specific result."
         ]
       ]
     },
     {
-      "title": ["۲. معرفی سرویس", "2. The service"],
+      "title": ["۲. حساب کاربری", "2. Your account"],
       "paras": [
         [
-          "روتینو یک اپلیکیشن عادت‌ساز و مدیریت کارهای روزانه است که امکاناتی مانند ثبت عادت‌ها، کارها، ژورنال، تایمر و آنالیز پیشرفت را ارائه می‌دهد.",
-          "Routino is a habit-tracking and daily task app offering habits, tasks, journaling, a timer, and progress analytics."
+          "رمز عبور و دسترسی به شماره‌ات را امن نگه دار. استفادهٔ غیرقانونی، ایجاد اختلال یا تلاش برای ورود غیرمجاز ممنوع است.",
+          "Keep your password and access to your mobile number safe. Unlawful use, disruption of the service, and attempts to gain unauthorized access are not allowed."
         ]
       ]
     },
     {
-      "title": ["۳. حساب کاربری", "3. Your account"],
+      "title": ["۳. اشتراک و پرداخت", "3. Subscription & payment"],
       "paras": [
         [
-          "ورود به حساب از طریق شماره موبایل یا نام کاربری و رمز عبور، یا کد یک‌بارمصرفِ پیامکی انجام می‌شود. مسئولیت حفظ رمز عبور و دسترسی به شماره موبایل و جلوگیری از استفاده‌ی دیگران از حساب، بر عهده‌ی شماست.",
-          "Sign-in is via your mobile number or username with a password, or a one-time SMS code. You are responsible for keeping your password, keeping access to your number, and preventing others from using your account."
-        ],
-        [
-          "می‌توانید بدون محدودیت تعداد دستگاه وارد حساب شوید. روتینو فهرست دستگاه‌ها یا نشست قابل‌ابطالِ جداگانه نگه نمی‌دارد؛ خروج فقط اطلاعات ورود همان دستگاه را پاک می‌کند و توکن امضاشده حداکثر ۳۰ روز اعتبار دارد.",
-          "You may sign in on any number of devices. Routino does not keep a device list or separately revocable device sessions; signing out clears credentials only on that device, and the signed token is valid for at most 30 days."
+          "اگر شرایط تریال را داشته باشی، فقط یک‌بار ۷ روز استفادهٔ آزمایشی می‌گیری. قیمت‌ها داخل اپ نمایش داده می‌شوند، اشتراک فقط بعد از تأیید پرداخت فعال می‌شود و تمدید خودکار ندارد. اگر پرداختت مشکل داشت، به پشتیبانی پیام بده؛ برگشت وجه هم طبق روال بانک و درگاه پرداخت انجام می‌شود.",
+          "If you are eligible for a trial, you can receive one seven-day trial. Prices are shown in the app, subscriptions activate only after payment is confirmed, and they do not renew automatically. If something goes wrong with a payment, contact support; refunds follow the bank and payment gateway process."
         ]
       ]
     },
     {
-      "title": ["۴. اشتراک و پرداخت", "4. Subscription & payment"],
+      "title": ["۴. اینترنت و دسترسی به سرویس", "4. Internet & service availability"],
       "paras": [
         [
-          "بخشی از امکانات روتینو نیازمند اشتراک پولی است. قیمت پلن‌ها در خودِ اپ نمایش داده می‌شود و پرداخت از طریق درگاه بانکی معتبر انجام می‌گیرد. اشتراک پس از پرداخت موفق فعال می‌شود.",
-          "Some features require a paid subscription. Plan prices are shown in the app and payment is made through a licensed bank gateway. The subscription activates after a successful payment."
-        ],
-        [
-          "ساخت حساب به‌تنهایی دورهٔ آزمایشی را شروع نمی‌کند. هر حساب واجد شرایط فقط یک‌بار، پس از انتخاب یا ساخت اولین عادت و تأیید صریح شروع، دورهٔ آزمایشی ۷روزه می‌گیرد. اشتراک خودکار تمدید نمی‌شود؛ پس از پایان دسترسی، محتوای موجود فقط‌خواندنی می‌ماند و برای ثبت تغییر تازه باید اشتراک تهیه یا تمدید شود.",
-          "Creating an account does not start a trial. Each eligible account may receive one seven-day trial only after choosing or creating its first habit and explicitly confirming activation. Subscriptions do not auto-renew; after access expires, existing content remains readable, while new product changes require a purchase or renewal."
+          "روتینو برای سرویس‌های آنلاینش از Cloudflare و Supabase استفاده می‌کند. ورود، همگام‌سازی و پرداخت به اینترنت نیاز دارند؛ پس اگر اینترنت، اپراتور یا یکی از سرویس‌های بیرونی قطع یا مختل شود، ممکن است این بخش‌ها موقتاً کار نکنند. اتفاق‌هایی که خارج از کنترل معقول ما هستند به عهدهٔ روتینو نیستند، مگر جایی که قانون چیز دیگری بگوید. بخش‌های اصلی با اطلاعات روی دستگاه کار می‌کنند، اما اطلاعات همگام‌نشده ممکن است با حذف برنامه، پاک‌کردن داده‌های مرورگر یا خرابی دستگاه از بین بروند؛ بهتر است خروجی پشتیبان بگیری.",
+          "Routino uses Cloudflare and Supabase for its online services. Sign-in, sync, and payment need an internet connection, so those features may be temporarily unavailable if your internet provider or an external service is interrupted. Routino is not responsible for events outside our reasonable control, except where the law requires otherwise. Core features use data stored on your device, but unsynced data may be lost if you uninstall the app, clear browser data, or lose the device; keeping an export backup is recommended."
         ]
       ]
     },
     {
-      "title": ["۵. استرداد وجه", "5. Refunds"],
+      "title": ["۵. مالکیت و تغییر قوانین", "5. Ownership & changes"],
       "paras": [
         [
-          "اگر در فرایند پرداخت مبلغی از حساب شما کسر شود اما اشتراک فعال نگردد، مبلغ طبق روال درگاه بانکی به‌صورت خودکار بازمی‌گردد؛ در غیر این صورت با پشتیبانی تماس بگیرید تا موضوع پیگیری شود.",
-          "If an amount is deducted but your subscription is not activated, it is refunded automatically per the bank gateway's process; otherwise, contact support to resolve it."
-        ]
-      ]
-    },
-    {
-      "title": ["۶. مسئولیت‌های کاربر", "6. User responsibilities"],
-      "paras": [
-        [
-          "استفاده از روتینو باید قانونی و مطابق مقررات باشد. تلاش برای اخلال در سرویس یا دسترسی غیرمجاز مجاز نیست. رمز عبور و دسترسی به شمارهٔ خود را امن نگه دارید و در صورت احتمال دسترسی غیرمجاز فوراً به @routino_support پیام دهید.",
-          "Use of Routino must be lawful. Attempts to disrupt the service or gain unauthorized access are not permitted. Keep your password and mobile number secure, and contact @routino_support immediately if you suspect unauthorized access."
-        ]
-      ]
-    },
-    {
-      "title": ["۷. محدودیت مسئولیت", "7. Limitation of liability"],
-      "paras": [
-        [
-          "سرویس «همان‌گونه که هست» ارائه می‌شود. روتینو برای کار آفلاین یک نسخهٔ محلی نگه می‌دارد و محتوای حساب احراز‌شده را برای بازیابی و استفاده در چند دستگاه با بک‌اند روتینو همگام می‌کند. پاک‌کردن دادهٔ مرورگر، حالت ناشناس، حذف برنامه یا خرابی دستگاه می‌تواند نسخهٔ محلیِ همگام‌نشده را از بین ببرد؛ Export همیشه فعال است و نگهداری امن فایل پشتیبان بر عهدهٔ کاربر است.",
-          "The service is provided “as is”. Routino keeps a local copy for offline use and syncs authenticated account content with Routino's backend for recovery and multi-device use. Clearing browser data, private browsing, uninstalling the app, or device failure may remove local changes that have not yet synced. Export remains available, and you are responsible for keeping backup files safe."
-        ]
-      ]
-    },
-    {
-      "title": ["۸. مالکیت فکری", "8. Intellectual property"],
-      "paras": [
-        [
-          "کلیه‌ی حقوق مربوط به نام، طراحی و کدِ روتینو متعلق به مالک آن است و بدون اجازه‌ی کتبی قابل کپی یا استفاده‌ی تجاری نیست.",
-          "All rights to Routino's name, design, and code belong to its owner and may not be copied or used commercially without written permission."
-        ]
-      ]
-    },
-    {
-      "title": ["۹. تغییر قوانین", "9. Changes to these terms"],
-      "paras": [
-        [
-          "این قوانین ممکن است در آینده به‌روزرسانی شوند. نسخه‌ی جدید از همین بخش در دسترس خواهد بود و تاریخ آخرین به‌روزرسانی بالای همین بخش درج می‌شود.",
-          "These terms may be updated. The latest version will be available in this section, with the last-updated date shown above."
+          "نام، طراحی و کد روتینو متعلق به مالک آن است. اگر این قوانین تغییر کنند، نسخهٔ تازه از همین بخش در دسترس خواهد بود.",
+          "Routino's name, design, and code belong to its owner. If these terms change, the latest version will be available here."
         ]
       ]
     }
   ],
   "privacy": [
     {
-      "title": ["۱. کلیات", "1. Overview"],
+      "title": ["۱. چه اطلاعاتی نگه می‌داریم؟", "1. What we keep"],
       "paras": [
         [
-          "حفظ حریم خصوصی شما برای ما مهم است. این بخش توضیح می‌دهد چه اطلاعاتی جمع‌آوری می‌شود، کجا نگهداری می‌شود و چگونه استفاده می‌شود.",
-          "Your privacy matters to us. This section explains what information is collected, where it is kept, and how it is used."
+          "روتینو اطلاعات حساب، چیزهایی که داخل برنامه ثبت می‌کنی، وضعیت اشتراک، سوابق ضروری پرداخت و اطلاعات فنی لازم برای امنیت و پشتیبانی را نگه می‌دارد.",
+          "Routino keeps account details, content you add to the app, subscription status, necessary payment records, and technical information needed for security and support."
         ]
       ]
     },
     {
-      "title": ["۲. اطلاعاتی که جمع‌آوری می‌کنیم", "2. Information we collect"],
+      "title": ["۲. اطلاعات کجا می‌روند و چرا؟", "2. Where information goes and why"],
       "paras": [
         [
-          "شماره موبایل: تنها برای ورود و احراز هویت (ارسال کد یک‌بارمصرف) استفاده می‌شود.",
-          "Mobile number: used only for sign-in and authentication (sending the one-time code)."
-        ],
-        [
-          "محتوای برنامه: روتینو نسخه‌ای محلی از دسته‌ها، عادت‌ها، ثبت تکمیل، کارها، تاریخچهٔ تایمر، محتوای ژورنال و تنظیمات منتخب نگه می‌دارد تا اپ آفلاین کار کند. برای حساب احراز‌شده، همین انواعِ قابل‌همگام‌سازی به بک‌اند روتینو فرستاده می‌شوند تا بازیابی و استفاده در چند دستگاه ممکن باشد. آمار و مرور هفتگی از همین داده‌ها محلی محاسبه می‌شوند.",
-          "App content: Routino keeps a local copy of categories, habits, completion logs, tasks, timer history, journal content, and selected preferences so the app works offline. For an authenticated account, these syncable kinds are sent to Routino's backend for recovery and multi-device use. Analytics and Weekly Review are calculated locally from that content."
-        ],
-        [
-          "ترجیحات مخصوص دستگاه: تم، ترجیح/مجوز اعلان، صدای تکمیل و بازخورد لمسی روی همان دستگاه می‌مانند و بین دستگاه‌ها همگام نمی‌شوند.",
-          "Device-local preferences: theme, notification preference/permission, completion sound, and haptic feedback remain on that device and are not synced across devices."
-        ],
-        [
-          "اطلاعات حساب و امنیت: سرور شماره موبایل، نام کاربری و هش رمز (در صورت تنظیم)، اطلاعات عمومی نصب/مرورگر و نشست دستگاه، رویدادهای امنیتی، وضعیت اشتراک، دفتر گرنت‌ها و سوابق لازم پرداخت را نگهداری می‌کند. IP یا VPN برای ساخت هویت دستگاه استفاده نمی‌شود.",
-          "Account and security data: the server stores your mobile number, username and password hash (if set), general installation/browser and device-session details, security events, subscription status, grant history, and necessary payment records. IP address or VPN state is not used to create device identity."
-        ],
-        [
-          "اطلاعات پرداخت: ورود اطلاعات کامل کارت و رمز فقط در درگاه بانکی انجام می‌شود و روتینو آن‌ها را دریافت نمی‌کند. درگاه ممکن است برای تطبیق و پشتیبانی، شمارهٔ کارت ماسک‌شده، شناسهٔ پیگیری و نتیجهٔ تراکنش را برگرداند که همراه سابقهٔ لازم پرداخت نگهداری می‌شود.",
-          "Payment details: full card details and PIN are entered only at the bank gateway and are not received by Routino. For reconciliation and support, the gateway may return a masked card number, tracking reference, and transaction result, which are stored with the necessary payment record."
+          "بخشی از اطلاعات روی دستگاهت می‌ماند و اطلاعات قابل‌همگام‌سازی از راه زیرساخت Cloudflare و Supabase با سرور روتینو ردوبدل می‌شود. از این اطلاعات فقط برای ورود، همگام‌سازی و بازیابی، پرداخت، پشتیبانی و امنیت استفاده می‌کنیم. اطلاعاتت را نمی‌فروشیم و برای تبلیغات به کسی نمی‌دهیم.",
+          "Some information stays on your device. Syncable information is exchanged with Routino's server through Cloudflare and Supabase infrastructure. We use it only for sign-in, sync and recovery, payment, support, and security. We do not sell your information or share it for advertising."
         ]
       ]
     },
     {
-      "title": ["۳. کار کردن بدون اینترنت", "3. Working offline"],
+      "title": ["۳. سرویس‌های دیگر", "3. Other services"],
       "paras": [
         [
-          "یک نسخهٔ محلی از محتوای محصول روی دستگاه می‌ماند و امکانات اصلی و یادآورهای زمان‌بندی‌شدهٔ سیستم‌عامل بدون اینترنت کار می‌کنند. وقتی اینترنت برگردد، تغییرات قابل‌همگام‌سازی با حساب شما ردوبدل می‌شوند. بررسی امنیت نشست و همگام‌سازی دو کار جدا هستند و نیاز به اتصال، دادهٔ محلی را پاک نمی‌کند.",
-          "A local copy of product content remains on the device, and core features plus scheduled OS reminders work without internet. When connectivity returns, syncable changes are exchanged with your account. Session-security checks and content sync are separate, and requiring reconnection does not delete local data."
+          "برای زیرساخت آنلاین، پیامک ورود و پرداخت از سرویس‌دهنده‌های دیگر کمک می‌گیریم و فقط اطلاعات لازم برای همان کار را در اختیارشان می‌گذاریم. اطلاعات کامل کارت و رمز بانکی فقط در درگاه پرداخت وارد می‌شود و به روتینو نمی‌رسد.",
+          "We use other providers for online infrastructure, sign-in messages, and payments, and share only what is needed for that task. Full card details and banking PINs are entered only at the payment gateway and are not received by Routino."
         ]
       ]
     },
     {
-      "title": ["۴. نحوه‌ی استفاده از اطلاعات", "4. How we use information"],
+      "title": ["۴. امنیت و نگهداری اطلاعات", "4. Security & retention"],
       "paras": [
         [
-          "از شماره موبایل فقط برای احراز هویت، فعال‌سازی اشتراک و پشتیبانی استفاده می‌شود. ما اطلاعات شما را نمی‌فروشیم و برای تبلیغات در اختیار دیگران قرار نمی‌دهیم.",
-          "Your mobile number is used only for authentication, activating your subscription, and support. We do not sell your data or share it for advertising."
+          "برای محافظت از اطلاعات از روش‌های امنیتی متعارف استفاده می‌کنیم، اما هیچ سیستم آنلاینی امنیت یا دسترسی صددرصدی ندارد. حساب‌هایی که سابقهٔ خرید یا دسترسی غیرآزمایشی ندارند ممکن است بعد از حداقل ۳۰ روز و در تاریخی که اپ نشان می‌دهد، همراه اطلاعات قابل‌حذفشان پاک شوند. حساب‌های دارای سابقهٔ پرداخت یا دسترسی غیرآزمایشی شامل این حذف خودکار نمی‌شوند.",
+          "We use reasonable security measures, but no online system can guarantee perfect security or availability. Accounts with no purchase or non-trial access history may be deleted with their deletable data after at least 30 days and on the date shown in the app. Accounts with payment or non-trial access history are not included in this automatic deletion."
         ]
       ]
     },
     {
-      "title": ["۵. اشتراک‌گذاری با سرویس‌های شخص ثالث", "5. Third-party services"],
+      "title": ["۵. انتخاب‌های تو", "5. Your choices"],
       "paras": [
         [
-          "برای ارسال کد ورود از یک سرویس پیامکی، و برای دریافت پرداخت از یک درگاه بانکی معتبر استفاده می‌کنیم. فقط اطلاعات لازم برای همان کار (مثل شماره موبایل برای ارسال پیامک) در اختیارشان قرار می‌گیرد.",
-          "We use an SMS provider to send the login code and a licensed bank gateway to process payments. Only the data needed for that specific task (e.g., your number to send the SMS) is shared."
-        ]
-      ]
-    },
-    {
-      "title": ["۶. امنیت", "6. Security"],
-      "paras": [
-        [
-          "کدهای ورود به‌صورت هش‌شده نگهداری و پس از مدت کوتاهی منقضی می‌شوند. ورود موفق یک توکن امضاشده با اعتبار حداکثر ۳۰ روز می‌سازد و توکن یا مشخصات دستگاه در دیتابیس نگهداری نمی‌شود. تغییر رمز، توکن‌های صادرشدهٔ قبلی را پیش از انقضا باطل نمی‌کند. هیچ سیستمی صددرصد ایمن نیست و روتینو رمزنگاری سرتاسریِ محتوای همگام‌شده را ادعا نمی‌کند.",
-          "Login codes are stored as hashes and expire quickly. A successful sign-in creates a signed token valid for at most 30 days; the token and device details are not stored in the database. Changing a password does not invalidate previously issued tokens before they expire. No system is 100% secure, and Routino does not claim end-to-end encryption for synced content."
-        ]
-      ]
-    },
-    {
-      "title": ["۷. حقوق شما", "7. Your rights"],
-      "paras": [
-        [
-          "Export محتوای محصول همیشه فعال است. Import فقط با اشتراک پولی فعال است. گزینهٔ «پاک‌کردن همهٔ داده‌ها» محتوای محصول را در حساب همگام‌شده و دستگاه‌های متصل reset می‌کند، اما حساب احراز هویت، اشتراک، گرنت‌ها، پرداخت‌ها و سوابقی که نگهداری آن‌ها لازم است باقی می‌مانند؛ این گزینه حذف حساب نیست. برای درخواست حذف حساب و دادهٔ سروریِ قابل‌حذف با پشتیبانی تماس بگیرید.",
-          "Product-content export is always available. Import requires an active paid subscription. “Erase all data” resets product content across the synced account and connected devices, while the authentication account, subscription, grants, payments, and records that must be retained remain; it is not account deletion. Contact support to request deletion of the account and server data that can lawfully be removed."
+          "گرفتن خروجی از اطلاعات همیشه در دسترس است. «پاک‌کردن همهٔ داده‌ها» محتوای برنامه را پاک می‌کند، ولی حساب را حذف نمی‌کند. برای حذف حساب و اطلاعات سروری قابل‌حذف به پشتیبانی پیام بده. سوابقی که برای پرداخت، امنیت یا تکالیف قانونی لازم‌اند ممکن است باقی بمانند.",
+          "You can always export your information. “Erase all data” removes app content but does not delete the account. Contact support to request deletion of the account and deletable server data. Records needed for payments, security, or legal duties may be retained."
         ]
       ]
     }

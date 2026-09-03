@@ -71,7 +71,7 @@ Run:
 
 ```powershell
 npm run build
-npx tsc -p tsconfig.app.json --noEmit
+npx tsc --noEmit
 node C:\Users\User\.agents\skills\impeccable\scripts\detect.mjs --json src/lib/legal-text.json src/components/LegalContent.tsx landing/legal.template.html
 git diff --check
 ```
@@ -131,4 +131,3 @@ The public page must show the new copy and date. The live app HTML must referenc
 - [ ] **Step 5: Record final evidence**
 
 Report the implementation commit, push result, local test/build results, live legal-page markers, live app asset evidence, and explicitly state that no Supabase Edge/database/payment deployment occurred.
-

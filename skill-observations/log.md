@@ -383,3 +383,5 @@ existing deployment-provenance observations cover this launch audit. -->
 **Suggested improvement:** In the user-review gate, compare the newest specification against every earlier design choice, revise the written spec before implementation, and explicitly list removed features as non-goals.
 
 **Principle:** The latest explicit final specification replaces earlier exploratory choices; implementation should preserve that precedence in both code and documentation.
+
+<!-- Task-observer checkpoint 2026-09-03 (friendly legal copy): no new reusable observations. -->

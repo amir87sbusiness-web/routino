@@ -12,8 +12,8 @@ export const LEGAL_INFO = {
   instagram: "routino.me",
 
   /** آخرین به‌روزرسانی این قوانین — هر بار متن را عوض کردی این دو را هم به‌روز کن */
-  lastUpdatedFa: "۳۰ مرداد ۱۴۰۵",
-  lastUpdatedEn: "August 21, 2026",
+  lastUpdatedFa: "۱۲ شهریور ۱۴۰۵",
+  lastUpdatedEn: "September 3, 2026",
 } as const;
 
 /** آیا هنوز مقداری پرنشده (placeholder داخل [ ]) باقی مانده؟ (هشدار حالت توسعه) */
