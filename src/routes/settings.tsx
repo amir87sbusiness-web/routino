@@ -486,13 +486,7 @@ function SettingsPage() {
               }`}
             />
           </button>
-        </div>
-        <p className="mt-3 text-xs leading-6 text-muted-foreground">
-          {t(
-            "یادآوری عادت‌ها، کارها، ژورنال و پایان دوره آزمایشی/اشتراک. در وب، اعلان سیستمی به بازبودن قابلیت مرورگر وابسته است؛ اعلان داخل روتینو از دست نمی‌رود.",
-            "Habit, task, journal, trial and subscription reminders. Web system alerts depend on browser support; the in-app alert is still kept.",
-          )}
-        </p>
+        </div>   
         <div className="mt-4 space-y-3 border-t border-border pt-3">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
