@@ -46,8 +46,8 @@ describe("admin auth", () => {
 });
 
 describe("overview + users", () => {
-  it("counts users but hides registration-only accounts from phone search", async () => {
-    await signIn(h, "09123334444");
+  it("counts and returns registration-only accounts in phone search", async () => {
+    const { user } = await signIn(h, "09123334444");
     await signIn(h, "09351112222");
 
     const ov = await (await h.call("GET", "/v1/admin/overview", { headers: admin })).json();
@@ -59,7 +59,42 @@ describe("overview + users", () => {
     const found = await (
       await h.call("GET", "/v1/admin/users?q=0912333", { headers: admin })
     ).json();
-    expect(found.users).toEqual([]);
+    expect(found.users).toHaveLength(1);
+    expect(found.users[0]).toMatchObject({
+      id: user.id,
+      phone: "989123334444",
+      subscriptionActive: false,
+    });
+  });
+
+  it("returns Trial-only detail and allows an admin grant", async () => {
+    const { user, access } = await signIn(h, "09124445566");
+    const started = await h.call("POST", "/v1/subscriptions/trial/start", {
+      headers: auth(access),
+    });
+    expect((await started.json()).started).toBe(true);
+
+    const list = await (
+      await h.call("GET", "/v1/admin/users?q=09124445566", { headers: admin })
+    ).json();
+    expect(list.users).toHaveLength(1);
+    expect(list.users[0].id).toBe(user.id);
+
+    const detail = await h.call("GET", `/v1/admin/users/${user.id}`, { headers: admin });
+    expect(detail.status).toBe(200);
+    expect((await detail.json()).entitlement.planId).toBe("trial");
+
+    const granted = await h.call("POST", `/v1/admin/users/${user.id}/grant`, {
+      headers: admin,
+      body: { months: 1, note: "support gift" },
+    });
+    expect(granted.status).toBe(200);
+    expect((await granted.json()).entitlement.status).toBe("active");
+
+    const grants = await h.query<{ source: string; note: string }>(
+      `select source, note from grants where user_id = '${user.id}' order by created_at`,
+    );
+    expect(grants).toContainEqual({ source: "admin", note: "support gift" });
   });
 
   it("surfaces a verify_failed payment as an alert (never should happen)", async () => {
