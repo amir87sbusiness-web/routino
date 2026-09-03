@@ -401,25 +401,53 @@ describe("admin page", () => {
     }
   });
 
-  it("shows account history without device or blocking controls", async () => {
+  it("opens cached user details inline from users and payments", async () => {
+    const user = {
+      id: "user-id",
+      phone: "989123334444",
+      username: "amir",
+      createdAt: "2026-09-01T10:00:00.000Z",
+      activeDays: 4,
+      lastActiveAt: "2026-09-03T10:30:00.000Z",
+      syncRecordCount: 8,
+      syncDataBytes: 2048,
+      planId: "trial",
+      expiresAt: "2026-09-08T10:00:00.000Z",
+      subscriptionActive: true,
+    };
     const detail = {
-      user: { phone: "989123334444", createdAt: new Date().toISOString() },
-      entitlement: { planId: "trial", expiresAt: new Date().toISOString() },
+      user,
+      entitlement: { planId: "trial", expiresAt: user.expiresAt },
       payments: [],
       grants: [],
     };
-    const fetch = vi.fn(async (path: string) => ({
-      status: 200,
-      ok: true,
-      json: async () => (path.includes("/users/") ? detail : overview),
-    }));
+    const fetch = vi.fn(async (path: string) => {
+      let body: object = { authenticated: true };
+      if (path.endsWith("/overview")) body = overview;
+      else if (path.endsWith("/users")) body = { users: [user] };
+      else if (path.endsWith("/users/user-id")) body = detail;
+      else if (path.endsWith("/payments")) {
+        body = {
+          payments: [
+            {
+              id: "payment-id",
+              userId: user.id,
+              phone: user.phone,
+              username: user.username,
+              planId: "m1",
+              amountToman: 59000,
+              status: "paid",
+              createdAt: "2026-09-03T10:00:00.000Z",
+            },
+          ],
+        };
+      }
+      return { status: 200, ok: true, json: async () => body };
+    });
     const dom = new JSDOM(ADMIN_PAGE, {
       runScripts: "dangerously",
       url: "https://admin.routino.test/admin",
       beforeParse(window: object) {
-        const dialog = (window as { HTMLDialogElement?: { prototype: { showModal: () => void } } })
-          .HTMLDialogElement;
-        if (dialog) dialog.prototype.showModal = () => undefined;
         Object.assign(window, { fetch, alert: vi.fn(), confirm: vi.fn(() => true) });
       },
     });
@@ -427,14 +455,117 @@ describe("admin page", () => {
     try {
       await settlePage();
       await settlePage();
-      await (dom.window as unknown as { openUser: (id: string) => Promise<void> }).openUser(
-        "user-id",
+      const document = dom.window.document;
+      (document.querySelector("#tab-button-users") as { click(): void }).click();
+      await settlePage();
+      await settlePage();
+      const userRow = document.querySelector("#uResults .expandable-row") as unknown as {
+        click(): void;
+        getAttribute(name: string): string | null;
+      };
+      userRow.click();
+      await settlePage();
+      await settlePage();
+      expect(userRow.getAttribute("aria-expanded")).toBe("true");
+      expect(document.querySelector("#uResults .detail-row")?.textContent).toContain("۲ کیلوبایت");
+
+      userRow.click();
+      userRow.click();
+      await settlePage();
+      expect(fetch.mock.calls.filter(([path]) => path === "/v1/admin/users/user-id")).toHaveLength(
+        1,
       );
-      expect(dom.window.document.querySelector("#maxDevices")).toBeNull();
-      expect(dom.window.document.querySelector("#devicePolicyGo")).toBeNull();
-      expect(dom.window.document.querySelector("#resetSwitchGo")).toBeNull();
-      expect(dom.window.document.querySelector("#bGo")).toBeNull();
-      expect(dom.window.document.querySelector("#userDlg")?.textContent).not.toContain("دستگاه‌ها");
+
+      (document.querySelector("#tab-button-payments") as { click(): void }).click();
+      await settlePage();
+      await settlePage();
+      (
+        document.querySelector("#pResults .expandable-row") as unknown as { click(): void }
+      ).click();
+      await settlePage();
+      expect(document.querySelector("#pResults .detail-row")?.textContent).toContain("amir");
+      expect(fetch.mock.calls.filter(([path]) => path === "/v1/admin/users/user-id")).toHaveLength(
+        1,
+      );
+      expect(document.querySelector("#userDlg")).toBeNull();
+    } finally {
+      dom.window.close();
+    }
+  });
+
+  it("edits a plan price from its dedicated tab after confirmation", async () => {
+    const confirm = vi.fn(() => true);
+    const fetch = vi.fn(async (path: string, init?: { method?: string; body?: string }) => {
+      if (path.endsWith("/overview")) return { status: 200, ok: true, json: async () => overview };
+      if (path.endsWith("/plans/m1") && init?.method === "POST") {
+        return {
+          status: 200,
+          ok: true,
+          json: async () => ({
+            plan: {
+              id: "m1",
+              nameFa: "یک‌ماهه",
+              nameEn: "1 Month",
+              months: 1,
+              priceToman: 69000,
+              active: true,
+            },
+          }),
+        };
+      }
+      if (path.endsWith("/plans")) {
+        return {
+          status: 200,
+          ok: true,
+          json: async () => ({
+            plans: [
+              {
+                id: "m1",
+                nameFa: "یک‌ماهه",
+                nameEn: "1 Month",
+                months: 1,
+                priceToman: 59000,
+                active: true,
+              },
+            ],
+          }),
+        };
+      }
+      return { status: 200, ok: true, json: async () => ({ authenticated: true }) };
+    });
+    const dom = new JSDOM(ADMIN_PAGE, {
+      runScripts: "dangerously",
+      url: "https://admin.routino.test/admin",
+      beforeParse(window: object) {
+        Object.assign(window, { fetch, alert: vi.fn(), confirm });
+      },
+    });
+
+    try {
+      await settlePage();
+      await settlePage();
+      const document = dom.window.document;
+      (document.querySelector("#tab-button-plans") as { click(): void }).click();
+      await settlePage();
+      await settlePage();
+      const input = document.querySelector("#plansResults input") as unknown as {
+        value: string;
+        oninput(): void;
+      };
+      input.value = "69000";
+      input.oninput();
+      (
+        document.querySelector("#plansResults .plan-save") as unknown as { click(): void }
+      ).click();
+      await settlePage();
+      await settlePage();
+
+      expect(confirm).toHaveBeenCalledOnce();
+      const mutation = fetch.mock.calls.find(
+        ([path, init]) => path === "/v1/admin/plans/m1" && init?.method === "POST",
+      );
+      expect(JSON.parse(mutation?.[1]?.body || "{}")).toEqual({ priceToman: 69000 });
+      expect(document.querySelector("#plansResults")?.textContent).toContain("۶۹٬۰۰۰");
     } finally {
       dom.window.close();
     }

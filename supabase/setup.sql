@@ -13,11 +13,14 @@ create table if not exists users (
   gc_seq bigint not null default 0,
   sync_record_count integer not null default 0,
   sync_data_bytes bigint not null default 0,
+  active_days integer not null default 0,
+  last_active_at timestamptz,
   sync_growth_period_started_at timestamptz not null default now(),
   sync_growth_bytes bigint not null default 0,
   constraint users_sync_record_count_bounds check
     (sync_record_count between 0 and 50000),
   constraint users_sync_data_bytes_nonnegative check (sync_data_bytes >= 0),
+  constraint users_active_days_nonnegative check (active_days >= 0),
   constraint users_sync_growth_bytes_bounds check
     (sync_growth_bytes between 0 and 10485760),
   created_at timestamptz not null default now()
@@ -55,6 +58,8 @@ create index if not exists records_pull on records (user_id, seq);
 -- once per INSERT/UPDATE/DELETE statement, not once per record in a batch.
 alter table users add column if not exists sync_record_count integer not null default 0;
 alter table users add column if not exists sync_data_bytes bigint not null default 0;
+alter table users add column if not exists active_days integer not null default 0;
+alter table users add column if not exists last_active_at timestamptz;
 alter table users add column if not exists
   sync_growth_period_started_at timestamptz not null default now();
 alter table users add column if not exists sync_growth_bytes bigint not null default 0;
@@ -97,6 +102,9 @@ begin
   if not exists (select 1 from pg_constraint where conname = 'users_sync_growth_bytes_bounds') then
     alter table users add constraint users_sync_growth_bytes_bounds check
       (sync_growth_bytes between 0 and 10485760);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'users_active_days_nonnegative') then
+    alter table users add constraint users_active_days_nonnegative check (active_days >= 0);
   end if;
 end
 $$;

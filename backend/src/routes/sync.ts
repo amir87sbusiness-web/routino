@@ -13,6 +13,7 @@ import { z } from "zod";
 import { requireUser } from "../plugins/auth.js";
 import { readEntitlement } from "../services/entitlement.js";
 import { settleOpenPayments } from "../services/payment-flow.js";
+import { touchUserActivity } from "../services/user-activity.js";
 import {
   MAX_PUSH_RECORDS,
   PULL_PAGE_SIZE,
@@ -65,6 +66,7 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
       t,
       input.limit,
     );
+    await touchUserActivity(db, user.id, t);
     if (!input.includeAccountState || page.hasMore || page.reset) return page;
     await settleOpenPayments(db, psp, user.id, t);
     return { ...page, entitlement: await readEntitlement(db, user.id, t) };

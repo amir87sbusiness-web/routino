@@ -9,6 +9,7 @@ import { z } from "zod";
 import { makeAuthenticate, readJson, requireUser, type AppEnv, type Deps } from "../deps.ts";
 import { readEntitlement } from "../shared/services/entitlement.ts";
 import { settleOpenPayments } from "../shared/services/payment-flow.ts";
+import { touchUserActivity } from "../shared/services/user-activity.ts";
 import {
   MAX_PUSH_RECORDS,
   PULL_PAGE_SIZE,
@@ -62,6 +63,7 @@ export function syncRoutes(deps: Deps) {
       t,
       input.limit,
     );
+    await touchUserActivity(db, user.id, t);
     if (!input.includeAccountState || page.hasMore || page.reset) return c.json(page);
     await settleOpenPayments(db, psp, user.id, t);
     return c.json({ ...page, entitlement: await readEntitlement(db, user.id, t) });

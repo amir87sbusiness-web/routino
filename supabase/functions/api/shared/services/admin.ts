@@ -9,7 +9,7 @@
  * table is scanned at most once. The per-user detail view still fans out its
  * independent, on-demand history reads.
  */
-import { desc, eq, ilike, sql } from "drizzle-orm";
+import { asc, desc, eq, sql } from "drizzle-orm";
 import { rowsOf, type Database } from "../db/client.ts";
 import {
   anonymousCounters,
@@ -18,6 +18,7 @@ import {
   grants,
   otpCodes,
   payments,
+  plans,
   users,
 } from "../db/schema.ts";
 import { badRequest, notFound } from "../lib/http-errors.ts";
@@ -26,6 +27,8 @@ import { grantInterval, listGrants, readEntitlement } from "./entitlement.ts";
 import { hashPassword, validatePassword } from "./password.ts";
 
 const DAY_MS = 86_400_000;
+const asDate = (value: Date | string | null | undefined): Date | null =>
+  value == null ? null : value instanceof Date ? value : new Date(value);
 
 export async function adminOverview(db: Database, now: Date) {
   const dayAgo = new Date(now.getTime() - DAY_MS);
@@ -120,33 +123,72 @@ export async function adminListUsers(
 ) {
   const n = Math.min(opts.limit || 50, 200);
 
-  const base = db
-    .select({
-      id: users.id,
-      phone: users.phone,
-      createdAt: users.createdAt,
-      planId: entitlements.planId,
-      expiresAt: entitlements.expiresAt,
-    })
-    .from(users)
-    .leftJoin(entitlements, eq(entitlements.userId, users.id))
-    .orderBy(desc(users.createdAt))
-    .limit(n);
-
   // Humans type `0912…`; the canonical stored form is `98912…`. Dropping the
   // leading zero makes the obvious search work.
-  let digits = opts.q ? toAsciiDigits(opts.q).replace(/\D/g, "") : "";
+  const query = opts.q?.trim().toLowerCase() ?? "";
+  let digits = toAsciiDigits(query).replace(/\D/g, "");
   if (digits.startsWith("0")) digits = digits.slice(1);
-  const rows = digits ? await base.where(ilike(users.phone, `%${digits}%`)) : await base;
-
-  return rows.map((r) => ({ ...r, subscriptionActive: !!r.expiresAt && r.expiresAt > now }));
+  const result = await db.execute(sql`
+    select u.id, u.phone, u.username, u.created_at,
+           u.active_days, u.last_active_at,
+           u.sync_record_count, u.sync_data_bytes,
+           e.plan_id, e.expires_at
+      from users u
+      left join entitlements e on e.user_id = u.id
+     where ${query === ""}
+        or lower(coalesce(u.username, '')) like ${`%${query}%`}
+        or (${digits !== ""} and u.phone like ${`%${digits}%`})
+     order by u.created_at desc
+     limit ${n}
+  `);
+  type UserSummaryRow = {
+    id: string;
+    phone: string;
+    username: string | null;
+    created_at: Date;
+    active_days: number | string | bigint;
+    last_active_at: Date | null;
+    sync_record_count: number | string | bigint;
+    sync_data_bytes: number | string | bigint;
+    plan_id: string | null;
+    expires_at: Date | null;
+  };
+  return rowsOf<UserSummaryRow>(result).map((row) => ({
+    id: row.id,
+    phone: row.phone,
+    username: row.username,
+    createdAt: asDate(row.created_at),
+    activeDays: nonnegativeMetric(row.active_days),
+    lastActiveAt: asDate(row.last_active_at),
+    syncRecordCount: nonnegativeMetric(row.sync_record_count),
+    syncDataBytes: nonnegativeMetric(row.sync_data_bytes),
+    planId: row.plan_id,
+    expiresAt: asDate(row.expires_at),
+    subscriptionActive: !!asDate(row.expires_at) && asDate(row.expires_at)! > now,
+  }));
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function adminUserDetail(db: Database, id: string, now: Date) {
   if (!UUID_RE.test(id)) throw badRequest("bad_id", "Malformed user id");
-  const [user] = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  const userResult = await db.execute(sql`
+    select id, phone, username, created_at, active_days, last_active_at,
+           sync_record_count, sync_data_bytes
+      from users
+     where id = ${id}::uuid
+     limit 1
+  `);
+  const [user] = rowsOf<{
+    id: string;
+    phone: string;
+    username: string | null;
+    created_at: Date;
+    active_days: number | string | bigint;
+    last_active_at: Date | null;
+    sync_record_count: number | string | bigint;
+    sync_data_bytes: number | string | bigint;
+  }>(userResult);
   if (!user) throw notFound("unknown_user", "No such user");
 
   const [userPayments, userGrants, entitlement] = await Promise.all([
@@ -159,7 +201,12 @@ export async function adminUserDetail(db: Database, id: string, now: Date) {
     user: {
       id: user.id,
       phone: user.phone,
-      createdAt: user.createdAt,
+      username: user.username,
+      createdAt: asDate(user.created_at),
+      activeDays: nonnegativeMetric(user.active_days),
+      lastActiveAt: asDate(user.last_active_at),
+      syncRecordCount: nonnegativeMetric(user.sync_record_count),
+      syncDataBytes: nonnegativeMetric(user.sync_data_bytes),
     },
     entitlement,
     payments: userPayments,
@@ -236,6 +283,7 @@ export async function adminListPayments(db: Database, opts: { status?: string; l
     .select({
       id: payments.id,
       phone: users.phone,
+      username: users.username,
       userId: payments.userId,
       planId: payments.planId,
       amountToman: payments.amountToman,
@@ -253,6 +301,21 @@ export async function adminListPayments(db: Database, opts: { status?: string; l
     .limit(n);
 
   return opts.status ? base.where(eq(payments.status, opts.status)) : base;
+}
+
+const nonnegativeMetric = (value: number | string | bigint | null | undefined): number => {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;
+};
+
+export async function adminListPlans(db: Database) {
+  return db.select().from(plans).orderBy(asc(plans.months));
+}
+
+export async function adminUpdatePlanPrice(db: Database, id: string, priceToman: number) {
+  const [plan] = await db.update(plans).set({ priceToman }).where(eq(plans.id, id)).returning();
+  if (!plan) throw notFound("unknown_plan", "No such plan");
+  return { ok: true as const, plan };
 }
 
 export async function adminListDiscounts(db: Database) {

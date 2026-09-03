@@ -32,10 +32,12 @@ import {
   adminGrant,
   adminListDiscounts,
   adminListPayments,
+  adminListPlans,
   adminListUsers,
   adminOverview,
   adminSetPassword,
   adminUpdateDiscount,
+  adminUpdatePlanPrice,
   adminUserDetail,
 } from "../services/admin.js";
 
@@ -86,6 +88,10 @@ const discountUpdateBody = z.object({
   active: z.boolean().optional(),
   maxUses: z.number().int().min(1).max(1_000_000).nullable().optional(),
   expiresAt: z.number().int().positive().nullable().optional(),
+});
+
+const planPriceBody = z.object({
+  priceToman: z.number().int().min(1_000).max(1_000_000_000),
 });
 
 export const adminRoutes: FastifyPluginAsync = async (app) => {
@@ -210,6 +216,13 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.get("/admin/payments", opts, async (req) => {
     const { status, limit } = req.query as { status?: string; limit?: string };
     return { payments: await adminListPayments(db, { status, limit: Number(limit) || undefined }) };
+  });
+
+  app.get("/admin/plans", opts, async () => ({ plans: await adminListPlans(db) }));
+
+  app.post("/admin/plans/:id", opts, async (req) => {
+    const { id } = req.params as { id: string };
+    return adminUpdatePlanPrice(db, id, planPriceBody.parse(req.body).priceToman);
   });
 
   app.get("/admin/discounts", opts, async () => ({ discounts: await adminListDiscounts(db) }));

@@ -144,17 +144,81 @@ describe("admin endpoints", () => {
     expect(user.id).toBeTruthy();
   });
 
-  it("finds registration-only users by phone", async () => {
-    await signIn("09123334444");
+  it("finds users by phone or username and returns lightweight usage metadata", async () => {
+    const amir = await signIn("09123334444");
     await signIn("09351112222");
+    await h.raw(`
+      update users
+         set username = 'amir', active_days = 4,
+             last_active_at = '2026-09-03T10:30:00Z',
+             sync_record_count = 8, sync_data_bytes = 2048
+       where id = '${amir.user.id}'
+    `);
     const res = await h.app.inject({
       method: "GET",
       url: "/v1/admin/users?q=0912",
       headers: admin,
     });
-    const { users } = res.json() as { users: { phone: string; subscriptionActive: boolean }[] };
+    const { users } = res.json() as { users: Record<string, unknown>[] };
     expect(users).toHaveLength(1);
-    expect(users[0]).toMatchObject({ phone: "989123334444", subscriptionActive: false });
+    expect(users[0]).toMatchObject({
+      phone: "989123334444",
+      username: "amir",
+      subscriptionActive: false,
+      activeDays: 4,
+      lastActiveAt: "2026-09-03T10:30:00.000Z",
+      syncRecordCount: 8,
+      syncDataBytes: 2048,
+    });
+
+    const byUsername = await h.app.inject({
+      method: "GET",
+      url: "/v1/admin/users?q=ami",
+      headers: admin,
+    });
+    expect(byUsername.json().users).toHaveLength(1);
+
+    const detail = await h.app.inject({
+      method: "GET",
+      url: `/v1/admin/users/${amir.user.id}`,
+      headers: admin,
+    });
+    expect(detail.json().user).toMatchObject({
+      username: "amir",
+      activeDays: 4,
+      syncRecordCount: 8,
+      syncDataBytes: 2048,
+    });
+  });
+
+  it("lists plans and changes only a validated Toman price", async () => {
+    const list = await h.app.inject({ method: "GET", url: "/v1/admin/plans", headers: admin });
+    expect(list.statusCode).toBe(200);
+    expect(list.json().plans).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: "m1", priceToman: 59000 })]),
+    );
+
+    const changed = await h.app.inject({
+      method: "POST",
+      url: "/v1/admin/plans/m1",
+      headers: admin,
+      payload: { priceToman: 69000 },
+    });
+    expect(changed.statusCode).toBe(200);
+    expect(changed.json().plan).toMatchObject({ id: "m1", months: 1, priceToman: 69000 });
+
+    const invalid = await h.app.inject({
+      method: "POST",
+      url: "/v1/admin/plans/m1",
+      headers: admin,
+      payload: { priceToman: 0 },
+    });
+    expect(invalid.statusCode).toBe(400);
+
+    const [stored] = await h.query<{ price_toman: number }>(
+      "select price_toman from plans where id = 'm1'",
+    );
+    expect(stored?.price_toman).toBe(69000);
   });
 
   it("does not expose account blocking", async () => {

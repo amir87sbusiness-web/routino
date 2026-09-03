@@ -32,10 +32,12 @@ import {
   adminGrant,
   adminListDiscounts,
   adminListPayments,
+  adminListPlans,
   adminListUsers,
   adminOverview,
   adminSetPassword,
   adminUpdateDiscount,
+  adminUpdatePlanPrice,
   adminUserDetail,
 } from "../shared/services/admin.ts";
 
@@ -76,6 +78,10 @@ const discountUpdateBody = z.object({
   active: z.boolean().optional(),
   maxUses: z.number().int().min(1).max(1_000_000).nullable().optional(),
   expiresAt: z.number().int().positive().nullable().optional(),
+});
+
+const planPriceBody = z.object({
+  priceToman: z.number().int().min(1_000).max(1_000_000_000),
 });
 
 export function adminRoutes(deps: Deps) {
@@ -219,6 +225,13 @@ export function adminRoutes(deps: Deps) {
       limit: Number(c.req.query("limit")) || undefined,
     });
     return c.json({ payments });
+  });
+
+  r.get("/admin/plans", async (c) => c.json({ plans: await adminListPlans(db) }));
+
+  r.post("/admin/plans/:id", async (c) => {
+    const body = planPriceBody.parse(await readJson(c));
+    return c.json(await adminUpdatePlanPrice(db, c.req.param("id"), body.priceToman));
   });
 
   r.get("/admin/discounts", async (c) => c.json({ discounts: await adminListDiscounts(db) }));

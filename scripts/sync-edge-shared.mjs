@@ -44,6 +44,7 @@ export const SHARED_FILES = [
   "services/sync-record-validation.ts",
   "services/task-month-archive.ts",
   "services/sync.ts",
+  "services/user-activity.ts",
   "providers/sms/index.ts",
   "providers/sms/console.ts",
   "providers/sms/kavenegar.ts",
