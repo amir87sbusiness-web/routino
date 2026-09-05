@@ -17,29 +17,50 @@ export async function runLoadSmoke({
   requests = 200,
   concurrency = 20,
   fetchImpl = fetch,
+  scenarios = [
+    { path: "/health", expectedStatuses: [200] },
+    { path: "/v1/plans", expectedStatuses: [200] },
+  ],
 }) {
   const base = new URL(baseUrl);
-  const local = ["127.0.0.1", "localhost", "::1"].includes(base.hostname);
+  const local = ["127.0.0.1", "localhost", "::1", "[::1]"].includes(base.hostname);
   if (!local && process.env.ALLOW_REMOTE_LOAD !== "true") {
     throw new Error("Remote load is disabled. This smoke test is intended for a local API.");
   }
+  if (!Number.isInteger(requests) || requests < 1)
+    throw new Error("requests must be a positive integer");
+  if (!Number.isInteger(concurrency) || concurrency < 1) {
+    throw new Error("concurrency must be a positive integer");
+  }
+  if (!scenarios.length) throw new Error("at least one load scenario is required");
 
-  const paths = ["/health", "/v1/plans", "/v1/devices/ping"];
   const results = [];
   let next = 0;
   const worker = async () => {
     while (next < requests) {
       const index = next++;
-      const path = paths[index % paths.length];
+      const scenario = scenarios[index % scenarios.length];
+      const { path, expectedStatuses, headers } = scenario;
       const startedAt = performance.now();
       try {
-        const response = await fetchImpl(new URL(path, base), {
-          headers: path.includes("devices") ? { authorization: "Bearer invalid" } : undefined,
+        const response = await fetchImpl(new URL(path, base), { headers });
+        const bytes = (await response.arrayBuffer()).byteLength;
+        const unexpected = response.status >= 500 || !expectedStatuses.includes(response.status);
+        results.push({
+          path,
+          status: response.status,
+          bytes,
+          unexpected,
+          durationMs: performance.now() - startedAt,
         });
-        await response.arrayBuffer();
-        results.push({ status: response.status, durationMs: performance.now() - startedAt });
       } catch {
-        results.push({ status: 0, durationMs: performance.now() - startedAt });
+        results.push({
+          path,
+          status: 0,
+          bytes: 0,
+          unexpected: true,
+          durationMs: performance.now() - startedAt,
+        });
       }
     }
   };
@@ -55,11 +76,16 @@ export async function runLoadSmoke({
     target: base.origin,
     requests: results.length,
     concurrency,
-    errors: results.filter((result) => result.status === 0 || result.status >= 500).length,
+    errors: results.filter((result) => result.unexpected).length,
+    unexpectedResponses: results
+      .filter((result) => result.status !== 0 && result.unexpected)
+      .map(({ path, status }) => ({ path, status })),
+    responseBytes: results.reduce((sum, result) => sum + result.bytes, 0),
     statuses,
     latencyMs: {
       p50: Math.round(percentile(durations, 0.5)),
       p95: Math.round(percentile(durations, 0.95)),
+      p99: Math.round(percentile(durations, 0.99)),
       max: Math.round(Math.max(...durations)),
     },
   };

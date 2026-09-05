@@ -28,13 +28,52 @@ npm run test:edge -- --maxWorkers=1
 node scripts/gen-setup-sql.mjs
 ```
 
-برای release archive/quota این توالی ایمن و دقیق است؛ هیچ مرحله‌ای از تست محلی
-اجازهٔ اجرای production نمی‌دهد:
+برای release کشسان فعلی این توالی دو مرحله‌ای ایمن است؛ هیچ تست محلی اجازهٔ اجرای
+production نمی‌دهد و همهٔ مراحل production مجوز جداگانه می‌خواهند:
 
-1. کد fail-closed را اول deploy کن. تا وقتی `routino_sync_push_if_current` وجود ندارد فقط exchange تازه با cursor صفر از writer سازگار استفاده می‌کند؛ exchange با cursor غیرصفر و push قدیمیِ بدون cursor عمداً non-2xx می‌شوند تا outbox پاک نشود. این rollout صفر-downtime نیست: فاصلهٔ کد تا migration باید کوتاه، هماهنگ و تحت مانیتور باشد؛ retry موقت شاهد خرابی داده نیست.
-2. روی همان project ref، backup قابل‌بازیابی و غیرخالی بگیر و restore/read-only check آن را ثبت کن. سپس migrationهای pending را روی clone یا dry-run بررسی کن؛ `setup.sql` جای migration production نیست.
-3. فقط migrationهای افزایشیِ ازپیش‌بررسی‌شده را به ترتیب نام اجرا کن. برای archive/quota، `20260901150000_task_archive_quota_expand.sql` ستون‌های annual را اضافه و constraint قدیمی data-byte را حذف می‌کند؛ دادهٔ موجود را بازنویسی یا حذف نمی‌کند. سپس `20260901151000_task_month_compactor.sql` فقط functionهای compaction را نصب می‌کند.
-4. پیش از migration فقط `health/ready`، endpoint read-only مثل `/v1/plans` و fail-closed ماندن outbox را canary کن. فقط بعد از شاهد backup و با مجوز جداگانه، ابتدا migration افزایشی و ثابت `20260905140000_elastic_launch_hardening.sql` و سپس migration رو‌به‌جلوی `20260905150000_sync_gc_admission_and_maintenance_bounds.sql` را اجرا کن. migration دوم cursor gate، index هم‌راستا با query و scheduleهای bounded را نهایی می‌کند: compactor هر دقیقه با batch حداکثر ۱٬۰۰۰ و tombstone purge هر ۵ دقیقه با batch حداکثر ۲٬۰۰۰؛ هر job `statement_timeout=45s`، `lock_timeout=1s` و advisory no-overlap دارد. هیچ‌کدام هنگام migration compaction یا purge را مستقیم اجرا نمی‌کنند. سپس full-resync تک‌صفحه‌ای/چندصفحه‌ای، cursor عادی و non-2xx شدن legacy push برای حسابی با `gc_seq>0` را canary کن. عدد ۱٬۴۴۰٬۰۰۰ task/day فقط ظرفیت نظری schedule×batch است، نه تضمین throughput production؛ شاهد `EXPLAIN` فعلی نیز regression محلی PGlite است، نه benchmark واقعی Supabase.
+1. project ref را دوباره چک کن؛ backup غیرخالی و قابل‌بازیابی از `users`، `records`، `payments`، `grants`، `entitlements`، `redemptions` و `discounts` بگیر و restore/read-only check آن را ثبت کن. migrationها را اول روی clone یا dry-run بررسی کن؛ `setup.sql` جای migration production نیست.
+2. ابتدا artifact میانی sync fail-closed (در تاریخ این تغییر، commit `ce19d76`) را deploy کن. این نسخه هنوز به `provider_capacity_leases` و `checkout_provider` وابسته نیست. روی schema قدیمی، exchange عقب‌مانده و push قدیمی non-2xx می‌شوند تا outbox پاک نشود. این پنجره صفر-downtime نیست و باید کوتاه و مانیتورشده باشد.
+3. `health/ready`، `/v1/plans`، cursor عادی، reset و باقی‌ماندن outbox را canary کن. سپس فقط migrationهای افزایشی را به ترتیب `20260905140000_elastic_launch_hardening.sql`، `20260905150000_sync_gc_admission_and_maintenance_bounds.sql`، `20260905160000_provider_capacity_and_atomic_otp.sql` و `20260905170000_elastic_checkout_identity.sql` اجرا کن. `170000` قبل از ساخت index، nonterminalهای منطقی تکراری را چک می‌کند و در صورت ابهام بدون تغییر داده abort می‌شود.
+4. Edge نهایی را deploy کن و ابتدا sync و endpointهای بدون خرج provider را canary کن. OTP و checkout واقعی فقط در مرحلهٔ post-deploy و با تأیید مالک انجام می‌شوند. compactor هر دقیقه حداکثر ۱٬۰۰۰ و tombstone purge هر ۵ دقیقه حداکثر ۲٬۰۰۰ ردیف می‌گیرند؛ هر دو timeout و no-overlap دارند. ظرفیت ۱٬۴۴۰٬۰۰۰ task/day فقط schedule×batch نظری است، نه benchmark Supabase.
+
+مرز rollback: بعد از اعمال این چهار migration، برای برگشت سریع فقط Edge را به artifact
+میانی برگردان؛ schemaها افزایشی و با کد قبلی سازگارند. migration معکوس، حذف index/table
+یا پاک‌کردن ردیف مجاز نیست. اگر cron مشکل ساخت، فقط با مجوز مالک job را موقتاً
+`cron.unschedule` کن و داده/تابع را نگه دار.
+
+### SQL پایش قبل و بعد از canary
+
+```sql
+select * from routino_task_compaction_backlog(now());
+
+select count(*) as eligible_tombstones,
+       min(to_timestamp(updated_at / 1000.0)) as oldest_eligible_at
+from records
+where deleted = true
+  and updated_at < floor(
+    extract(epoch from (now() - interval '90 days')) * 1000
+  )::bigint;
+
+select jobid, jobname, schedule, active
+from cron.job
+where jobname in ('routino-task-month-compaction', 'routino-tombstone-purge');
+
+select j.jobname, d.status, d.start_time, d.end_time, d.return_message
+from cron.job_run_details d
+join cron.job j on j.jobid = d.jobid
+where j.jobname in ('routino-task-month-compaction', 'routino-tombstone-purge')
+order by d.start_time desc
+limit 40;
+
+select kind, count(*) as active_leases, min(expires_at), max(expires_at)
+from provider_capacity_leases
+where expires_at > now()
+group by kind;
+```
+
+هیچ query پاک‌سازی دستی روی payment/grant/entitlement/redemption اجرا نکن.
+`provider_unknown` و همهٔ پرداخت‌های nonterminal باید تا تعیین نتیجه بمانند؛ migration
+`170000` نیز در ابهام باید متوقف شود، نه اینکه مشتری را حذف یا status را حدس بزند.
 
 برای retention حساب، قبل از هر write فایل
 `supabase/precheck/20260902_trial_account_cleanup_dry_run.sql` را اجرا کن و فقط آمار
@@ -77,6 +116,8 @@ KAVENEGAR_API_KEY=<server secret>
 KAVENEGAR_TEMPLATE=routino-otp
 PSP_PROVIDER=zarinpal
 ZARINPAL_MERCHANT=<real merchant UUID>
+SMS_PROVIDER_MAX_CONCURRENCY=32
+PSP_PROVIDER_MAX_CONCURRENCY=64
 PUBLIC_API_URL=https://api.routino.me
 PUBLIC_WEB_URL=https://routino.me/app
 APP_DEEP_LINK=routino://pay/result
@@ -112,7 +153,8 @@ npx supabase functions deploy api --no-verify-jwt --project-ref <PROJECT_REF>
 5. برگشت وب و deep-link را روی گوشی واقعی تست کن. build سبز یا emulator به‌تنهایی
    اثبات delivery در production نیست.
 6. Rate Limiting/WAF سراسری Cloudflare برای OTP و checkout را جدا از محدودیت‌های
-   هر شماره، IP و حساب بررسی کن؛ سقف فعلی SMS حداکثر ۲۰۰۰ درخواست provider در روز است.
+   هر شماره و IP بررسی کن. سقف روزانهٔ تجاری وجود ندارد؛ مقادیر concurrency باید با
+   ظرفیت واقعی Kavenegar/ZarinPal و پلن Supabase تنظیم شوند، نه با تعداد کل کاربر.
 
 هیچ deploy، تغییر secret، اجرای migration production یا تراکنش واقعی از اجرای
 محلی تست‌ها استنتاج نمی‌شود؛ این اقدامات باید روی پروژه/حساب درست و با مجوز مالک

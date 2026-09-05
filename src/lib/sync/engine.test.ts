@@ -72,10 +72,22 @@ const server = {
   pull(cursor: number, fullResyncGcSeq?: number): PullResponse {
     if (this.resetNextPull) {
       this.resetNextPull = false;
-      return { records: [], cursor: 0, hasMore: true, reset: true, gcSeq: this.gcSeq } as PullResponse;
+      return {
+        records: [],
+        cursor: 0,
+        hasMore: true,
+        reset: true,
+        gcSeq: this.gcSeq,
+      } as PullResponse;
     }
     if (cursor > 0 && cursor < this.gcSeq && fullResyncGcSeq !== this.gcSeq) {
-      return { records: [], cursor: 0, hasMore: true, reset: true, gcSeq: this.gcSeq } as PullResponse;
+      return {
+        records: [],
+        cursor: 0,
+        hasMore: true,
+        reset: true,
+        gcSeq: this.gcSeq,
+      } as PullResponse;
     }
     const remaining = this.log.filter((r) => r.seq > cursor).sort((a, b) => a.seq - b.seq);
     const records = remaining.slice(0, this.pageSize);

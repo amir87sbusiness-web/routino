@@ -243,9 +243,19 @@ export async function checkoutPayment(
       eq(payments.platform, body.platform ?? "web"),
       eq(payments.checkoutProvider, psp.name),
       isNull(payments.appliedAt),
-      inArray(payments.status, ["pending", "requesting", "redirected", "provider_unknown", "verifying"]),
+      inArray(payments.status, [
+        "pending",
+        "requesting",
+        "redirected",
+        "provider_unknown",
+        "verifying",
+      ]),
     ];
-    const [logical] = await db.select().from(payments).where(and(...logicalConditions)).limit(1);
+    const [logical] = await db
+      .select()
+      .from(payments)
+      .where(and(...logicalConditions))
+      .limit(1);
     if (logical) return existingAttemptResult(db, psp, logical, body, t);
     throw new Error("failed to create payment");
   }

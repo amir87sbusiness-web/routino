@@ -1,9 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  createSyncScheduler,
-  EDIT_SYNC_DELAY_MS,
-  FOREGROUND_SYNC_COOLDOWN_MS,
-} from "./scheduler";
+import { createSyncScheduler, EDIT_SYNC_DELAY_MS, FOREGROUND_SYNC_COOLDOWN_MS } from "./scheduler";
 
 describe("lifecycle sync scheduler", () => {
   const flush = vi.fn(async () => undefined);

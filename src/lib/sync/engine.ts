@@ -58,9 +58,7 @@ export async function loadSyncState(owner: string): Promise<SyncState> {
       cursor: row.cursor,
       lastSyncedAt: row.lastSyncedAt,
       ...(row.quotaRetryAt === undefined ? {} : { quotaRetryAt: row.quotaRetryAt }),
-      ...(isValidGcSeq(row.fullResyncGcSeq)
-        ? { fullResyncGcSeq: row.fullResyncGcSeq }
-        : {}),
+      ...(isValidGcSeq(row.fullResyncGcSeq) ? { fullResyncGcSeq: row.fullResyncGcSeq } : {}),
     };
   } catch {
     return emptyState();
@@ -523,9 +521,7 @@ async function run(owner: string, options: SyncOptions): Promise<SyncOutcome> {
         cursor: state.cursor,
         records: batch.map(({ record }) => record),
         includeAccountState,
-        ...(state.fullResyncGcSeq === undefined
-          ? {}
-          : { fullResyncGcSeq: state.fullResyncGcSeq }),
+        ...(state.fullResyncGcSeq === undefined ? {} : { fullResyncGcSeq: state.fullResyncGcSeq }),
       },
       owner,
       options.keepalive,

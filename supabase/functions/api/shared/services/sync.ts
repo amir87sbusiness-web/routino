@@ -684,9 +684,7 @@ export async function pullRecords(
 ): Promise<PullResult> {
   const safeCursor = Number.isFinite(cursor) && cursor >= 0 ? Math.floor(cursor) : 0;
   const safeFullResyncGcSeq =
-    Number.isFinite(fullResyncGcSeq) && fullResyncGcSeq! >= 0
-      ? Math.floor(fullResyncGcSeq!)
-      : null;
+    Number.isFinite(fullResyncGcSeq) && fullResyncGcSeq! >= 0 ? Math.floor(fullResyncGcSeq!) : null;
   const safeLimit = Math.max(1, Math.min(PULL_PAGE_SIZE, Math.floor(limit) || PULL_PAGE_SIZE));
   const fetchLimit = Math.min(PULL_DB_FETCH_ROW_LIMIT, safeLimit);
   if (metrics) metrics.queries += 1;

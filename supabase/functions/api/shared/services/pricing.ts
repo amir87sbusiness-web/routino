@@ -179,16 +179,7 @@ export async function quote(
   allowFree = false,
 ): Promise<Quote> {
   return (
-    await quoteWithDiscount(
-      db,
-      planId,
-      rawCode,
-      userId,
-      userPhone,
-      now,
-      offerPercent,
-      allowFree,
-    )
+    await quoteWithDiscount(db, planId, rawCode, userId, userPhone, now, offerPercent, allowFree)
   ).quote;
 }
 

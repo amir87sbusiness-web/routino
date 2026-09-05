@@ -10,13 +10,7 @@
 import { createHmac } from "node:crypto";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { rowsOf, type Database } from "../db/client.js";
-import {
-  authRateLimitBuckets,
-  feedback,
-  otpCodes,
-  redemptions,
-  users,
-} from "../db/schema.js";
+import { authRateLimitBuckets, feedback, otpCodes, redemptions, users } from "../db/schema.js";
 import type { Env } from "../env.js";
 import { badRequest, conflict, notFound } from "../lib/http-errors.js";
 
@@ -26,16 +20,9 @@ const localPhone = (phone: string): string =>
   phone.startsWith("98") ? `0${phone.slice(2)}` : phone;
 
 const loginIdentifierHash = (env: Env, value: string): string =>
-  createHmac("sha256", env.OTP_PEPPER)
-    .update(`login_identifier\0${value}`)
-    .digest("hex");
+  createHmac("sha256", env.OTP_PEPPER).update(`login_identifier\0${value}`).digest("hex");
 
-export async function adminDeleteUser(
-  db: Database,
-  env: Env,
-  id: string,
-  confirmation: string,
-) {
+export async function adminDeleteUser(db: Database, env: Env, id: string, confirmation: string) {
   if (!UUID_RE.test(id)) throw badRequest("bad_id", "Malformed user id");
   const typed = confirmation.trim();
   if (!typed) throw badRequest("delete_confirmation_required", "Deletion confirmation is required");
@@ -105,10 +92,7 @@ export async function adminDeleteUser(
 
     // records, grants and entitlement cascade. payments are detached by the
     // database FK and remain available as anonymous financial history.
-    const deleted = await tx
-      .delete(users)
-      .where(eq(users.id, user.id))
-      .returning();
+    const deleted = await tx.delete(users).where(eq(users.id, user.id)).returning();
     if (!deleted.length) throw notFound("unknown_user", "No such user");
 
     // A phone-restricted discount is PII too. If its code is referenced by

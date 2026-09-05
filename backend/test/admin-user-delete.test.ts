@@ -16,9 +16,7 @@ afterAll(async () => {
 });
 
 const loginHash = (value: string) =>
-  createHmac("sha256", h.env.OTP_PEPPER)
-    .update(`login_identifier\0${value}`)
-    .digest("hex");
+  createHmac("sha256", h.env.OTP_PEPPER).update(`login_identifier\0${value}`).digest("hex");
 
 async function createUser(username: string | null, phone: string) {
   const id = randomUUID();

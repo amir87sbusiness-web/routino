@@ -112,7 +112,9 @@ describe("edge sync", () => {
   it("uses the current quota writer only for cursor-zero when the cursor gate is not installed", async () => {
     const rollout = await makeHarness();
     try {
-      await rollout.raw(`drop function routino_sync_push_if_current(uuid, timestamptz, jsonb, bigint)`);
+      await rollout.raw(
+        `drop function routino_sync_push_if_current(uuid, timestamptz, jsonb, bigint)`,
+      );
       const { access, user } = await signIn(rollout, "09120001127");
 
       const fresh = await rollout.call("POST", "/v1/sync/exchange", {

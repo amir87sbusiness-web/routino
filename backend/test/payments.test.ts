@@ -517,7 +517,9 @@ describe("checkout → gateway → callback", () => {
     expect(busyBody.retryAfter).toBeGreaterThan(0);
     expect(requestCalls).toBe(0);
     expect(
-      await h.query(`select id from payments where user_id is not null and attempt_id = '${attemptId}'`),
+      await h.query(
+        `select id from payments where user_id is not null and attempt_id = '${attemptId}'`,
+      ),
     ).toHaveLength(1);
 
     await h.raw(`delete from provider_capacity_leases where kind = 'psp'`);

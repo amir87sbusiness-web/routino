@@ -479,9 +479,7 @@ describe("admin page", () => {
       (document.querySelector("#tab-button-payments") as { click(): void }).click();
       await settlePage();
       await settlePage();
-      (
-        document.querySelector("#pResults .expandable-row") as unknown as { click(): void }
-      ).click();
+      (document.querySelector("#pResults .expandable-row") as unknown as { click(): void }).click();
       await settlePage();
       expect(document.querySelector("#pResults .detail-row")?.textContent).toContain("amir");
       expect(fetch.mock.calls.filter(([path]) => path === "/v1/admin/users/user-id")).toHaveLength(
@@ -554,9 +552,7 @@ describe("admin page", () => {
       };
       input.value = "69000";
       input.oninput();
-      (
-        document.querySelector("#plansResults .plan-save") as unknown as { click(): void }
-      ).click();
+      (document.querySelector("#plansResults .plan-save") as unknown as { click(): void }).click();
       await settlePage();
       await settlePage();
 

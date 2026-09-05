@@ -37,9 +37,7 @@ async function importSubscription(access: string) {
 describe("legacy subscription import cutoff", () => {
   it("keeps pre-cutoff accounts eligible", async () => {
     const { access, user } = await signIn();
-    await h.raw(
-      `update users set created_at = '2026-09-05T09:44:59.000Z' where id = '${user.id}'`,
-    );
+    await h.raw(`update users set created_at = '2026-09-05T09:44:59.000Z' where id = '${user.id}'`);
 
     const response = await importSubscription(access);
     expect(response.statusCode).toBe(200);
@@ -48,9 +46,7 @@ describe("legacy subscription import cutoff", () => {
 
   it("blocks post-cutoff accounts without creating a grant", async () => {
     const { access, user } = await signIn();
-    await h.raw(
-      `update users set created_at = '2026-09-05T09:45:00.000Z' where id = '${user.id}'`,
-    );
+    await h.raw(`update users set created_at = '2026-09-05T09:45:00.000Z' where id = '${user.id}'`);
 
     const response = await importSubscription(access);
     expect(response.statusCode).toBe(200);

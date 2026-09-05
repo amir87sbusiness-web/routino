@@ -1,6 +1,6 @@
 # آمادگی لانچ روتینو
 
-آخرین بازبینی: ۳۰ مرداد ۱۴۰۵ / 21 August 2026
+آخرین بازبینی: ۱۵ شهریور ۱۴۰۵ / 6 September 2026
 
 این سند وضعیت **کد فعلی همین working tree** را خلاصه می‌کند. طراحی‌های قدیمی
 `docs/superpowers/` تاریخی‌اند و قرارداد محصول امروز نیستند.
@@ -38,6 +38,11 @@
   دستگاه و رویداد امنیتی حذف شده‌اند و Edge با Postgres مستقیم کار می‌کند.
 - `backend/src/` منبع canonical است. `supabase/functions/api/shared/` فقط با
   `npm run sync:edge` تولید می‌شود و parity test اختلاف را رد می‌کند.
+- SMS و PSP سقف روزانهٔ تجاری ندارند؛ lease دیتابیسی فقط تماس هم‌زمان provider را
+  محدود می‌کند. اشباع موقت قبل از خرج provider پس‌فشار می‌دهد و checkout با همان
+  `attemptId` ادامه پیدا می‌کند، نه با payment تازه.
+- maintenance دیتابیس batch و timeout ثابت دارد. backlog و تاریخچهٔ pg_cron باید با
+  SQL سند deploy پایش شوند؛ عدد schedule×batch به معنی ظرفیت تضمینی کاربر نیست.
 
 ## وضعیت محیط زنده
 
@@ -48,14 +53,17 @@
 
 ## کارهای لازم پیش از انتشار عمومی
 
-1. تغییرات همین working tree هنوز deploy نشده‌اند: Edge/backend shared، فرانت و
-   `supabase/setup.sql` جدید باید در فرایند انتشار اعمال و سپس smoke شوند.
+1. تغییرات همین working tree هنوز deploy نشده‌اند: rollout دو مرحله‌ای Edge، backup
+   قابل‌بازیابی و migrationهای `140000` تا `170000` باید طبق سند deploy انجام شوند.
 2. ماتریس reminder روی حداقل یک گوشی واقعی، شامل اپ بسته/پس‌زمینه، permission،
    timezone/reboot و exact alarm اندروید باید اجرا شود؛ build یا شبیه‌ساز جای آن نیست.
 3. یک OTP واقعی و یک پرداخت واقعی کنترل‌شده فقط با تأیید صریح مالک انجام شود.
 4. URL واقعی APK بعد از آپلود در `ANDROID_DOWNLOAD_URL` قرار بگیرد؛ URL حدسی ممنوع است.
-5. بودجهٔ SMS و Rate Limiting/WAF سراسری Cloudflare برای OTP و checkout بررسی شود؛
-   محدودیت‌های هر شماره/IP/حساب به‌تنهایی جلوی چرخش هویت را نمی‌گیرند.
+5. بودجهٔ SMS، ظرفیت واقعی providerها و Rate Limiting/WAF سراسری Cloudflare برای OTP
+   و checkout بررسی شود؛ محدودیت شماره/IP به‌تنهایی جلوی چرخش هویت را نمی‌گیرد.
+6. `npm run load:smoke` فقط روی API محلی اجرا شود و p50/p95/p99، حجم پاسخ، histogram
+   status و خطاهای غیرمنتظره‌اش ثبت شود. این تست public read-only است و اثبات بار
+   واقعی Postgres، پرداخت یا پیامک نیست؛ اجرای remote پیش‌فرض بسته است.
 
 ## گیت تأیید هر انتشار
 
@@ -66,15 +74,17 @@ npm run lint
 npm run build
 npm run build:mobile
 npm run sync:edge
+node scripts/gen-setup-sql.mjs
+node scripts/load-smoke.mjs --url http://127.0.0.1:3000
 cd backend && npm test
 cd backend && npm run typecheck
 cd backend && npm run build
 npm run cap:sync
 ```
 
-اگر DDL/setup تغییر کرده، `node scripts/gen-setup-sql.mjs` نیز باید اجرا و SQL
-تولیدشده از نظر cron و RLS بررسی شود. پاسِ محلی به معنی deploy یا اعمال SQL در
-پروداکشن نیست.
+گزارش load-smoke فقط وقتی معتبر است که backend محلی واقعاً در حال اجرا باشد. پاسِ
+محلی به معنی deploy، اعمال SQL، سلامت WAF/provider یا توان ۱۰۰۰ کاربر در production
+نیست؛ آن‌ها بعد از backup و canary زنده جداگانه اثبات می‌شوند.
 
 ## محدودیت‌های واقعی
 
