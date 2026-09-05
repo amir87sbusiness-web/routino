@@ -40,6 +40,7 @@ export const SHARED_FILES = [
   "services/admin.ts",
   "services/admin-auth.ts",
   "services/admin-user-delete.ts",
+  "services/admin-payment-history.ts",
   "services/password.ts",
   "services/login-throttle.ts",
   "services/owner-bootstrap.ts",
