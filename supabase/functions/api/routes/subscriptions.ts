@@ -1,9 +1,12 @@
 /** Subscription routes — thin edge adapter mirroring
  * backend/src/routes/subscriptions.ts (see that file for the import-bounding
  * rationale). */
+import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { makeAuthenticate, readJson, requireUser, type AppEnv, type Deps } from "../deps.ts";
+import { users } from "../shared/db/schema.ts";
+import { unauthorized } from "../shared/lib/http-errors.ts";
 import {
   ensureExpiresAt,
   hasSettledGrant,
@@ -48,12 +51,28 @@ export function subscriptionRoutes(deps: Deps) {
     return c.json({ ...result, ...tokens });
   });
 
-  /** Imports a legacy client-side subscription — trusted exactly once, bounded
-   * (once per account, capped at IMPORT_MAX_DAYS, never stacks). */
+  /** Imports a legacy client-side subscription. Only accounts that existed
+   * before LEGACY_IMPORT_CUTOFF may use this inherently-untrusted migration
+   * bridge; future public signups are fail-closed. */
   r.post("/subscriptions/import", auth, async (c) => {
     const user = requireUser(c);
     const body = importBody.parse(await readJson(c));
     const t = now();
+
+    const [account] = await db
+      .select({ createdAt: users.createdAt })
+      .from(users)
+      .where(eq(users.id, user.id))
+      .limit(1);
+    if (!account) throw unauthorized("unknown_user", "User no longer exists");
+
+    if (account.createdAt >= new Date(env.LEGACY_IMPORT_CUTOFF)) {
+      return c.json({
+        entitlement: await readEntitlement(db, user.id, t),
+        imported: false,
+        reason: "not_legacy_account",
+      });
+    }
 
     if (await hasSettledGrant(db, user.id)) {
       // Already paid or already imported — replaying this must not extend anything.
