@@ -19,7 +19,7 @@ import {
   pollPayment,
   UUID_RE,
 } from "../shared/services/payment-flow.ts";
-import { checkDiscount, quote } from "../shared/services/pricing.ts";
+import { quoteWithDiscount } from "../shared/services/pricing.ts";
 
 const quoteBody = z.object({
   planId: z.string().min(1).max(32),
@@ -52,9 +52,9 @@ export function paymentRoutes(deps: Deps) {
     const user = await paymentUser(authenticated.id);
     const body = quoteBody.parse(await readJson(c));
     const t = now();
-    const q = await quote(db, body.planId, body.code ?? null, user.id, user.phone, t, 0, true);
-    const d = await checkDiscount(db, body.code ?? null, user.id, user.phone, t);
-    return c.json({ quote: q, discount: d });
+    return c.json(
+      await quoteWithDiscount(db, body.planId, body.code ?? null, user.id, user.phone, t, 0, true),
+    );
   });
 
   r.post("/payments/checkout", auth, async (c) => {
