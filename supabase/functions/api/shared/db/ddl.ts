@@ -1065,7 +1065,7 @@ create table if not exists redemptions (
 
 create table if not exists payments (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references users(id),
+  user_id uuid references users(id) on delete set null,
   plan_id text not null,
   months integer not null,
   amount_toman integer not null,

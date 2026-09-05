@@ -57,6 +57,11 @@ async function existingAttemptResult(
   body: { planId: string; code?: string; platform?: "web" | "android" | "ios" },
   t: Date,
 ): Promise<CheckoutResult> {
+  // This lookup is user-scoped, but preserved financial history may have no
+  // account after deletion and must never be reusable for a checkout.
+  if (!payment.userId) {
+    throw conflict("payment_account_deleted", "This payment belongs to a deleted account.");
+  }
   if (!attemptInputsMatch(payment, body)) {
     throw conflict(
       "duplicate_payment_attempt",
@@ -103,11 +108,17 @@ export async function applyPaid(
   t: Date,
   authority = payment.authority,
 ): Promise<void> {
+  // An anonymous history row is intentionally retained, but it can never add
+  // entitlement or redeem a discount for a deleted account.
+  const userId = payment.userId;
+  if (!userId) {
+    throw conflict("payment_account_deleted", "This payment belongs to a deleted account.");
+  }
   const granted = await db.transaction(async (tx) => {
     const [insertedGrant] = await tx
       .insert(grants)
       .values({
-        userId: payment.userId,
+        userId,
         months: payment.months,
         days: 0,
         source: "payment",
@@ -123,7 +134,7 @@ export async function applyPaid(
 
     const extension = await extendEntitlement(
       tx,
-      payment.userId,
+      userId,
       { planId: payment.planId, months: payment.months },
       t,
     );
@@ -152,7 +163,7 @@ export async function applyPaid(
 
   if (granted && payment.discountCode) {
     try {
-      await redeemDiscount(db, payment.discountCode, payment.userId, payment.id);
+      await redeemDiscount(db, payment.discountCode, userId, payment.id);
     } catch (err) {
       console.error("discount redemption failed after atomic payment grant", {
         paymentId: payment.id,
