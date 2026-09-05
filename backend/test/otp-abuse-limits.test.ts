@@ -71,4 +71,25 @@ describe("OTP abuse limits", () => {
     await releaseProviderLease(h.db, "sms", leases[0]!.leaseId);
     expect((await request("09128888888", "203.0.113.88")).statusCode).toBe(200);
   });
+
+  it("checks saturated provider capacity before any OTP write can become visible", async () => {
+    const db = h.db as typeof h.db & {
+      transaction: typeof h.db.transaction;
+      execute: typeof h.db.execute;
+    };
+    const transaction = db.transaction.bind(db);
+    const execute = db.execute.bind(db);
+    db.transaction = (async () => null) as typeof db.transaction;
+    db.execute = (async () => {
+      throw new Error("OTP SQL must not run while provider capacity is full");
+    }) as unknown as typeof db.execute;
+
+    try {
+      const blocked = await request("09128888889", "203.0.113.89");
+      expect(blocked.statusCode).toBe(429);
+    } finally {
+      db.transaction = transaction;
+      db.execute = execute;
+    }
+  });
 });

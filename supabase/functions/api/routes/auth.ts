@@ -78,20 +78,6 @@ export function authRoutes(deps: Deps) {
 
     const t = now();
     const ip = clientIp(c, env);
-    // The slot and the code are claimed together, in ONE statement — see
-    // `claimSendSlot`. `checkSendRate` still runs, but only to explain WHICH
-    // limit was hit; it no longer enforces them, because a check followed by a
-    // separate insert let simultaneous requests for one phone each count zero
-    // rows and each send a message. Every one of those is real money.
-    const slot = await claimSendSlot(db, env, phone, ip, t);
-    if (!slot) {
-      const verdict = await checkSendRate(db, phone, ip, t);
-      // Last 4 digits only — these logs land in a third-party pipeline with its
-      // own retention rules, and a subscriber list does not belong there.
-      console.warn("otp rate limited", { reason: verdict.reason, phone: `***${phone.slice(-4)}` });
-      throw tooMany("Too many code requests. Try again later.", verdict.retryAfter ?? 60);
-    }
-
     const providerLease = await acquireProviderLease(
       db,
       "sms",
@@ -100,11 +86,27 @@ export function authRoutes(deps: Deps) {
       30_000,
     );
     if (!providerLease) {
-      await releaseSendSlot(db, slot.slotId);
       throw tooMany("Too many code requests. Try again later.", 1);
     }
 
     try {
+      // The slot and the code are claimed together, in ONE statement — see
+      // `claimSendSlot`. `checkSendRate` still runs, but only to explain WHICH
+      // limit was hit; it no longer enforces them, because a check followed by a
+      // separate insert let simultaneous requests for one phone each count zero
+      // rows and each send a message. Every one of those is real money.
+      const slot = await claimSendSlot(db, env, phone, ip, t);
+      if (!slot) {
+        const verdict = await checkSendRate(db, phone, ip, t);
+        // Last 4 digits only — these logs land in a third-party pipeline with its
+        // own retention rules, and a subscriber list does not belong there.
+        console.warn("otp rate limited", {
+          reason: verdict.reason,
+          phone: `***${phone.slice(-4)}`,
+        });
+        throw tooMany("Too many code requests. Try again later.", verdict.retryAfter ?? 60);
+      }
+
       try {
         await sms.sendOtp(phone, slot.code);
       } catch (err) {

@@ -152,28 +152,26 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
     if (adminPhoneMatches(env, phone)) {
       const ledgerKey = adminOtpLedgerKey(env);
-      const slot = await claimSendSlot(db, env, ledgerKey, req.ip ?? null, t);
-      if (slot) {
-        const providerLease = await acquireProviderLease(
-          db,
-          "sms",
-          env.SMS_PROVIDER_MAX_CONCURRENCY,
-          now(),
-          30_000,
-        );
-        if (!providerLease) {
-          await releaseSendSlot(db, slot.slotId);
-        } else {
-          try {
+      const providerLease = await acquireProviderLease(
+        db,
+        "sms",
+        env.SMS_PROVIDER_MAX_CONCURRENCY,
+        now(),
+        30_000,
+      );
+      if (providerLease) {
+        try {
+          const slot = await claimSendSlot(db, env, ledgerKey, req.ip ?? null, t);
+          if (slot) {
             try {
               await sms.sendOtp(normalizePhone(env.ADMIN_PHONE)!, slot.code);
             } catch (error) {
               if (error instanceof SmsNotSentError) await releaseSendSlot(db, slot.slotId);
               req.log.error({ error }, "admin otp send failed");
             }
-          } finally {
-            await releaseProviderLease(db, "sms", providerLease.leaseId);
           }
+        } finally {
+          await releaseProviderLease(db, "sms", providerLease.leaseId);
         }
       }
     }

@@ -65,21 +65,6 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     if (!phone) throw badRequest("invalid_phone", "Enter a valid Iranian mobile number");
 
     const t = now();
-    // The slot and the code are claimed together, in ONE statement — see
-    // `claimSendSlot`. `checkSendRate` still runs, but only to explain WHICH
-    // limit was hit; it no longer enforces them, because a check followed by a
-    // separate insert let simultaneous requests for one phone each count zero
-    // rows and each send a message. Every one of those is real money.
-    const slot = await claimSendSlot(db, env, phone, clientIp(req), t);
-    if (!slot) {
-      const verdict = await checkSendRate(db, phone, clientIp(req), t);
-      // Last 4 digits only. These logs land in a third-party pipeline with its
-      // own retention and access rules; a full subscriber list does not belong
-      // there just to explain a rate-limit hit.
-      req.log.warn({ reason: verdict.reason, phone: `***${phone.slice(-4)}` }, "otp rate limited");
-      throw tooMany("Too many code requests. Try again later.", verdict.retryAfter ?? 60);
-    }
-
     const providerLease = await acquireProviderLease(
       db,
       "sms",
@@ -88,12 +73,28 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       30_000,
     );
     if (!providerLease) {
-      // No provider call was attempted, so this OTP claim is certainly unused.
-      await releaseSendSlot(db, slot.slotId);
       throw tooMany("Too many code requests. Try again later.", 1);
     }
 
     try {
+      // The slot and the code are claimed together, in ONE statement — see
+      // `claimSendSlot`. `checkSendRate` still runs, but only to explain WHICH
+      // limit was hit; it no longer enforces them, because a check followed by a
+      // separate insert let simultaneous requests for one phone each count zero
+      // rows and each send a message. Every one of those is real money.
+      const slot = await claimSendSlot(db, env, phone, clientIp(req), t);
+      if (!slot) {
+        const verdict = await checkSendRate(db, phone, clientIp(req), t);
+        // Last 4 digits only. These logs land in a third-party pipeline with its
+        // own retention and access rules; a full subscriber list does not belong
+        // there just to explain a rate-limit hit.
+        req.log.warn(
+          { reason: verdict.reason, phone: `***${phone.slice(-4)}` },
+          "otp rate limited",
+        );
+        throw tooMany("Too many code requests. Try again later.", verdict.retryAfter ?? 60);
+      }
+
       try {
         await sms.sendOtp(phone, slot.code);
       } catch (err) {

@@ -149,19 +149,17 @@ export function adminRoutes(deps: Deps) {
     }
 
     if (adminPhoneMatches(env, phone)) {
-      const slot = await claimSendSlot(db, env, adminOtpLedgerKey(env), ip, t);
-      if (slot) {
-        const providerLease = await acquireProviderLease(
-          db,
-          "sms",
-          env.SMS_PROVIDER_MAX_CONCURRENCY,
-          now(),
-          30_000,
-        );
-        if (!providerLease) {
-          await releaseSendSlot(db, slot.slotId);
-        } else {
-          try {
+      const providerLease = await acquireProviderLease(
+        db,
+        "sms",
+        env.SMS_PROVIDER_MAX_CONCURRENCY,
+        now(),
+        30_000,
+      );
+      if (providerLease) {
+        try {
+          const slot = await claimSendSlot(db, env, adminOtpLedgerKey(env), ip, t);
+          if (slot) {
             try {
               await sms.sendOtp(normalizePhone(env.ADMIN_PHONE)!, slot.code);
             } catch (error) {
@@ -171,9 +169,9 @@ export function adminRoutes(deps: Deps) {
                   error instanceof Error ? { name: error.name, message: error.message } : undefined,
               });
             }
-          } finally {
-            await releaseProviderLease(db, "sms", providerLease.leaseId);
           }
+        } finally {
+          await releaseProviderLease(db, "sms", providerLease.leaseId);
         }
       }
     }
