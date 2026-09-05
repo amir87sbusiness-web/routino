@@ -77,6 +77,10 @@ export async function makeHarness(overrides: Partial<NodeJS.ProcessEnv> = {}): P
     NODE_ENV: "test",
     ADMIN_PHONE: "09120000123",
     ADMIN_SESSION_SECRET: "s".repeat(48),
+    // Existing subscription-import tests model legacy accounts. Keep their
+    // default eligibility independent of the real production rollout date;
+    // tests that exercise the cutoff can override this explicitly.
+    LEGACY_IMPORT_CUTOFF: "2999-01-01T00:00:00.000Z",
     ...overrides,
   });
   const pglite = new PGlite();
