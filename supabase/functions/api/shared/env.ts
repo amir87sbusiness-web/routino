@@ -79,6 +79,11 @@ const schema = z.object({
 
   /** Bound the damage from the inherently-untrusted subscription import. */
   IMPORT_MAX_DAYS: z.coerce.number().default(400),
+  /** Only accounts that already existed before the public-launch boundary may
+   * use the legacy local-subscription importer. The fixed default preserves all
+   * accounts that existed during this hardening rollout while closing the path
+   * for future signups. Tests override it with a far-future date. */
+  LEGACY_IMPORT_CUTOFF: z.string().datetime().default("2026-09-05T09:45:00.000Z"),
 
   /**
    * Optional owner bootstrap. When OWNER_PHONE and OWNER_PASSWORD are both set,
