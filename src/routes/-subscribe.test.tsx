@@ -7,7 +7,7 @@ import { defaultDb, type Db } from "@/lib/store";
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const payments = vi.hoisted(() => ({
-  checkout: vi.fn(),
+  checkoutWithProviderBusyRetry: vi.fn(),
   fetchPlans: vi.fn(),
   fetchQuote: vi.fn(),
 }));
@@ -61,7 +61,7 @@ describe("SubscribePage payment attempts", () => {
     app.db = defaultDb([]);
     app.applyEntitlement.mockReset();
     navigate.mockReset();
-    payments.checkout.mockReset();
+    payments.checkoutWithProviderBusyRetry.mockReset();
     payments.fetchQuote.mockReset();
     payments.fetchPlans.mockReset().mockResolvedValue({
       plans: [
@@ -86,7 +86,7 @@ describe("SubscribePage payment attempts", () => {
 
   it("blocks two clicks before React can render the disabled state", async () => {
     let release!: (value: unknown) => void;
-    payments.checkout.mockReturnValue(
+    payments.checkoutWithProviderBusyRetry.mockReturnValue(
       new Promise((resolve) => {
         release = resolve;
       }),
@@ -99,38 +99,40 @@ describe("SubscribePage payment attempts", () => {
       await Promise.resolve();
     });
 
-    expect(payments.checkout).toHaveBeenCalledTimes(1);
+    expect(payments.checkoutWithProviderBusyRetry).toHaveBeenCalledTimes(1);
     await act(async () => release({ free: false, paymentId: "payment-1" }));
   });
 
   it("reuses one UUID after a retryable timeout", async () => {
-    payments.checkout
+    payments.checkoutWithProviderBusyRetry
       .mockRejectedValueOnce(new ApiError(504, "payment_network_timeout", "safe"))
       .mockResolvedValueOnce({ free: false, paymentId: "payment-1" });
 
     await click(paymentButton(host));
     await click(paymentButton(host));
 
-    expect(payments.checkout).toHaveBeenCalledTimes(2);
-    const firstAttempt = payments.checkout.mock.calls[0]?.[3];
-    const secondAttempt = payments.checkout.mock.calls[1]?.[3];
+    expect(payments.checkoutWithProviderBusyRetry).toHaveBeenCalledTimes(2);
+    const firstAttempt = payments.checkoutWithProviderBusyRetry.mock.calls[0]?.[3];
+    const secondAttempt = payments.checkoutWithProviderBusyRetry.mock.calls[1]?.[3];
     expect(firstAttempt).toMatch(/^[0-9a-f-]{36}$/i);
     expect(secondAttempt).toBe(firstAttempt);
   });
 
   it("keeps the UUID when the same attempt is still being processed", async () => {
-    payments.checkout
+    payments.checkoutWithProviderBusyRetry
       .mockRejectedValueOnce(new ApiError(409, "duplicate_payment_attempt", "safe"))
       .mockResolvedValueOnce({ free: false, paymentId: "payment-1" });
 
     await click(paymentButton(host));
     await click(paymentButton(host));
 
-    expect(payments.checkout.mock.calls[1]?.[3]).toBe(payments.checkout.mock.calls[0]?.[3]);
+    expect(payments.checkoutWithProviderBusyRetry.mock.calls[1]?.[3]).toBe(
+      payments.checkoutWithProviderBusyRetry.mock.calls[0]?.[3],
+    );
   });
 
   it("creates a new UUID when the selected plan changes", async () => {
-    payments.checkout
+    payments.checkoutWithProviderBusyRetry
       .mockRejectedValueOnce(new ApiError(503, "payment_provider_unavailable", "safe"))
       .mockResolvedValueOnce({ free: false, paymentId: "payment-2" });
 
@@ -141,18 +143,22 @@ describe("SubscribePage payment attempts", () => {
     await click(oneMonth);
     await click(paymentButton(host));
 
-    expect(payments.checkout.mock.calls[1]?.[3]).not.toBe(payments.checkout.mock.calls[0]?.[3]);
+    expect(payments.checkoutWithProviderBusyRetry.mock.calls[1]?.[3]).not.toBe(
+      payments.checkoutWithProviderBusyRetry.mock.calls[0]?.[3],
+    );
   });
 
   it("releases the UUID after a definitive ZarinPal rejection", async () => {
-    payments.checkout
+    payments.checkoutWithProviderBusyRetry
       .mockRejectedValueOnce(new ApiError(400, "psp_failed", "safe"))
       .mockResolvedValueOnce({ free: false, paymentId: "payment-3" });
 
     await click(paymentButton(host));
     await click(paymentButton(host));
 
-    expect(payments.checkout.mock.calls[1]?.[3]).not.toBe(payments.checkout.mock.calls[0]?.[3]);
+    expect(payments.checkoutWithProviderBusyRetry.mock.calls[1]?.[3]).not.toBe(
+      payments.checkoutWithProviderBusyRetry.mock.calls[0]?.[3],
+    );
     expect(host.textContent).not.toContain("safe");
   });
 });

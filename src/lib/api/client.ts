@@ -92,7 +92,8 @@ async function webRequest(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 15_000);
   // Honour a caller's signal as well as our timeout.
-  opts.signal?.addEventListener("abort", () => controller.abort(), { once: true });
+  const abortFromCaller = () => controller.abort();
+  opts.signal?.addEventListener("abort", abortFromCaller, { once: true });
 
   try {
     const res = await fetch(url, {
@@ -109,6 +110,7 @@ async function webRequest(
     return { status: res.status, body, headers: h };
   } finally {
     clearTimeout(timer);
+    opts.signal?.removeEventListener("abort", abortFromCaller);
   }
 }
 

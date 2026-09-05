@@ -14,7 +14,12 @@ import { useEffect, useRef, useState } from "react";
 import { Button, Input, Logo } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
 import { entitlementToSubscription } from "@/lib/api/auth";
-import { checkout, fetchPlans, fetchQuote, type ServerPlan } from "@/lib/api/payments";
+import {
+  checkoutWithProviderBusyRetry,
+  fetchPlans,
+  fetchQuote,
+  type ServerPlan,
+} from "@/lib/api/payments";
 import { faNum, formatDate, dateKey } from "@/lib/dates";
 import { subscriptionActive } from "@/lib/logic";
 import { PLANS } from "@/lib/presets";
@@ -51,6 +56,7 @@ function SubscribePage() {
   const [freeSuccess, setFreeSuccess] = useState(false);
   const paymentInFlight = useRef(false);
   const paymentAttempt = useRef<{ id: string; key: string } | null>(null);
+  const paymentAbort = useRef<AbortController | null>(null);
 
   // Server catalog. Failure keeps the bundled fallback and flags offline mode.
   useEffect(() => {
@@ -73,6 +79,14 @@ function SubscribePage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(
+    () => () => {
+      paymentAbort.current?.abort();
+      paymentAbort.current = null;
+    },
+    [],
+  );
 
   if (!ctx?.db) return null;
   const { db, applyEntitlement, t, lang, cal } = ctx;
@@ -143,13 +157,21 @@ function SubscribePage() {
     setPaying(true);
     setPayError("");
     setNeedsLogin(false);
+    const controller = new AbortController();
+    paymentAbort.current = controller;
     try {
       const platform = Capacitor.getPlatform() as "web" | "android" | "ios";
       const attemptKey = JSON.stringify([selected, appliedCode?.code ?? null, platform]);
       if (!paymentAttempt.current || paymentAttempt.current.key !== attemptKey) {
         paymentAttempt.current = { id: crypto.randomUUID(), key: attemptKey };
       }
-      const res = await checkout(selected, appliedCode?.code, platform, paymentAttempt.current.id);
+      const res = await checkoutWithProviderBusyRetry(
+        selected,
+        appliedCode?.code,
+        platform,
+        paymentAttempt.current.id,
+        controller.signal,
+      );
 
       if (res.free && res.entitlement) {
         paymentAttempt.current = null;
@@ -173,9 +195,11 @@ function SubscribePage() {
         t("شروع پرداخت ناموفق بود. دوباره تلاش کن.", "Could not start the payment. Try again."),
       );
     } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") return;
       const retryable =
         err instanceof ApiError &&
         (err.offline ||
+          err.code === "provider_busy" ||
           err.code === "payment_network_timeout" ||
           err.code === "payment_provider_unavailable" ||
           err.code === "duplicate_payment_attempt");
@@ -195,6 +219,13 @@ function SubscribePage() {
           t(
             "این تلاش پرداخت قبلاً ثبت شده؛ چند لحظه صبر کن و دوباره وضعیت را بررسی کن.",
             "This payment attempt is already registered. Wait a moment and check again.",
+          ),
+        );
+      } else if (err instanceof ApiError && err.code === "provider_busy") {
+        setPayError(
+          t(
+            "درگاه شلوغ است؛ چند لحظه دیگر دوباره امتحان کن.",
+            "The gateway is busy. Try again in a moment.",
           ),
         );
       } else if (
@@ -218,8 +249,11 @@ function SubscribePage() {
         setPayError(t("یه مشکلی پیش اومد. دوباره تلاش کن.", "Something went wrong. Try again."));
       }
     } finally {
-      paymentInFlight.current = false;
-      setPaying(false);
+      if (paymentAbort.current === controller) {
+        paymentAbort.current = null;
+        paymentInFlight.current = false;
+        setPaying(false);
+      }
     }
   };
 
