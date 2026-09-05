@@ -28,8 +28,8 @@ const pushBody = z.object({
     .array(
       z.object({
         kind: z.string().min(1).max(32),
-        id: z.string().min(1).max(128),
         // jsonb; the service bounds its serialised size. Absent on tombstones.
+        id: z.string().min(1).max(128),
         data: z.unknown(),
         updatedAt: z.number().int().nonnegative(),
         deleted: z.boolean(),
@@ -101,6 +101,10 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
    * `settleOpenPayments`, before the entitlement is read, so a user whose
    * gateway callback never arrived is simply subscribed by the time the app
    * paints. On the normal path that is one indexed SELECT returning nothing.
+   *
+   * Legacy clients still use pull/push instead of exchange. Count activity here
+   * only on the final pull page so those clients are covered without adding any
+   * extra client request or repeating the activity statement for pagination.
    */
   app.get("/sync/pull", { preHandler: app.authenticate }, async (req) => {
     const user = requireUser(req);
@@ -108,6 +112,7 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
     const t = now();
     const page = await pullRecords(db, user.id, cursor, limit);
     if (page.hasMore) return page;
+    await touchUserActivity(db, user.id, t);
     await settleOpenPayments(db, psp, user.id, t);
     return { ...page, entitlement: await readEntitlement(db, user.id, t) };
   });
