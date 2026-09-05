@@ -77,20 +77,24 @@ export function syncRoutes(deps: Deps) {
 
   // The last page carries the entitlement too, so the app does not make a
   // separate `GET /subscriptions/me` request every time it opens. See the
-  // Fastify twin for the reasoning.
+  // Fastify twin for the reasoning. Legacy clients still use pull/push instead
+  // of exchange, so count activity here only on the final pull page. That adds
+  // no client request and avoids repeating the activity statement on pagination.
   r.get("/sync/pull", auth, async (c) => {
     const user = requireUser(c);
     const { cursor, limit } = pullQuery.parse({
       cursor: c.req.query("cursor"),
       limit: c.req.query("limit"),
     });
+    const t = now();
     const page = await pullRecords(db, user.id, cursor, limit);
     if (page.hasMore) return c.json(page);
+    await touchUserActivity(db, user.id, t);
     // Finish any payment whose gateway callback never made it back — see the
     // Fastify twin. A VPN-routed browser drops that redirect often enough that
     // without this the money moves and nothing is granted.
-    await settleOpenPayments(db, psp, user.id, now());
-    return c.json({ ...page, entitlement: await readEntitlement(db, user.id, now()) });
+    await settleOpenPayments(db, psp, user.id, t);
+    return c.json({ ...page, entitlement: await readEntitlement(db, user.id, t) });
   });
 
   return r;
