@@ -29,8 +29,10 @@ export const Route = createFileRoute("/pay/result")({
   component: PayResultPage,
 });
 
-const POLL_MS = 2500;
-const MAX_POLLS = 24; // ~1 minute, then we stop and let the user retry
+/** Start responsive, then back off with the server's verify cooldown instead of
+ * hammering the Edge Function every 2.5 seconds for a full minute. The first
+ * poll is still immediate; these are only the waits between pending attempts. */
+const POLL_DELAYS_MS = [2_500, 5_000, 10_000, 20_000, 30_000] as const;
 
 function PayResultPage() {
   const ctx = useAppMaybe();
@@ -51,6 +53,16 @@ function PayResultPage() {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
+    const scheduleNext = (poll: () => Promise<void>) => {
+      const delay = POLL_DELAYS_MS[polls.current];
+      if (delay === undefined) {
+        setState("timeout");
+        return;
+      }
+      polls.current += 1;
+      timer = setTimeout(() => void poll(), delay);
+    };
+
     const poll = async () => {
       try {
         const res = await fetchPayment(paymentId);
@@ -68,15 +80,10 @@ function PayResultPage() {
           setState("done");
           return;
         }
-        if (++polls.current >= MAX_POLLS) {
-          setState("timeout");
-          return;
-        }
-        timer = setTimeout(poll, POLL_MS);
+        scheduleNext(poll);
       } catch {
         if (cancelled) return;
-        if (++polls.current >= MAX_POLLS) setState("timeout");
-        else timer = setTimeout(poll, POLL_MS);
+        scheduleNext(poll);
       }
     };
     void poll();
