@@ -29,6 +29,7 @@ const server = {
   log: [] as RemoteRecord[],
   seq: 0,
   resetNextPull: false,
+  rejectNextBatchForReset: false,
   exchanges: [] as ExchangeRequest[],
   /** ids the server permanently refuses, e.g. an oversized journal entry. */
   refuse: new Set<string>(),
@@ -81,6 +82,20 @@ const server = {
   },
   exchange(request: ExchangeRequest): ExchangeResponse {
     this.exchanges.push(structuredClone(request));
+    if (this.rejectNextBatchForReset) {
+      this.rejectNextBatchForReset = false;
+      this.resetNextPull = false;
+      return {
+        records: [],
+        cursor: 0,
+        hasMore: true,
+        reset: true,
+        batchAccepted: false,
+        applied: 0,
+        skipped: 0,
+        rejectedRecords: [],
+      } as ExchangeResponse;
+    }
     const pushed = this.push(request.records);
     const pulled = this.pull(request.cursor);
     return {
@@ -88,12 +103,14 @@ const server = {
       applied: pushed.applied,
       skipped: pushed.skipped,
       rejectedRecords: pushed.rejectedRecords,
+      batchAccepted: true,
     };
   },
   reset() {
     this.log = [];
     this.seq = 0;
     this.resetNextPull = false;
+    this.rejectNextBatchForReset = false;
     this.exchanges = [];
     this.refuse.clear();
     this.refuseCode = "record_too_large";
@@ -646,6 +663,22 @@ describe("sync engine, two devices on one account", () => {
     expect(outcome.pushed).toBe(0);
     expect(outcome.pulled).toBe(0);
     expect(outcome.remoteChanged).toBe(true);
+  });
+
+  it("keeps dirty flags when a reset response did not admit the exchange batch", async () => {
+    await localDirtyHabit("stale-dirty", "نسخه محلی", 2_000);
+    server.rejectNextBatchForReset = true;
+
+    const outcome = await syncNow(OWNER);
+
+    expect(outcome.pushed).toBe(0);
+    expect(outcome.remoteChanged).toBe(true);
+    expect(await idb.habits.get("stale-dirty")).toMatchObject({
+      data: { id: "stale-dirty", name: "نسخه محلی" },
+      updatedAt: 2_000,
+      dirty: 1,
+    });
+    expect(server.log.some((record) => record.id === "stale-dirty")).toBe(false);
   });
 
   it("keeps syncing everything else when the server refuses one record", async () => {

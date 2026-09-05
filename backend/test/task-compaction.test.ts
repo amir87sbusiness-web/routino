@@ -355,7 +355,49 @@ describe("task archive SQL predicate", () => {
 });
 
 describe("bounded transactional task compaction", () => {
-  it("drains a 10000-task owner-month backlog within one scheduled day without semantic or counter loss", async () => {
+  it("offers the planner the owner-month partial index for eligible ordered work", async () => {
+    await h.raw(`
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      select '${OWNER}', 'tasks', 'planner-' || value,
+             jsonb_build_object(
+               'id', 'planner-' || value,
+               'dateKey', case when value % 2 = 0 then '2026-04-01' else '2026-05-01' end,
+               'title', 'planner task ' || value,
+               'type', 'binary', 'target', 1, 'value', 1, 'done', true
+             ),
+             ${OLD_UPDATED_AT} + value, false, value
+        from generate_series(1, 500) value;
+    `);
+    const planRows = await h.query<Record<string, string>>(`
+      explain (costs off)
+      select source.user_id, left(source.data->>'dateKey', 7), source.id
+        from records source
+       where source.kind = 'tasks'
+         and source.deleted = false
+         and source.data->>'done' = 'true'
+         and routino_task_archive_candidate_valid(source.id, source.data)
+         and source.updated_at between 0 and 9007199254740991
+         and left(source.data->>'dateKey', 7) < '2026-06'
+         and source.updated_at <= ${Date.parse(NOW) - 7 * 86_400_000}
+         and not exists (
+           select 1
+             from records archive
+             cross join lateral jsonb_array_elements(
+               case when jsonb_typeof(archive.data->'items') = 'array'
+                 then archive.data->'items' else '[]'::jsonb end
+             ) item
+            where archive.user_id = source.user_id
+              and archive.kind = 'taskMonths'
+              and item->>0 = source.id
+         )
+       order by source.user_id, left(source.data->>'dateKey', 7), source.id collate "C"
+       limit 500
+    `);
+    const plan = planRows.flatMap((row) => Object.values(row)).join("\n");
+    expect(plan).toContain("records_task_compaction_owner_month");
+  });
+
+  it("drains a 10000-task fixture losslessly within the schedule's theoretical daily ceiling", async () => {
     await h.raw(`
       insert into users (id, phone, sync_growth_period_started_at)
       values ${LOAD_OWNERS.slice(1)

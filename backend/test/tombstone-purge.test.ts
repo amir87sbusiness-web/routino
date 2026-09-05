@@ -81,6 +81,14 @@ const push = (access: string, records: unknown[]) =>
 const pull = (access: string, cursor: number) =>
   h.app.inject({ method: "GET", url: `/v1/sync/pull?cursor=${cursor}`, headers: auth(access) });
 
+const exchange = (access: string, cursor: number, records: unknown[]) =>
+  h.app.inject({
+    method: "POST",
+    url: "/v1/sync/exchange",
+    headers: auth(access),
+    payload: { protocolVersion: 2, cursor, records },
+  });
+
 describe("bounded tombstone purge", () => {
   it("drains old tombstones in deterministic batches and advances each affected watermark", async () => {
     const a = await signIn("09124440006");
@@ -232,6 +240,62 @@ describe("bounded tombstone purge", () => {
     // Starting over is always allowed and returns the true current state.
     const fresh = (await pull(access, 0)).json() as { records: { id: string }[] };
     expect(fresh.records.map((r) => r.id)).toEqual(["alive"]);
+  });
+
+  it("rejects a stale exchange batch atomically before it can resurrect a purged row", async () => {
+    const { access, user } = await signIn("09124440008");
+    const deletedAt = Date.now() - 200 * DAY;
+    await push(access, [
+      habit("alive-before-gc"),
+      { kind: "habits", id: "purged-delete", data: null, updatedAt: deletedAt, deleted: true },
+    ]);
+    await h.raw(purgeSql());
+
+    const staleLive = {
+      ...habit("purged-delete"),
+      updatedAt: Date.now(),
+    };
+    const response = await exchange(access, 1, [staleLive]);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      reset: true,
+      batchAccepted: false,
+      applied: 0,
+      skipped: 0,
+      records: [],
+    });
+    expect(
+      await h.query(`
+        select kind, id, deleted from records
+         where user_id = '${user.id}' and kind = 'habits' and id = 'purged-delete'
+      `),
+    ).toEqual([]);
+  });
+
+  it("fails legacy cursorless push closed after tombstone GC without writing", async () => {
+    const { access, user } = await signIn("09124440009");
+    await push(access, [
+      habit("legacy-alive"),
+      {
+        kind: "habits",
+        id: "legacy-purged-delete",
+        data: null,
+        updatedAt: Date.now() - 200 * DAY,
+        deleted: true,
+      },
+    ]);
+    await h.raw(purgeSql());
+
+    const response = await push(access, [
+      { ...habit("legacy-purged-delete"), updatedAt: Date.now() },
+    ]);
+    expect(response.statusCode).toBeGreaterThanOrEqual(400);
+    expect(
+      await h.query(`
+        select kind, id, deleted from records
+         where user_id = '${user.id}' and kind = 'habits' and id = 'legacy-purged-delete'
+      `),
+    ).toEqual([]);
   });
 
   it("never touches another user's rows", async () => {

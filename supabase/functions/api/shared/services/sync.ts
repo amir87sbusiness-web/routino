@@ -159,6 +159,9 @@ export interface PushResult {
   /** Invalid rows refused independently so one bad local item cannot stop the
    * rest of the outbox or the pull. Payload data is never echoed. */
   rejectedRecords: RejectedSyncRecord[];
+  /** False only when the owner-lock cursor gate refused the entire batch before
+   * any record write. The client must retain every corresponding dirty flag. */
+  batchAccepted: boolean;
 }
 
 export interface PullResult {
@@ -178,6 +181,7 @@ export interface ExchangeResult extends PullResult {
   applied: number;
   skipped: number;
   rejectedRecords: RejectedSyncRecord[];
+  batchAccepted: boolean;
 }
 
 const utf8Bytes = (value: string) => new TextEncoder().encode(value).byteLength;
@@ -459,6 +463,7 @@ async function pushRecordsLegacySchema(
           code: "account_quota_exceeded" as const,
         })),
       ],
+      batchAccepted: true,
     };
   }
 
@@ -476,7 +481,18 @@ async function pushRecordsLegacySchema(
     applied,
     skipped: Number(row.total) - applied,
     rejectedRecords,
+    batchAccepted: true,
   };
+}
+
+function isUndefinedRoutinoCursorGateError(error: unknown): boolean {
+  return hasPgError(
+    error,
+    (candidate) =>
+      candidate.code === "42883" &&
+      typeof candidate.message === "string" &&
+      /\broutino_sync_push_if_current\s*\(/i.test(candidate.message),
+  );
 }
 
 export async function pushRecords(
@@ -484,12 +500,19 @@ export async function pushRecords(
   userId: string,
   incoming: PushRecord[],
   now: Date,
+  cursor: number | null = null,
 ): Promise<PushResult> {
   const { valid, rejectedRecords } = partitionIncoming(incoming);
 
   if (valid.length === 0) {
     const [u] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-    return { cursor: Number(u?.seq ?? 0), applied: 0, skipped: 0, rejectedRecords };
+    return {
+      cursor: Number(u?.seq ?? 0),
+      applied: 0,
+      skipped: 0,
+      rejectedRecords,
+      batchAccepted: true,
+    };
   }
 
   const ceiling = now.getTime() + CLOCK_SKEW_TOLERANCE_MS;
@@ -523,15 +546,23 @@ export async function pushRecords(
   let res: Awaited<ReturnType<Database["execute"]>>;
   try {
     res = await db.execute(sql`
-      select result.cursor, result.applied, result.skipped, result.quota_rejected
-        from routino_push_records(
+      select result.cursor, result.applied, result.skipped,
+             result.quota_rejected, result.batch_accepted
+        from routino_sync_push_if_current(
           ${userId}::uuid,
           ${now.toISOString()}::timestamptz,
-          ${JSON.stringify(packet)}::jsonb
+          ${JSON.stringify(packet)}::jsonb,
+          ${cursor}::bigint
         ) result
     `);
   } catch (error) {
-    if (isUndefinedRoutinoPushRecordsError(error)) {
+    // During code-first rollout, only cursor zero may use the old writer: it is
+    // an explicitly fresh full resync. A non-zero or cursorless request cannot
+    // prove it is above the GC watermark and therefore fails closed.
+    if (
+      cursor === 0 &&
+      (isUndefinedRoutinoPushRecordsError(error) || isUndefinedRoutinoCursorGateError(error))
+    ) {
       return pushRecordsLegacySchema(db, userId, all, rejectedRecords);
     }
     if (!isAccountQuotaError(error)) throw error;
@@ -560,6 +591,7 @@ export async function pushRecords(
           ...(Number.isFinite(retryAt) ? { retryAt } : {}),
         })),
       ],
+      batchAccepted: true,
     };
   }
 
@@ -568,6 +600,7 @@ export async function pushRecords(
     applied: string | number;
     skipped: string | number;
     quota_rejected: RejectedSyncRecord[];
+    batch_accepted: boolean;
   }>(res);
   if (!row) throw unauthorized("unknown_user", "User no longer exists");
   // bigint and count() arrive as strings on node-postgres, numbers on PGlite.
@@ -585,6 +618,7 @@ export async function pushRecords(
           }))
         : []),
     ],
+    batchAccepted: Boolean(row.batch_accepted),
   };
 }
 
@@ -714,7 +748,8 @@ export interface PullDbMetrics {
   lookaheadUtf8Bytes: number;
 }
 
-/** Applies this device's outbox and reads changes from its ORIGINAL cursor.
+/** Admits this device's outbox against its ORIGINAL cursor while holding the
+ * same owner lock as the write, then reads changes from that cursor.
  * Keeping the original cursor is essential: adopting the push cursor would
  * skip rows another device committed before this request. Empty exchanges skip
  * the push query entirely. */
@@ -727,8 +762,20 @@ export async function exchangeRecords(
   limit = PULL_PAGE_SIZE,
 ): Promise<ExchangeResult> {
   const pushed = incoming.length
-    ? await pushRecords(db, userId, incoming, now)
-    : { applied: 0, skipped: 0, rejectedRecords: [] };
+    ? await pushRecords(db, userId, incoming, now, cursor)
+    : { applied: 0, skipped: 0, rejectedRecords: [], batchAccepted: true };
+  if (!pushed.batchAccepted) {
+    return {
+      records: [],
+      cursor: 0,
+      hasMore: true,
+      reset: true,
+      applied: 0,
+      skipped: 0,
+      rejectedRecords: pushed.rejectedRecords,
+      batchAccepted: false,
+    };
+  }
   // `pullRecords` reserves 8 KiB for its normal response envelope. Exchange
   // adds client-controlled (but bounded) rejection metadata, so reserve its
   // actual UTF-8 JSON size too before choosing public records.
@@ -749,6 +796,7 @@ export async function exchangeRecords(
     applied: pushed.applied,
     skipped: pushed.skipped,
     rejectedRecords: pushed.rejectedRecords,
+    batchAccepted: true,
   };
 }
 

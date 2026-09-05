@@ -44,6 +44,16 @@ const ELASTIC_MAINTENANCE_MIGRATION_PATH = resolve(
   "supabase/migrations/20260905140000_elastic_launch_hardening.sql",
 );
 
+function cronBody(sql: string, jobName: string, delimiter: "$$" | "$job$"): string {
+  const job = sql.indexOf(`'${jobName}'`);
+  expect(job).toBeGreaterThan(-1);
+  const open = sql.indexOf(`${delimiter}begin;`, job);
+  expect(open).toBeGreaterThan(job);
+  const close = sql.indexOf(delimiter, open + delimiter.length);
+  expect(close).toBeGreaterThan(open);
+  return sql.slice(open + delimiter.length, close);
+}
+
 let h: Harness;
 
 beforeEach(async () => {
@@ -226,7 +236,8 @@ describe("launch schema repairs", () => {
              'routino_task_compaction_backlog',
              'routino_compact_task_months',
              'routino_run_task_month_compaction',
-             'routino_purge_tombstones'
+             'routino_purge_tombstones',
+             'routino_sync_push_if_current'
            )
        order by routine_name
     `);
@@ -802,12 +813,20 @@ describe("launch schema repairs", () => {
     const compactionSchedule = `select cron.schedule(
   'routino-task-month-compaction',
   '* * * * *',
-  $$select * from routino_run_task_month_compaction(now(), 1000)$$
+  $$begin;
+set local statement_timeout = '45000ms';
+set local lock_timeout = '1000ms';
+select * from routino_run_task_month_compaction(now(), 1000);
+commit;$$
 );`;
     const tombstoneSchedule = `select cron.schedule(
   'routino-tombstone-purge',
   '*/5 * * * *',
-  $$select * from routino_purge_tombstones(now(), 2000)$$
+  $$begin;
+set local statement_timeout = '45000ms';
+set local lock_timeout = '1000ms';
+select * from routino_purge_tombstones(now(), 2000);
+commit;$$
 );`;
 
     expect(sql).toContain(unschedule);
@@ -819,6 +838,20 @@ describe("launch schema repairs", () => {
     expect(sql.indexOf(unschedule)).toBeLessThan(sql.indexOf(compactionSchedule));
     expect(sql.match(/'routino-task-month-compaction'/g)).toHaveLength(2);
     expect(sql.match(/'routino-tombstone-purge'/g)).toHaveLength(2);
+  });
+
+  it("executes every bounded maintenance cron body with PostgreSQL-valid transaction syntax", async () => {
+    execFileSync(process.execPath, ["scripts/gen-setup-sql.mjs"], { cwd: root, stdio: "pipe" });
+    const setup = readFileSync(resolve(root, "supabase/setup.sql"), "utf8");
+    const migration = readFileSync(ELASTIC_MAINTENANCE_MIGRATION_PATH, "utf8");
+    for (const body of [
+      cronBody(setup, "routino-task-month-compaction", "$$"),
+      cronBody(setup, "routino-tombstone-purge", "$$"),
+      cronBody(migration, "routino-task-month-compaction", "$job$"),
+      cronBody(migration, "routino-tombstone-purge", "$job$"),
+    ]) {
+      await h.raw(body);
+    }
   });
 
   it("installs indexed advisory-locked maintenance entrypoints without running them", async () => {
@@ -843,11 +876,11 @@ describe("launch schema repairs", () => {
     const indexes = await h.query<{ indexname: string; indexdef: string }>(`
         select indexname, indexdef from pg_indexes
          where schemaname = 'public'
-           and indexname in ('records_task_compaction_eligible', 'records_tombstone_purge')
+           and indexname in ('records_task_compaction_owner_month', 'records_tombstone_purge')
          order by indexname
       `);
     expect(indexes.map((index) => index.indexname)).toEqual([
-      "records_task_compaction_eligible",
+      "records_task_compaction_owner_month",
       "records_tombstone_purge",
     ]);
     expect(indexes[0]!.indexdef).toMatch(/"?left"?\(\(data ->> 'dateKey'::text\), 7\)/);
@@ -879,5 +912,7 @@ describe("launch schema repairs", () => {
     expect(migration).toContain("and source.seq = locked.seq");
     expect(migration).toContain("'routino-task-month-compaction',\n        '* * * * *'");
     expect(migration).toContain("'routino-tombstone-purge',\n        '*/5 * * * *'");
+    expect(migration.match(/set local statement_timeout = '45000ms'/g)).toHaveLength(2);
+    expect(migration.match(/set local lock_timeout = '1000ms'/g)).toHaveLength(2);
   });
 });

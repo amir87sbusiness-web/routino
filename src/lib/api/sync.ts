@@ -59,6 +59,9 @@ export interface ExchangeResponse extends PullResponse {
   applied: number;
   skipped: number;
   rejectedRecords: RejectedSyncRecord[];
+  /** False means the cursor gate rejected every uploaded row before writing;
+   * retain their local dirty flags, wipe synced copies, and pull from zero. */
+  batchAccepted: boolean;
 }
 
 export function exchangeRecords(

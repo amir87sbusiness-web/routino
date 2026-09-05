@@ -38,7 +38,11 @@ select cron.unschedule(jobid) from cron.job where jobname = 'routino-task-month-
 select cron.schedule(
   'routino-task-month-compaction',
   '* * * * *',
-  $$select * from routino_run_task_month_compaction(now(), 1000)$$
+  $$begin;
+set local statement_timeout = '45000ms';
+set local lock_timeout = '1000ms';
+select * from routino_run_task_month_compaction(now(), 1000);
+commit;$$
 );
 
 -- A small daily batch. The function itself also carries these timeouts and
@@ -75,7 +79,11 @@ select cron.unschedule(jobid) from cron.job where jobname = 'routino-tombstone-p
 select cron.schedule(
   'routino-tombstone-purge',
   '*/5 * * * *',
-  $$select * from routino_purge_tombstones(now(), 2000)$$
+  $$begin;
+set local statement_timeout = '45000ms';
+set local lock_timeout = '1000ms';
+select * from routino_purge_tombstones(now(), 2000);
+commit;$$
 );
 `;
 

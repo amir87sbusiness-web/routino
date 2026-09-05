@@ -519,11 +519,15 @@ async function run(owner: string, options: SyncOptions): Promise<SyncOutcome> {
     const refused = new Set((page.rejectedRecords ?? []).map(rejectionKey));
     const quotaRetryAt = await pauseQuotaRejected(batch, page.rejectedRecords ?? [], owner);
     if (quotaRetryAt !== undefined) state = { ...state, owner, quotaRetryAt };
-    await clearDirty(
-      batch
-        .filter(({ record }) => !refused.has(rejectionKey(record)))
-        .flatMap(({ sources }) => sources),
-    );
+    // Older servers did not expose batchAccepted and always admitted before
+    // returning reset. Only an explicit false is the new pre-write cursor gate.
+    if (page.batchAccepted !== false) {
+      await clearDirty(
+        batch
+          .filter(({ record }) => !refused.has(rejectionKey(record)))
+          .flatMap(({ sources }) => sources),
+      );
+    }
     pushed += page.applied;
 
     let guard = 0;

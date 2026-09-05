@@ -51,8 +51,10 @@ alter table records drop constraint if exists records_kind_valid;
 alter table records add constraint records_kind_valid check (kind in
   ('categories','habits','habitMonths','tasks','timerSessions','journal','taskMonths'));
 create index if not exists records_pull on records (user_id, seq);
-create index if not exists records_task_compaction_eligible
-  on records ((left(data->>'dateKey', 7)), updated_at, user_id, id)
+drop index if exists records_task_compaction_eligible;
+create index if not exists records_task_compaction_owner_month
+  on records (user_id, (left(data->>'dateKey', 7)), (id collate "C"))
+  include (updated_at)
   where kind = 'tasks' and deleted = false and data->>'done' = 'true';
 create index if not exists records_tombstone_purge
   on records (updated_at, seq)
@@ -536,6 +538,62 @@ end
 $function$;
 
 revoke execute on function routino_push_records(uuid, timestamptz, jsonb) from public;
+
+-- Cursor admission and the write share one transaction and one owner lock.
+-- A stale device must be refused before routino_push_records can recreate a
+-- tombstone that maintenance already removed. NULL identifies the cursorless
+-- legacy endpoint; it remains usable only until this owner has any GC history.
+create or replace function routino_sync_push_if_current(
+  p_user_id uuid,
+  p_now timestamptz,
+  p_incoming jsonb,
+  p_cursor bigint
+)
+returns table (
+  cursor bigint,
+  applied bigint,
+  skipped bigint,
+  quota_rejected jsonb,
+  batch_accepted boolean
+)
+language plpgsql
+volatile
+security invoker
+set search_path = public, pg_temp
+as $function$
+declare
+  v_gc_seq bigint;
+begin
+  select u.gc_seq
+    into v_gc_seq
+    from users u
+   where u.id = p_user_id
+   for update;
+  if not found then
+    raise exception 'unknown sync user';
+  end if;
+
+  if p_cursor is null and v_gc_seq > 0 then
+    raise exception using
+      errcode = '55000',
+      message = 'cursorless sync push requires a full protocol-v2 resync';
+  end if;
+
+  if p_cursor is not null and p_cursor > 0 and p_cursor < v_gc_seq then
+    return query select 0::bigint, 0::bigint, 0::bigint, '[]'::jsonb, false;
+    return;
+  end if;
+
+  return query
+  select pushed.cursor, pushed.applied, pushed.skipped,
+         pushed.quota_rejected, true
+    from routino_push_records(p_user_id, p_now, p_incoming) pushed;
+end
+$function$;
+
+revoke execute on function routino_sync_push_if_current(
+  uuid, timestamptz, jsonb, bigint
+) from public;
 
 -- JavaScript/Zod count string bounds in UTF-16 code units. PostgreSQL counts
 -- Unicode scalar values, so each non-BMP character needs one extra unit here.
@@ -1026,7 +1084,7 @@ end
 $function$;
 
 -- The scheduled command sets transaction-local timeouts BEFORE it invokes this
--- thin wrapper. Keeping the call target named makes the cron contract auditable
+-- bounded wrapper. Keeping the call target named makes the cron contract auditable
 -- without pretending a timeout set inside an already-running SELECT is enough.
 create or replace function routino_run_task_month_compaction(
   p_now timestamptz,
@@ -1128,9 +1186,30 @@ begin
     return;
   end if;
 
-  with locked as materialized (
+  with candidate_tombstones as materialized (
+    select source.user_id
+      from records source
+     where source.deleted = true
+       and source.updated_at < floor(
+         extract(epoch from (p_now - interval '90 days')) * 1000
+       )::bigint
+     order by source.updated_at, source.seq, source.user_id, source.kind, source.id
+     limit v_limit
+  ), candidate_owners as materialized (
+    select candidate.user_id
+      from candidate_tombstones candidate
+     group by candidate.user_id
+     order by candidate.user_id
+  ), locked_owners as materialized (
+    select owner.id
+      from users owner
+      join candidate_owners candidate on candidate.user_id = owner.id
+     order by owner.id
+     for update of owner skip locked
+  ), locked as materialized (
     select source.user_id, source.kind, source.id, source.updated_at, source.seq
       from records source
+      join locked_owners owner on owner.id = source.user_id
      where source.deleted = true
        and source.updated_at < floor(
          extract(epoch from (p_now - interval '90 days')) * 1000
@@ -1597,7 +1676,11 @@ select cron.unschedule(jobid) from cron.job where jobname = 'routino-task-month-
 select cron.schedule(
   'routino-task-month-compaction',
   '* * * * *',
-  $$select * from routino_run_task_month_compaction(now(), 1000)$$
+  $$begin;
+set local statement_timeout = '45000ms';
+set local lock_timeout = '1000ms';
+select * from routino_run_task_month_compaction(now(), 1000);
+commit;$$
 );
 
 -- A small daily batch. The function itself also carries these timeouts and
@@ -1634,7 +1717,11 @@ select cron.unschedule(jobid) from cron.job where jobname = 'routino-tombstone-p
 select cron.schedule(
   'routino-tombstone-purge',
   '*/5 * * * *',
-  $$select * from routino_purge_tombstones(now(), 2000)$$
+  $$begin;
+set local statement_timeout = '45000ms';
+set local lock_timeout = '1000ms';
+select * from routino_purge_tombstones(now(), 2000);
+commit;$$
 );
 
 -- Lock every table out of Supabase's public PostgREST API (see comment in
