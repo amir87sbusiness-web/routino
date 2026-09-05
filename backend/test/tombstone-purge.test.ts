@@ -1,5 +1,5 @@
 /**
- * The tombstone purge that pg_cron runs weekly, executed for real.
+ * The bounded tombstone purge that pg_cron runs frequently, executed for real.
  *
  * It reads the statement out of `supabase/setup.sql` rather than restating it,
  * because the whole risk with a scheduled job is that nobody ever watches it:
@@ -28,7 +28,7 @@ function purgeSql(): string {
     fileURLToPath(new URL("../../supabase/setup.sql", import.meta.url)),
     "utf8",
   );
-  const marker = "select cron.schedule('routino-tombstone-purge'";
+  const marker = "select cron.schedule(\n  'routino-tombstone-purge',";
   const start = setup.indexOf(marker);
   expect(start).toBeGreaterThan(-1);
   const open = setup.indexOf("$$", start) + 2;
@@ -81,7 +81,98 @@ const push = (access: string, records: unknown[]) =>
 const pull = (access: string, cursor: number) =>
   h.app.inject({ method: "GET", url: `/v1/sync/pull?cursor=${cursor}`, headers: auth(access) });
 
-describe("weekly tombstone purge", () => {
+describe("bounded tombstone purge", () => {
+  it("drains old tombstones in deterministic batches and advances each affected watermark", async () => {
+    const a = await signIn("09124440006");
+    const b = await signIn("09124440007");
+    const ago = (days: number) => Date.now() - days * DAY;
+
+    await push(a.access, [
+      habit("a-live"),
+      { kind: "habits", id: "a-old-1", data: null, updatedAt: ago(210), deleted: true },
+      { kind: "habits", id: "a-old-2", data: null, updatedAt: ago(208), deleted: true },
+      { kind: "habits", id: "a-old-3", data: null, updatedAt: ago(206), deleted: true },
+      { kind: "habits", id: "a-recent", data: null, updatedAt: ago(3), deleted: true },
+    ]);
+    await push(b.access, [
+      habit("b-live"),
+      { kind: "habits", id: "b-old-1", data: null, updatedAt: ago(209), deleted: true },
+      { kind: "habits", id: "b-old-2", data: null, updatedAt: ago(207), deleted: true },
+      { kind: "habits", id: "b-old-3", data: null, updatedAt: ago(205), deleted: true },
+      { kind: "habits", id: "b-old-4", data: null, updatedAt: ago(204), deleted: true },
+      { kind: "habits", id: "b-recent", data: null, updatedAt: ago(2), deleted: true },
+    ]);
+
+    const counts = async () => {
+      const [row] = await h.query<{ old: number; recent: number; live: number }>(`
+        select
+          count(*) filter (
+            where deleted and updated_at < (extract(epoch from now()) * 1000)::bigint
+              - 90 * 86400000::bigint
+          )::integer as old,
+          count(*) filter (
+            where deleted and updated_at >= (extract(epoch from now()) * 1000)::bigint
+              - 90 * 86400000::bigint
+          )::integer as recent,
+          count(*) filter (where not deleted)::integer as live
+        from records
+       where user_id in ('${a.user.id}', '${b.user.id}')
+      `);
+      return { old: Number(row!.old), recent: Number(row!.recent), live: Number(row!.live) };
+    };
+    const watermarks = async () =>
+      h.query<{ id: string; gc_seq: number }>(`
+        select id::text as id, gc_seq::integer as gc_seq
+          from users where id in ('${a.user.id}', '${b.user.id}') order by id
+      `);
+
+    const before = await counts();
+    const [first] = await h.query<{ purged_records: number; affected_users: number }>(
+      "select * from routino_purge_tombstones(now(), 3)",
+    );
+
+    expect(Number(first!.purged_records)).toBe(3);
+    expect(Number(first!.affected_users)).toBe(2);
+    expect((await counts()).old).toBe(before.old - 3);
+    expect((await counts()).live).toBe(before.live);
+    expect((await counts()).recent).toBe(before.recent);
+    expect(await watermarks()).toEqual(
+      [
+        { id: a.user.id, gc_seq: 3 },
+        { id: b.user.id, gc_seq: 2 },
+      ].sort((left, right) => left.id.localeCompare(right.id)),
+    );
+    expect(((await pull(a.access, 1)).json() as { reset: boolean }).reset).toBe(true);
+
+    const [second] = await h.query<{ purged_records: number }>(
+      "select * from routino_purge_tombstones(now(), 3)",
+    );
+    const [third] = await h.query<{ purged_records: number }>(
+      "select * from routino_purge_tombstones(now(), 3)",
+    );
+    expect(Number(second!.purged_records)).toBe(3);
+    expect(Number(third!.purged_records)).toBe(1);
+    expect((await counts()).old).toBe(0);
+    expect((await counts()).live).toBe(before.live);
+    expect((await counts()).recent).toBe(before.recent);
+    expect(await watermarks()).toEqual(
+      [
+        { id: a.user.id, gc_seq: 4 },
+        { id: b.user.id, gc_seq: 5 },
+      ].sort((left, right) => left.id.localeCompare(right.id)),
+    );
+
+    const beforeEmptyRun = { counts: await counts(), watermarks: await watermarks() };
+    const [empty] = await h.query<{ purged_records: number; affected_users: number }>(
+      "select * from routino_purge_tombstones(now(), 3)",
+    );
+    expect({
+      purgedRecords: Number(empty!.purged_records),
+      affectedUsers: Number(empty!.affected_users),
+    }).toEqual({ purgedRecords: 0, affectedUsers: 0 });
+    expect({ counts: await counts(), watermarks: await watermarks() }).toEqual(beforeEmptyRun);
+  });
+
   it("drops old tombstones, keeps live rows, and raises the resync watermark", async () => {
     const { access, user } = await signIn("09124440001");
 

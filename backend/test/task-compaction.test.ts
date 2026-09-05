@@ -24,7 +24,16 @@ const RESTORE_SQL_PATH = resolve(
   root,
   "supabase/manual-production/20260901_task_archive_restore.sql",
 );
+const SETUP_SQL_PATH = resolve(root, "supabase/setup.sql");
 const RESTORE_OWNER_SENTINEL = "00000000-0000-0000-0000-000000000000";
+const LOAD_OWNERS = [
+  OWNER,
+  ...Array.from(
+    { length: 9 },
+    (_, index) =>
+      `c2${String(index + 1).padStart(6, "0")}-2222-4222-8222-${String(index + 1).padStart(12, "0")}`,
+  ),
+];
 
 let h: Harness;
 
@@ -158,6 +167,75 @@ async function assertExactPhysicalCounters(): Promise<void> {
   expect(actual.bytes).toBe(Number(expected!.bytes));
 }
 
+async function semanticTasksFor(ownerIds: string[]): Promise<unknown[]> {
+  return h.query(`
+    with candidates as (
+      select r.user_id, r.id, r.updated_at, r.data, r.seq
+        from records r
+       where r.user_id in (${ownerIds.map(sqlText).join(", ")})
+         and r.kind = 'tasks' and not r.deleted
+      union all
+      select a.user_id, item->>0, (item->>1)::bigint, item->2, a.seq
+        from records a
+        cross join lateral jsonb_array_elements(a.data->'items') item
+       where a.user_id in (${ownerIds.map(sqlText).join(", ")})
+         and a.kind = 'taskMonths' and not a.deleted
+    )
+    select distinct on (user_id, id) user_id::text as user_id, id, updated_at::text, data
+      from candidates
+     order by user_id, id, updated_at desc, seq desc
+  `);
+}
+
+async function exactCounters(ownerIds: string[]): Promise<unknown[]> {
+  return h.query(`
+    select id::text as user_id, sync_record_count::integer as rows,
+           sync_data_bytes::bigint::text as bytes
+      from users
+     where id in (${ownerIds.map(sqlText).join(", ")})
+     order by id
+  `);
+}
+
+async function recomputedCounters(ownerIds: string[]): Promise<unknown[]> {
+  return h.query(`
+    select u.id::text as user_id, count(r.*)::integer as rows,
+           coalesce(sum(octet_length(r.data::text)), 0)::bigint::text as bytes
+      from users u
+      left join records r on r.user_id = u.id
+     where u.id in (${ownerIds.map(sqlText).join(", ")})
+     group by u.id
+     order by u.id
+  `);
+}
+
+function taskCompactionSchedule(): { batchSize: number; runsPerDay: number } {
+  const sql = readFileSync(SETUP_SQL_PATH, "utf8");
+  const start = sql.indexOf("'routino-task-month-compaction'");
+  expect(start).toBeGreaterThan(-1);
+  const scheduled = sql.slice(start, start + 500);
+  const cronExpression = scheduled.match(/'routino-task-month-compaction',\s*'([^']+)'/)?.[1];
+  const batchSize = Number(
+    scheduled.match(/routino_run_task_month_compaction\(now\(\),\s*(\d+)\)/)?.[1],
+  );
+  expect(cronExpression).toBeDefined();
+  expect(batchSize).toBeGreaterThan(0);
+
+  const fields = cronExpression!.trim().split(/\s+/);
+  expect(fields).toHaveLength(5);
+  const [minute, hour, dayOfMonth, month, dayOfWeek] = fields;
+  expect([dayOfMonth, month, dayOfWeek]).toEqual(["*", "*", "*"]);
+  let runsPerDay = 0;
+  if (minute === "*" && hour === "*") runsPerDay = 24 * 60;
+  else if (/^\*\/\d+$/.test(minute!) && hour === "*") {
+    runsPerDay = (24 * 60) / Number(minute!.slice(2));
+  } else if (/^\d+$/.test(minute!) && hour === "*") runsPerDay = 24;
+  else if (/^\d+$/.test(minute!) && /^\d+$/.test(hour!)) runsPerDay = 1;
+  expect(Number.isInteger(runsPerDay)).toBe(true);
+  expect(runsPerDay).toBeGreaterThan(0);
+  return { batchSize, runsPerDay };
+}
+
 function recoverySql(path: string): string {
   return readFileSync(path, "utf8");
 }
@@ -277,6 +355,96 @@ describe("task archive SQL predicate", () => {
 });
 
 describe("bounded transactional task compaction", () => {
+  it("drains a 10000-task owner-month backlog within one scheduled day without semantic or counter loss", async () => {
+    await h.raw(`
+      insert into users (id, phone, sync_growth_period_started_at)
+      values ${LOAD_OWNERS.slice(1)
+        .map(
+          (ownerId, index) =>
+            `(${sqlText(ownerId)}, ${sqlText(`9891222777${String(index + 1).padStart(2, "0")}`)}, '2026-01-01T00:00:00Z')`,
+        )
+        .join(",\n")};
+
+      with owners as (
+        select owner_id, owner_no
+          from unnest(array[${LOAD_OWNERS.map((ownerId) => `${sqlText(ownerId)}::uuid`).join(", ")}])
+               with ordinality as seeded(owner_id, owner_no)
+      )
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      select owner_id,
+             'tasks',
+             task_id,
+             jsonb_build_object(
+               'id', task_id,
+               'dateKey', to_char(date '2025-07-01' + month_no * interval '1 month', 'YYYY-MM-DD'),
+               'title', task_id,
+               'type', 'binary',
+               'target', 1,
+               'value', 1,
+               'done', true
+             ),
+             ${OLD_UPDATED_AT} + task_no,
+             false,
+             0
+        from owners
+        cross join generate_series(0, 9) month_no
+        cross join generate_series(1, 100) task_no
+        cross join lateral (
+          select 'load-' || lpad(owner_no::text, 2, '0') || '-' ||
+                 lpad(month_no::text, 2, '0') || '-' || lpad(task_no::text, 3, '0') as task_id
+        ) ids;
+    `);
+
+    const [before] = await h.query<{
+      eligible_tasks: number;
+      candidate_owner_months: number;
+      oldest_eligible_at: number;
+    }>(`select * from routino_task_compaction_backlog('${NOW}')`);
+    const beforeSemantics = await semanticTasksFor(LOAD_OWNERS);
+    const schedule = taskCompactionSchedule();
+    const theoreticalDailyCapacity = schedule.runsPerDay * schedule.batchSize;
+
+    let processed = 0;
+    for (let run = 0; run < schedule.runsPerDay && processed < 10_000; run += 1) {
+      const result = await h.query<{ archived_tasks: number }>(
+        `select * from routino_run_task_month_compaction('${NOW}', ${schedule.batchSize})`,
+      );
+      const runProcessed = result.reduce((sum, row) => sum + Number(row.archived_tasks), 0);
+      expect(runProcessed).toBeLessThanOrEqual(1_000);
+      processed += runProcessed;
+    }
+
+    const [after] = await h.query<{ eligible_tasks: number }>(
+      `select * from routino_task_compaction_backlog('${NOW}')`,
+    );
+    expect(Number(before!.eligible_tasks)).toBe(10_000);
+    expect(Number(before!.candidate_owner_months)).toBe(100);
+    expect(Number(before!.oldest_eligible_at)).toBe(OLD_UPDATED_AT + 1);
+    expect(processed).toBe(10_000);
+    expect(Number(after!.eligible_tasks)).toBe(0);
+    expect(await semanticTasksFor(LOAD_OWNERS)).toEqual(beforeSemantics);
+    expect(await exactCounters(LOAD_OWNERS)).toEqual(await recomputedCounters(LOAD_OWNERS));
+    expect(schedule.batchSize).toBe(1_000);
+    expect(theoreticalDailyCapacity).toBe(1_440_000);
+    expect(theoreticalDailyCapacity).toBeGreaterThanOrEqual(100_000);
+
+    const beforeEmptyRun = await h.query(`
+      select id::text, seq::text, gc_seq::text, sync_record_count,
+             sync_data_bytes::text, sync_growth_bytes::text
+        from users where id in (${LOAD_OWNERS.map(sqlText).join(", ")}) order by id
+    `);
+    expect(
+      await h.query(`select * from routino_run_task_month_compaction('${NOW}', 1000)`),
+    ).toEqual([]);
+    expect(
+      await h.query(`
+        select id::text, seq::text, gc_seq::text, sync_record_count,
+               sync_data_bytes::text, sync_growth_bytes::text
+          from users where id in (${LOAD_OWNERS.map(sqlText).join(", ")}) order by id
+      `),
+    ).toEqual(beforeEmptyRun);
+  }, 120_000);
+
   it("skips unsafe legacy timestamps while valid cold work still progresses", async () => {
     await insertTask("valid-timestamp", task("valid-timestamp"));
     await insertTask("legacy-negative", task("legacy-negative"), -1);

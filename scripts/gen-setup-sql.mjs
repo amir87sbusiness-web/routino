@@ -37,12 +37,8 @@ select cron.schedule('routino-auth-rate-limit-purge', '30 * * * *',
 select cron.unschedule(jobid) from cron.job where jobname = 'routino-task-month-compaction';
 select cron.schedule(
   'routino-task-month-compaction',
-  '17 4 * * *',
-  $$begin;
-set local statement_timeout = '5000ms';
-set local lock_timeout = '1000ms';
-select * from routino_run_task_month_compaction(now(), 500);
-commit;$$
+  '* * * * *',
+  $$select * from routino_run_task_month_compaction(now(), 1000)$$
 );
 
 -- A small daily batch. The function itself also carries these timeouts and
@@ -60,7 +56,7 @@ select * from routino_cleanup_trial_accounts(50, clock_timestamp());
 commit;$$
 );
 
--- Tombstones, weekly. A deleted habit or log leaves a row behind on purpose: a
+-- Tombstones, in frequent bounded batches. A deleted habit or log leaves a row behind on purpose: a
 -- delete has to be able to TRAVEL to the user's other devices, and an absence
 -- cannot. But it only has to travel once, so a user who tidies up their habits
 -- every month should not keep carrying every tombstone forever.
@@ -75,21 +71,12 @@ commit;$$
 --
 -- 90 days is the promise: a device offline longer than that pays for a full
 -- resync, which is correct but not free, so do not shorten this casually.
-select cron.schedule('routino-tombstone-purge', '45 3 * * 0', $$
-  with doomed as (
-    delete from records
-     where deleted = true
-       -- 86400000::bigint, not a bare 90 * 86400000: that product is 7.7e9, which
-       -- overflows int4 and fails the whole job with "integer out of range" —
-       -- weekly, quietly, in a cron log nobody reads.
-       and updated_at < (extract(epoch from now()) * 1000)::bigint - 90 * 86400000::bigint
-    returning user_id, seq
-  ), highest as (
-    select user_id, max(seq) as top from doomed group by user_id
-  )
-  update users u set gc_seq = greatest(u.gc_seq, h.top)
-    from highest h where u.id = h.user_id
-$$);
+select cron.unschedule(jobid) from cron.job where jobname = 'routino-tombstone-purge';
+select cron.schedule(
+  'routino-tombstone-purge',
+  '*/5 * * * *',
+  $$select * from routino_purge_tombstones(now(), 2000)$$
+);
 `;
 
 // Every table Supabase's PostgREST auto-exposes under /rest/v1/. Our backend

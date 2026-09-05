@@ -39,6 +39,10 @@ const ACCOUNT_RETENTION_MIGRATION_SQL = readFileSync(
   resolve(root, "supabase/migrations/20260903120000_trial_account_retention.sql"),
   "utf8",
 );
+const ELASTIC_MAINTENANCE_MIGRATION_PATH = resolve(
+  root,
+  "supabase/migrations/20260905140000_elastic_launch_hardening.sql",
+);
 
 let h: Harness;
 
@@ -216,11 +220,14 @@ describe("launch schema repairs", () => {
        where specific_schema = 'public'
          and grantee = 'PUBLIC'
          and privilege_type = 'EXECUTE'
-         and routine_name in (
-           'routino_js_string_length',
-           'routino_task_archive_candidate_valid',
-           'routino_compact_task_months'
-         )
+           and routine_name in (
+             'routino_js_string_length',
+             'routino_task_archive_candidate_valid',
+             'routino_task_compaction_backlog',
+             'routino_compact_task_months',
+             'routino_run_task_month_compaction',
+             'routino_purge_tombstones'
+           )
        order by routine_name
     `);
     expect(publicExecute).toEqual([]);
@@ -787,44 +794,90 @@ describe("launch schema repairs", () => {
     expect(sql).toContain("set local lock_timeout = '250ms'");
   });
 
-  it("generates one idempotent low-impact task compaction schedule", () => {
+  it("generates frequent bounded compaction and tombstone schedules", () => {
     execFileSync(process.execPath, ["scripts/gen-setup-sql.mjs"], { cwd: root, stdio: "pipe" });
     const sql = readFileSync(resolve(root, "supabase/setup.sql"), "utf8");
     const unschedule =
       "select cron.unschedule(jobid) from cron.job where jobname = 'routino-task-month-compaction';";
-    const schedule = `select cron.schedule(
+    const compactionSchedule = `select cron.schedule(
   'routino-task-month-compaction',
-  '17 4 * * *',
-  $$begin;
-set local statement_timeout = '5000ms';
-set local lock_timeout = '1000ms';
-select * from routino_run_task_month_compaction(now(), 500);
-commit;$$
+  '* * * * *',
+  $$select * from routino_run_task_month_compaction(now(), 1000)$$
+);`;
+    const tombstoneSchedule = `select cron.schedule(
+  'routino-tombstone-purge',
+  '*/5 * * * *',
+  $$select * from routino_purge_tombstones(now(), 2000)$$
 );`;
 
     expect(sql).toContain(unschedule);
-    expect(sql).toContain(schedule);
-    expect(sql.indexOf(unschedule)).toBeLessThan(sql.indexOf(schedule));
+    expect(sql).toContain(compactionSchedule);
+    expect(sql).toContain(
+      "select cron.unschedule(jobid) from cron.job where jobname = 'routino-tombstone-purge';",
+    );
+    expect(sql).toContain(tombstoneSchedule);
+    expect(sql.indexOf(unschedule)).toBeLessThan(sql.indexOf(compactionSchedule));
     expect(sql.match(/'routino-task-month-compaction'/g)).toHaveLength(2);
+    expect(sql.match(/'routino-tombstone-purge'/g)).toHaveLength(2);
   });
 
-  it("claims owners before task rows and schedules the timeout-bounded compactor wrapper", () => {
+  it("installs indexed advisory-locked maintenance entrypoints without running them", async () => {
+    expect(() => readFileSync(ELASTIC_MAINTENANCE_MIGRATION_PATH, "utf8")).not.toThrow();
+    const migration = readFileSync(ELASTIC_MAINTENANCE_MIGRATION_PATH, "utf8");
+    const owner = "a0333333-3333-4333-8333-333333333333";
+    await h.raw(`
+      insert into users (id, phone, seq, gc_seq)
+      values ('${owner}', '989122299988', 2, 0);
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      values
+        ('${owner}', 'tasks', 'cold-task',
+         '{"id":"cold-task","dateKey":"2026-01-01","title":"keep","type":"binary","target":1,"value":1,"done":true}',
+         1000, false, 1),
+        ('${owner}', 'habits', 'old-delete', null, 1000, true, 2);
+    `);
+    const before = await h.query(`select * from records where user_id = '${owner}' order by kind`);
+
+    await h.raw(migration);
+
+    expect(await h.query(`select * from records where user_id = '${owner}' order by kind`)).toEqual(before);
+    const indexes = await h.query<{ indexname: string; indexdef: string }>(`
+        select indexname, indexdef from pg_indexes
+         where schemaname = 'public'
+           and indexname in ('records_task_compaction_eligible', 'records_tombstone_purge')
+         order by indexname
+      `);
+    expect(indexes.map((index) => index.indexname)).toEqual([
+      "records_task_compaction_eligible",
+      "records_tombstone_purge",
+    ]);
+    expect(indexes[0]!.indexdef).toMatch(/"?left"?\(\(data ->> 'dateKey'::text\), 7\)/);
+    expect(indexes[0]!.indexdef).toContain("updated_at");
+    expect(indexes[0]!.indexdef).toContain("(deleted = false)");
+    expect(indexes[1]!.indexdef).toContain("(updated_at, seq)");
+    expect(indexes[1]!.indexdef).toContain("(deleted = true)");
+    expect(
+      await h.query<{ routine_name: string }>(`
+        select routine_name from information_schema.routines
+         where routine_schema = 'public'
+           and routine_name in ('routino_task_compaction_backlog', 'routino_purge_tombstones')
+         order by routine_name
+      `),
+    ).toEqual([
+      { routine_name: "routino_purge_tombstones" },
+      { routine_name: "routino_task_compaction_backlog" },
+    ]);
+
     const ownerClaim = SCHEMA_SQL.indexOf("locked_owners as materialized");
     const sourceLock = SCHEMA_SQL.indexOf("for update of source skip locked");
     expect(ownerClaim).toBeGreaterThan(-1);
     expect(sourceLock).toBeGreaterThan(ownerClaim);
     expect(SCHEMA_SQL).toContain("for update of u skip locked");
     expect(SCHEMA_SQL).toContain("create or replace function routino_run_task_month_compaction");
-    execFileSync(process.execPath, ["scripts/gen-setup-sql.mjs"], { cwd: root, stdio: "pipe" });
-    const sql = readFileSync(resolve(root, "supabase/setup.sql"), "utf8");
-    const timedSchedule = `$$begin;
-set local statement_timeout = '5000ms';
-set local lock_timeout = '1000ms';
-select * from routino_run_task_month_compaction(now(), 500);
-commit;$$`;
-    expect(sql).toContain(timedSchedule);
-    expect(sql.indexOf("set local statement_timeout")).toBeLessThan(
-      sql.indexOf("routino_run_task_month_compaction(now(), 500)"),
-    );
+    expect(SCHEMA_SQL.match(/pg_try_advisory_xact_lock/g)).toHaveLength(2);
+    expect(migration.match(/pg_try_advisory_xact_lock/g)).toHaveLength(2);
+    expect(SCHEMA_SQL).toContain("and source.seq = locked.seq");
+    expect(migration).toContain("and source.seq = locked.seq");
+    expect(migration).toContain("'routino-task-month-compaction',\n        '* * * * *'");
+    expect(migration).toContain("'routino-tombstone-purge',\n        '*/5 * * * *'");
   });
 });

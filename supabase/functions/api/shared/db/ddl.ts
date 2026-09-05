@@ -60,6 +60,12 @@ alter table records drop constraint if exists records_kind_valid;
 alter table records add constraint records_kind_valid check (kind in
   ('categories','habits','habitMonths','tasks','timerSessions','journal','taskMonths'));
 create index if not exists records_pull on records (user_id, seq);
+create index if not exists records_task_compaction_eligible
+  on records ((left(data->>'dateKey', 7)), updated_at, user_id, id)
+  where kind = 'tasks' and deleted = false and data->>'done' = 'true';
+create index if not exists records_tombstone_purge
+  on records (updated_at, seq)
+  where deleted = true;
 
 -- Exact per-account storage accounting. Existing databases are backfilled only
 -- while the trigger set is absent; normal boots see the triggers and skip the
@@ -655,6 +661,53 @@ exception when others then
 end
 $function$;
 
+-- Exact read-only observability for the same conservative eligibility contract
+-- used by the compactor. Invalid legacy tasks and already archived sources are
+-- counted as retained review work, never as safe-to-delete backlog.
+create or replace function routino_task_compaction_backlog(p_now timestamptz)
+returns table (
+  eligible_tasks bigint,
+  candidate_owner_months bigint,
+  oldest_eligible_at bigint
+)
+language sql
+stable
+security invoker
+set search_path = public, pg_temp
+as $function$
+  with eligible as materialized (
+    select source.user_id, left(source.data->>'dateKey', 7) as month_key,
+           source.updated_at
+      from records source
+     where source.kind = 'tasks'
+       and source.deleted = false
+       and source.data->>'done' = 'true'
+       and routino_task_archive_candidate_valid(source.id, source.data)
+       and source.updated_at between 0 and 9007199254740991
+       and left(source.data->>'dateKey', 7) < to_char(
+         (p_now - interval '7 days') at time zone 'UTC', 'YYYY-MM'
+       )
+       and source.updated_at <= floor(
+         extract(epoch from (p_now - interval '7 days')) * 1000
+       )::bigint
+       and not exists (
+         select 1
+           from records archive
+           cross join lateral jsonb_array_elements(
+             case when jsonb_typeof(archive.data->'items') = 'array'
+               then archive.data->'items' else '[]'::jsonb end
+           ) item
+          where archive.user_id = source.user_id
+            and archive.kind = 'taskMonths'
+            and item->>0 = source.id
+       )
+  )
+  select count(*)::bigint,
+         count(distinct (eligible.user_id, eligible.month_key))::bigint,
+         min(eligible.updated_at)::bigint
+    from eligible
+$function$;
+
 -- Re-encode a small deterministic set of cold completed tasks. Row locks are
 -- skipped instead of waited on, and every source/delete is verified in the
 -- same transaction as its immutable archive insert.
@@ -994,18 +1047,140 @@ returns table (
   archived_tasks integer,
   archive_rows integer
 )
-language sql
+language plpgsql
 volatile
 security invoker
 set search_path = public, pg_temp
 as $function$
-  select * from routino_compact_task_months(p_now, p_max_tasks)
+declare
+  v_remaining integer := greatest(1, least(coalesce(p_max_tasks, 1), 1000));
+  v_processed integer;
+  v_result record;
+begin
+  if not pg_try_advisory_xact_lock(1919905903, 1) then
+    return;
+  end if;
+
+  -- Avoid even temporary-table writes when the minute-level scheduler finds no
+  -- eligible source. The full compactor repeats every predicate under row lock.
+  if not exists (
+    select 1
+      from records source
+     where source.kind = 'tasks'
+       and source.deleted = false
+       and source.data->>'done' = 'true'
+       and routino_task_archive_candidate_valid(source.id, source.data)
+       and source.updated_at between 0 and 9007199254740991
+       and left(source.data->>'dateKey', 7) < to_char(
+         (p_now - interval '7 days') at time zone 'UTC', 'YYYY-MM'
+       )
+       and source.updated_at <= floor(
+         extract(epoch from (p_now - interval '7 days')) * 1000
+       )::bigint
+       and not exists (
+         select 1
+           from records archive
+           cross join lateral jsonb_array_elements(
+             case when jsonb_typeof(archive.data->'items') = 'array'
+               then archive.data->'items' else '[]'::jsonb end
+           ) item
+          where archive.user_id = source.user_id
+            and archive.kind = 'taskMonths'
+            and item->>0 = source.id
+       )
+     limit 1
+  ) then
+    return;
+  end if;
+
+  while v_remaining > 0 loop
+    v_processed := 0;
+    for v_result in
+      select * from routino_compact_task_months(p_now, least(v_remaining, 500))
+    loop
+      owner_id := v_result.owner_id;
+      month_key := v_result.month_key;
+      archived_tasks := v_result.archived_tasks;
+      archive_rows := v_result.archive_rows;
+      v_processed := v_processed + v_result.archived_tasks;
+      return next;
+    end loop;
+    exit when v_processed = 0;
+    v_remaining := v_remaining - v_processed;
+  end loop;
+end
+$function$;
+
+-- Deterministic bounded tombstone collection. The delete and each owner's
+-- reset watermark advance in one statement/transaction, so an old cursor can
+-- never continue past a tombstone that has disappeared.
+create or replace function routino_purge_tombstones(
+  p_now timestamptz,
+  p_limit integer
+)
+returns table (
+  purged_records integer,
+  affected_users integer
+)
+language plpgsql
+volatile
+security invoker
+set search_path = public, pg_temp
+as $function$
+declare
+  v_limit integer := greatest(0, least(coalesce(p_limit, 0), 2000));
+begin
+  purged_records := 0;
+  affected_users := 0;
+  if v_limit = 0 or not pg_try_advisory_xact_lock(1919905903, 2) then
+    return next;
+    return;
+  end if;
+
+  with locked as materialized (
+    select source.user_id, source.kind, source.id, source.updated_at, source.seq
+      from records source
+     where source.deleted = true
+       and source.updated_at < floor(
+         extract(epoch from (p_now - interval '90 days')) * 1000
+       )::bigint
+     order by source.updated_at, source.seq, source.user_id, source.kind, source.id
+     limit v_limit
+     for update of source skip locked
+  ), doomed as (
+    delete from records source
+     using locked
+     where source.user_id = locked.user_id
+       and source.kind = locked.kind
+       and source.id = locked.id
+       and source.deleted = true
+       and source.updated_at = locked.updated_at
+       and source.seq = locked.seq
+     returning source.user_id, source.seq
+  ), highest as (
+    select doomed.user_id, max(doomed.seq) as top
+      from doomed
+     group by doomed.user_id
+  ), advanced as (
+    update users owner
+       set gc_seq = greatest(owner.gc_seq, highest.top)
+      from highest
+     where owner.id = highest.user_id
+     returning owner.id
+  )
+  select (select count(*)::integer from doomed),
+         (select count(*)::integer from advanced)
+    into purged_records, affected_users;
+  return next;
+end
 $function$;
 
 revoke execute on function routino_js_string_length(text) from public;
 revoke execute on function routino_task_archive_candidate_valid(text, jsonb) from public;
+revoke execute on function routino_task_compaction_backlog(timestamptz) from public;
 revoke execute on function routino_compact_task_months(timestamptz, integer) from public;
 revoke execute on function routino_run_task_month_compaction(timestamptz, integer) from public;
+revoke execute on function routino_purge_tombstones(timestamptz, integer) from public;
 
 create table if not exists otp_codes (
   id uuid primary key default gen_random_uuid(),
