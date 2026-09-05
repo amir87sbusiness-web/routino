@@ -60,7 +60,7 @@ export function createSyncScheduler({
       const pending = await hasPending(owner);
       const last = lastCompletedAt.get(owner) ?? 0;
       if (!pending && Date.now() - last < FOREGROUND_SYNC_COOLDOWN_MS) return;
-      return run(owner, { pullRequired: true, trackActivity: true });
+      return run(owner, { pullRequired: true });
     },
 
     dispose() {
