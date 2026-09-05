@@ -58,6 +58,9 @@ export async function loadSyncState(owner: string): Promise<SyncState> {
       cursor: row.cursor,
       lastSyncedAt: row.lastSyncedAt,
       ...(row.quotaRetryAt === undefined ? {} : { quotaRetryAt: row.quotaRetryAt }),
+      ...(isValidGcSeq(row.fullResyncGcSeq)
+        ? { fullResyncGcSeq: row.fullResyncGcSeq }
+        : {}),
     };
   } catch {
     return emptyState();
@@ -97,6 +100,9 @@ interface OutgoingPacket {
 
 const isValidRetryAt = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value) && value > 0;
+
+const isValidGcSeq = (value: unknown): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 
 /** Atomically returns this owner's paused rows to the ordinary outbox once the
  * server's account window has reset. Rows live in an owner-specific vault; the
@@ -479,12 +485,28 @@ async function run(owner: string, options: SyncOptions): Promise<SyncOutcome> {
     if (page.reset) {
       await wipeSyncedTables();
       resetApplied = true;
-      state = { ...state, owner, cursor: 0 };
+      const { fullResyncGcSeq: _oldWatermark, ...resetState } = state;
+      state = {
+        ...resetState,
+        owner,
+        cursor: 0,
+        ...(isValidGcSeq(page.gcSeq) ? { fullResyncGcSeq: page.gcSeq } : {}),
+      };
       await saveSyncState(state);
       return;
     }
     pulled += await applyRemote(page.records);
-    state = { ...state, owner, cursor: page.cursor };
+    const wasFullResync = state.cursor === 0 || state.fullResyncGcSeq !== undefined;
+    const { fullResyncGcSeq: _oldWatermark, ...settledState } = state;
+    state = {
+      ...settledState,
+      owner,
+      cursor: page.cursor,
+      ...(wasFullResync && page.hasMore && isValidGcSeq(page.gcSeq)
+        ? { fullResyncGcSeq: page.gcSeq }
+        : {}),
+    };
+    await saveSyncState(state);
     if (page.entitlement !== undefined) {
       entitlement = page.entitlement;
       accountStateReceived = true;
@@ -501,6 +523,9 @@ async function run(owner: string, options: SyncOptions): Promise<SyncOutcome> {
         cursor: state.cursor,
         records: batch.map(({ record }) => record),
         includeAccountState,
+        ...(state.fullResyncGcSeq === undefined
+          ? {}
+          : { fullResyncGcSeq: state.fullResyncGcSeq }),
       },
       owner,
       options.keepalive,
@@ -510,7 +535,31 @@ async function run(owner: string, options: SyncOptions): Promise<SyncOutcome> {
     return page;
   };
 
-  for (let index = 0; index < batches.length; index += 1) {
+  // A network/app interruption can leave a cursor-zero recovery between pages.
+  // Finish that read-only continuation before admitting any saved outbox row.
+  if (state.fullResyncGcSeq !== undefined) {
+    let page = await exchangePage([], false);
+    let guard = 0;
+    while (page.reset || page.hasMore) {
+      if (++guard > 200) break;
+      page = await exchangePage([], false);
+    }
+    // Very large accounts may need more than one bounded run. Keep the durable
+    // continuation and defer the outbox instead of mixing writes into recovery.
+    if (state.fullResyncGcSeq !== undefined) {
+      await saveSyncState({ ...state, owner, lastSyncedAt: Date.now() });
+      return {
+        pushed,
+        pulled,
+        rejected,
+        quotaExceeded,
+        remoteChanged: resetApplied || pulled > 0,
+        entitlement,
+      };
+    }
+  }
+
+  batchLoop: for (let index = 0; index < batches.length; index += 1) {
     const batch = batches[index]!;
     let page = await exchangePage(
       batch,
@@ -535,6 +584,7 @@ async function run(owner: string, options: SyncOptions): Promise<SyncOutcome> {
       if (++guard > 200) break;
       page = await exchangePage([], options.includeAccountState === true);
     }
+    if (state.fullResyncGcSeq !== undefined) break batchLoop;
   }
 
   // No outbox means no request unless a lifecycle trigger explicitly needs a

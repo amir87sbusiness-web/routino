@@ -43,12 +43,18 @@ const pullQuery = z.object({
   limit: z.coerce.number().int().positive().max(PULL_PAGE_SIZE).default(PULL_PAGE_SIZE),
 });
 
-const exchangeBody = pushBody.extend({
-  protocolVersion: z.literal(2),
-  cursor: z.number().int().nonnegative().default(0),
-  limit: z.number().int().positive().max(PULL_PAGE_SIZE).default(PULL_PAGE_SIZE),
-  includeAccountState: z.boolean().default(false),
-});
+const exchangeBody = pushBody
+  .extend({
+    protocolVersion: z.literal(2),
+    cursor: z.number().int().nonnegative().default(0),
+    limit: z.number().int().positive().max(PULL_PAGE_SIZE).default(PULL_PAGE_SIZE),
+    includeAccountState: z.boolean().default(false),
+    fullResyncGcSeq: z.number().int().nonnegative().optional(),
+  })
+  .refine((input) => input.fullResyncGcSeq === undefined || input.records.length === 0, {
+    message: "full resync continuation must be read-only",
+    path: ["records"],
+  });
 
 export const syncRoutes: FastifyPluginAsync = async (app) => {
   const { db, psp } = app.deps;
@@ -65,6 +71,7 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
       input.records as PushRecord[],
       t,
       input.limit,
+      input.fullResyncGcSeq,
     );
     await touchUserActivity(db, user.id, t);
     if (!input.includeAccountState || page.hasMore || page.reset) return page;

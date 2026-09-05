@@ -156,7 +156,7 @@ subscribe.tsx (فرانت)
 - Export همیشه فعال است. Import در `src/lib/import-policy.ts` فقط برای اشتراک پولی فعال است و هم قبل از file picker و هم قبل از commit دوباره چک می‌شود.
 - قرارداد عمومی فقط شش kind `categories/habits/habitMonths/tasks/timerSessions/journal` دارد؛ جدول `records` علاوه بر آن می‌تواند `taskMonths` داخلی داشته باشد که فقط سرور می‌بیند. هیچ دستگاه یا تنظیماتی روی سرور ذخیره نمی‌شود. PostgREST با RLS بدون policy بسته است و فرانت فقط از Edge API احراز‌شده استفاده می‌کند.
 - سقف حساب ۵۰٬۰۰۰ ردیف است و سقف ۱۲۸ MiB مادام‌العمر وجود ندارد. محدودیت write برابر ۱۰ MiB رشد مثبت JSON در هر دورهٔ ۳۶۵روزهٔ خود حساب است؛ دادهٔ پیش از migration grandfathered می‌ماند. فشرده‌سازی taskهای قدیمی job دیتابیس است و هیچ request اضافه از اپ یا Edge تولید نمی‌کند.
-- ترتیب production اجباری است: کد سازگار اول؛ سپس backup، dry-run و migration افزایشی با canary؛ cron فشرده‌ساز در آخر. این ترتیب اجازه می‌دهد نسخه‌های نصب‌شدهٔ فعلی همیشه task معمولی دریافت کنند.
+- ترتیب production اجباری است: کد fail-closed اول؛ سپس backup، dry-run، migrationهای `20260905140000` و `20260905150000` به‌ترتیب و canary؛ cron فشرده‌ساز در آخر. full-resync چندصفحه‌ای با `fullResyncGcSeq` فقط خواندنی ادامه پیدا می‌کند، پس outbox تا عبور cursor از watermark ارسال یا تسویه نمی‌شود. این ترتیب اجازه می‌دهد نسخه‌های نصب‌شدهٔ فعلی همیشه task معمولی دریافت کنند.
 - در schema قدیمی فقط نبودن دقیق `routino_push_records(` writer سازگار را فعال می‌کند؛ وجود ناقص ستون‌های سالانه عمداً ۵۰۰ می‌دهد تا allowance جدید دور زده نشود.
 
 ### 🎁 قرارداد ۹: دوره آزمایشی و گِیت اشتراک

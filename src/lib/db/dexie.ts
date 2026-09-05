@@ -92,6 +92,8 @@ export interface SyncMetaRow {
   lastSyncedAt: number;
   /** Earliest server reset time for quota-paused rows in this owner's vault. */
   quotaRetryAt?: number;
+  /** Exact server GC watermark while a cursor-zero full pull is incomplete. */
+  fullResyncGcSeq?: number;
 }
 
 export class RoutinoDexie extends Dexie {

@@ -81,12 +81,17 @@ const push = (access: string, records: unknown[]) =>
 const pull = (access: string, cursor: number) =>
   h.app.inject({ method: "GET", url: `/v1/sync/pull?cursor=${cursor}`, headers: auth(access) });
 
-const exchange = (access: string, cursor: number, records: unknown[]) =>
+const exchange = (
+  access: string,
+  cursor: number,
+  records: unknown[],
+  options: { limit?: number; fullResyncGcSeq?: number } = {},
+) =>
   h.app.inject({
     method: "POST",
     url: "/v1/sync/exchange",
     headers: auth(access),
-    payload: { protocolVersion: 2, cursor, records },
+    payload: { protocolVersion: 2, cursor, records, ...options },
   });
 
 describe("bounded tombstone purge", () => {
@@ -270,6 +275,87 @@ describe("bounded tombstone purge", () => {
          where user_id = '${user.id}' and kind = 'habits' and id = 'purged-delete'
       `),
     ).toEqual([]);
+  });
+
+  it("finishes a paginated full resync above gc before admitting the next dirty write", async () => {
+    const { access, user } = await signIn("09124440010");
+    await push(access, [
+      habit("resync-live-1"),
+      habit("resync-live-2"),
+      {
+        kind: "habits",
+        id: "resync-gone",
+        data: null,
+        updatedAt: Date.now() - 200 * DAY,
+        deleted: true,
+      },
+    ]);
+    await h.raw(purgeSql());
+
+    const rejected = await exchange(access, 1, [
+      { ...habit("resync-gone"), updatedAt: Date.now() },
+    ]);
+    expect(rejected.json()).toMatchObject({ reset: true, batchAccepted: false, gcSeq: 3 });
+
+    const first = (await exchange(access, 0, [], { limit: 1 })).json() as {
+      records: { id: string }[];
+      cursor: number;
+      hasMore: boolean;
+      gcSeq: number;
+    };
+    expect(first).toMatchObject({ cursor: 1, hasMore: true, gcSeq: 3 });
+    expect(first.records.map((record) => record.id)).toEqual(["resync-live-1"]);
+
+    const final = (
+      await exchange(access, first.cursor, [], {
+        limit: 1,
+        fullResyncGcSeq: first.gcSeq,
+      })
+    ).json() as { records: { id: string }[]; cursor: number; hasMore: boolean; reset: boolean };
+    expect(final.records.map((record) => record.id)).toEqual(["resync-live-2"]);
+    expect(final).toMatchObject({ hasMore: false, reset: false });
+    expect(final.cursor).toBeGreaterThanOrEqual(3);
+
+    const accepted = await exchange(access, final.cursor, [
+      { ...habit("legitimate-after-resync"), updatedAt: Date.now() },
+    ]);
+    expect(accepted.json()).toMatchObject({ batchAccepted: true, applied: 1, reset: false });
+    expect(
+      await h.query(`
+        select id from records
+         where user_id = '${user.id}' and kind = 'habits' and id = 'legitimate-after-resync'
+      `),
+    ).toHaveLength(1);
+  });
+
+  it("advances an empty full resync to the purge watermark", async () => {
+    const { access } = await signIn("09124440011");
+    await push(access, [
+      {
+        kind: "habits",
+        id: "only-tombstone",
+        data: null,
+        updatedAt: Date.now() - 200 * DAY,
+        deleted: true,
+      },
+    ]);
+    await h.raw(purgeSql());
+
+    expect((await exchange(access, 0, [])).json()).toMatchObject({
+      records: [],
+      cursor: 1,
+      gcSeq: 1,
+      hasMore: false,
+      reset: false,
+    });
+  });
+
+  it("rejects full-resync continuation when it is combined with incoming writes", async () => {
+    const { access } = await signIn("09124440012");
+    const response = await exchange(access, 0, [habit("must-not-enter")], {
+      fullResyncGcSeq: 1,
+    });
+    expect(response.statusCode).toBeGreaterThanOrEqual(400);
   });
 
   it("fails legacy cursorless push closed after tombstone GC without writing", async () => {

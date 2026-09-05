@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
@@ -43,6 +44,12 @@ const ELASTIC_MAINTENANCE_MIGRATION_PATH = resolve(
   root,
   "supabase/migrations/20260905140000_elastic_launch_hardening.sql",
 );
+const SYNC_GC_FIX_MIGRATION_PATH = resolve(
+  root,
+  "supabase/migrations/20260905150000_sync_gc_admission_and_maintenance_bounds.sql",
+);
+const ELASTIC_MAINTENANCE_ORIGINAL_SHA256 =
+  "84b0baea221fd41054a99a3d1e34fe9ae6ff23f9ee5473e6e0b757c771156912";
 
 function cronBody(sql: string, jobName: string, delimiter: "$$" | "$job$"): string {
   const job = sql.indexOf(`'${jobName}'`);
@@ -65,6 +72,40 @@ afterAll(async () => {
 });
 
 describe("launch schema repairs", () => {
+  it("keeps the committed elastic-maintenance migration byte-identical", () => {
+    const migration = readFileSync(ELASTIC_MAINTENANCE_MIGRATION_PATH);
+    expect(createHash("sha256").update(migration).digest("hex")).toBe(
+      ELASTIC_MAINTENANCE_ORIGINAL_SHA256,
+    );
+  });
+
+  it("installs review corrections through a new forward-only migration without cleanup", async () => {
+    expect(() => readFileSync(SYNC_GC_FIX_MIGRATION_PATH, "utf8")).not.toThrow();
+    const migration = readFileSync(SYNC_GC_FIX_MIGRATION_PATH, "utf8");
+    const owner = "a0444444-4444-4444-8444-444444444444";
+    await h.raw(`
+      insert into users (id, phone, seq, gc_seq)
+      values ('${owner}', '989122299977', 2, 0);
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      values
+        ('${owner}', 'tasks', 'forward-cold-task',
+         '{"id":"forward-cold-task","dateKey":"2026-01-01","title":"keep","type":"binary","target":1,"value":1,"done":true}',
+         1000, false, 1),
+        ('${owner}', 'habits', 'forward-old-delete', null, 1000, true, 2);
+    `);
+    const before = await h.query(`select * from records where user_id = '${owner}' order by kind`);
+
+    await h.raw(migration);
+
+    expect(await h.query(`select * from records where user_id = '${owner}' order by kind`)).toEqual(before);
+    expect(
+      await h.query<{ routine_name: string }>(`
+        select routine_name from information_schema.routines
+         where routine_schema = 'public' and routine_name = 'routino_sync_push_if_current'
+      `),
+    ).toHaveLength(1);
+  });
+
   it("keeps payment history nullable when its account is deleted", () => {
     const paymentsTable = SCHEMA_SQL.match(/create table if not exists payments \([\s\S]*?\n\);/i)?.[0];
     expect(paymentsTable).toMatch(/user_id uuid references users\(id\) on delete set null/i);
@@ -843,7 +884,7 @@ commit;$$
   it("executes every bounded maintenance cron body with PostgreSQL-valid transaction syntax", async () => {
     execFileSync(process.execPath, ["scripts/gen-setup-sql.mjs"], { cwd: root, stdio: "pipe" });
     const setup = readFileSync(resolve(root, "supabase/setup.sql"), "utf8");
-    const migration = readFileSync(ELASTIC_MAINTENANCE_MIGRATION_PATH, "utf8");
+    const migration = readFileSync(SYNC_GC_FIX_MIGRATION_PATH, "utf8");
     for (const body of [
       cronBody(setup, "routino-task-month-compaction", "$$"),
       cronBody(setup, "routino-tombstone-purge", "$$"),
@@ -855,8 +896,8 @@ commit;$$
   });
 
   it("installs indexed advisory-locked maintenance entrypoints without running them", async () => {
-    expect(() => readFileSync(ELASTIC_MAINTENANCE_MIGRATION_PATH, "utf8")).not.toThrow();
-    const migration = readFileSync(ELASTIC_MAINTENANCE_MIGRATION_PATH, "utf8");
+    expect(() => readFileSync(SYNC_GC_FIX_MIGRATION_PATH, "utf8")).not.toThrow();
+    const migration = readFileSync(SYNC_GC_FIX_MIGRATION_PATH, "utf8");
     const owner = "a0333333-3333-4333-8333-333333333333";
     await h.raw(`
       insert into users (id, phone, seq, gc_seq)
@@ -907,7 +948,7 @@ commit;$$
     expect(SCHEMA_SQL).toContain("for update of u skip locked");
     expect(SCHEMA_SQL).toContain("create or replace function routino_run_task_month_compaction");
     expect(SCHEMA_SQL.match(/pg_try_advisory_xact_lock/g)).toHaveLength(2);
-    expect(migration.match(/pg_try_advisory_xact_lock/g)).toHaveLength(2);
+    expect(migration.match(/pg_try_advisory_xact_lock/g)).toHaveLength(1);
     expect(SCHEMA_SQL).toContain("and source.seq = locked.seq");
     expect(migration).toContain("and source.seq = locked.seq");
     expect(migration).toContain("'routino-task-month-compaction',\n        '* * * * *'");

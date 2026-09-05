@@ -175,6 +175,9 @@ export interface PullResult {
    * from zero instead.
    */
   reset: boolean;
+  /** Current tombstone GC watermark. A full-resync continuation is valid only
+   * while this exact value remains unchanged. */
+  gcSeq: number;
 }
 
 export interface ExchangeResult extends PullResult {
@@ -205,7 +208,7 @@ export function selectPullPage(
   safeLimit: number,
   byteBudget: number,
   emptyPageMaxBytes = byteBudget,
-): PullResult {
+): Omit<PullResult, "gcSeq"> {
   const records: PullRecord[] = [];
   let cursor = 0;
   let usedBytes = 0;
@@ -495,6 +498,48 @@ function isUndefinedRoutinoCursorGateError(error: unknown): boolean {
   );
 }
 
+/** Code-first rollout bridge for the immediately preceding annual-quota
+ * schema. It deliberately calls only the existing three-argument writer; if
+ * that exact function is absent, the caller may try the truly-old schema path. */
+async function pushRecordsCurrentQuotaSchema(
+  db: Database,
+  userId: string,
+  now: Date,
+  packet: unknown[],
+  rejectedRecords: RejectedSyncRecord[],
+): Promise<PushResult> {
+  const result = await db.execute(sql`
+    select pushed.cursor, pushed.applied, pushed.skipped, pushed.quota_rejected
+      from routino_push_records(
+        ${userId}::uuid,
+        ${now.toISOString()}::timestamptz,
+        ${JSON.stringify(packet)}::jsonb
+      ) pushed
+  `);
+  const [row] = rowsOf<{
+    cursor: string | number;
+    applied: string | number;
+    skipped: string | number;
+    quota_rejected: RejectedSyncRecord[];
+  }>(result);
+  if (!row) throw unauthorized("unknown_user", "User no longer exists");
+  return {
+    cursor: Number(row.cursor),
+    applied: Number(row.applied),
+    skipped: Number(row.skipped),
+    rejectedRecords: [
+      ...rejectedRecords,
+      ...(Array.isArray(row.quota_rejected)
+        ? row.quota_rejected.map((rejection) => ({
+            ...rejection,
+            retryAt: Number(rejection.retryAt),
+          }))
+        : []),
+    ],
+    batchAccepted: true,
+  };
+}
+
 export async function pushRecords(
   db: Database,
   userId: string,
@@ -559,10 +604,15 @@ export async function pushRecords(
     // During code-first rollout, only cursor zero may use the old writer: it is
     // an explicitly fresh full resync. A non-zero or cursorless request cannot
     // prove it is above the GC watermark and therefore fails closed.
-    if (
-      cursor === 0 &&
-      (isUndefinedRoutinoPushRecordsError(error) || isUndefinedRoutinoCursorGateError(error))
-    ) {
+    if (cursor === 0 && isUndefinedRoutinoCursorGateError(error)) {
+      try {
+        return await pushRecordsCurrentQuotaSchema(db, userId, now, packet, rejectedRecords);
+      } catch (currentSchemaError) {
+        if (!isUndefinedRoutinoPushRecordsError(currentSchemaError)) throw currentSchemaError;
+        return pushRecordsLegacySchema(db, userId, all, rejectedRecords);
+      }
+    }
+    if (cursor === 0 && isUndefinedRoutinoPushRecordsError(error)) {
       return pushRecordsLegacySchema(db, userId, all, rejectedRecords);
     }
     if (!isAccountQuotaError(error)) throw error;
@@ -630,8 +680,13 @@ export async function pullRecords(
   recordByteBudget = PULL_RECORDS_BYTE_BUDGET,
   emptyPageMaxBytes = recordByteBudget,
   metrics?: PullDbMetrics,
+  fullResyncGcSeq?: number,
 ): Promise<PullResult> {
   const safeCursor = Number.isFinite(cursor) && cursor >= 0 ? Math.floor(cursor) : 0;
+  const safeFullResyncGcSeq =
+    Number.isFinite(fullResyncGcSeq) && fullResyncGcSeq! >= 0
+      ? Math.floor(fullResyncGcSeq!)
+      : null;
   const safeLimit = Math.max(1, Math.min(PULL_PAGE_SIZE, Math.floor(limit) || PULL_PAGE_SIZE));
   const fetchLimit = Math.min(PULL_DB_FETCH_ROW_LIMIT, safeLimit);
   if (metrics) metrics.queries += 1;
@@ -648,7 +703,11 @@ export async function pullRecords(
         from records r cross join owner
        where r.user_id = ${userId}::uuid
          and r.seq > ${safeCursor}::bigint
-         and (${safeCursor}::bigint = 0 or ${safeCursor}::bigint >= owner.gc_seq)
+         and (
+           ${safeCursor}::bigint = 0
+           or ${safeCursor}::bigint >= owner.gc_seq
+           or ${safeFullResyncGcSeq}::bigint = owner.gc_seq
+         )
        order by r.seq
        limit ${fetchLimit + 1}
     ),
@@ -698,8 +757,9 @@ export async function pullRecords(
   // tombstones that were purged below it. Cursor zero is a fresh device and is
   // exempt. The SQL above suppresses record fetches when a reset is required.
   const gcSeq = Number(ownerRow.gc_seq);
-  if (safeCursor > 0 && safeCursor < gcSeq) {
-    return { records: [], cursor: 0, hasMore: true, reset: true };
+  const continuingFullResync = safeFullResyncGcSeq === gcSeq;
+  if (safeCursor > 0 && safeCursor < gcSeq && !continuingFullResync) {
+    return { records: [], cursor: 0, hasMore: true, reset: true, gcSeq };
   }
 
   const transferred = rows.filter((row) => row.kind !== null);
@@ -732,10 +792,13 @@ export async function pullRecords(
   // `cursor` is non-zero whenever a stored row was selected, including a
   // valid empty archive. Preserve the caller's cursor only for an empty query.
   const nextCursor = selected.cursor || safeCursor;
+  const hasMore = selected.hasMore || hasLookahead;
+  const completingFullResync = safeCursor === 0 || continuingFullResync;
   return {
     ...selected,
-    cursor: nextCursor,
-    hasMore: selected.hasMore || hasLookahead,
+    cursor: completingFullResync && !hasMore ? Math.max(nextCursor, gcSeq) : nextCursor,
+    hasMore,
+    gcSeq,
   };
 }
 
@@ -760,16 +823,18 @@ export async function exchangeRecords(
   incoming: PushRecord[],
   now: Date,
   limit = PULL_PAGE_SIZE,
+  fullResyncGcSeq?: number,
 ): Promise<ExchangeResult> {
+  if (fullResyncGcSeq !== undefined && incoming.length > 0) {
+    throw new Error("full resync continuation must be read-only");
+  }
   const pushed = incoming.length
     ? await pushRecords(db, userId, incoming, now, cursor)
     : { applied: 0, skipped: 0, rejectedRecords: [], batchAccepted: true };
   if (!pushed.batchAccepted) {
+    const reset = await pullRecords(db, userId, cursor, limit);
     return {
-      records: [],
-      cursor: 0,
-      hasMore: true,
-      reset: true,
+      ...reset,
       applied: 0,
       skipped: 0,
       rejectedRecords: pushed.rejectedRecords,
@@ -790,6 +855,8 @@ export async function exchangeRecords(
     limit,
     exchangeRecordBudget,
     PULL_RECORDS_BYTE_BUDGET,
+    undefined,
+    fullResyncGcSeq,
   );
   return {
     ...pulled,

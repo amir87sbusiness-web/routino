@@ -42,6 +42,8 @@ export interface PullResponse {
   hasMore: boolean;
   /** The device fell behind the tombstone purge; wipe and pull from zero. */
   reset: boolean;
+  /** Tombstone purge watermark used to bind a stateless full-resync continuation. */
+  gcSeq?: number;
   /** Present on the LAST page only. The app reads its paywall from this instead
    * of spending a second invocation on GET /subscriptions/me every boot. */
   entitlement?: ServerEntitlement;
@@ -53,6 +55,8 @@ export interface ExchangeRequest {
   records: SyncRecord[];
   includeAccountState?: boolean;
   limit?: number;
+  /** Read-only continuation after cursor-zero/reset pagination. */
+  fullResyncGcSeq?: number;
 }
 
 export interface ExchangeResponse extends PullResponse {

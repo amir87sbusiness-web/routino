@@ -109,6 +109,61 @@ async function seedTaskArchive(
 }
 
 describe("edge sync", () => {
+  it("uses the current quota writer only for cursor-zero when the cursor gate is not installed", async () => {
+    const rollout = await makeHarness();
+    try {
+      await rollout.raw(`drop function routino_sync_push_if_current(uuid, timestamptz, jsonb, bigint)`);
+      const { access, user } = await signIn(rollout, "09120001127");
+
+      const fresh = await rollout.call("POST", "/v1/sync/exchange", {
+        headers: auth(access),
+        body: {
+          protocolVersion: 2,
+          cursor: 0,
+          records: [habit("gate-rollout-fresh", "سالم")],
+          includeAccountState: false,
+        },
+      });
+      expect(fresh.status).toBe(200);
+      expect(await fresh.json()).toMatchObject({ applied: 1, batchAccepted: true });
+
+      const nonzero = await rollout.call("POST", "/v1/sync/exchange", {
+        headers: auth(access),
+        body: {
+          protocolVersion: 2,
+          cursor: 1,
+          records: [habit("gate-rollout-nonzero", "نباید نوشته شود")],
+          includeAccountState: false,
+        },
+      });
+      expect(nonzero.status).toBe(500);
+
+      await rollout.raw(`
+        update users
+           set sync_growth_period_started_at = now(),
+               sync_growth_bytes = 10485760
+         where id = '${user.id}'
+      `);
+      const quota = await rollout.call("POST", "/v1/sync/exchange", {
+        headers: auth(access),
+        body: {
+          protocolVersion: 2,
+          cursor: 0,
+          records: [habit("gate-rollout-quota", "سهمیه دور نخورد")],
+          includeAccountState: false,
+        },
+      });
+      expect(quota.status).toBe(200);
+      expect(await quota.json()).toMatchObject({
+        applied: 0,
+        batchAccepted: true,
+        rejectedRecords: [expect.objectContaining({ code: "account_quota_exceeded" })],
+      });
+    } finally {
+      await rollout.close();
+    }
+  });
+
   it("keeps non-empty public sync working when code is deployed before the archive quota migration", async () => {
     const legacy = await makeHarness();
     try {

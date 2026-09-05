@@ -30,6 +30,8 @@ const server = {
   seq: 0,
   resetNextPull: false,
   rejectNextBatchForReset: false,
+  gcSeq: 0,
+  pageSize: Number.POSITIVE_INFINITY,
   exchanges: [] as ExchangeRequest[],
   /** ids the server permanently refuses, e.g. an oversized journal entry. */
   refuse: new Set<string>(),
@@ -67,18 +69,25 @@ const server = {
       rejectedRecords,
     };
   },
-  pull(cursor: number): PullResponse {
+  pull(cursor: number, fullResyncGcSeq?: number): PullResponse {
     if (this.resetNextPull) {
       this.resetNextPull = false;
-      return { records: [], cursor, hasMore: true, reset: true };
+      return { records: [], cursor: 0, hasMore: true, reset: true, gcSeq: this.gcSeq } as PullResponse;
     }
-    const records = this.log.filter((r) => r.seq > cursor).sort((a, b) => a.seq - b.seq);
+    if (cursor > 0 && cursor < this.gcSeq && fullResyncGcSeq !== this.gcSeq) {
+      return { records: [], cursor: 0, hasMore: true, reset: true, gcSeq: this.gcSeq } as PullResponse;
+    }
+    const remaining = this.log.filter((r) => r.seq > cursor).sort((a, b) => a.seq - b.seq);
+    const records = remaining.slice(0, this.pageSize);
+    const hasMore = remaining.length > records.length;
+    const selectedCursor = records.length ? records[records.length - 1]!.seq : cursor;
     return {
       records,
-      cursor: records.length ? records[records.length - 1]!.seq : cursor,
-      hasMore: false,
+      cursor: hasMore ? selectedCursor : Math.max(selectedCursor, this.gcSeq),
+      hasMore,
       reset: false,
-    };
+      gcSeq: this.gcSeq,
+    } as PullResponse;
   },
   exchange(request: ExchangeRequest): ExchangeResponse {
     this.exchanges.push(structuredClone(request));
@@ -97,7 +106,10 @@ const server = {
       } as ExchangeResponse;
     }
     const pushed = this.push(request.records);
-    const pulled = this.pull(request.cursor);
+    const pulled = this.pull(
+      request.cursor,
+      (request as ExchangeRequest & { fullResyncGcSeq?: number }).fullResyncGcSeq,
+    );
     return {
       ...pulled,
       applied: pushed.applied,
@@ -111,6 +123,8 @@ const server = {
     this.seq = 0;
     this.resetNextPull = false;
     this.rejectNextBatchForReset = false;
+    this.gcSeq = 0;
+    this.pageSize = Number.POSITIVE_INFINITY;
     this.exchanges = [];
     this.refuse.clear();
     this.refuseCode = "record_too_large";
@@ -679,6 +693,64 @@ describe("sync engine, two devices on one account", () => {
       dirty: 1,
     });
     expect(server.log.some((record) => record.id === "stale-dirty")).toBe(false);
+  });
+
+  it("resumes an interrupted full resync before sending dirty rows and clears its watermark", async () => {
+    server.gcSeq = 3;
+    server.seq = 3;
+    server.pageSize = 1;
+    server.log.push(
+      {
+        kind: "habits",
+        id: "already-pulled",
+        data: habitData("already-pulled", "صفحه اول"),
+        updatedAt: 1_000,
+        deleted: false,
+        seq: 1,
+      },
+      {
+        kind: "habits",
+        id: "remaining-page",
+        data: habitData("remaining-page", "صفحه دوم"),
+        updatedAt: 2_000,
+        deleted: false,
+        seq: 2,
+      },
+    );
+    await idb.habits.put({
+      key: "already-pulled",
+      data: habitData("already-pulled", "صفحه اول"),
+      updatedAt: 1_000,
+      deleted: 0,
+      dirty: 0,
+      seq: 1,
+    });
+    const interruptedState = {
+      key: "cursor" as const,
+      owner: OWNER,
+      cursor: 1,
+      lastSyncedAt: 0,
+      fullResyncGcSeq: 3,
+    };
+    await idb.syncMeta.put(interruptedState);
+    await localDirtyHabit("wait-until-resync-finishes", "محلی", 4_000);
+
+    await syncNow(OWNER, { pullRequired: true });
+
+    expect(server.exchanges[0]).toMatchObject({
+      cursor: 1,
+      records: [],
+      fullResyncGcSeq: 3,
+    });
+    expect(server.exchanges.at(-1)?.records).toEqual([
+      expect.objectContaining({ id: "wait-until-resync-finishes" }),
+    ]);
+    expect(await idb.habits.get("remaining-page")).toBeDefined();
+    expect(await idb.habits.get("wait-until-resync-finishes")).toMatchObject({ dirty: 0 });
+    expect(await idb.syncMeta.get("cursor")).toMatchObject({ cursor: 4 });
+    expect(
+      (await idb.syncMeta.get("cursor")) as unknown as { fullResyncGcSeq?: number },
+    ).not.toHaveProperty("fullResyncGcSeq");
   });
 
   it("keeps syncing everything else when the server refuses one record", async () => {
