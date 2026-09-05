@@ -1,26 +1,17 @@
 /**
- * Adds the destructive account-deletion control to the self-contained admin page
- * without coupling the main dashboard renderer to deletion semantics.
+ * Adds the destructive account-deletion control to the self-contained admin page.
  *
- * The server remains the authority: this UI only previews the target and requires
- * a typed confirmation; `/admin/users/:id/delete` re-checks the same identity in
- * a locked database transaction before deleting anything.
+ * This file is UI-only. The server remains authoritative for the destructive
+ * operation; the panel merely requires the visible account phone before calling
+ * the existing protected delete endpoint.
  */
 const STYLE = `
-  .delete-zone{margin-top:14px;padding:14px;border:1px solid #efb5ae;border-radius:14px;background:var(--bad-soft)}
-  .delete-zone-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:10px}.delete-zone-head strong{color:var(--bad);font-size:12px}.delete-zone-head p{margin:2px 0 0;color:#875552;font-size:11px}
-  .delete-preview{display:none;margin-top:10px;padding:11px 12px;border:1px solid #efb5ae;border-radius:11px;background:#fff;color:var(--txt)}.delete-preview.on{display:block}.delete-preview b{display:block}.delete-preview span{display:block;margin-top:2px;color:var(--mut);font-size:11px}
-  .delete-confirm-row{display:none;margin-top:10px}.delete-confirm-row.on{display:flex}.delete-confirm-row input{flex:1 1 220px;min-width:0}.delete-zone .btn:disabled{cursor:not-allowed}
-`;
-
-const HTML = `
-      <div class="delete-zone" id="deleteUserZone">
-        <div class="delete-zone-head"><div><strong>حذف کامل حساب</strong><p>اطلاعات شخصی و داده‌های اپ حذف می‌شوند و قابل بازگشت نیستند. سوابق پرداخت مالی حفظ می‌شوند اما از حساب حذف‌شده جدا می‌شوند. برای تأیید باید نام کاربری دقیق وارد شود.</p></div><span class="pill bad">خطرناک</span></div>
-        <div class="row"><input id="deleteUserLookup" placeholder="نام کاربری دقیق (یا شماره برای حساب بدون نام کاربری)" aria-label="پیدا کردن حساب برای حذف" dir="auto"><button class="btn secondary" type="button" id="deleteUserLookupGo">بررسی حساب</button></div>
-        <div class="delete-preview" id="deleteUserPreview" aria-live="polite"></div>
-        <div class="row delete-confirm-row" id="deleteUserConfirmRow"><input id="deleteUserConfirm" placeholder="تأیید حذف" aria-label="تأیید حذف حساب" dir="auto" disabled><button class="btn danger" type="button" id="deleteUserGo" disabled>حذف برای همیشه</button></div>
-        <div class="err" id="deleteUserErr" role="alert"></div>
-      </div>
+  .detail-delete-open{margin-inline-start:auto!important;border-color:#efb5ae!important;background:#fff!important;color:var(--bad)!important;box-shadow:none!important}
+  .detail-delete-open:hover{background:var(--bad-soft)!important}
+  .detail-delete-panel{margin-top:10px;padding:13px;border:1px solid #efb5ae;border-radius:14px;background:var(--bad-soft)}
+  .detail-delete-panel[hidden]{display:none!important}.detail-delete-panel strong{color:var(--bad);font-size:12px}.detail-delete-panel p{margin:3px 0 10px;color:#875552;font-size:11px}
+  .detail-delete-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.detail-delete-row input{min-width:0;flex:1 1 220px;background:#fff}.detail-delete-row .btn{flex:0 0 auto}
+  .detail-delete-error{min-height:20px;margin-top:7px;color:var(--bad);font-size:11px}.detail-delete-panel .btn:disabled{cursor:not-allowed}
 `;
 
 const SCRIPT = `
@@ -35,93 +26,102 @@ expandablePair = (cells, labels, userId, key, colspan) => {
   return '<tr>' + cells.map((cell, index) => '<td data-label="' + esc(labels[index]) + '">' + cell + '</td>').join("") + '</tr>';
 };
 
-let adminDeleteCandidate = null;
-function resetAdminDeleteCandidate(message) {
-  adminDeleteCandidate = null;
-  $("#deleteUserPreview").classList.remove("on");
-  $("#deleteUserPreview").innerHTML = "";
-  $("#deleteUserConfirmRow").classList.remove("on");
-  $("#deleteUserConfirm").value = "";
-  $("#deleteUserConfirm").disabled = true;
-  $("#deleteUserGo").disabled = true;
-  $("#deleteUserErr").textContent = message || "";
+const normalizeDeletePhone = (value) => String(value ?? "")
+  .replace(/[۰-۹]/g, (digit) => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)))
+  .replace(/[٠-٩]/g, (digit) => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
+  .trim();
+
+function attachAdminDeleteControls(host, user, userId) {
+  const actions = host.querySelector(".detail-actions");
+  if (!actions || actions.querySelector(".detail-delete-open")) return;
+
+  const phone = localPhone(user.phone);
+  // The existing backend may internally use username as its confirmation key.
+  // The admin UI intentionally confirms only the visible phone and supplies the
+  // backend value itself after that phone has matched exactly.
+  const backendConfirmation = user.username || phone;
+
+  const openButton = document.createElement("button");
+  openButton.type = "button";
+  openButton.className = "btn secondary mini detail-delete-open";
+  openButton.textContent = "حذف حساب";
+  actions.appendChild(openButton);
+
+  const panel = document.createElement("div");
+  panel.className = "detail-delete-panel";
+  panel.hidden = true;
+  panel.innerHTML =
+    '<strong>حذف کامل حساب</strong>' +
+    '<p>برای جلوگیری از حذف اشتباهی، شمارهٔ <b dir="ltr">' + esc(phone) + '</b> را دقیق وارد کن. داده‌های اپ حذف می‌شوند؛ سوابق پرداخت مالی باقی می‌مانند.</p>' +
+    '<div class="detail-delete-row"><input class="detail-delete-phone" inputmode="numeric" autocomplete="off" dir="ltr" placeholder="' + esc(phone) + '" aria-label="شماره برای تأیید حذف"><button class="btn secondary mini detail-delete-cancel" type="button">انصراف</button><button class="btn danger mini detail-delete-go" type="button" disabled>حذف برای همیشه</button></div>' +
+    '<div class="detail-delete-error" role="alert"></div>';
+  actions.insertAdjacentElement("afterend", panel);
+
+  const input = panel.querySelector(".detail-delete-phone");
+  const cancelButton = panel.querySelector(".detail-delete-cancel");
+  const deleteButton = panel.querySelector(".detail-delete-go");
+  const error = panel.querySelector(".detail-delete-error");
+
+  const closePanel = () => {
+    panel.hidden = true;
+    openButton.hidden = false;
+    input.value = "";
+    deleteButton.disabled = true;
+    error.textContent = "";
+  };
+
+  openButton.onclick = (event) => {
+    event.stopPropagation();
+    openButton.hidden = true;
+    panel.hidden = false;
+    input.focus();
+  };
+  cancelButton.onclick = (event) => { event.stopPropagation(); closePanel(); };
+  input.onclick = (event) => event.stopPropagation();
+  input.oninput = () => {
+    deleteButton.disabled = normalizeDeletePhone(input.value) !== phone;
+    error.textContent = "";
+  };
+
+  deleteButton.onclick = async (event) => {
+    event.stopPropagation();
+    if (normalizeDeletePhone(input.value) !== phone) return;
+    if (!confirm("حساب «" + phone + "» و تمام داده‌های شخصی/اپ آن برای همیشه حذف شود؟ سوابق پرداخت مالی باقی می‌مانند.")) return;
+
+    deleteButton.disabled = true;
+    cancelButton.disabled = true;
+    error.textContent = "";
+    try {
+      await api("/users/" + encodeURIComponent(userId) + "/delete", {
+        method: "POST",
+        body: { confirmation: backendConfirmation },
+      });
+      userDetailCache.delete(userId);
+      alert("حساب و داده‌های اپ حذف شد. سوابق پرداخت مالی حفظ شدند.");
+      await loadUsers();
+      void loadOverview();
+    } catch (cause) {
+      error.textContent = cause.message || "حذف حساب انجام نشد.";
+      deleteButton.disabled = normalizeDeletePhone(input.value) !== phone;
+      cancelButton.disabled = false;
+    }
+  };
 }
 
-$("#deleteUserLookup").addEventListener("input", () => resetAdminDeleteCandidate());
-$("#deleteUserLookupGo").onclick = async () => {
-  resetAdminDeleteCandidate();
-  const raw = $("#deleteUserLookup").value.trim();
-  if (!raw) { $("#deleteUserErr").textContent = "نام کاربری یا شماره را وارد کن."; return; }
-  const usernameQuery = raw.startsWith("@") ? raw.slice(1).toLowerCase() : raw.toLowerCase();
-  const button = $("#deleteUserLookupGo");
-  button.disabled = true;
-  try {
-    const result = await api("/users?q=" + encodeURIComponent(raw.startsWith("@") ? raw.slice(1) : raw));
-    const target = result.users.find((u) =>
-      (u.username && u.username === usernameQuery) ||
-      (!u.username && (localPhone(u.phone) === raw || u.phone === raw))
-    );
-    if (!target) { resetAdminDeleteCandidate("حساب دقیقی با این نام کاربری/شماره پیدا نشد."); return; }
-
-    const expected = target.username || localPhone(target.phone);
-    adminDeleteCandidate = { id: target.id, username: target.username, phone: target.phone, expected };
-    $("#deleteUserPreview").innerHTML =
-      "<b dir='ltr'>" + esc(target.username ? "@" + target.username : localPhone(target.phone)) + "</b>" +
-      "<span dir='ltr'>" + esc(localPhone(target.phone)) + " · " + esc(target.id) + "</span>" +
-      "<span>برای حذف، دقیقاً <b dir='ltr' style='display:inline'>" + esc(expected) + "</b> را در کادر پایین وارد کن.</span>";
-    $("#deleteUserPreview").classList.add("on");
-    $("#deleteUserConfirmRow").classList.add("on");
-    $("#deleteUserConfirm").disabled = false;
-    $("#deleteUserConfirm").placeholder = target.username ? "نام کاربری دقیق، بدون @" : "شماره دقیق حساب";
-    $("#deleteUserConfirm").focus();
-  } catch (error) {
-    resetAdminDeleteCandidate(error.message || "بررسی حساب ممکن نشد.");
-  } finally { button.disabled = false; }
-};
-
-$("#deleteUserConfirm").addEventListener("input", () => {
-  const value = $("#deleteUserConfirm").value.trim();
-  $("#deleteUserGo").disabled = !adminDeleteCandidate || value !== adminDeleteCandidate.expected;
-  $("#deleteUserErr").textContent = "";
-});
-
-$("#deleteUserGo").onclick = async () => {
-  if (!adminDeleteCandidate) return;
-  const confirmation = $("#deleteUserConfirm").value.trim();
-  if (confirmation !== adminDeleteCandidate.expected) return;
-  const label = adminDeleteCandidate.username ? "@" + adminDeleteCandidate.username : localPhone(adminDeleteCandidate.phone);
-  if (!confirm("حساب «" + label + "» و تمام داده‌های شخصی/اپ آن برای همیشه حذف شود؟ سوابق پرداخت مالی باقی می‌مانند.")) return;
-
-  const button = $("#deleteUserGo");
-  button.disabled = true;
-  try {
-    const deletedId = adminDeleteCandidate.id;
-    await api("/users/" + encodeURIComponent(deletedId) + "/delete", {
-      method: "POST",
-      body: { confirmation },
-    });
-    userDetailCache.delete(deletedId);
-    $("#deleteUserLookup").value = "";
-    resetAdminDeleteCandidate();
-    $("#deleteUserErr").textContent = "حساب و داده‌های اپ حذف شد؛ سوابق پرداخت مالی حفظ شد.";
-    await loadUsers();
-    void loadOverview();
-  } catch (error) {
-    $("#deleteUserErr").textContent = error.message || "حذف حساب انجام نشد.";
-    button.disabled = false;
-  }
+const baseRenderUserDetail = renderUserDetail;
+renderUserDetail = (host, detail, userId) => {
+  baseRenderUserDetail(host, detail, userId);
+  attachAdminDeleteControls(host, detail.user, userId);
 };
 `;
 
 export function withAdminUserDeleteUi(page: string): string {
   const styleMarker = "</style>";
-  const usersMarker = '      <div class="result" id="uResults" aria-live="polite"></div>';
   const bootMarker = "boot();\n</script>";
-  if (!page.includes(styleMarker) || !page.includes(usersMarker) || !page.includes(bootMarker)) {
+  if (!page.includes(styleMarker) || !page.includes(bootMarker)) {
     throw new Error("admin delete UI markers no longer match ADMIN_PAGE");
   }
   return page
     .replace(styleMarker, `${STYLE}\n</style>`)
-    .replace(usersMarker, `${HTML}\n${usersMarker}`)
     .replace(bootMarker, `${SCRIPT}\nboot();\n</script>`);
 }
