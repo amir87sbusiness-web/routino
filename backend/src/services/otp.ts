@@ -19,15 +19,12 @@ import { otpCodes } from "../db/schema.js";
 import type { Env } from "../env.js";
 
 /** Per-phone and per-IP windows. The per-minute rule is what stops a tight loop;
- * the daily rules bound the worst case. */
+ * the daily phone rule bounds one identity without blocking unrelated people. */
 const LIMITS = {
   phonePerMinute: 1,
   phonePerHour: 5,
   phonePerDay: 10,
   ipPerHour: 20,
-  /** Circuit breaker: a hard global stop so a novel abuse pattern cannot run up
-   * an unbounded bill overnight before anyone notices. */
-  globalPerDay: 2000,
 } as const;
 
 /** 4 digits, from a CSPRNG. `Math.random()` is predictable and would make codes
@@ -75,7 +72,7 @@ export interface SendSlot {
 export interface RateVerdict {
   ok: boolean;
   retryAfter?: number;
-  reason?: "phone_minute" | "phone_hour" | "phone_day" | "ip_hour" | "global_day";
+  reason?: "phone_minute" | "phone_hour" | "phone_day" | "ip_hour";
 }
 
 export async function checkSendRate(
@@ -95,14 +92,6 @@ export async function checkSendRate(
   }
   if (ip && (await countSince(db, "ip", ip, 3600, now)) >= LIMITS.ipPerHour) {
     return { ok: false, retryAfter: 3600, reason: "ip_hour" };
-  }
-
-  const since = new Date(now.getTime() - 86_400_000);
-  const [row] = await db.select({ n: count() }).from(otpCodes).where(gt(otpCodes.createdAt, since));
-  if ((row?.n ?? 0) >= LIMITS.globalPerDay) {
-    // Deliberately a hard stop. If this ever fires, something is wrong and it
-    // should page you rather than quietly keep spending.
-    return { ok: false, retryAfter: 3600, reason: "global_day" };
   }
 
   return { ok: true };
@@ -143,13 +132,9 @@ export async function createCode(
  *
  * Two things make it safe, and both are needed:
  *
- *  - `pg_try_advisory_xact_lock` keyed on the phone serialises requests for the
- *    SAME number and nothing else. A conditional INSERT alone would not be
- *    enough: under READ COMMITTED both transactions can evaluate the counts
- *    against their own snapshot before either commits, and both would insert.
- *  - Losing the lock is treated as "rate limited", not as an error. A second
- *    request for the same phone in the same instant is precisely what the limit
- *    exists to refuse.
+ * The optional IP lock, then phone lock are acquired in that fixed order. This
+ * makes the shared-IP count atomic across different phone numbers without
+ * serialising unrelated IPs or introducing a global business quota.
  *
  * Returns the plaintext code, or null when the caller may not send.
  */
@@ -176,12 +161,15 @@ export async function claimSendSlot(
   const expiresIso = new Date(now.getTime() + env.OTP_TTL_SECONDS * 1000).toISOString();
 
   const res = await db.execute(sql`
-    with lk as (
-      select pg_try_advisory_xact_lock(hashtext(${phone})) as got
+    with ip_lock as materialized (
+      select case when ${ip}::text is null then null
+                  else pg_advisory_xact_lock(hashtext('otp:ip:' || ${ip}::text)) end
+    ), phone_lock as materialized (
+      select pg_advisory_xact_lock(hashtext('otp:phone:' || ${phone}))
+        from ip_lock
     ),
     verdict as (
-      select lk.got
-        and (select count(*) from otp_codes
+      select (select count(*) from otp_codes
               where phone = ${phone} and created_at > ${atIso(60)}::timestamptz) < ${LIMITS.phonePerMinute}
         and (select count(*) from otp_codes
               where phone = ${phone} and created_at > ${atIso(3600)}::timestamptz) < ${LIMITS.phonePerHour}
@@ -189,10 +177,8 @@ export async function claimSendSlot(
               where phone = ${phone} and created_at > ${atIso(86400)}::timestamptz) < ${LIMITS.phonePerDay}
         and (${ip}::text is null or (select count(*) from otp_codes
               where ip = ${ip} and created_at > ${atIso(3600)}::timestamptz) < ${LIMITS.ipPerHour})
-        and (select count(*) from otp_codes
-              where created_at > ${atIso(86400)}::timestamptz) < ${LIMITS.globalPerDay}
         as allow
-      from lk
+      from phone_lock
     )
     insert into otp_codes (phone, code_hash, expires_at, ip, created_at)
     select ${phone}, ${hashCode(code, env)},

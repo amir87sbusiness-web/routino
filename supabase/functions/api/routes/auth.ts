@@ -28,6 +28,10 @@ import {
   releaseSendSlot,
   verifyCode,
 } from "../shared/services/otp.ts";
+import {
+  acquireProviderLease,
+  releaseProviderLease,
+} from "../shared/services/provider-capacity.ts";
 import { SmsNotSentError } from "../shared/providers/sms/index.ts";
 import {
   DUMMY_HASH,
@@ -88,23 +92,32 @@ export function authRoutes(deps: Deps) {
       throw tooMany("Too many code requests. Try again later.", verdict.retryAfter ?? 60);
     }
 
-    try {
-      await sms.sendOtp(phone, slot.code);
-    } catch (err) {
-      // Give the slot back only when the provider is CERTAIN nothing was sent
-      // (bad template, empty account, rejected receptor). That send cost
-      // nothing, so charging the user's per-hour allowance for it would lock
-      // them out for an hour over our misconfiguration — and from their side it
-      // is indistinguishable from "the SMS just doesn't arrive sometimes".
-      // A timeout or a 5xx is deliberately NOT refunded: the message may
-      // genuinely have gone out, and refunding an ambiguous failure is how the
-      // rate limit stops protecting the bill.
-      if (err instanceof SmsNotSentError) await releaseSendSlot(db, slot.slotId);
-      console.error("sms send failed", { err });
-      return c.json({ error: "sms_failed", message: "Could not send the code. Try again." }, 502);
+    const providerLease = await acquireProviderLease(
+      db,
+      "sms",
+      env.SMS_PROVIDER_MAX_CONCURRENCY,
+      now(),
+      30_000,
+    );
+    if (!providerLease) {
+      await releaseSendSlot(db, slot.slotId);
+      throw tooMany("Too many code requests. Try again later.", 1);
     }
 
-    return c.json({ ok: true, retryAfter: 60 });
+    try {
+      try {
+        await sms.sendOtp(phone, slot.code);
+      } catch (err) {
+        // Give the slot back only when the provider is CERTAIN nothing was sent.
+        if (err instanceof SmsNotSentError) await releaseSendSlot(db, slot.slotId);
+        console.error("sms send failed", { err });
+        return c.json({ error: "sms_failed", message: "Could not send the code. Try again." }, 502);
+      }
+
+      return c.json({ ok: true, retryAfter: 60 });
+    } finally {
+      await releaseProviderLease(db, "sms", providerLease.leaseId);
+    }
   });
 
   /**

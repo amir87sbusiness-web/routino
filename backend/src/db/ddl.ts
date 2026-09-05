@@ -1272,10 +1272,18 @@ create table if not exists otp_codes (
 );
 create index if not exists otp_phone_recent on otp_codes (phone, created_at);
 create index if not exists otp_ip_recent on otp_codes (ip, created_at);
--- The global daily circuit breaker counts the whole table by created_at with no
--- phone or ip to narrow it, on every single code request. It is also what the
--- 24h purge scans.
+-- Supports the bounded 24h housekeeping scan.
 create index if not exists otp_recent on otp_codes (created_at);
+
+create table if not exists provider_capacity_leases (
+  kind text not null,
+  lease_id uuid not null,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  primary key (kind, lease_id)
+);
+create index if not exists provider_capacity_leases_expiry
+  on provider_capacity_leases (kind, expires_at);
 
 create table if not exists auth_rate_limit_buckets (
   scope text not null,

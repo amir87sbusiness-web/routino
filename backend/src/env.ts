@@ -53,12 +53,14 @@ const schema = z.object({
   OTP_MAX_ATTEMPTS: z.coerce.number().default(3),
 
   SMS_PROVIDER: z.enum(["console", "kavenegar"]).default("console"),
+  SMS_PROVIDER_MAX_CONCURRENCY: z.coerce.number().int().min(1).max(1000).default(32),
   KAVENEGAR_API_KEY: z.string().optional(),
   KAVENEGAR_TEMPLATE: z.string().default("routino-otp"),
 
   /** Production supports only ZarinPal. Fake is local/test-only and production
    * rejects it unconditionally. */
   PSP_PROVIDER: z.enum(["fake", "zarinpal"]).default("fake"),
+  PSP_PROVIDER_MAX_CONCURRENCY: z.coerce.number().int().min(1).max(1000).default(64),
   /** ZarinPal merchant id (36-char UUID). */
   ZARINPAL_MERCHANT: z.string().default("dev-only-zarinpal-merchant"),
 

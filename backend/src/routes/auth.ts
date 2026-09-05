@@ -22,6 +22,7 @@ import {
 } from "../services/password.js";
 import { SmsNotSentError } from "../providers/sms/index.js";
 import { issueAccessToken } from "../services/tokens.js";
+import { acquireProviderLease, releaseProviderLease } from "../services/provider-capacity.js";
 
 const requestBody = z.object({ phone: z.string().min(1).max(32) });
 const verifyBody = z.object({
@@ -79,27 +80,44 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       throw tooMany("Too many code requests. Try again later.", verdict.retryAfter ?? 60);
     }
 
-    try {
-      await sms.sendOtp(phone, slot.code);
-    } catch (err) {
-      // Give the slot back only when the provider is CERTAIN nothing was sent
-      // (bad template, empty account, rejected receptor). That send cost
-      // nothing, so charging the user's per-hour allowance for it would lock
-      // them out for an hour over our misconfiguration — and from their side it
-      // is indistinguishable from "the SMS just doesn't arrive sometimes".
-      // A timeout or a 5xx is deliberately NOT refunded: the message may
-      // genuinely have gone out, and refunding an ambiguous failure is how the
-      // rate limit stops protecting the bill.
-      if (err instanceof SmsNotSentError) await releaseSendSlot(db, slot.slotId);
-      // The code row stays — it counts against the rate limit either way, so a
-      // provider outage can't be used to bypass throttling.
-      req.log.error({ err }, "sms send failed");
-      return reply
-        .status(502)
-        .send({ error: "sms_failed", message: "Could not send the code. Try again." });
+    const providerLease = await acquireProviderLease(
+      db,
+      "sms",
+      env.SMS_PROVIDER_MAX_CONCURRENCY,
+      now(),
+      30_000,
+    );
+    if (!providerLease) {
+      // No provider call was attempted, so this OTP claim is certainly unused.
+      await releaseSendSlot(db, slot.slotId);
+      throw tooMany("Too many code requests. Try again later.", 1);
     }
 
-    return { ok: true, retryAfter: 60 };
+    try {
+      try {
+        await sms.sendOtp(phone, slot.code);
+      } catch (err) {
+        // Give the slot back only when the provider is CERTAIN nothing was sent
+        // (bad template, empty account, rejected receptor). That send cost
+        // nothing, so charging the user's per-hour allowance for it would lock
+        // them out for an hour over our misconfiguration — and from their side it
+        // is indistinguishable from "the SMS just doesn't arrive sometimes".
+        // A timeout or a 5xx is deliberately NOT refunded: the message may
+        // genuinely have gone out, and refunding an ambiguous failure is how the
+        // rate limit stops protecting the bill.
+        if (err instanceof SmsNotSentError) await releaseSendSlot(db, slot.slotId);
+        // The code row stays — it counts against the rate limit either way, so a
+        // provider outage can't be used to bypass throttling.
+        req.log.error({ err }, "sms send failed");
+        return reply
+          .status(502)
+          .send({ error: "sms_failed", message: "Could not send the code. Try again." });
+      }
+
+      return { ok: true, retryAfter: 60 };
+    } finally {
+      await releaseProviderLease(db, "sms", providerLease.leaseId);
+    }
   });
 
   /**

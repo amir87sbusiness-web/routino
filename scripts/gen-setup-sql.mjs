@@ -101,6 +101,7 @@ const RLS_TABLES = [
   "users",
   "records",
   "otp_codes",
+  "provider_capacity_leases",
   "auth_rate_limit_buckets",
   "plans",
   "discounts",

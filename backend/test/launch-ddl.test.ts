@@ -97,7 +97,9 @@ describe("launch schema repairs", () => {
 
     await h.raw(migration);
 
-    expect(await h.query(`select * from records where user_id = '${owner}' order by kind`)).toEqual(before);
+    expect(await h.query(`select * from records where user_id = '${owner}' order by kind`)).toEqual(
+      before,
+    );
     expect(
       await h.query<{ routine_name: string }>(`
         select routine_name from information_schema.routines
@@ -107,7 +109,9 @@ describe("launch schema repairs", () => {
   });
 
   it("keeps payment history nullable when its account is deleted", () => {
-    const paymentsTable = SCHEMA_SQL.match(/create table if not exists payments \([\s\S]*?\n\);/i)?.[0];
+    const paymentsTable = SCHEMA_SQL.match(
+      /create table if not exists payments \([\s\S]*?\n\);/i,
+    )?.[0];
     expect(paymentsTable).toMatch(/user_id uuid references users\(id\) on delete set null/i);
     expect(paymentsTable).not.toMatch(/user_id uuid not null references users\(id\)/i);
   });
@@ -797,6 +801,7 @@ describe("launch schema repairs", () => {
       "users",
       "records",
       "otp_codes",
+      "provider_capacity_leases",
       "auth_rate_limit_buckets",
       "plans",
       "discounts",
@@ -913,7 +918,9 @@ commit;$$
 
     await h.raw(migration);
 
-    expect(await h.query(`select * from records where user_id = '${owner}' order by kind`)).toEqual(before);
+    expect(await h.query(`select * from records where user_id = '${owner}' order by kind`)).toEqual(
+      before,
+    );
     const indexes = await h.query<{ indexname: string; indexdef: string }>(`
         select indexname, indexdef from pg_indexes
          where schemaname = 'public'

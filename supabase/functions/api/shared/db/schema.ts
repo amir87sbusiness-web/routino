@@ -128,6 +128,22 @@ export const otpCodes = pgTable(
   ],
 );
 
+/** Short-lived concurrency permits for external providers. Deliberately stores
+ * no phone, user, IP, payment, or provider payload. */
+export const providerCapacityLeases = pgTable(
+  "provider_capacity_leases",
+  {
+    kind: text("kind").notNull(),
+    leaseId: uuid("lease_id").notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.kind, t.leaseId] }),
+    index("provider_capacity_leases_expiry").on(t.kind, t.expiresAt),
+  ],
+);
+
 /** Fixed-window authentication counters. One row absorbs every attempt for one
  * opaque key/window instead of appending one database row per failure. */
 export const authRateLimitBuckets = pgTable(
@@ -346,6 +362,7 @@ export const schema = {
   users,
   records,
   otpCodes,
+  providerCapacityLeases,
   authRateLimitBuckets,
   plans,
   discounts,

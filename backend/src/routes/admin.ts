@@ -29,6 +29,7 @@ import { adminDeleteUser } from "../services/admin-user-delete.js";
 import { adminListPaymentsIncludingDeleted } from "../services/admin-payment-history.js";
 import { claimAdminOtpRequest } from "../services/login-throttle.js";
 import { claimSendSlot, releaseSendSlot, verifyCode } from "../services/otp.js";
+import { acquireProviderLease, releaseProviderLease } from "../services/provider-capacity.js";
 import {
   adminCreateDiscount,
   adminGrant,
@@ -153,11 +154,26 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       const ledgerKey = adminOtpLedgerKey(env);
       const slot = await claimSendSlot(db, env, ledgerKey, req.ip ?? null, t);
       if (slot) {
-        try {
-          await sms.sendOtp(normalizePhone(env.ADMIN_PHONE)!, slot.code);
-        } catch (error) {
-          if (error instanceof SmsNotSentError) await releaseSendSlot(db, slot.slotId);
-          req.log.error({ error }, "admin otp send failed");
+        const providerLease = await acquireProviderLease(
+          db,
+          "sms",
+          env.SMS_PROVIDER_MAX_CONCURRENCY,
+          now(),
+          30_000,
+        );
+        if (!providerLease) {
+          await releaseSendSlot(db, slot.slotId);
+        } else {
+          try {
+            try {
+              await sms.sendOtp(normalizePhone(env.ADMIN_PHONE)!, slot.code);
+            } catch (error) {
+              if (error instanceof SmsNotSentError) await releaseSendSlot(db, slot.slotId);
+              req.log.error({ error }, "admin otp send failed");
+            }
+          } finally {
+            await releaseProviderLease(db, "sms", providerLease.leaseId);
+          }
         }
       }
     }

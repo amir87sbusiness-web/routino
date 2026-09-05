@@ -33,6 +33,7 @@ export const SHARED_FILES = [
   "lib/pay-result-page.ts",
   "lib/request-id.ts",
   "services/otp.ts",
+  "services/provider-capacity.ts",
   "services/tokens.ts",
   "services/entitlement.ts",
   "services/pricing.ts",
