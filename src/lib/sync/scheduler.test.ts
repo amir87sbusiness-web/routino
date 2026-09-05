@@ -63,7 +63,7 @@ describe("lifecycle sync scheduler", () => {
     const scheduler = createSyncScheduler({ flush, hasPending });
     scheduler.markDirty("u1");
     await scheduler.onForeground("u1");
-    expect(flush).toHaveBeenCalledWith("u1", { pullRequired: true, trackActivity: true });
+    expect(flush).toHaveBeenCalledWith("u1", { pullRequired: true });
 
     scheduler.markDirty("u1");
     scheduler.dispose();
@@ -86,6 +86,6 @@ describe("lifecycle sync scheduler", () => {
     await vi.advanceTimersByTimeAsync(1);
     await scheduler.onForeground("u1");
     expect(flush).toHaveBeenCalledTimes(2);
-    expect(flush).toHaveBeenLastCalledWith("u1", { pullRequired: true, trackActivity: true });
+    expect(flush).toHaveBeenLastCalledWith("u1", { pullRequired: true });
   });
 });
