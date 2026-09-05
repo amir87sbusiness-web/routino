@@ -131,6 +131,25 @@ describe("admin permanent account deletion", () => {
       ),
     ).toEqual([{ id: paymentId, user_id: null }]);
 
+    const historyHeaders = await adminSignIn(h);
+    const history = await h.app.inject({
+      method: "GET",
+      url: "/v1/admin/payments",
+      headers: historyHeaders,
+    });
+    expect(history.statusCode).toBe(200);
+    expect(history.json().payments).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: paymentId,
+          userId: null,
+          phone: null,
+          username: null,
+          status: "paid",
+        }),
+      ]),
+    );
+
     expect(
       await h.query(
         `select 1 from auth_rate_limit_buckets where scope = 'login_identifier' and key_hash in ('${loginHash(user.phone)}','${loginHash(user.username!)}')`,
