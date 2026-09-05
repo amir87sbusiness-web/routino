@@ -5,7 +5,18 @@ import { adminSignIn, makeHarness, type Harness } from "./helpers/pglite.js";
 let h: Harness;
 
 beforeEach(async () => {
-  h ??= await makeHarness();
+  if (!h) {
+    h = await makeHarness();
+    // Mirror the production migration under test: payment history survives
+    // user deletion and loses only its account FK.
+    await h.raw(`
+      alter table payments drop constraint if exists payments_user_id_fkey;
+      alter table payments alter column user_id drop not null;
+      alter table payments
+        add constraint payments_user_id_users_id_fk
+        foreign key (user_id) references users(id) on delete set null;
+    `);
+  }
   await h.truncate();
 });
 
@@ -42,9 +53,9 @@ describe("admin permanent account deletion", () => {
     const paymentId = randomUUID();
     await h.raw(`
       insert into payments
-        (id, user_id, plan_id, months, amount_toman, amount_rial, status, attempt_id)
+        (id, user_id, plan_id, months, amount_toman, amount_rial, status, attempt_id, applied_at)
       values
-        ('${paymentId}', '${user.id}', 'm1', 1, 59000, 590000, 'paid', '${randomUUID()}');
+        ('${paymentId}', '${user.id}', 'm1', 1, 59000, 590000, 'paid', '${randomUUID()}', now());
     `);
 
     const response = await deleteAsAdmin(user.id, "someone_else");
@@ -54,7 +65,7 @@ describe("admin permanent account deletion", () => {
     expect(await h.query(`select id from payments where id = '${paymentId}'`)).toHaveLength(1);
   });
 
-  it("deletes the account and every directly identifiable server row in one operation", async () => {
+  it("preserves financial payment rows while deleting account and app data", async () => {
     const user = await createUser("victim", "989121111111");
     const other = await createUser("other", "989122222222");
     const paymentId = randomUUID();
@@ -70,10 +81,10 @@ describe("admin permanent account deletion", () => {
 
       insert into payments
         (id, user_id, plan_id, months, amount_toman, amount_rial, discount_code,
-         discount_percent, status, attempt_id)
+         discount_percent, status, attempt_id, applied_at)
       values
-        ('${paymentId}', '${user.id}', 'm1', 1, 59000, 590000, 'PRIVATE10', 10, 'paid', '${randomUUID()}'),
-        ('${otherPaymentId}', '${other.id}', 'm1', 1, 59000, 590000, 'PRIVATE10', 10, 'paid', '${randomUUID()}');
+        ('${paymentId}', '${user.id}', 'm1', 1, 59000, 590000, 'PRIVATE10', 10, 'paid', '${randomUUID()}', now()),
+        ('${otherPaymentId}', '${other.id}', 'm1', 1, 59000, 590000, 'PRIVATE10', 10, 'paid', '${randomUUID()}', now());
 
       insert into redemptions (code, user_id, payment_id)
       values
@@ -105,7 +116,6 @@ describe("admin permanent account deletion", () => {
     for (const [table, predicate] of [
       ["users", `id = '${user.id}'`],
       ["records", `user_id = '${user.id}'`],
-      ["payments", `user_id = '${user.id}'`],
       ["grants", `user_id = '${user.id}'`],
       ["entitlements", `user_id = '${user.id}'`],
       ["feedback", `user_id = '${user.id}'`],
@@ -116,23 +126,40 @@ describe("admin permanent account deletion", () => {
     }
 
     expect(
+      await h.query<{ id: string; user_id: string | null }>(
+        `select id, user_id from payments where id = '${paymentId}'`,
+      ),
+    ).toEqual([{ id: paymentId, user_id: null }]);
+
+    expect(
       await h.query(
         `select 1 from auth_rate_limit_buckets where scope = 'login_identifier' and key_hash in ('${loginHash(user.phone)}','${loginHash(user.username!)}')`,
       ),
     ).toHaveLength(0);
 
-    // Another user's historical reference keeps the discount row, but the
-    // deleted user's phone is scrubbed and the code is disabled rather than
-    // accidentally becoming public.
     expect(
       await h.query<{ phone: string | null; active: boolean }>(
         `select phone, active from discounts where code = 'PRIVATE10'`,
       ),
     ).toEqual([{ phone: null, active: false }]);
 
-    // Unrelated account/payment data survives untouched.
     expect(await h.query(`select id from users where id = '${other.id}'`)).toHaveLength(1);
     expect(await h.query(`select id from payments where id = '${otherPaymentId}'`)).toHaveLength(1);
+  });
+
+  it("blocks deletion while a payment can still settle", async () => {
+    const user = await createUser("victim", "989121111111");
+    await h.raw(`
+      insert into payments
+        (id, user_id, plan_id, months, amount_toman, amount_rial, status, attempt_id, authority)
+      values
+        ('${randomUUID()}', '${user.id}', 'm1', 1, 59000, 590000, 'redirected', '${randomUUID()}', 'A123');
+    `);
+
+    const response = await deleteAsAdmin(user.id, "victim");
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ error: "payment_in_progress" });
+    expect(await h.query(`select id from users where id = '${user.id}'`)).toHaveLength(1);
   });
 
   it("uses the exact local phone as confirmation only when the account has no username", async () => {
