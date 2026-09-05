@@ -89,14 +89,13 @@ export function buildApp(deps: Deps) {
     // administrator session, so an injected script or exfiltration beacon would
     // be especially damaging there —
     // and 'unsafe-inline' is unavoidable there because the panel's own script is
-    // inline. The payment result page is deliberately left out: it navigates to
-    // the `routino://` deep link to return to the Android app, and that flow is
-    // not worth risking for a header.
+    // inline. Keep the font on jsDelivr: it costs our Supabase/Cloudflare account
+    // no font egress, while the allowlist keeps the admin CSP narrow.
     if (c.req.path.startsWith("/api/admin")) {
       c.header(
         "Content-Security-Policy",
         "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
-          "img-src 'self' data:; font-src https://cdn.jsdelivr.net; connect-src 'self'; form-action 'self'; " +
+          "img-src 'self' data:; font-src 'self' https://cdn.jsdelivr.net data:; connect-src 'self'; form-action 'self'; " +
           "frame-ancestors 'none'; base-uri 'none'; object-src 'none'",
       );
     }
