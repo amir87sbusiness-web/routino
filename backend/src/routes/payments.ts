@@ -24,7 +24,7 @@ import {
   pollPayment,
   UUID_RE,
 } from "../services/payment-flow.js";
-import { checkDiscount, quote } from "../services/pricing.js";
+import { quoteWithDiscount } from "../services/pricing.js";
 
 const quoteBody = z.object({
   planId: z.string().min(1).max(32),
@@ -56,9 +56,7 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
     const user = await paymentUser(auth.id);
     const body = quoteBody.parse(req.body);
     const t = now();
-    const q = await quote(db, body.planId, body.code ?? null, user.id, user.phone, t, 0, true);
-    const d = await checkDiscount(db, body.code ?? null, user.id, user.phone, t);
-    return { quote: q, discount: d };
+    return quoteWithDiscount(db, body.planId, body.code ?? null, user.id, user.phone, t, 0, true);
   });
 
   app.post("/payments/checkout", { preHandler: app.authenticate }, async (req) => {

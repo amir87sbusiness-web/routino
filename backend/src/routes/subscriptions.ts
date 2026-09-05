@@ -1,6 +1,9 @@
+import { eq } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
+import { users } from "../db/schema.js";
 import { requireUser } from "../plugins/auth.js";
+import { unauthorized } from "../plugins/errors.js";
 import {
   ensureExpiresAt,
   hasSettledGrant,
@@ -52,16 +55,33 @@ export const subscriptionRoutes: FastifyPluginAsync = async (app) => {
    *
    * It is also inherently untrusted: the body is client-authored, so anyone can
    * claim `expiresAt: 2099`. It cannot be validated — only BOUNDED:
-   *   - once per account, and never after a payment or a previous import
+   *   - only accounts created before LEGACY_IMPORT_CUTOFF are eligible
+   *   - once per eligible account, and never after a payment or previous import
    *   - capped at now + IMPORT_MAX_DAYS
    *   - raises expiry to max(current, claimed); never stacks on the trial
    *   - the raw claim is recorded on the grant for audit
-   * Trust the client exactly once, at migration, and never again.
+   * Future public signups therefore cannot mint access through this migration
+   * endpoint, while every account that already existed at rollout keeps working.
    */
   app.post("/subscriptions/import", { preHandler: app.authenticate }, async (req) => {
     const user = requireUser(req);
     const body = importBody.parse(req.body);
     const t = now();
+
+    const [account] = await db
+      .select({ createdAt: users.createdAt })
+      .from(users)
+      .where(eq(users.id, user.id))
+      .limit(1);
+    if (!account) throw unauthorized("unknown_user", "User no longer exists");
+
+    if (account.createdAt >= new Date(env.LEGACY_IMPORT_CUTOFF)) {
+      return {
+        entitlement: await readEntitlement(db, user.id, t),
+        imported: false,
+        reason: "not_legacy_account",
+      };
+    }
 
     if (await hasSettledGrant(db, user.id)) {
       // Already paid or already imported — replaying this must not extend anything.

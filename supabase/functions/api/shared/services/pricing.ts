@@ -117,6 +117,55 @@ export async function checkDiscount(
   return { valid: true, percent: d.percent, code: d.code };
 }
 
+/** Computes the quote and exposes the exact discount validation result from the
+ * same pass. The quote-preview route needs both; returning them together avoids
+ * running the discount queries twice for one button press. */
+export async function quoteWithDiscount(
+  db: Database,
+  planId: string,
+  rawCode: string | null | undefined,
+  userId: string,
+  userPhone: string,
+  now: Date,
+  offerPercent = 0,
+  allowFree = false,
+): Promise<{ quote: Quote; discount: DiscountCheck }> {
+  const [plan] = await db
+    .select()
+    .from(plans)
+    .where(and(eq(plans.id, planId), eq(plans.active, true)))
+    .limit(1);
+  if (!plan) throw notFound("unknown_plan", `No active plan '${planId}'`);
+
+  const discount = await checkDiscount(db, rawCode, userId, userPhone, now);
+
+  // Offer and discount stack multiplicatively — same order the client UI has
+  // always shown, so the displayed price matches what gets charged.
+  let price = plan.priceToman;
+  if (offerPercent > 0) price = Math.round((price * (100 - offerPercent)) / 100);
+  if (discount.valid) price = Math.round((price * (100 - discount.percent)) / 100);
+
+  // ZarinPal has a minimum charge; a 100% discount would also
+  // mean "free", which should never reach a payment gateway at all.
+  if (price <= 0 && !allowFree)
+    throw badRequest("free_plan", "Discounted price is zero; grant directly instead of charging");
+  if (price < 0) price = 0;
+
+  return {
+    quote: {
+      planId: plan.id,
+      months: plan.months,
+      basePriceToman: plan.priceToman,
+      offerPercent,
+      discountPercent: discount.valid ? discount.percent : 0,
+      discountCode: discount.code,
+      finalToman: price,
+      finalRial: tomanToRial(price),
+    },
+    discount,
+  };
+}
+
 export async function quote(
   db: Database,
   planId: string,
@@ -129,37 +178,18 @@ export async function quote(
    * it to the gateway; everyone else treats zero as an error. */
   allowFree = false,
 ): Promise<Quote> {
-  const [plan] = await db
-    .select()
-    .from(plans)
-    .where(and(eq(plans.id, planId), eq(plans.active, true)))
-    .limit(1);
-  if (!plan) throw notFound("unknown_plan", `No active plan '${planId}'`);
-
-  const d = await checkDiscount(db, rawCode, userId, userPhone, now);
-
-  // Offer and discount stack multiplicatively — same order the client UI has
-  // always shown, so the displayed price matches what gets charged.
-  let price = plan.priceToman;
-  if (offerPercent > 0) price = Math.round((price * (100 - offerPercent)) / 100);
-  if (d.valid) price = Math.round((price * (100 - d.percent)) / 100);
-
-  // ZarinPal has a minimum charge; a 100% discount would also
-  // mean "free", which should never reach a payment gateway at all.
-  if (price <= 0 && !allowFree)
-    throw badRequest("free_plan", "Discounted price is zero; grant directly instead of charging");
-  if (price < 0) price = 0;
-
-  return {
-    planId: plan.id,
-    months: plan.months,
-    basePriceToman: plan.priceToman,
-    offerPercent,
-    discountPercent: d.valid ? d.percent : 0,
-    discountCode: d.code,
-    finalToman: price,
-    finalRial: tomanToRial(price),
-  };
+  return (
+    await quoteWithDiscount(
+      db,
+      planId,
+      rawCode,
+      userId,
+      userPhone,
+      now,
+      offerPercent,
+      allowFree,
+    )
+  ).quote;
 }
 
 /** Marks a code used. Called inside the grant transaction, never before payment

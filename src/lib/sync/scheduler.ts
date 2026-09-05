@@ -1,6 +1,7 @@
 import type { SyncOptions } from "./engine";
 
 export const EDIT_SYNC_DELAY_MS = 10_000;
+export const FOREGROUND_SYNC_COOLDOWN_MS = 20_000;
 
 export interface SyncSchedulerDeps {
   flush: (owner: string, options: SyncOptions) => Promise<unknown>;
@@ -58,7 +59,7 @@ export function createSyncScheduler({
     async onForeground(owner: string) {
       const pending = await hasPending(owner);
       const last = lastCompletedAt.get(owner) ?? 0;
-      if (!pending && Date.now() - last < EDIT_SYNC_DELAY_MS) return;
+      if (!pending && Date.now() - last < FOREGROUND_SYNC_COOLDOWN_MS) return;
       return run(owner, { pullRequired: true });
     },
 

@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createSyncScheduler, EDIT_SYNC_DELAY_MS } from "./scheduler";
+import {
+  createSyncScheduler,
+  EDIT_SYNC_DELAY_MS,
+  FOREGROUND_SYNC_COOLDOWN_MS,
+} from "./scheduler";
 
-describe("10-second lifecycle sync scheduler", () => {
+describe("lifecycle sync scheduler", () => {
   const flush = vi.fn(async () => undefined);
   const hasPending = vi.fn(async () => true);
 
@@ -67,7 +71,7 @@ describe("10-second lifecycle sync scheduler", () => {
     expect(flush).toHaveBeenCalledTimes(1);
   });
 
-  it("coalesces redundant clean foreground pulls for ten seconds", async () => {
+  it("coalesces redundant clean foreground pulls for twenty seconds", async () => {
     hasPending.mockResolvedValue(false);
     const scheduler = createSyncScheduler({ flush, hasPending });
 
@@ -75,7 +79,11 @@ describe("10-second lifecycle sync scheduler", () => {
     await scheduler.onForeground("u1");
     expect(flush).toHaveBeenCalledTimes(1);
 
-    await vi.advanceTimersByTimeAsync(EDIT_SYNC_DELAY_MS);
+    await vi.advanceTimersByTimeAsync(FOREGROUND_SYNC_COOLDOWN_MS - 1);
+    await scheduler.onForeground("u1");
+    expect(flush).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(1);
     await scheduler.onForeground("u1");
     expect(flush).toHaveBeenCalledTimes(2);
     expect(flush).toHaveBeenLastCalledWith("u1", { pullRequired: true });
