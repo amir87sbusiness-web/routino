@@ -25,6 +25,7 @@ import {
   readCookie,
   verifyAdminSession,
 } from "../shared/services/admin-auth.ts";
+import { adminDeleteUser } from "../shared/services/admin-user-delete.ts";
 import { claimAdminOtpRequest } from "../shared/services/login-throttle.ts";
 import { claimSendSlot, releaseSendSlot, verifyCode } from "../shared/services/otp.ts";
 import {
@@ -60,6 +61,10 @@ const grantBody = z.object({
 const setPasswordBody = z.object({
   phone: z.string().min(1).max(32),
   password: z.string().min(1).max(128),
+});
+
+const deleteUserBody = z.object({
+  confirmation: z.string().min(1).max(64),
 });
 
 const discountCreateBody = z.object({
@@ -208,6 +213,14 @@ export function adminRoutes(deps: Deps) {
       months: body.months,
       days: body.days,
     });
+    return c.json(res);
+  });
+
+  r.post("/admin/users/:id/delete", async (c) => {
+    const id = c.req.param("id");
+    const { confirmation } = deleteUserBody.parse(await readJson(c));
+    const res = await adminDeleteUser(db, env, id, confirmation);
+    console.warn("admin permanently deleted user", { userId: id });
     return c.json(res);
   });
 
