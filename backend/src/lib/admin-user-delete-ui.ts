@@ -15,7 +15,7 @@ const STYLE = `
 
 const HTML = `
       <div class="delete-zone" id="deleteUserZone">
-        <div class="delete-zone-head"><div><strong>حذف کامل حساب</strong><p>تمام داده‌های سرور این حساب حذف می‌شود و قابل بازگشت نیست. اول حساب را پیدا کن، بعد نام کاربری دقیقش را برای تأیید وارد کن.</p></div><span class="pill bad">خطرناک</span></div>
+        <div class="delete-zone-head"><div><strong>حذف کامل حساب</strong><p>اطلاعات شخصی و داده‌های اپ حذف می‌شوند و قابل بازگشت نیستند. سوابق پرداخت مالی حفظ می‌شوند اما از حساب حذف‌شده جدا می‌شوند. برای تأیید باید نام کاربری دقیق وارد شود.</p></div><span class="pill bad">خطرناک</span></div>
         <div class="row"><input id="deleteUserLookup" placeholder="نام کاربری دقیق (یا شماره برای حساب بدون نام کاربری)" aria-label="پیدا کردن حساب برای حذف" dir="auto"><button class="btn secondary" type="button" id="deleteUserLookupGo">بررسی حساب</button></div>
         <div class="delete-preview" id="deleteUserPreview" aria-live="polite"></div>
         <div class="row delete-confirm-row" id="deleteUserConfirmRow"><input id="deleteUserConfirm" placeholder="تأیید حذف" aria-label="تأیید حذف حساب" dir="auto" disabled><button class="btn danger" type="button" id="deleteUserGo" disabled>حذف برای همیشه</button></div>
@@ -24,6 +24,17 @@ const HTML = `
 `;
 
 const SCRIPT = `
+const baseIdentityCell = identityCell;
+identityCell = (phone, username) => {
+  if (phone) return baseIdentityCell(phone, username);
+  return '<div class="identity"><span class="identity-mark">×</span><span class="identity-copy"><b>حساب حذف‌شده</b><small>سابقهٔ مالی حفظ شده</small></span></div>';
+};
+const baseExpandablePair = expandablePair;
+expandablePair = (cells, labels, userId, key, colspan) => {
+  if (userId) return baseExpandablePair(cells, labels, userId, key, colspan);
+  return '<tr>' + cells.map((cell, index) => '<td data-label="' + esc(labels[index]) + '">' + cell + '</td>').join("") + '</tr>';
+};
+
 let adminDeleteCandidate = null;
 function resetAdminDeleteCandidate(message) {
   adminDeleteCandidate = null;
@@ -79,7 +90,7 @@ $("#deleteUserGo").onclick = async () => {
   const confirmation = $("#deleteUserConfirm").value.trim();
   if (confirmation !== adminDeleteCandidate.expected) return;
   const label = adminDeleteCandidate.username ? "@" + adminDeleteCandidate.username : localPhone(adminDeleteCandidate.phone);
-  if (!confirm("حساب «" + label + "» و تمام داده‌های سرورش برای همیشه حذف شود؟ این عملیات قابل بازگشت نیست.")) return;
+  if (!confirm("حساب «" + label + "» و تمام داده‌های شخصی/اپ آن برای همیشه حذف شود؟ سوابق پرداخت مالی باقی می‌مانند.")) return;
 
   const button = $("#deleteUserGo");
   button.disabled = true;
@@ -92,7 +103,7 @@ $("#deleteUserGo").onclick = async () => {
     userDetailCache.delete(deletedId);
     $("#deleteUserLookup").value = "";
     resetAdminDeleteCandidate();
-    $("#deleteUserErr").textContent = "حساب و تمام داده‌های مرتبط با موفقیت حذف شد.";
+    $("#deleteUserErr").textContent = "حساب و داده‌های اپ حذف شد؛ سوابق پرداخت مالی حفظ شد.";
     await loadUsers();
     void loadOverview();
   } catch (error) {
