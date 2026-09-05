@@ -52,6 +52,9 @@ export interface ExchangeRequest {
   cursor: number;
   records: SyncRecord[];
   includeAccountState?: boolean;
+  /** Lifecycle-only analytics. Ordinary edit sync leaves this false so the
+   * server does not spend a DB statement just to touch an activity counter. */
+  trackActivity?: boolean;
   limit?: number;
 }
 
