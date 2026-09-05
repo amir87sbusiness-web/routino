@@ -51,6 +51,12 @@ afterAll(async () => {
 });
 
 describe("launch schema repairs", () => {
+  it("keeps payment history nullable when its account is deleted", () => {
+    const paymentsTable = SCHEMA_SQL.match(/create table if not exists payments \([\s\S]*?\n\);/i)?.[0];
+    expect(paymentsTable).toMatch(/user_id uuid references users\(id\) on delete set null/i);
+    expect(paymentsTable).not.toMatch(/user_id uuid not null references users\(id\)/i);
+  });
+
   it("installs retention additively and gives every preexisting account 30 safe days", async () => {
     const owner = "a0000000-0000-4000-8000-000000000099";
     await h.raw(`

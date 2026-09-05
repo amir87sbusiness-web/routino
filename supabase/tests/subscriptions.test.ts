@@ -42,6 +42,10 @@ describe("GET /v1/subscriptions/me", () => {
 });
 
 describe("POST /v1/subscriptions/import", () => {
+  it("uses a far-future legacy cutoff by default in the Edge harness", () => {
+    expect(new Date(h.env.LEGACY_IMPORT_CUTOFF).toISOString()).toBe("2999-01-01T00:00:00.000Z");
+  });
+
   it("raises expiry to the claimed date without adding local time", async () => {
     const { access } = await signIn(h);
     const claimed = Date.now() + 30 * DAY;

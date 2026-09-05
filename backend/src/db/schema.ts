@@ -196,9 +196,7 @@ export const payments = pgTable(
   {
     /** Also the `orderId` sent to the PSP. */
     id: uuid("id").primaryKey().defaultRandom(),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
     planId: text("plan_id").notNull(),
     months: integer("months").notNull(),
     /** Server-computed, post-discount. NEVER accepted from the client. */

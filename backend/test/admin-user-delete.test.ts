@@ -3,21 +3,12 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { adminSignIn, makeHarness, type Harness } from "./helpers/pglite.js";
 
 let h: Harness;
+let adminHeaders: Record<string, string>;
 
 beforeEach(async () => {
-  if (!h) {
-    h = await makeHarness();
-    // Mirror the production migration under test: payment history survives
-    // user deletion and loses only its account FK.
-    await h.raw(`
-      alter table payments drop constraint if exists payments_user_id_fkey;
-      alter table payments alter column user_id drop not null;
-      alter table payments
-        add constraint payments_user_id_users_id_fk
-        foreign key (user_id) references users(id) on delete set null;
-    `);
-  }
+  h ??= await makeHarness();
   await h.truncate();
+  adminHeaders = await adminSignIn(h);
 });
 
 afterAll(async () => {
@@ -38,11 +29,10 @@ async function createUser(username: string | null, phone: string) {
 }
 
 async function deleteAsAdmin(id: string, confirmation: string) {
-  const headers = await adminSignIn(h);
   return h.app.inject({
     method: "POST",
     url: `/v1/admin/users/${id}/delete`,
-    headers,
+    headers: adminHeaders,
     payload: { confirmation },
   });
 }
@@ -131,11 +121,10 @@ describe("admin permanent account deletion", () => {
       ),
     ).toEqual([{ id: paymentId, user_id: null }]);
 
-    const historyHeaders = await adminSignIn(h);
     const history = await h.app.inject({
       method: "GET",
       url: "/v1/admin/payments",
-      headers: historyHeaders,
+      headers: adminHeaders,
     });
     expect(history.statusCode).toBe(200);
     expect(history.json().payments).toEqual(

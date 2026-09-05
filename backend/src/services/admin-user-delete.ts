@@ -108,7 +108,7 @@ export async function adminDeleteUser(
     const deleted = await tx
       .delete(users)
       .where(eq(users.id, user.id))
-      .returning({ id: users.id });
+      .returning();
     if (!deleted.length) throw notFound("unknown_user", "No such user");
 
     // A phone-restricted discount is PII too. If its code is referenced by

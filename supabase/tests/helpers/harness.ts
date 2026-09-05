@@ -79,6 +79,9 @@ export async function makeHarness(
     // Production-like origin list, so the CORS behaviour asserted here is the
     // one routino.me actually gets.
     CORS_ORIGINS: "https://routino.me,https://localhost,capacitor://localhost",
+    // Subscription-import tests model legacy accounts. Keep their eligibility
+    // independent of the real production rollout date; cutoff tests override it.
+    LEGACY_IMPORT_CUTOFF: "2999-01-01T00:00:00.000Z",
     ...overrides,
   } as NodeJS.ProcessEnv);
   const pglite = new PGlite();
