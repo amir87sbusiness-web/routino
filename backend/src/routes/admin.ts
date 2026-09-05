@@ -26,13 +26,13 @@ import {
   verifyAdminSession,
 } from "../services/admin-auth.js";
 import { adminDeleteUser } from "../services/admin-user-delete.js";
+import { adminListPaymentsIncludingDeleted } from "../services/admin-payment-history.js";
 import { claimAdminOtpRequest } from "../services/login-throttle.js";
 import { claimSendSlot, releaseSendSlot, verifyCode } from "../services/otp.js";
 import {
   adminCreateDiscount,
   adminGrant,
   adminListDiscounts,
-  adminListPayments,
   adminListPlans,
   adminListUsers,
   adminOverview,
@@ -228,7 +228,12 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/admin/payments", opts, async (req) => {
     const { status, limit } = req.query as { status?: string; limit?: string };
-    return { payments: await adminListPayments(db, { status, limit: Number(limit) || undefined }) };
+    return {
+      payments: await adminListPaymentsIncludingDeleted(db, {
+        status,
+        limit: Number(limit) || undefined,
+      }),
+    };
   });
 
   app.get("/admin/plans", opts, async () => ({ plans: await adminListPlans(db) }));
