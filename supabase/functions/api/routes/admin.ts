@@ -26,13 +26,13 @@ import {
   verifyAdminSession,
 } from "../shared/services/admin-auth.ts";
 import { adminDeleteUser } from "../shared/services/admin-user-delete.ts";
+import { adminListPaymentsIncludingDeleted } from "../shared/services/admin-payment-history.ts";
 import { claimAdminOtpRequest } from "../shared/services/login-throttle.ts";
 import { claimSendSlot, releaseSendSlot, verifyCode } from "../shared/services/otp.ts";
 import {
   adminCreateDiscount,
   adminGrant,
   adminListDiscounts,
-  adminListPayments,
   adminListPlans,
   adminListUsers,
   adminOverview,
@@ -233,7 +233,7 @@ export function adminRoutes(deps: Deps) {
   });
 
   r.get("/admin/payments", async (c) => {
-    const payments = await adminListPayments(db, {
+    const payments = await adminListPaymentsIncludingDeleted(db, {
       status: c.req.query("status"),
       limit: Number(c.req.query("limit")) || undefined,
     });
