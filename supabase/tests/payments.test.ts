@@ -244,14 +244,14 @@ describe("checkout → gateway → callback", () => {
     expect((await checkout(access, { planId: "m99" })).status).toBe(404);
   });
 
-  it("rate-limits checkout creation", async () => {
+  it("does not impose a fixed hourly business cap on legitimate checkouts", async () => {
     const { access } = await signIn(h);
-    for (let i = 0; i < 10; i++) {
-      expect((await checkout(access, { planId: "m1" })).status).toBe(200);
+    for (let i = 0; i < 11; i++) {
+      const response = await checkout(access, { planId: "m1" });
+      expect(response.status).toBe(200);
+      const { paymentId } = (await response.json()) as { paymentId: string };
+      await h.raw(`update payments set status = 'failed' where id = '${paymentId}'`);
     }
-    const blocked = await checkout(access, { planId: "m1" });
-    expect(blocked.status).toBe(429);
-    expect(blocked.headers.get("retry-after")).toBe("3600");
   });
 });
 

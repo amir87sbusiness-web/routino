@@ -188,8 +188,9 @@ describe("checkout → gateway → callback", () => {
     expect(payment).toEqual({ status: "provider_unknown", authority: null });
 
     const fresh = await checkout(access, { planId: "m1", attemptId: crypto.randomUUID() });
-    expect(fresh.statusCode).toBe(200);
-    expect(h.psp._txns.size).toBe(1);
+    expect(fresh.statusCode).toBe(503);
+    expect(fresh.json()).toMatchObject({ error: "payment_request_unknown" });
+    expect(h.psp._txns.size).toBe(0);
   });
 
   it("recovers when the authority callback arrives after token persistence was interrupted", async () => {
@@ -479,12 +480,56 @@ describe("checkout → gateway → callback", () => {
     expect((await checkout(access, { planId: "m99" })).statusCode).toBe(404);
   });
 
-  it("rate-limits checkout creation", async () => {
+  it("does not impose a fixed hourly business cap on legitimate checkouts", async () => {
     const { access } = await signIn();
-    for (let i = 0; i < 10; i++) {
-      expect((await checkout(access, { planId: "m1" })).statusCode).toBe(200);
+    for (let i = 0; i < 11; i++) {
+      const response = await checkout(access, { planId: "m1" });
+      expect(response.statusCode).toBe(200);
+      const { paymentId } = response.json() as { paymentId: string };
+      await h.raw(`update payments set status = 'failed' where id = '${paymentId}'`);
     }
-    expect((await checkout(access, { planId: "m1" })).statusCode).toBe(429);
+  });
+
+  it("keeps one requesting row when PSP capacity is busy and resumes the same attempt", async () => {
+    const { access } = await signIn();
+    const attemptId = crypto.randomUUID();
+    await h.raw(`
+      insert into provider_capacity_leases (kind, lease_id, expires_at)
+      select 'psp', gen_random_uuid(), now() + interval '1 minute'
+        from generate_series(1, 64)
+    `);
+    const request = h.psp.request.bind(h.psp);
+    let requestCalls = 0;
+    h.psp.request = async (input) => {
+      requestCalls += 1;
+      return request(input);
+    };
+
+    const busy = await checkout(access, { planId: "m1", attemptId });
+    expect(busy.statusCode).toBe(503);
+    expect(busy.headers["retry-after"]).toBeTruthy();
+    const busyBody = busy.json() as {
+      error: string;
+      retryAfter: number;
+      paymentId: string;
+    };
+    expect(busyBody).toMatchObject({ error: "provider_busy", paymentId: expect.any(String) });
+    expect(busyBody.retryAfter).toBeGreaterThan(0);
+    expect(requestCalls).toBe(0);
+    expect(
+      await h.query(`select id from payments where user_id is not null and attempt_id = '${attemptId}'`),
+    ).toHaveLength(1);
+
+    await h.raw(`delete from provider_capacity_leases where kind = 'psp'`);
+    const changed = await checkout(access, { planId: "m3", attemptId });
+    expect(changed.statusCode).toBe(409);
+    expect(changed.json()).toMatchObject({ error: "duplicate_payment_attempt" });
+    expect(requestCalls).toBe(0);
+
+    const resumed = await checkout(access, { planId: "m1", attemptId });
+    expect(resumed.statusCode).toBe(200);
+    expect((resumed.json() as { paymentId: string }).paymentId).toBe(busyBody.paymentId);
+    expect(requestCalls).toBe(1);
   });
 });
 

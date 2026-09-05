@@ -1328,6 +1328,7 @@ create table if not exists payments (
   offer_percent integer,
   status text not null default 'pending',
   platform text,
+  checkout_provider text not null default 'zarinpal',
   attempt_id uuid not null default gen_random_uuid(),
   authority text unique,
   ref_number text,
@@ -1345,6 +1346,7 @@ create table if not exists payments (
   updated_at timestamptz not null default now()
 );
 alter table payments add column if not exists attempt_id uuid;
+alter table payments add column if not exists checkout_provider text not null default 'zarinpal';
 alter table payments add column if not exists request_started_at timestamptz;
 alter table payments add column if not exists verify_started_at timestamptz;
 alter table payments add column if not exists next_verify_at timestamptz;
@@ -1395,6 +1397,33 @@ create index if not exists payments_user on payments (user_id);
 create index if not exists payments_status on payments (status, created_at);
 create unique index if not exists payments_user_attempt_unique
   on payments (user_id, attempt_id);
+-- Never guess which ambiguous checkout is authoritative. If history already
+-- contains two live logical purchases, startup/migration aborts without
+-- deleting, merging or terminalising either money row.
+do $$
+begin
+  if exists (
+    select 1
+      from payments
+     where user_id is not null
+       and applied_at is null
+       and status in ('pending', 'requesting', 'redirected', 'provider_unknown', 'verifying')
+     group by user_id, plan_id, amount_toman, coalesce(discount_code, ''),
+              coalesce(platform, 'web'), checkout_provider
+    having count(*) > 1
+  ) then
+    raise exception 'duplicate nonterminal logical payments require review before enabling checkout uniqueness';
+  end if;
+end
+$$;
+create unique index if not exists payments_nonterminal_checkout_unique
+  on payments (
+    user_id, plan_id, amount_toman, coalesce(discount_code, ''),
+    coalesce(platform, 'web'), checkout_provider
+  )
+  where user_id is not null
+    and applied_at is null
+    and status in ('pending', 'requesting', 'redirected', 'provider_unknown', 'verifying');
 -- A limited discount code counts the checkouts currently in flight against it
 -- (slotsTaken in services/pricing.ts), on the checkout path. Partial, because
 -- most payments carry no code at all.

@@ -228,6 +228,9 @@ export const payments = pgTable(
     /** web | android | ios — decides where the callback page sends the user
      * back to (web URL vs custom-scheme deep link). */
     platform: text("platform"),
+    /** PSP selected when this logical checkout was created. Included in the
+     * nonterminal uniqueness key so provider switches never merge histories. */
+    checkoutProvider: text("checkout_provider").notNull().default("zarinpal"),
     /** Client-generated idempotency key. It identifies one checkout intent for
      * one user; retries with the same key must never register twice at a PSP. */
     attemptId: uuid("attempt_id").notNull().defaultRandom(),
@@ -255,6 +258,18 @@ export const payments = pgTable(
     index("payments_user").on(t.userId),
     index("payments_status").on(t.status, t.createdAt),
     uniqueIndex("payments_user_attempt_unique").on(t.userId, t.attemptId),
+    uniqueIndex("payments_nonterminal_checkout_unique")
+      .on(
+        t.userId,
+        t.planId,
+        t.amountToman,
+        sql`coalesce(${t.discountCode}, '')`,
+        sql`coalesce(${t.platform}, 'web')`,
+        t.checkoutProvider,
+      )
+      .where(
+        sql`${t.userId} is not null and ${t.appliedAt} is null and ${t.status} in ('pending', 'requesting', 'redirected', 'provider_unknown', 'verifying')`,
+      ),
     check("payments_verify_attempts_nonnegative", sql`${t.verifyAttempts} >= 0`),
   ],
 );

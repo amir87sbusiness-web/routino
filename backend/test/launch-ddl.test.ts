@@ -48,6 +48,10 @@ const SYNC_GC_FIX_MIGRATION_PATH = resolve(
   root,
   "supabase/migrations/20260905150000_sync_gc_admission_and_maintenance_bounds.sql",
 );
+const ELASTIC_CHECKOUT_MIGRATION_SQL = readFileSync(
+  resolve(root, "supabase/migrations/20260905170000_elastic_checkout_identity.sql"),
+  "utf8",
+);
 const ELASTIC_MAINTENANCE_ORIGINAL_SHA256 =
   "84b0baea221fd41054a99a3d1e34fe9ae6ff23f9ee5473e6e0b757c771156912";
 
@@ -114,6 +118,36 @@ describe("launch schema repairs", () => {
     )?.[0];
     expect(paymentsTable).toMatch(/user_id uuid references users\(id\) on delete set null/i);
     expect(paymentsTable).not.toMatch(/user_id uuid not null references users\(id\)/i);
+  });
+
+  it("aborts checkout uniqueness over duplicate live history without changing money rows", async () => {
+    const owner = "a0555555-5555-4555-8555-555555555555";
+    await h.raw(`
+      drop index payments_nonterminal_checkout_unique;
+      insert into users (id, phone) values ('${owner}', '989122299955');
+      insert into payments (
+        user_id, plan_id, months, amount_toman, amount_rial, status, platform,
+        checkout_provider, attempt_id
+      ) values
+        ('${owner}', 'm1', 1, 59000, 590000, 'requesting', 'web', 'zarinpal', gen_random_uuid()),
+        ('${owner}', 'm1', 1, 59000, 590000, 'provider_unknown', 'web', 'zarinpal', gen_random_uuid());
+    `);
+    const before = await h.query(`
+      select id, status, amount_toman, amount_rial from payments
+       where user_id = '${owner}' order by id
+    `);
+
+    await expect(h.raw(ELASTIC_CHECKOUT_MIGRATION_SQL)).rejects.toThrow(
+      /duplicate nonterminal logical payments require review/i,
+    );
+    await h.raw("rollback");
+
+    expect(
+      await h.query(`
+        select id, status, amount_toman, amount_rial from payments
+         where user_id = '${owner}' order by id
+      `),
+    ).toEqual(before);
   });
 
   it("installs retention additively and gives every preexisting account 30 safe days", async () => {

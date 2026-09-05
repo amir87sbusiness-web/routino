@@ -1,23 +1,25 @@
-import { and, count, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import type { Database } from "../db/client.js";
 import { grants, payments, users } from "../db/schema.js";
 import {
   badRequest,
   conflict,
+  HttpError,
   notFound,
   serviceUnavailable,
-  tooMany,
   unauthorized,
 } from "../lib/http-errors.js";
 import { toLocalPhone } from "../lib/phone.js";
 import type { PspProvider, PspVerifyResult } from "../providers/psp/index.js";
 import { extendEntitlement, readEntitlement, type Entitlement } from "./entitlement.js";
 import { quote, redeemDiscount } from "./pricing.js";
+import { acquireProviderLease, releaseProviderLease } from "./provider-capacity.js";
 
 export type PaymentRow = typeof payments.$inferSelect;
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const MAX_CHECKOUTS_PER_HOUR = 10;
+const PSP_REQUEST_LEASE_MS = 30_000;
+const PSP_BUSY_RETRY_SECONDS = 2;
 const VERIFY_LEASE_MS = 30_000;
 const VERIFY_BACKOFF_BASE_MS = 5_000;
 const VERIFY_BACKOFF_MAX_MS = 5 * 60_000;
@@ -174,7 +176,7 @@ export async function applyPaid(
 
 export async function checkoutPayment(
   db: Database,
-  env: { PUBLIC_API_URL: string },
+  env: { PUBLIC_API_URL: string; PSP_PROVIDER_MAX_CONCURRENCY: number },
   psp: PspProvider,
   user: { id: string; phone: string },
   body: {
@@ -190,38 +192,40 @@ export async function checkoutPayment(
     .from(payments)
     .where(and(eq(payments.userId, user.id), eq(payments.attemptId, body.attemptId)))
     .limit(1);
-  if (prior) return existingAttemptResult(db, psp, prior, body, t);
-
-  const since = new Date(t.getTime() - 3_600_000);
-  const [recent] = await db
-    .select({ n: count() })
-    .from(payments)
-    .where(and(eq(payments.userId, user.id), gt(payments.createdAt, since)));
-  if ((recent?.n ?? 0) >= MAX_CHECKOUTS_PER_HOUR) {
-    throw tooMany("Too many payment attempts. Try again later.", 3600);
+  if (prior && !(prior.status === "requesting" && prior.requestStartedAt === null)) {
+    return existingAttemptResult(db, psp, prior, body, t);
+  }
+  if (prior && !attemptInputsMatch(prior, body)) {
+    return existingAttemptResult(db, psp, prior, body, t);
   }
 
   const priced = await quote(db, body.planId, body.code ?? null, user.id, user.phone, t, 0, true);
-  const [payment] = await db
-    .insert(payments)
-    .values({
-      userId: user.id,
-      planId: priced.planId,
-      months: priced.months,
-      amountToman: priced.finalToman,
-      amountRial: priced.finalRial,
-      discountCode: priced.discountCode,
-      discountPercent: priced.discountPercent,
-      offerPercent: priced.offerPercent,
-      platform: body.platform ?? "web",
-      attemptId: body.attemptId,
-      status: priced.finalToman <= 0 ? "pending" : "requesting",
-      requestStartedAt: priced.finalToman <= 0 ? null : t,
-      createdAt: t,
-      updatedAt: t,
-    })
-    .onConflictDoNothing()
-    .returning();
+  let payment = prior;
+  let ownsRequest = false;
+  if (!payment) {
+    [payment] = await db
+      .insert(payments)
+      .values({
+        userId: user.id,
+        planId: priced.planId,
+        months: priced.months,
+        amountToman: priced.finalToman,
+        amountRial: priced.finalRial,
+        discountCode: priced.discountCode,
+        discountPercent: priced.discountPercent,
+        offerPercent: priced.offerPercent,
+        platform: body.platform ?? "web",
+        checkoutProvider: psp.name,
+        attemptId: body.attemptId,
+        status: priced.finalToman <= 0 ? "pending" : "requesting",
+        requestStartedAt: priced.finalToman <= 0 ? null : t,
+        createdAt: t,
+        updatedAt: t,
+      })
+      .onConflictDoNothing()
+      .returning();
+    ownsRequest = Boolean(payment && priced.finalToman > 0);
+  }
   if (!payment) {
     const [raced] = await db
       .select()
@@ -229,6 +233,20 @@ export async function checkoutPayment(
       .where(and(eq(payments.userId, user.id), eq(payments.attemptId, body.attemptId)))
       .limit(1);
     if (raced) return existingAttemptResult(db, psp, raced, body, t);
+    const logicalConditions = [
+      eq(payments.userId, user.id),
+      eq(payments.planId, priced.planId),
+      eq(payments.amountToman, priced.finalToman),
+      priced.discountCode === null
+        ? isNull(payments.discountCode)
+        : eq(payments.discountCode, priced.discountCode),
+      eq(payments.platform, body.platform ?? "web"),
+      eq(payments.checkoutProvider, psp.name),
+      isNull(payments.appliedAt),
+      inArray(payments.status, ["pending", "requesting", "redirected", "provider_unknown", "verifying"]),
+    ];
+    const [logical] = await db.select().from(payments).where(and(...logicalConditions)).limit(1);
+    if (logical) return existingAttemptResult(db, psp, logical, body, t);
     throw new Error("failed to create payment");
   }
 
@@ -241,14 +259,55 @@ export async function checkoutPayment(
     };
   }
 
+  if (!ownsRequest) {
+    const [claimed] = await db
+      .update(payments)
+      .set({ requestStartedAt: t, updatedAt: t })
+      .where(
+        and(
+          eq(payments.id, payment.id),
+          eq(payments.status, "requesting"),
+          isNull(payments.requestStartedAt),
+        ),
+      )
+      .returning();
+    if (!claimed) return existingAttemptResult(db, psp, payment, body, t);
+    payment = claimed;
+  }
+
+  const providerLease = await acquireProviderLease(
+    db,
+    "psp",
+    env.PSP_PROVIDER_MAX_CONCURRENCY,
+    t,
+    PSP_REQUEST_LEASE_MS,
+  );
+  if (!providerLease) {
+    await db
+      .update(payments)
+      .set({ requestStartedAt: null, updatedAt: t })
+      .where(and(eq(payments.id, payment.id), eq(payments.status, "requesting")));
+    const err = new HttpError(503, "provider_busy", "Payment provider is busy. Retry shortly.", {
+      retryAfter: PSP_BUSY_RETRY_SECONDS,
+      paymentId: payment.id,
+    });
+    (err as HttpError & { retryAfter?: number }).retryAfter = PSP_BUSY_RETRY_SECONDS;
+    throw err;
+  }
+
   const callbackUrl = new URL(`${env.PUBLIC_API_URL}/v1/payments/callback`);
   callbackUrl.searchParams.set("paymentId", payment.id);
-  const result = await psp.request({
-    amountRial: priced.finalRial,
-    callbackUrl: callbackUrl.toString(),
-    description: `Routino ${priced.planId} (${priced.months}m)`,
-    mobile: toLocalPhone(user.phone),
-  });
+  let result;
+  try {
+    result = await psp.request({
+      amountRial: payment.amountRial,
+      callbackUrl: callbackUrl.toString(),
+      description: `Routino ${payment.planId} (${payment.months}m)`,
+      mobile: toLocalPhone(user.phone),
+    });
+  } finally {
+    await releaseProviderLease(db, "psp", providerLease.leaseId);
+  }
 
   if (result.kind !== "issued") {
     const ambiguous = result.kind === "unknown";

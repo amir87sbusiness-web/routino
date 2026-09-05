@@ -38,12 +38,12 @@ async function signIn(phone: string) {
   return res.json() as { access: string; user: { id: string } };
 }
 
-async function checkout(access: string, code?: string) {
+async function checkout(access: string, code?: string, planId = "m1") {
   const res = await h.app.inject({
     method: "POST",
     url: "/v1/payments/checkout",
     headers: auth(access),
-    payload: { planId: "m1", attemptId: crypto.randomUUID(), ...(code ? { code } : {}) },
+    payload: { planId, attemptId: crypto.randomUUID(), ...(code ? { code } : {}) },
   });
   return { status: res.statusCode, body: res.json() as { paymentId: string; authority: string } };
 }
@@ -140,7 +140,7 @@ describe("a burst of simultaneous sales", () => {
     // Someone double-taps, or buys on the phone and the laptop at once. Two
     // separate payments, both genuinely paid.
     const a = await checkout(access);
-    const b = await checkout(access);
+    const b = await checkout(access, undefined, "m3");
     h.psp._settle(a.body.authority, "paid");
     h.psp._settle(b.body.authority, "paid");
 
@@ -162,7 +162,7 @@ describe("a burst of simultaneous sales", () => {
     expect(await grantCount(a.body.paymentId)).toBe(1);
     expect(await grantCount(b.body.paymentId)).toBe(1);
 
-    // And the entitlement moved by ~two months, not one. This is the failure the
+    // And the entitlement moved by ~four months, not one. This is the failure the
     // single-statement `insert … on conflict … greatest(expires_at, now) +
     // make_interval` exists to prevent: read-then-write let two grants landing
     // together drop one, so a user who paid twice got one month.
@@ -170,7 +170,7 @@ describe("a burst of simultaneous sales", () => {
       `select expires_at::text from entitlements where user_id = '${user.id}'`,
     );
     const days = (new Date(after[0]!.expires_at).getTime() - start) / 86_400_000;
-    expect(days).toBeGreaterThan(55);
+    expect(days).toBeGreaterThan(110);
   });
 
   it("keeps each buyer's sync data to themselves under load", async () => {
