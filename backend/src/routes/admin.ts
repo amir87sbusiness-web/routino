@@ -25,13 +25,14 @@ import {
   readCookie,
   verifyAdminSession,
 } from "../services/admin-auth.js";
+import { adminDeleteUser } from "../services/admin-user-delete.js";
+import { adminListPaymentsIncludingDeleted } from "../services/admin-payment-history.js";
 import { claimAdminOtpRequest } from "../services/login-throttle.js";
 import { claimSendSlot, releaseSendSlot, verifyCode } from "../services/otp.js";
 import {
   adminCreateDiscount,
   adminGrant,
   adminListDiscounts,
-  adminListPayments,
   adminListPlans,
   adminListUsers,
   adminOverview,
@@ -70,6 +71,10 @@ const grantBody = z.object({
 const setPasswordBody = z.object({
   phone: z.string().min(1).max(32),
   password: z.string().min(1).max(128),
+});
+
+const deleteUserBody = z.object({
+  confirmation: z.string().min(1).max(64),
 });
 
 const discountCreateBody = z.object({
@@ -204,6 +209,14 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
     return res;
   });
 
+  app.post("/admin/users/:id/delete", opts, async (req) => {
+    const { id } = req.params as { id: string };
+    const { confirmation } = deleteUserBody.parse(req.body);
+    const res = await adminDeleteUser(db, env, id, confirmation);
+    req.log.warn({ userId: id }, "admin permanently deleted user");
+    return res;
+  });
+
   // Set/reset a password by phone, creating the account if needed. `set-password`
   // is a fixed path, so it never collides with the `/admin/users/:id` params.
   app.post("/admin/users/set-password", opts, async (req) => {
@@ -215,7 +228,12 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.get("/admin/payments", opts, async (req) => {
     const { status, limit } = req.query as { status?: string; limit?: string };
-    return { payments: await adminListPayments(db, { status, limit: Number(limit) || undefined }) };
+    return {
+      payments: await adminListPaymentsIncludingDeleted(db, {
+        status,
+        limit: Number(limit) || undefined,
+      }),
+    };
   });
 
   app.get("/admin/plans", opts, async () => ({ plans: await adminListPlans(db) }));

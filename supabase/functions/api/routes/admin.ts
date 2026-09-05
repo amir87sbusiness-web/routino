@@ -25,13 +25,14 @@ import {
   readCookie,
   verifyAdminSession,
 } from "../shared/services/admin-auth.ts";
+import { adminDeleteUser } from "../shared/services/admin-user-delete.ts";
+import { adminListPaymentsIncludingDeleted } from "../shared/services/admin-payment-history.ts";
 import { claimAdminOtpRequest } from "../shared/services/login-throttle.ts";
 import { claimSendSlot, releaseSendSlot, verifyCode } from "../shared/services/otp.ts";
 import {
   adminCreateDiscount,
   adminGrant,
   adminListDiscounts,
-  adminListPayments,
   adminListPlans,
   adminListUsers,
   adminOverview,
@@ -60,6 +61,10 @@ const grantBody = z.object({
 const setPasswordBody = z.object({
   phone: z.string().min(1).max(32),
   password: z.string().min(1).max(128),
+});
+
+const deleteUserBody = z.object({
+  confirmation: z.string().min(1).max(64),
 });
 
 const discountCreateBody = z.object({
@@ -211,6 +216,14 @@ export function adminRoutes(deps: Deps) {
     return c.json(res);
   });
 
+  r.post("/admin/users/:id/delete", async (c) => {
+    const id = c.req.param("id");
+    const { confirmation } = deleteUserBody.parse(await readJson(c));
+    const res = await adminDeleteUser(db, env, id, confirmation);
+    console.warn("admin permanently deleted user", { userId: id });
+    return c.json(res);
+  });
+
   // Fixed path, so it never collides with `/admin/users/:id`.
   r.post("/admin/users/set-password", async (c) => {
     const body = setPasswordBody.parse(await readJson(c));
@@ -220,7 +233,7 @@ export function adminRoutes(deps: Deps) {
   });
 
   r.get("/admin/payments", async (c) => {
-    const payments = await adminListPayments(db, {
+    const payments = await adminListPaymentsIncludingDeleted(db, {
       status: c.req.query("status"),
       limit: Number(c.req.query("limit")) || undefined,
     });
