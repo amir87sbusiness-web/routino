@@ -490,7 +490,7 @@ describe("checkout → gateway → callback", () => {
     }
   });
 
-  it("keeps one requesting row when PSP capacity is busy and resumes the same attempt", async () => {
+  it("keeps one requesting row when PSP capacity is busy and survives a client reload", async () => {
     const { access } = await signIn();
     const attemptId = crypto.randomUUID();
     await h.raw(`
@@ -528,10 +528,13 @@ describe("checkout → gateway → callback", () => {
     expect(changed.json()).toMatchObject({ error: "duplicate_payment_attempt" });
     expect(requestCalls).toBe(0);
 
-    const resumed = await checkout(access, { planId: "m1", attemptId });
+    const resumed = await checkout(access, { planId: "m1", attemptId: crypto.randomUUID() });
     expect(resumed.statusCode).toBe(200);
     expect((resumed.json() as { paymentId: string }).paymentId).toBe(busyBody.paymentId);
     expect(requestCalls).toBe(1);
+    expect(
+      await h.query(`select id from payments where id = '${busyBody.paymentId}'`),
+    ).toHaveLength(1);
   });
 });
 

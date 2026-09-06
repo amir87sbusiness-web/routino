@@ -257,8 +257,13 @@ export async function checkoutPayment(
       .from(payments)
       .where(and(...logicalConditions))
       .limit(1);
-    if (logical) return existingAttemptResult(db, psp, logical, body, t);
-    throw new Error("failed to create payment");
+    if (!logical) throw new Error("failed to create payment");
+    if (!(logical.status === "requesting" && logical.requestStartedAt === null)) {
+      return existingAttemptResult(db, psp, logical, body, t);
+    }
+    // The browser may have reloaded after provider_busy and lost its in-memory
+    // attemptId. Resume the same unissued logical row; never create another.
+    payment = logical;
   }
 
   if (priced.finalToman <= 0) {
