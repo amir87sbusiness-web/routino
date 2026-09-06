@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>پیش‌نمایش فعال‌سازی روتینو</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #fbfaf7;
+        --surface: #ffffff;
+        --surface-muted: #f5f2ec;
+        --text: #27231f;
+        --text-muted: #746d65;
+        --primary: #e86f2d;
+        --primary-strong: #c94f16;
+        --primary-soft: #fff0e6;
+        --success: #287a54;
+        --success-soft: #e9f6ef;
+        --border: #e7e1d9;
+        --shadow: 0 18px 45px rgba(74, 49, 30, 0.1);
+        --ring: rgba(232, 111, 45, 0.34);
+      }
+
+      :root[data-theme="dark"] {
+        color-scheme: dark;
+        --bg: #181512;
+        --surface: #221e1a;
+        --surface-muted: #2b2621;
+        --text: #fbf7f1;
+        --text-muted: #b8afa5;
+        --primary: #f18a4d;
+        --primary-strong: #ff9b5f;
+        --primary-soft: #3c281d;
+        --success: #68c391;
+        --success-soft: #1d3328;
+        --border: #3b342e;
+        --shadow: 0 22px 50px rgba(0, 0, 0, 0.28);
+        --ring: rgba(241, 138, 77, 0.42);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        min-width: 320px;
+        background: var(--bg);
+        font-family: Vazirmatn, Tahoma, Arial, sans-serif;
+        scroll-behavior: smooth;
+      }
+
+      body {
+        min-height: 100vh;
+        margin: 0;
+        color: var(--text);
+        background:
+          radial-gradient(circle at 15% -5%, rgba(232, 111, 45, 0.16), transparent 34%),
+          var(--bg);
+        transition: background-color 180ms ease, color 180ms ease;
+      }
+
+      button {
+        font: inherit;
+      }
+
+      button:focus-visible {
+        outline: 3px solid var(--ring);
+        outline-offset: 3px;
+      }
+
+      ::selection {
+        color: var(--text);
+        background: var(--primary-soft);
+      }
+
+      ::-webkit-scrollbar {
+        width: 10px;
+      }
+
+      ::-webkit-scrollbar-track {
+        background: var(--bg);
+      }
+
+      ::-webkit-scrollbar-thumb {
+        border: 3px solid var(--bg);
+        border-radius: 999px;
+        background: var(--border);
+      }
+
+      .page {
+        position: relative;
+        width: min(100%, 480px);
+        min-height: 100vh;
+        margin-inline: auto;
+        padding:
+          calc(18px + env(safe-area-inset-top))
+          20px
+          calc(24px + env(safe-area-inset-bottom));
+        overflow: hidden;
+      }
+
+      .page::before {
+        position: absolute;
+        z-index: -1;
+        top: 118px;
+        left: -78px;
+        width: 170px;
+        height: 170px;
+        border: 34px solid rgba(232, 111, 45, 0.06);
+        border-radius: 50%;
+        content: "";
+      }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        min-height: 44px;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 15px;
+        font-weight: 900;
+        letter-spacing: -0.02em;
+      }
+
+      .brand img {
+        width: 34px;
+        height: 34px;
+        object-fit: contain;
+      }
+
+      .theme-toggle {
+        display: grid;
+        width: 42px;
+        height: 42px;
+        padding: 0;
+        place-items: center;
+        color: var(--text-muted);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--surface);
+        cursor: pointer;
+        transition: transform 160ms ease, border-color 160ms ease, color 160ms ease;
+      }
+
+      .theme-toggle:hover {
+        color: var(--primary);
+        border-color: var(--primary);
+        transform: translateY(-1px);
+      }
+
+      .theme-toggle svg {
+        width: 19px;
+        height: 19px;
+      }
+
+      .hero {
+        padding: 32px 2px 24px;
+        text-align: center;
+      }
+
+      .trial-mark {
+        position: relative;
+        display: grid;
+        width: 68px;
+        height: 68px;
+        margin: 0 auto 18px;
+        place-items: center;
+        color: var(--primary);
+        border: 1px solid rgba(232, 111, 45, 0.2);
+        border-radius: 23px;
+        background: var(--primary-soft);
+        box-shadow: 0 12px 26px rgba(201, 79, 22, 0.13);
+      }
+
+      .trial-mark::after {
+        position: absolute;
+        top: -5px;
+        left: -4px;
+        width: 14px;
+        height: 14px;
+        border: 4px solid var(--bg);
+        border-radius: 50%;
+        background: var(--success);
+        content: "";
+      }
+
+      .trial-mark svg {
+        width: 30px;
+        height: 30px;
+      }
+
+      h1 {
+        max-width: 390px;
+        margin: 0 auto;
+        font-size: clamp(28px, 8vw, 38px);
+        font-weight: 900;
+        line-height: 1.35;
+        letter-spacing: -0.035em;
+        text-wrap: balance;
+      }
+
+      .hero p {
+        max-width: 350px;
+        margin: 12px auto 0;
+        color: var(--text-muted);
+        font-size: 14px;
+        font-weight: 500;
+        line-height: 1.9;
+        text-wrap: balance;
+      }
+
+      .benefits {
+        margin: 0;
+        padding: 4px 4px 18px;
+        list-style: none;
+      }
+
+      .benefit {
+        display: grid;
+        grid-template-columns: 34px 1fr auto;
+        gap: 11px;
+        align-items: center;
+        min-height: 48px;
+        padding-block: 8px;
+      }
+
+      .benefit + .benefit {
+        border-top: 1px solid var(--border);
+      }
+
+      .benefit-icon {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        place-items: center;
+        color: var(--primary);
+        border-radius: 12px;
+        background: var(--primary-soft);
+      }
+
+      .benefit-icon svg {
+        width: 18px;
+        height: 18px;
+      }
+
+      .benefit-copy strong {
+        display: block;
+        margin-bottom: 2px;
+        font-size: 13px;
+        font-weight: 800;
+      }
+
+      .benefit-copy span {
+        display: block;
+        color: var(--text-muted);
+        font-size: 11px;
+        line-height: 1.6;
+      }
+
+      .check {
+        width: 18px;
+        height: 18px;
+        color: var(--success);
+      }
+
+      .plans-section {
+        padding-top: 10px;
+      }
+
+      .plans-heading {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+
+      .plans-heading h2 {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 900;
+        letter-spacing: -0.02em;
+      }
+
+      .plans-heading span {
+        color: var(--text-muted);
+        font-size: 10px;
+      }
+
+      .plans {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .plan {
+        position: relative;
+        min-width: 0;
+        min-height: 108px;
+        padding: 14px 8px 11px;
+        color: var(--text);
+        text-align: center;
+        border: 1px solid var(--border);
+        border-radius: 18px;
+        background: var(--surface);
+        cursor: pointer;
+        transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+      }
+
+      .plan:hover {
+        transform: translateY(-2px);
+      }
+
+      .plan[aria-pressed="true"] {
+        border-color: var(--primary);
+        background: var(--primary-soft);
+        box-shadow: 0 10px 25px rgba(201, 79, 22, 0.09);
+      }
+
+      .plan-badge {
+        position: absolute;
+        top: -10px;
+        right: 50%;
+        width: max-content;
+        padding: 3px 8px;
+        color: #fff;
+        font-size: 9px;
+        font-weight: 800;
+        border-radius: 999px;
+        background: var(--primary-strong);
+        transform: translateX(50%);
+      }
+
+      .plan-name {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .plan-price {
+        display: block;
+        font-size: 16px;
+        font-weight: 900;
+        font-variant-numeric: tabular-nums;
+        line-height: 1.25;
+      }
+
+      .plan-unit {
+        display: block;
+        margin-top: 3px;
+        color: var(--text-muted);
+        font-size: 9px;
+        font-weight: 500;
+      }
+
+      .action-panel {
+        position: sticky;
+        bottom: 0;
+        margin: 20px -4px 0;
+        padding: 14px 4px 0;
+        background: linear-gradient(to top, var(--bg) 75%, transparent);
+      }
+
+      .primary-action {
+        display: flex;
+        width: 100%;
+        min-height: 56px;
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+        color: #fff;
+        border: 0;
+        border-radius: 18px;
+        background: var(--primary-strong);
+        box-shadow: 0 14px 30px rgba(201, 79, 22, 0.24);
+        cursor: pointer;
+        transition: transform 160ms ease, box-shadow 160ms ease;
+      }
+
+      .primary-action:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 18px 34px rgba(201, 79, 22, 0.3);
+      }
+
+      .primary-action:active {
+        transform: translateY(0);
+      }
+
+      .primary-action strong {
+        font-size: 15px;
+        font-weight: 900;
+      }
+
+      .primary-action svg {
+        width: 20px;
+        height: 20px;
+      }
+
+      .reassurance {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        margin: 9px 0 2px;
+        color: var(--text-muted);
+        font-size: 10px;
+        font-weight: 500;
+      }
+
+      .reassurance svg {
+        width: 13px;
+        height: 13px;
+        color: var(--success);
+      }
+
+      .purchase-action {
+        display: block;
+        margin: 8px auto 0;
+        padding: 8px 12px;
+        color: var(--primary-strong);
+        font-size: 11px;
+        font-weight: 800;
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 4px;
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+      }
+
+      .toast {
+        position: fixed;
+        z-index: 10;
+        right: 50%;
+        bottom: calc(20px + env(safe-area-inset-bottom));
+        width: min(calc(100% - 32px), 410px);
+        padding: 12px 16px;
+        color: var(--text);
+        text-align: center;
+        font-size: 12px;
+        font-weight: 700;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        opacity: 0;
+        pointer-events: none;
+        transform: translate(50%, 14px);
+        transition: opacity 180ms ease, transform 180ms ease;
+      }
+
+      .toast.is-visible {
+        opacity: 1;
+        transform: translate(50%, 0);
+      }
+
+      @media (min-width: 760px) {
+        body {
+          display: grid;
+          padding-block: 30px;
+          place-items: center;
+        }
+
+        .page {
+          min-height: min(790px, calc(100vh - 60px));
+          border: 1px solid var(--border);
+          border-radius: 30px;
+          background: var(--bg);
+          box-shadow: var(--shadow);
+        }
+      }
+
+      @media (max-width: 370px) {
+        .page {
+          padding-inline: 15px;
+        }
+
+        .hero {
+          padding-top: 24px;
+        }
+
+        .plan-price {
+          font-size: 14px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          scroll-behavior: auto !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page" aria-labelledby="page-title">
+      <header class="topbar">
+        <div class="brand" aria-label="روتینو">
+          <picture>
+            <source
+              srcset="../../../public/brand/logo-dark.webp"
+              media="(prefers-color-scheme: dark)"
+            />
+            <img src="../../../public/brand/logo-light.webp" alt="" />
+          </picture>
+          <span>روتینو</span>
+        </div>
+        <button class="theme-toggle" type="button" aria-label="تغییر تم پیش‌نمایش">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+            <path d="M20.2 15.1A8.5 8.5 0 0 1 8.9 3.8 8.5 8.5 0 1 0 20.2 15.1Z" />
+          </svg>
+        </button>
+      </header>
+
+      <section class="hero">
+        <div class="trial-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m12 3 1.7 4.8L18.5 9.5l-4.8 1.7L12 16l-1.7-4.8-4.8-1.7 4.8-1.7L12 3Z" />
+            <path d="m18.5 16 .8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z" />
+          </svg>
+        </div>
+        <h1 id="page-title">اشتراک کامل روتینو، ۷ روز رایگان</h1>
+        <p>بدون کارت بانکی شروع کن. بعد از هفت روز هم هیچ پرداختی خودکار انجام نمی‌شود.</p>
+      </section>
+
+      <ul class="benefits" aria-label="امکانات دوره رایگان">
+        <li class="benefit">
+          <span class="benefit-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 11 12 14 22 4" />
+              <path d="M21 12a9 9 0 1 1-5.3-8.2" />
+            </svg>
+          </span>
+          <span class="benefit-copy">
+            <strong>همه‌چیز برای ساختن یک ریتم خوب</strong>
+            <span>عادت‌ها، کارها، ژورنال و تایمر بدون محدودیت نمایشی</span>
+          </span>
+          <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
+        </li>
+        <li class="benefit">
+          <span class="benefit-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 19V9M10 19V5M16 19v-7M22 19V3" />
+            </svg>
+          </span>
+          <span class="benefit-copy">
+            <strong>پیشرفتت را واضح ببین</strong>
+            <span>آمار، استریک و روند روزها در یک نگاه ساده</span>
+          </span>
+          <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
+        </li>
+        <li class="benefit">
+          <span class="benefit-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
+              <path d="m9 12 2 2 4-4" />
+            </svg>
+          </span>
+          <span class="benefit-copy">
+            <strong>اطلاعاتت همیشه همراهت می‌ماند</strong>
+            <span>ذخیره روی دستگاه و همگام‌سازی امن با حسابت</span>
+          </span>
+          <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
+        </li>
+      </ul>
+
+      <section class="plans-section" aria-labelledby="plans-title">
+        <div class="plans-heading">
+          <h2 id="plans-title">بعد از دوره رایگان، انتخاب با توست</h2>
+          <span>قیمت نهایی</span>
+        </div>
+        <div class="plans" role="group" aria-label="پلن‌های اشتراک">
+          <button class="plan" type="button" aria-pressed="false" data-plan="یک‌ماهه">
+            <span class="plan-name">یک‌ماهه</span>
+            <span class="plan-price">۵۹٬۰۰۰</span>
+            <span class="plan-unit">تومان</span>
+          </button>
+          <button class="plan" type="button" aria-pressed="false" data-plan="سه‌ماهه">
+            <span class="plan-name">سه‌ماهه</span>
+            <span class="plan-price">۱۴۹٬۰۰۰</span>
+            <span class="plan-unit">تومان</span>
+          </button>
+          <button class="plan" type="button" aria-pressed="true" data-plan="یک‌ساله">
+            <span class="plan-badge">به‌صرفه‌ترین</span>
+            <span class="plan-name">یک‌ساله</span>
+            <span class="plan-price">۴۴۹٬۰۰۰</span>
+            <span class="plan-unit">تومان</span>
+          </button>
+        </div>
+      </section>
+
+      <section class="action-panel" aria-label="فعال‌سازی">
+        <button class="primary-action preview-action" type="button">
+          <strong>شروع ۷ روز رایگان</strong>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
+        </button>
+        <p class="reassurance">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
+          بدون کارت بانکی · فعال‌سازی فوری · بدون تمدید خودکار
+        </p>
+        <button class="purchase-action preview-action" type="button">خرید مستقیم اشتراک</button>
+      </section>
+    </main>
+
+    <div class="toast" role="status" aria-live="polite">نسخه نمایشی — هنوز به برنامه وصل نیست</div>
+
+    <script>
+      const root = document.documentElement;
+      const toast = document.querySelector(".toast");
+      let toastTimer;
+
+      function showPreviewMessage() {
+        toast.classList.add("is-visible");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove("is-visible"), 2200);
+      }
+
+      document.querySelector(".theme-toggle").addEventListener("click", () => {
+        root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+      });
+
+      document.querySelectorAll(".plan").forEach((plan) => {
+        plan.addEventListener("click", () => {
+          document.querySelectorAll(".plan").forEach((item) => item.setAttribute("aria-pressed", "false"));
+          plan.setAttribute("aria-pressed", "true");
+        });
+      });
+
+      document.querySelectorAll(".preview-action").forEach((button) => {
+        button.addEventListener("click", showPreviewMessage);
+      });
+    </script>
+  </body>
+</html>
