@@ -120,7 +120,7 @@ describePostgres("account cleanup on real PostgreSQL", () => {
     const db = drizzle(pool, { schema });
     const checkout = checkoutPayment(
       db,
-      { PUBLIC_API_URL: "https://api.test" },
+      { PUBLIC_API_URL: "https://api.test", PSP_PROVIDER_MAX_CONCURRENCY: 64 },
       psp,
       user,
       { planId: "m1", attemptId: crypto.randomUUID(), platform: "web" },
