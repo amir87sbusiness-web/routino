@@ -57,7 +57,7 @@ const exchangeBody = pushBody
   });
 
 export const syncRoutes: FastifyPluginAsync = async (app) => {
-  const { db, psp } = app.deps;
+  const { db, env, psp } = app.deps;
   const now = () => new Date(app.deps.now());
 
   app.post("/sync/exchange", { preHandler: app.authenticate }, async (req) => {
@@ -73,9 +73,8 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
       input.limit,
       input.fullResyncGcSeq,
     );
-    await touchUserActivity(db, user.id, t);
     if (!input.includeAccountState || page.hasMore || page.reset) return page;
-    await settleOpenPayments(db, psp, user.id, t);
+    await settleOpenPayments(db, psp, user.id, t, env.PSP_PROVIDER_MAX_CONCURRENCY);
     return { ...page, entitlement: await readEntitlement(db, user.id, t) };
   });
 
@@ -120,7 +119,7 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
     const page = await pullRecords(db, user.id, cursor, limit);
     if (page.hasMore) return page;
     await touchUserActivity(db, user.id, t);
-    await settleOpenPayments(db, psp, user.id, t);
+    await settleOpenPayments(db, psp, user.id, t, env.PSP_PROVIDER_MAX_CONCURRENCY);
     return { ...page, entitlement: await readEntitlement(db, user.id, t) };
   });
 };

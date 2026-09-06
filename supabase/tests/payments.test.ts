@@ -191,6 +191,11 @@ describe("checkout → gateway → callback", () => {
     expect(grants).toHaveLength(0);
 
     // And the REAL payment still works afterwards — the forgery didn't poison it.
+    const pending = await settleAndCallback(body.authority, "paid");
+    expect(await pending.text()).toContain("در حال بررسی");
+    await h.raw(
+      `update payments set next_verify_at = now() - interval '1 second' where id = '${body.paymentId}'`,
+    );
     const real = await settleAndCallback(body.authority, "paid");
     expect(await real.text()).toContain("پرداخت موفق");
   });

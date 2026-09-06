@@ -51,10 +51,8 @@ const esc = (s) =>
     .replace(/"/g, "&quot;");
 
 /**
- * The APK is uploaded outside this repository. Until its final HTTPS URL is
- * known, the public page must show a real disabled button instead of a link
- * that goes nowhere. Keeping this renderer in the build step means adding the
- * cloud URL later needs no hand-edit inside the landing template.
+ * A configured HTTPS URL can override the signed APK shipped with the site.
+ * Without either, keep the button disabled instead of linking to a missing file.
  */
 export function renderAndroidDownload(rawUrl) {
   const value = String(rawUrl ?? "").trim();
@@ -294,11 +292,19 @@ async function main() {
   const info = readLegalInfo();
 
   mkdirSync(OUT_DIR, { recursive: true });
+  const apkName = "routino-android-1.0.apk";
+  const bundledApk = join(ROOT, "landing", "downloads", apkName);
+  let androidUrl = process.env.ANDROID_DOWNLOAD_URL;
+  if (existsSync(bundledApk)) {
+    mkdirSync(join(OUT_DIR, "downloads"), { recursive: true });
+    copyFileSync(bundledApk, join(OUT_DIR, "downloads", apkName));
+    androidUrl ||= `${SITE}/downloads/${apkName}`;
+  }
 
   // ── صفحه‌ی اصلی ──────────────────────────────────────────
   // مهر اینماد عیناً درج می‌شود، بدون escape — باید همان HTMLی باشد که صادر شده.
   const homeHtml = fill("index.template.html", {
-    "<!--ANDROID-DOWNLOAD-->": renderAndroidDownload(process.env.ANDROID_DOWNLOAD_URL),
+    "<!--ANDROID-DOWNLOAD-->": renderAndroidDownload(androidUrl),
     "<!--ENAMAD-->": ENAMAD_SEAL,
   });
   writeFileSync(join(OUT_DIR, "index.html"), homeHtml);

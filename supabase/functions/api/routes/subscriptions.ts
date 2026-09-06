@@ -37,7 +37,7 @@ export function subscriptionRoutes(deps: Deps) {
   r.get("/subscriptions/me", auth, async (c) => {
     const user = requireUser(c);
     const t = now();
-    await settleOpenPayments(db, psp, user.id, t);
+    await settleOpenPayments(db, psp, user.id, t, env.PSP_PROVIDER_MAX_CONCURRENCY);
     return c.json({ entitlement: await readEntitlement(db, user.id, t) });
   });
 

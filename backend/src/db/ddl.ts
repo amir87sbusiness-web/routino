@@ -768,6 +768,49 @@ $function$;
 -- Re-encode a small deterministic set of cold completed tasks. Row locks are
 -- skipped instead of waited on, and every source/delete is verified in the
 -- same transaction as its immutable archive insert.
+-- Normalize one archive item for verification and manual recovery. V1 stays
+-- readable. Invalid v2 tuples remain invalid, never repaired or defaulted.
+create or replace function routino_expand_task_archive_item(
+  p_version jsonb, p_month text, p_item jsonb
+)
+returns jsonb language plpgsql immutable security invoker
+set search_path = public, pg_temp
+as $function$
+declare
+  p jsonb;
+begin
+  if p_version = '1'::jsonb then return p_item; end if;
+  if p_version is distinct from '2'::jsonb then return 'null'::jsonb; end if;
+  if jsonb_typeof(p_item) is distinct from 'array' then return 'null'::jsonb; end if;
+  if jsonb_array_length(p_item) <> 3 then return 'null'::jsonb; end if;
+  p := p_item->2;
+  if jsonb_typeof(p) is distinct from 'array' then return 'null'::jsonb; end if;
+  if jsonb_array_length(p) <> 6 then return 'null'::jsonb; end if;
+  if jsonb_typeof(p->0) is distinct from 'string'
+     or (p->>0) !~ '^[0-9]{2}$'
+     or jsonb_typeof(p->5) is distinct from 'object' then return 'null'::jsonb; end if;
+  if (p->5) - array['note','unitKind','reminderAt','color','icon'] <> '{}'::jsonb
+    then return 'null'::jsonb; end if;
+  return jsonb_build_array(p_item->0, p_item->1,
+    jsonb_build_object('id', p_item->0, 'dateKey', p_month || '-' || (p->>0),
+      'title', p->1, 'type', p->2, 'target', p->3, 'value', p->4, 'done', true) || (p->5));
+end;
+$function$;
+
+-- A short v2 tuple can fall below TOAST's compression threshold while v1 was
+-- compressed already, increasing physical storage. Keep those packets as v1.
+-- Called on the freshly constructed (uncompressed) JSONB, never a stored datum.
+create or replace function routino_task_archive_storage(p_compact jsonb)
+returns jsonb language sql immutable strict security invoker
+set search_path = public, pg_temp
+as $function$
+  select case when pg_column_size(p_compact) >= 2048 then p_compact
+    else jsonb_set(jsonb_set(p_compact, '{v}', '1'::jsonb), '{items}', (
+      select jsonb_agg(routino_expand_task_archive_item('2'::jsonb, p_compact->>'monthKey', item) order by ord)
+      from jsonb_array_elements(p_compact->'items') with ordinality as entries(item, ord)
+    )) end;
+$function$;
+
 create or replace function routino_compact_task_months(
   p_now timestamptz,
   p_max_tasks integer
@@ -961,8 +1004,8 @@ begin
     select v_group.user_id,
            'taskMonths',
            v_group.month_key || '|' || md5(string_agg(items.task_id, E'\\n' order by items.task_id collate "C")),
-           jsonb_build_object(
-             'v', 1,
+           routino_task_archive_storage(jsonb_build_object(
+             'v', 2,
              'monthKey', v_group.month_key,
              'count', count(*)::integer,
              'checksum', md5(string_agg(
@@ -970,10 +1013,14 @@ begin
                E'\\n' order by items.task_id collate "C"
              )),
              'items', jsonb_agg(
-               jsonb_build_array(items.task_id, items.updated_at, items.task_data)
+               jsonb_build_array(items.task_id, items.updated_at,
+                 jsonb_build_array(right(items.task_data->>'dateKey', 2),
+                   items.task_data->'title', items.task_data->'type',
+                   items.task_data->'target', items.task_data->'value',
+                   items.task_data - array['id','dateKey','title','type','target','value','done']))
                order by items.task_id collate "C"
              )
-           ),
+           )),
            max(items.updated_at),
            false,
            v_end_seq - v_archive_rows + items.chunk_no
@@ -1003,7 +1050,7 @@ begin
          and archive.kind = 'taskMonths'
          and (
            archive.deleted
-           or archive.data->'v' is distinct from '1'::jsonb
+           or coalesce(archive.data->'v' not in ('1'::jsonb, '2'::jsonb), true)
            or archive.data->>'monthKey' is distinct from v_group.month_key
            or (archive.data->>'count')::integer is distinct from expected.item_count
            or jsonb_array_length(archive.data->'items') is distinct from expected.item_count
@@ -1011,7 +1058,8 @@ begin
            or (archive.data->>'count')::integer is distinct from jsonb_array_length(archive.data->'items')
            or archive.data->>'checksum' is distinct from (
              select md5(string_agg(
-               item->>0 || E'\\n' || (item->>1)::bigint::text || E'\\n' || (item->2)::text,
+               item->>0 || E'\\n' || (item->>1)::bigint::text || E'\\n' ||
+                 (routino_expand_task_archive_item(archive.data->'v', archive.data->>'monthKey', item)->2)::text,
                E'\\n' order by (item->>0) collate "C"
              ))
                from jsonb_array_elements(archive.data->'items') item
@@ -1028,7 +1076,8 @@ begin
          where selected.user_id = v_group.user_id
            and selected.month_key = v_group.month_key
         except
-        select item->>0, (item->>1)::bigint, item->2
+        select item->>0, (item->>1)::bigint,
+               routino_expand_task_archive_item(archive.data->'v', archive.data->>'monthKey', item)->2
           from records archive
           join (
             select v_group.month_key || '|' || md5(string_agg(items.task_id, E'\\n' order by items.task_id collate "C")) as archive_id
@@ -1042,7 +1091,8 @@ begin
       )
       union all
       (
-        select item->>0, (item->>1)::bigint, item->2
+        select item->>0, (item->>1)::bigint,
+               routino_expand_task_archive_item(archive.data->'v', archive.data->>'monthKey', item)->2
           from records archive
           join (
             select v_group.month_key || '|' || md5(string_agg(items.task_id, E'\\n' order by items.task_id collate "C")) as archive_id

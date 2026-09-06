@@ -275,33 +275,6 @@ export async function adminSetPassword(
   return { ok: true as const, created, userId: user.id, phone };
 }
 
-export async function adminListPayments(db: Database, opts: { status?: string; limit?: number }) {
-  const n = Math.min(opts.limit || 50, 200);
-
-  const base = db
-    .select({
-      id: payments.id,
-      phone: users.phone,
-      username: users.username,
-      userId: payments.userId,
-      planId: payments.planId,
-      amountToman: payments.amountToman,
-      discountCode: payments.discountCode,
-      status: payments.status,
-      authority: payments.authority,
-      platform: payments.platform,
-      refNumber: payments.refNumber,
-      createdAt: payments.createdAt,
-      paidAt: payments.paidAt,
-    })
-    .from(payments)
-    .innerJoin(users, eq(users.id, payments.userId))
-    .orderBy(desc(payments.createdAt))
-    .limit(n);
-
-  return opts.status ? base.where(eq(payments.status, opts.status)) : base;
-}
-
 const nonnegativeMetric = (value: number | string | bigint | null | undefined): number => {
   const parsed = Number(value ?? 0);
   return Number.isFinite(parsed) ? Math.max(0, parsed) : 0;

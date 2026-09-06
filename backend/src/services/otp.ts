@@ -97,33 +97,10 @@ export async function checkSendRate(
   return { ok: true };
 }
 
-/** Creates and stores a code. Returns the plaintext ONCE, for the SMS provider —
- * it is never persisted, logged, or returned to a client.
- *
- * Prefer `claimSendSlot`, which does this and the rate check together. This is
- * exported for the tests that need to write a code without spending a slot. */
-export async function createCode(
-  db: Database,
-  env: Env,
-  phone: string,
-  ip: string | null,
-  now: Date,
-): Promise<string> {
-  const code = generateCode();
-  await db.insert(otpCodes).values({
-    phone,
-    codeHash: hashCode(code, env),
-    expiresAt: new Date(now.getTime() + env.OTP_TTL_SECONDS * 1000),
-    ip,
-    createdAt: now,
-  });
-  return code;
-}
-
 /**
- * Claims one send slot and writes the code — in a SINGLE statement.
+ * Claims one send slot and writes the code in one transaction.
  *
- * `checkSendRate` then `createCode` is read-then-write, and every send costs
+ * Separately checking the rate and inserting a code is read-then-write, and every send costs
  * real money at Kavenegar. Five requests for one phone arriving together each
  * counted zero rows and each sent a message: the per-minute limit of one was
  * whatever the concurrency happened to be. Sequential callers never see it, and
@@ -160,15 +137,13 @@ export async function claimSendSlot(
   const nowIso = now.toISOString();
   const expiresIso = new Date(now.getTime() + env.OTP_TTL_SECONDS * 1000).toISOString();
 
-  const res = await db.execute(sql`
-    with ip_lock as materialized (
-      select case when ${ip}::text is null then null
-                  else pg_advisory_xact_lock(hashtext('otp:ip:' || ${ip}::text)) end
-    ), phone_lock as materialized (
-      select pg_advisory_xact_lock(hashtext('otp:phone:' || ${phone}))
-        from ip_lock
-    ),
-    verdict as (
+  return db.transaction(async (tx) => {
+    // Separate statements give the rate check a fresh READ COMMITTED snapshot
+    // after waiting for a previous sender. A locking CTE shares a stale snapshot.
+    if (ip) await tx.execute(sql`select pg_advisory_xact_lock(hashtext('otp:ip:' || ${ip}))`);
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtext('otp:phone:' || ${phone}))`);
+    const res = await tx.execute(sql`
+    with verdict as (
       select (select count(*) from otp_codes
               where phone = ${phone} and created_at > ${atIso(60)}::timestamptz) < ${LIMITS.phonePerMinute}
         and (select count(*) from otp_codes
@@ -178,7 +153,6 @@ export async function claimSendSlot(
         and (${ip}::text is null or (select count(*) from otp_codes
               where ip = ${ip} and created_at > ${atIso(3600)}::timestamptz) < ${LIMITS.ipPerHour})
         as allow
-      from phone_lock
     )
     insert into otp_codes (phone, code_hash, expires_at, ip, created_at)
     select ${phone}, ${hashCode(code, env)},
@@ -188,8 +162,9 @@ export async function claimSendSlot(
     returning id
   `);
 
-  const [row] = rowsOf<{ id: string }>(res);
-  return row ? { code, slotId: row.id } : null;
+    const [row] = rowsOf<{ id: string }>(res);
+    return row ? { code, slotId: row.id } : null;
+  });
 }
 
 /**
@@ -247,15 +222,25 @@ export async function verifyCode(
   const claimed = await db
     .update(otpCodes)
     .set({ attempts: sql`${otpCodes.attempts} + 1` })
-    .where(and(eq(otpCodes.id, row.id), lt(otpCodes.attempts, Math.min(env.OTP_MAX_ATTEMPTS, 3))))
+    .where(
+      and(
+        eq(otpCodes.id, row.id),
+        isNull(otpCodes.consumedAt),
+        lt(otpCodes.attempts, Math.min(env.OTP_MAX_ATTEMPTS, 3)),
+      ),
+    )
     .returning();
   if (!claimed.length) return { ok: false, reason: "too_many" };
 
   if (!constantTimeEquals(row.codeHash, hashCode(code, env))) return { ok: false, reason: "wrong" };
 
   // Single-use: consume on success.
-  await db.update(otpCodes).set({ consumedAt: now }).where(eq(otpCodes.id, row.id));
-  return { ok: true };
+  const consumed = await db
+    .update(otpCodes)
+    .set({ consumedAt: now })
+    .where(and(eq(otpCodes.id, row.id), isNull(otpCodes.consumedAt)))
+    .returning();
+  return consumed.length ? { ok: true } : { ok: false, reason: "no_code" };
 }
 
 /** Housekeeping — codes are useless after a day, and they are the rate-limit

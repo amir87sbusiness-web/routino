@@ -387,6 +387,7 @@ export interface CallbackOutcome {
   outcome: "paid" | "canceled" | "failed" | "verify_failed" | "pending";
   payment?: PaymentRow;
   message?: string;
+  retryCallbackAfterSeconds?: number;
 }
 
 interface VerifyOutcome extends CallbackOutcome {
@@ -412,7 +413,7 @@ async function verifyAndApplyPayment(
   payment: PaymentRow,
   t: Date,
   candidateAuthority?: string,
-  options: { bypassBackoff?: boolean } = {},
+  maxConcurrent = 64,
 ): Promise<VerifyOutcome> {
   if (payment.appliedAt) return { outcome: "paid", payment, changed: false };
   if (["failed", "verify_failed"].includes(payment.status)) {
@@ -445,9 +446,7 @@ async function verifyAndApplyPayment(
         isNull(payments.appliedAt),
         sql`${payments.status} not in ('failed', 'verify_failed')`,
         or(isNull(payments.verifyStartedAt), lt(payments.verifyStartedAt, staleBefore)),
-        options.bypassBackoff
-          ? sql`true`
-          : or(isNull(payments.nextVerifyAt), lte(payments.nextVerifyAt, t)),
+        or(isNull(payments.nextVerifyAt), lte(payments.nextVerifyAt, t)),
       ),
     )
     .returning();
@@ -455,18 +454,26 @@ async function verifyAndApplyPayment(
     const fresh = (await readPayment(db, payment.id)) ?? payment;
     return {
       outcome: fresh.appliedAt ? "paid" : "pending",
-      payment: fresh.appliedAt ? fresh : undefined,
+      payment: fresh.appliedAt || fresh.authority ? fresh : undefined,
       changed: false,
     };
   }
 
   let verified: PspVerifyResult;
+  // Reuse checkout's shared PSP capacity. No provider network call holds a DB transaction.
+  const providerLease = await acquireProviderLease(db, "psp", maxConcurrent, t, VERIFY_LEASE_MS);
+  if (!providerLease) {
+    const fresh = await releaseVerifyLease(db, claimed.id, t);
+    return { outcome: fresh?.appliedAt ? "paid" : "pending", payment: fresh, changed: false };
+  }
   try {
     verified = await psp.verify(authority, claimed.amountRial);
   } catch (err) {
     console.error("ZarinPal verify threw unexpectedly", { paymentId: claimed.id, err });
     const fresh = await releaseVerifyLease(db, claimed.id, t);
     return { outcome: fresh?.appliedAt ? "paid" : "pending", payment: fresh, changed: false };
+  } finally {
+    await releaseProviderLease(db, "psp", providerLease.leaseId);
   }
 
   if (verified.kind === "paid" || verified.kind === "already_verified") {
@@ -517,6 +524,7 @@ export async function handlePaymentCallback(
   psp: PspProvider,
   rawQs: Record<string, unknown>,
   t: Date,
+  maxConcurrent = 64,
 ): Promise<CallbackOutcome> {
   const scalar = (key: string): string | undefined =>
     typeof rawQs[key] === "string" ? (rawQs[key] as string) : undefined;
@@ -540,9 +548,20 @@ export async function handlePaymentCallback(
   // stored authority terminal; a later authenticated poll may still verify it.
   if (status !== "OK") return { outcome: "canceled", payment };
 
-  const result = await verifyAndApplyPayment(db, psp, payment, t, authority, {
-    bypassBackoff: true,
-  });
+  const result = await verifyAndApplyPayment(db, psp, payment, t, authority, maxConcurrent);
+  // With no persisted authority, app polling cannot recover this payment yet.
+  // Keep the browser on its original callback URL (untrusted candidate) for
+  // bounded retries; only successful PSP verification may bind the authority.
+  if (result.outcome === "pending" && !payment.authority) {
+    const fresh = await readPayment(db, payment.id);
+    return {
+      ...result,
+      retryCallbackAfterSeconds: Math.max(
+        5,
+        Math.ceil(((fresh?.nextVerifyAt?.getTime() ?? t.getTime()) - t.getTime()) / 1000),
+      ),
+    };
+  }
   return { outcome: result.outcome, payment: result.payment, message: result.message };
 }
 
@@ -551,6 +570,7 @@ export async function settleOne(
   psp: PspProvider,
   payment: PaymentRow,
   t: Date,
+  maxConcurrent = 64,
 ): Promise<boolean> {
   if (
     payment.appliedAt ||
@@ -559,7 +579,7 @@ export async function settleOne(
   ) {
     return false;
   }
-  return (await verifyAndApplyPayment(db, psp, payment, t)).changed;
+  return (await verifyAndApplyPayment(db, psp, payment, t, undefined, maxConcurrent)).changed;
 }
 
 /** Bounded app-open recovery for callbacks/tabs that never returned. */
@@ -568,6 +588,7 @@ export async function settleOpenPayments(
   psp: PspProvider,
   userId: string,
   t: Date,
+  maxConcurrent = 64,
 ): Promise<number> {
   const since = new Date(t.getTime() - SETTLE_WINDOW_MS);
   let healed = 0;
@@ -588,7 +609,7 @@ export async function settleOpenPayments(
       )
       .limit(SETTLE_MAX);
     for (const payment of open) {
-      if (await settleOne(db, psp, payment, t)) healed += 1;
+      if (await settleOne(db, psp, payment, t, maxConcurrent)) healed += 1;
     }
   } catch (err) {
     console.error("settleOpenPayments failed", { userId, err });
@@ -617,6 +638,7 @@ export async function pollPayment(
   userId: string,
   id: string,
   t: Date,
+  maxConcurrent = 64,
 ): Promise<PollResult> {
   if (!UUID_RE.test(id)) throw badRequest("bad_id", "Malformed payment id");
   const [owned] = await db
@@ -628,7 +650,7 @@ export async function pollPayment(
   if (!owned) throw unauthorized("unknown_user", "User no longer exists");
   let payment = owned.payment;
   if (!payment) throw notFound("unknown_payment", "No such payment");
-  await settleOne(db, psp, payment, t);
+  await settleOne(db, psp, payment, t, maxConcurrent);
   const [refreshed] = await db.select().from(payments).where(eq(payments.id, id)).limit(1);
   payment = refreshed ?? null;
   if (!payment) throw notFound("unknown_payment", "No such payment");

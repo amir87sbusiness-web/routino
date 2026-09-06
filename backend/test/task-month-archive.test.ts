@@ -61,6 +61,56 @@ const archive: StoredTaskMonthRecord = {
 };
 
 describe("task-month archive codec", () => {
+  it("expands compact v2 payloads exactly, preserving optional null and empty values", () => {
+    const original = {
+      ...task("t-1", "2026-01-02", "کار فارسی 🌿"),
+      done: true,
+      note: "",
+      reminderAt: null,
+      color: "",
+      icon: "",
+      unitKind: "count",
+    };
+    const v2 = {
+      ...archive,
+      id: `2026-01|${md5("t-1")}`,
+      updatedAt: 1000,
+      data: {
+        v: 2,
+        monthKey: "2026-01",
+        count: 1,
+        checksum: md5(`t-1\n1000\n${pgJsonbText(original)}`),
+        items: [
+          [
+            "t-1",
+            1000,
+            [
+              "02",
+              original.title,
+              "binary",
+              1,
+              0,
+              { note: "", reminderAt: null, color: "", icon: "", unitKind: "count" },
+            ],
+          ],
+        ],
+      },
+    };
+    expect(expandTaskMonthArchive(v2)).toEqual([
+      { kind: "tasks", id: "t-1", data: original, updatedAt: 1000, deleted: false, seq: 9 },
+    ]);
+    for (const extra of [{ id: "t-1" }, { done: false }, { surprise: "x" }]) {
+      const bad = structuredClone(v2);
+      bad.data.items = [
+        ["t-1", 1000, ["02", original.title, "binary", 1, 0, extra]],
+      ] as typeof bad.data.items;
+      expect(() => expandTaskMonthArchive(bad)).toThrow("invalid_task_month_archive");
+    }
+    const tampered = structuredClone(v2);
+    tampered.data.checksum = "0".repeat(32);
+    expect(() => expandTaskMonthArchive(tampered)).toThrow("invalid_task_month_archive");
+  });
+
   it.each([
     [0, "0"],
     [-0, "0"],
@@ -105,7 +155,7 @@ describe("task-month archive codec", () => {
   });
 
   it("rejects unsupported archive versions", () => {
-    expect(() => expandTaskMonthArchive({ ...archive, data: { ...archiveData, v: 2 } })).toThrow(
+    expect(() => expandTaskMonthArchive({ ...archive, data: { ...archiveData, v: 99 } })).toThrow(
       "unsupported_task_archive_version",
     );
   });

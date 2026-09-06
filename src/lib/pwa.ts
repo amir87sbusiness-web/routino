@@ -31,17 +31,6 @@ export async function requestPersistentStorage(): Promise<boolean> {
   }
 }
 
-/** Rough usage report, for a future "storage" row in settings. */
-export async function storageEstimate(): Promise<{ usage: number; quota: number } | null> {
-  if (!navigator.storage?.estimate) return null;
-  try {
-    const { usage = 0, quota = 0 } = await navigator.storage.estimate();
-    return { usage, quota };
-  } catch {
-    return null;
-  }
-}
-
 /* ------------------------------------------------------------ install --- */
 
 /**

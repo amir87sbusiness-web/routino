@@ -120,11 +120,6 @@ export const WEEKDAYS_EN = [
 export const WEEKDAYS_FA_SHORT = ["یک", "دو", "سه", "چهار", "پنج", "جمعه", "شنبه"];
 export const WEEKDAYS_EN_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-/** Full weekday name for the given lang — e.g. "سه‌شنبه" / "Tuesday". */
-export function weekdayFull(dow: number, lang: Lang): string {
-  return lang === "fa" ? WEEKDAYS_FA[dow] : WEEKDAYS_EN[dow];
-}
-
 /** Short weekday name for the given lang — never slices Persian text mid-word. */
 export function weekdayShort(dow: number, lang: Lang): string {
   return lang === "fa" ? WEEKDAYS_FA_SHORT[dow] : WEEKDAYS_EN_SHORT[dow];

@@ -52,7 +52,7 @@ const exchangeBody = pushBody
   });
 
 export function syncRoutes(deps: Deps) {
-  const { db, psp } = deps;
+  const { db, env, psp } = deps;
   const now = () => new Date(deps.now());
   const auth = makeAuthenticate(deps);
   const r = new Hono<AppEnv>();
@@ -70,9 +70,8 @@ export function syncRoutes(deps: Deps) {
       input.limit,
       input.fullResyncGcSeq,
     );
-    await touchUserActivity(db, user.id, t);
     if (!input.includeAccountState || page.hasMore || page.reset) return c.json(page);
-    await settleOpenPayments(db, psp, user.id, t);
+    await settleOpenPayments(db, psp, user.id, t, env.PSP_PROVIDER_MAX_CONCURRENCY);
     return c.json({ ...page, entitlement: await readEntitlement(db, user.id, t) });
   });
 
@@ -100,7 +99,7 @@ export function syncRoutes(deps: Deps) {
     // Finish any payment whose gateway callback never made it back — see the
     // Fastify twin. A VPN-routed browser drops that redirect often enough that
     // without this the money moves and nothing is granted.
-    await settleOpenPayments(db, psp, user.id, t);
+    await settleOpenPayments(db, psp, user.id, t, env.PSP_PROVIDER_MAX_CONCURRENCY);
     return c.json({ ...page, entitlement: await readEntitlement(db, user.id, t) });
   });
 

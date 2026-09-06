@@ -74,7 +74,13 @@ export function paymentRoutes(deps: Deps) {
         values.length === 1 ? values[0] : values,
       ]),
     );
-    const result = await handlePaymentCallback(db, psp, query, now());
+    const result = await handlePaymentCallback(
+      db,
+      psp,
+      query,
+      now(),
+      env.PSP_PROVIDER_MAX_CONCURRENCY,
+    );
     return html(c, renderResultPage(env, result));
   });
 
@@ -84,7 +90,7 @@ export function paymentRoutes(deps: Deps) {
     if (typeof id !== "string" || !UUID_RE.test(id)) {
       throw badRequest("bad_id", "Malformed payment id");
     }
-    return c.json(await pollPayment(db, psp, user.id, id, now()));
+    return c.json(await pollPayment(db, psp, user.id, id, now(), env.PSP_PROVIDER_MAX_CONCURRENCY));
   });
 
   return r;

@@ -82,7 +82,7 @@ describe("a payment whose callback never came back", () => {
     expect(Number(payment!.verify_attempts)).toBe(2);
   });
 
-  it("lets the real callback bypass a poll cooldown", async () => {
+  it("keeps the callback recoverable while respecting a poll cooldown", async () => {
     const { access } = await signIn("09121110007");
     const { paymentId, authority } = await checkout(access);
     await openApp(access); // pending verify starts the cooldown
@@ -93,6 +93,10 @@ describe("a payment whose callback never came back", () => {
       url: `/v1/payments/callback?paymentId=${paymentId}&Authority=${authority}&Status=OK`,
     });
     expect(callback.statusCode).toBe(200);
+    expect(callback.body).toContain(`paymentId=${paymentId}`);
+    expect(callback.body).toContain("در حال بررسی");
+    expect((await openApp(access)).entitlement.status).not.toBe("active");
+    await h.raw(`update payments set next_verify_at=now()-interval '1 second' where id='${paymentId}'`);
     expect((await openApp(access)).entitlement.status).toBe("active");
   });
 

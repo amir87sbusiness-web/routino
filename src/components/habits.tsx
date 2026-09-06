@@ -636,48 +636,6 @@ export function MonthCalendarGrid({
   );
 }
 
-/** Small square-per-day row showing this month's completion so far for a habit. */
-export function MonthHeatmap({
-  db,
-  habit,
-  cal,
-  color,
-}: {
-  db: Db;
-  habit: Habit;
-  cal: Calendar;
-  color?: string;
-}) {
-  const days = monthDays(todayKey(), cal);
-  const todayK = todayKey();
-  return (
-    <div className="flex gap-[3px]">
-      {days.map((d) => {
-        const due = isDueOn(habit, d, cal);
-        const future = d > todayK;
-        const done = due && isCompleted(habit, getLog(db, habit.id, d));
-        return (
-          <span
-            key={d}
-            title={d}
-            className="h-2 flex-1 rounded-[2px] transition-colors"
-            style={{
-              backgroundColor: !due
-                ? "var(--secondary)"
-                : future
-                  ? "var(--secondary)"
-                  : done
-                    ? (color ?? "var(--primary)")
-                    : "var(--destructive)",
-              opacity: !due || future ? 0.35 : done ? 1 : 0.4,
-            }}
-          />
-        );
-      })}
-    </div>
-  );
-}
-
 /* ---------------- habit form ---------------- */
 
 export interface HabitDraft {
@@ -1004,11 +962,4 @@ export function habitToDraft(h: Habit): HabitDraft {
     monthlyGoal: h.monthlyGoal ? String(h.monthlyGoal) : "",
     reminderTime: h.reminderTime ?? "",
   };
-}
-
-/** Display unit label for a habit: fixed "min" for time habits, custom text for count habits. */
-export function habitUnitLabel(h: Habit, t: (fa: string, en: string) => string): string {
-  if (h.type !== "quantity") return "";
-  if (h.unitKind === "time") return t("دقیقه", "min");
-  return h.unit ?? "";
 }

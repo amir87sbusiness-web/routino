@@ -219,20 +219,3 @@ export async function redeemDiscount(
 export async function activePlans(db: Database) {
   return db.select().from(plans).where(eq(plans.active, true));
 }
-
-/** Codes that are currently usable by anyone — used only for surfacing an
- * "offer" banner, never for validation. */
-export async function publicDiscountExists(db: Database, now: Date) {
-  const [row] = await db
-    .select()
-    .from(discounts)
-    .where(
-      and(
-        eq(discounts.active, true),
-        isNull(discounts.phone),
-        or(isNull(discounts.expiresAt), gt(discounts.expiresAt, now)),
-      ),
-    )
-    .limit(1);
-  return row ?? null;
-}

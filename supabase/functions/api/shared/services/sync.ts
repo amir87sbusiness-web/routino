@@ -27,6 +27,7 @@ import { eq, sql } from "drizzle-orm";
 import { rowsOf, type Database } from "../db/client.ts";
 import { users } from "../db/schema.ts";
 import { badRequest, unauthorized } from "../lib/http-errors.ts";
+import { userActivityUpdate } from "./user-activity.ts";
 import {
   expandTaskMonthArchive,
   isTaskMonthArchiveKind,
@@ -681,6 +682,7 @@ export async function pullRecords(
   emptyPageMaxBytes = recordByteBudget,
   metrics?: PullDbMetrics,
   fullResyncGcSeq?: number,
+  activityAt?: Date,
 ): Promise<PullResult> {
   const safeCursor = Number.isFinite(cursor) && cursor >= 0 ? Math.floor(cursor) : 0;
   const safeFullResyncGcSeq =
@@ -691,7 +693,7 @@ export async function pullRecords(
   const result = await db.execute(sql`
     with owner as (
       select u.seq, u.gc_seq from users u where u.id = ${userId}::uuid
-    ),
+    )${activityAt ? sql`, activity as (${userActivityUpdate(userId, activityAt)} returning 1)` : sql``},
     fetched as (
       select r.kind, r.id, r.data, r.updated_at, r.deleted, r.seq,
              (
@@ -830,7 +832,17 @@ export async function exchangeRecords(
     ? await pushRecords(db, userId, incoming, now, cursor)
     : { applied: 0, skipped: 0, rejectedRecords: [], batchAccepted: true };
   if (!pushed.batchAccepted) {
-    const reset = await pullRecords(db, userId, cursor, limit);
+    const reset = await pullRecords(
+      db,
+      userId,
+      cursor,
+      limit,
+      PULL_RECORDS_BYTE_BUDGET,
+      PULL_RECORDS_BYTE_BUDGET,
+      undefined,
+      undefined,
+      now,
+    );
     return {
       ...reset,
       applied: 0,
@@ -855,6 +867,7 @@ export async function exchangeRecords(
     PULL_RECORDS_BYTE_BUDGET,
     undefined,
     fullResyncGcSeq,
+    now,
   );
   return {
     ...pulled,
@@ -863,56 +876,4 @@ export async function exchangeRecords(
     rejectedRecords: pushed.rejectedRecords,
     batchAccepted: true,
   };
-}
-
-/**
- * Drops tombstones older than `keepMs` and raises the GC watermark.
- *
- * Tombstones cannot be kept forever — a user who deletes a habit a week keeps
- * paying for those rows in every pull. Raising `gc_seq` to the highest purged
- * seq is what makes the deletion safe: any device still below that line is told
- * to full-resync rather than being allowed to miss a delete and resurrect it.
- *
- * Supabase schedules the equivalent single-statement purge in generated
- * `supabase/setup.sql`; this function remains the directly testable service form.
- */
-export async function purgeTombstones(
-  db: Database,
-  userId: string,
-  now: Date,
-  keepMs = 90 * 86_400_000,
-): Promise<number> {
-  const cutoff = now.getTime() - keepMs;
-
-  // One statement, and the delete is deliberately keyed on nothing but its own
-  // WHERE clause.
-  //
-  // The previous version read every tombstone the user had ever made into
-  // memory, filtered in JS, then deleted `WHERE id IN (…)` — without `kind`.
-  // Ids are only unique WITHIN a kind (a journal entry is keyed by date, a
-  // settings row by field name), so that could delete a tombstone of a DIFFERENT
-  // kind that sits ABOVE the new watermark. No device is ever told about that
-  // delete, so the record comes back from the dead on the next sync.
-  //
-  // Raising `gc_seq` to the highest seq actually removed is what makes the purge
-  // safe: a device still below that line is told to full-resync instead of being
-  // allowed to miss a delete.
-  const res = await db.execute(sql`
-    with doomed as (
-      delete from records
-       where user_id = ${userId}::uuid
-         and deleted = true
-         and updated_at < ${cutoff}
-      returning seq
-    ),
-    bump as (
-      update users
-         set gc_seq = greatest(gc_seq, coalesce((select max(seq) from doomed), gc_seq))
-       where id = ${userId}::uuid
-    )
-    select count(*) as n from doomed
-  `);
-
-  const [row] = rowsOf<{ n: string | number }>(res);
-  return Number(row?.n ?? 0);
 }

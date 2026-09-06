@@ -120,29 +120,6 @@ export async function claimAdminOtpRequest(
     : { ok: false, retryAfter: secondsUntilReset(now), reason: "ip" };
 }
 
-/** Compatibility for the legacy shared-token guard until the OTP route unit
- * replaces it. Correct tokens are still checked before these functions run. */
-export async function checkAdminRate(
-  db: Database,
-  env: Env,
-  ip: string | null,
-  now: Date,
-): Promise<LoginRateVerdict> {
-  const count = await readCount(db, env, "admin_otp_ip", ip ?? "unknown", now);
-  return count >= ADMIN_LIMIT
-    ? { ok: false, retryAfter: secondsUntilReset(now), reason: "ip" }
-    : { ok: true };
-}
-
-export async function recordAdminFailure(
-  db: Database,
-  env: Env,
-  ip: string | null,
-  now: Date,
-): Promise<void> {
-  await increment(db, env, "admin_otp_ip", ip ?? "unknown", now);
-}
-
 export async function recordLoginFailure(
   db: Database,
   env: Env,

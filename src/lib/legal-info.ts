@@ -15,7 +15,3 @@ export const LEGAL_INFO = {
   lastUpdatedFa: "۱۲ شهریور ۱۴۰۵",
   lastUpdatedEn: "September 3, 2026",
 } as const;
-
-/** آیا هنوز مقداری پرنشده (placeholder داخل [ ]) باقی مانده؟ (هشدار حالت توسعه) */
-export const legalInfoIsPlaceholder = (): boolean =>
-  Object.values(LEGAL_INFO).some((v) => typeof v === "string" && v.includes("["));

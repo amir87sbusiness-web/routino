@@ -44,7 +44,7 @@ with archives as (
   select archive.*,
          not coalesce((
            archive.object_data
-           and archive.version_value = '1'::jsonb
+           and archive.version_value in ('1'::jsonb, '2'::jsonb)
            and archive.extra_fields = '{}'::jsonb
             and archive.month_key_is_string
             and archive.month_key_text ~ '^[0-9]{4}-(0[1-9]|1[0-2])$'
@@ -58,7 +58,8 @@ with archives as (
     from archive_bounds archive
 ), raw_items as (
   select archive.user_id, archive.archive_id, archive.updated_at as archive_updated_at,
-         archive.metadata_invalid, item.ordinality, item.value as item
+         archive.metadata_invalid, item.ordinality,
+         routino_expand_task_archive_item(archive.version_value, archive.month_key_text, item.value) as item
     from archive_metadata archive
     cross join lateral jsonb_array_elements(
       case when not archive.metadata_invalid then archive.items_value else '[]'::jsonb end
@@ -141,7 +142,7 @@ with archives as (
 )
 select
   (select count(*) from archive_metadata archive
-    where archive.version_value is distinct from '1'::jsonb) as unknown_archive_versions,
+    where coalesce(archive.version_value not in ('1'::jsonb, '2'::jsonb), true)) as unknown_archive_versions,
   (select count(*) from archive_metadata archive
     where archive.metadata_invalid) as malformed_archive_rows,
   (select count(*) from item_validation item where not item.item_valid) as malformed_archive_tuples,

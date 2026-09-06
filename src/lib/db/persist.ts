@@ -64,10 +64,3 @@ export async function pendingChanges(): Promise<Record<string, RecordRow<unknown
   }
   return out;
 }
-
-/** Drops every local record. Used by tests and by a future "sign out and wipe". */
-export async function clearAll(): Promise<void> {
-  await idb.transaction("rw", idb.tables, async () => {
-    await Promise.all(idb.tables.map((t) => t.clear()));
-  });
-}

@@ -1,5 +1,6 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
+import { pullRecords } from "../src/services/sync.js";
 
 let h: Harness;
 
@@ -47,7 +48,49 @@ async function activity(userId: string) {
 }
 
 describe("user activity on sync", () => {
+  it("counts the Tehran midnight boundary once, including an older delayed request", async () => {
+    await h.truncate();
+    const { user } = await signIn();
+    const pullAt = (instant: string) =>
+      pullRecords(
+        h.db,
+        user.id,
+        0,
+        10,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        new Date(instant),
+      );
+    await pullAt("2026-09-06T20:29:59.000Z");
+    expect((await activity(user.id)).active_days).toBe(1);
+    await pullAt("2026-09-06T20:30:00.000Z");
+    const nextDay = await activity(user.id);
+    expect(nextDay.active_days).toBe(2);
+    await pullAt("2026-09-06T20:29:59.000Z");
+    await pullAt("2026-09-06T20:30:01.000Z");
+    expect(await activity(user.id)).toEqual(nextDay);
+  });
+
+  it("records activity inside the single empty-exchange database statement", async () => {
+    await h.truncate();
+    const { access, user } = await signIn();
+    const execute = vi.spyOn(h.db, "execute");
+    try {
+      expect((await exchange(access)).statusCode).toBe(200);
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect((await activity(user.id)).active_days).toBe(1);
+      const first = await activity(user.id);
+      await Promise.all(Array.from({ length: 8 }, () => exchange(access)));
+      expect(await activity(user.id)).toEqual(first);
+    } finally {
+      execute.mockRestore();
+    }
+  });
+
   it("counts a Tehran calendar day once and refreshes the last activity", async () => {
+    await h.truncate();
     const { access, user } = await signIn();
 
     expect((await exchange(access)).statusCode).toBe(200);

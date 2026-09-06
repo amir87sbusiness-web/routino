@@ -12,8 +12,15 @@ import type { Database } from "../db/client.ts";
  * admin recency and keeps the write budget bounded to <= 1/user/day.
  */
 export async function touchUserActivity(db: Database, userId: string, now: Date): Promise<void> {
+  await db.execute(userActivityUpdate(userId, now));
+}
+
+/** Reusable conditional UPDATE, also embedded in the exchange's pull CTE.
+ * The predicate is rechecked after row-lock waits, so simultaneous calls still
+ * count a Tehran day exactly once. No activity payload crosses the DB wire. */
+export function userActivityUpdate(userId: string, now: Date) {
   const instant = now.toISOString();
-  await db.execute(sql`
+  return sql`
     update users
        set active_days = active_days + 1,
            last_active_at = ${instant}::timestamptz
@@ -23,5 +30,5 @@ export async function touchUserActivity(db: Database, userId: string, now: Date)
          or (last_active_at at time zone 'Asia/Tehran')::date
             < (${instant}::timestamptz at time zone 'Asia/Tehran')::date
        )
-  `);
+  `;
 }

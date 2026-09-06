@@ -2,7 +2,7 @@
 import { validateTaskPayload } from "./sync-record-validation.ts";
 
 export const TASK_MONTH_ARCHIVE_KIND = "taskMonths" as const;
-export const TASK_MONTH_ARCHIVE_VERSION = 1 as const;
+export const TASK_MONTH_ARCHIVE_VERSION = 2 as const;
 
 export interface TaskMonthArchiveV1 {
   v: 1;
@@ -10,6 +10,10 @@ export interface TaskMonthArchiveV1 {
   count: number;
   checksum: string;
   items: [id: string, updatedAt: number, data: unknown][];
+}
+
+export interface TaskMonthArchiveV2 extends Omit<TaskMonthArchiveV1, "v"> {
+  v: 2;
 }
 
 export interface StoredTaskMonthRecord {
@@ -44,11 +48,11 @@ function isMonthKey(value: string): boolean {
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 7) === value;
 }
 
-function isArchiveData(value: unknown): value is TaskMonthArchiveV1 {
+function isArchiveData(value: unknown): value is TaskMonthArchiveV1 | TaskMonthArchiveV2 {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const data = value as Record<string, unknown>;
   return (
-    data.v === TASK_MONTH_ARCHIVE_VERSION &&
+    (data.v === 1 || data.v === TASK_MONTH_ARCHIVE_VERSION) &&
     typeof data.monthKey === "string" &&
     typeof data.count === "number" &&
     typeof data.checksum === "string" &&
@@ -166,7 +170,7 @@ export function expandTaskMonthArchive(record: StoredTaskMonthRecord): ArchivedT
   if (record.deleted) return invalidArchive();
   if (!isArchiveData(record.data)) {
     const data = record.data as { v?: unknown } | null;
-    if (data?.v !== TASK_MONTH_ARCHIVE_VERSION) {
+    if (data?.v !== 1 && data?.v !== TASK_MONTH_ARCHIVE_VERSION) {
       throw new Error("unsupported_task_archive_version");
     }
     return invalidArchive();
@@ -193,7 +197,9 @@ export function expandTaskMonthArchive(record: StoredTaskMonthRecord): ArchivedT
   const checksumParts: string[] = [];
   for (const item of archive.items) {
     if (!Array.isArray(item) || item.length !== 3) return invalidArchive();
-    const [id, updatedAt, data] = item;
+    const [id, updatedAt, storedData] = item;
+    const data =
+      archive.v === 2 ? expandCompactTaskData(id, archive.monthKey, storedData) : storedData;
     if (
       typeof id !== "string" ||
       !Number.isSafeInteger(updatedAt) ||
@@ -221,4 +227,16 @@ export function expandTaskMonthArchive(record: StoredTaskMonthRecord): ArchivedT
   }
 
   return expanded;
+}
+
+/** V2 removes only derivable fields. Optional properties retain their exact
+ * presence/value; defaults and nulls must never be guessed by the reader. */
+function expandCompactTaskData(id: string, monthKey: string, compact: unknown): unknown {
+  if (!Array.isArray(compact) || compact.length !== 6) return invalidArchive();
+  const [day, title, type, target, value, extras] = compact;
+  if (typeof day !== "string" || !/^\d{2}$/.test(day)) return invalidArchive();
+  if (!extras || typeof extras !== "object" || Array.isArray(extras)) return invalidArchive();
+  const allowed = ["note", "unitKind", "reminderAt", "color", "icon"];
+  if (Object.keys(extras).some((key) => !allowed.includes(key))) return invalidArchive();
+  return { id, dateKey: `${monthKey}-${day}`, title, type, target, value, done: true, ...extras };
 }

@@ -20,6 +20,7 @@ export interface ResultPageInput {
   outcome: "paid" | "canceled" | "failed" | "verify_failed" | "pending";
   payment?: ResultPagePayment;
   message?: string;
+  retryCallbackAfterSeconds?: number;
 }
 
 const esc = (s: string) =>
@@ -37,6 +38,10 @@ export function renderResultPage(
   const target = native ? deepLink : webUrl;
 
   const ok = outcome === "paid";
+  const retrySeconds =
+    outcome === "pending" && input.retryCallbackAfterSeconds
+      ? Math.max(5, Math.min(300, Math.ceil(input.retryCallbackAfterSeconds)))
+      : 0;
   const title = ok
     ? "پرداخت موفق بود 🎉"
     : outcome === "canceled"
@@ -45,7 +50,9 @@ export function renderResultPage(
         ? "در حال بررسی پرداخت…"
         : "پرداخت ناموفق بود";
   const detail =
-    input.message ??
+    (retrySeconds
+      ? "تأیید درگاه هنوز کامل نشده. این صفحه را باز نگه دار؛ دوباره بررسی می‌کنیم."
+      : input.message) ??
     (ok
       ? `اشتراک شما فعال شد.${payment?.refNumber ? ` کد پیگیری: ${esc(payment.refNumber)}` : ""}`
       : outcome === "canceled"
@@ -80,12 +87,28 @@ export function renderResultPage(
   <div class="icon">${ok ? "✅" : outcome === "canceled" ? "↩️" : outcome === "pending" ? "⏳" : "❌"}</div>
   <h1>${title}</h1>
   <p>${detail}</p>
+  ${retrySeconds ? '<a class="btn" id="retry-verification" href="">بررسی دوبارهٔ پرداخت</a>' : ""}
   <a class="btn" href="${esc(target)}">بازگشت به روتینو</a>
   ${native ? `<a class="alt" href="${esc(webUrl)}">باز نشد؟ نسخه وب را باز کن</a>` : ""}
 </div>
 <script>
+  ${
+    retrySeconds
+      ? `
+  // Keep the candidate in the original callback URL. Never send it to the app.
+  var retryUrl = new URL(window.location.href);
+  var attempt = Math.max(0, Number(retryUrl.searchParams.get("verificationRetry")) || 0);
+  document.getElementById("retry-verification").href = retryUrl.href;
+  if (attempt < 3) {
+    retryUrl.searchParams.set("verificationRetry", String(attempt + 1));
+    setTimeout(function () { window.location.replace(retryUrl.href); }, ${retrySeconds * 1000});
+  }
+  `
+      : `
   // Give the user a beat to read the outcome, then return to the app.
   setTimeout(function () { window.location.href = ${JSON.stringify(target)}; }, ${ok ? 1600 : 4000});
+  `
+  }
 </script>
 </body>
 </html>`;

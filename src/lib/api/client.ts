@@ -29,8 +29,6 @@ export class ApiError extends Error {
   }
 }
 
-export const isOffline = (err: unknown): boolean => err instanceof ApiError && err.offline;
-
 export interface RequestOptions {
   method?: "GET" | "POST";
   body?: unknown;

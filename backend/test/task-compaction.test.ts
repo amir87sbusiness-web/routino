@@ -108,7 +108,8 @@ async function semanticTasks(): Promise<unknown[]> {
         from records r
        where r.user_id = '${OWNER}' and r.kind = 'tasks' and not r.deleted
       union all
-      select item->>0, (item->>1)::bigint, item->2, a.seq
+      select item->>0, (item->>1)::bigint,
+             routino_expand_task_archive_item(a.data->'v', a.data->>'monthKey', item)->2, a.seq
         from records a
         cross join lateral jsonb_array_elements(a.data->'items') item
        where a.user_id = '${OWNER}' and a.kind = 'taskMonths' and not a.deleted
@@ -175,7 +176,8 @@ async function semanticTasksFor(ownerIds: string[]): Promise<unknown[]> {
        where r.user_id in (${ownerIds.map(sqlText).join(", ")})
          and r.kind = 'tasks' and not r.deleted
       union all
-      select a.user_id, item->>0, (item->>1)::bigint, item->2, a.seq
+      select a.user_id, item->>0, (item->>1)::bigint,
+             routino_expand_task_archive_item(a.data->'v', a.data->>'monthKey', item)->2, a.seq
         from records a
         cross join lateral jsonb_array_elements(a.data->'items') item
        where a.user_id in (${ownerIds.map(sqlText).join(", ")})
@@ -787,6 +789,17 @@ describe("bounded transactional task compaction", () => {
     expect(chunks.filter((chunk) => chunk.month_key === "2026-04")).toHaveLength(2);
   });
 
+  it("keeps small compact packets as v1 to avoid losing PostgreSQL compression", async () => {
+    for (let n = 0; n < 16; n++) await insertTask(`small-${n}`, task(`small-${n}`));
+    const original = await semanticTasks();
+    await h.query(`select * from routino_compact_task_months('${NOW}', 32)`);
+    const [archive] = await h.query<{ version: number }>(
+      `select (data->>'v')::int as version from records where user_id='${OWNER}' and kind='taskMonths'`,
+    );
+    expect(archive!.version).toBe(1);
+    expect(await semanticTasks()).toEqual(original);
+  });
+
   it("pulls a real compacted quantity archive with PostgreSQL decimal numeric text", async () => {
     const decimalTasks = [
       ["Z-decimal", 1.125],
@@ -796,7 +809,13 @@ describe("bounded transactional task compaction", () => {
     for (const [id, value] of decimalTasks) {
       await insertTask(
         id,
-        task(id, { type: "quantity", target: value, value, dateKey: "2026-05-01" }),
+        task(id, {
+          type: "quantity",
+          target: value,
+          value,
+          dateKey: "2026-05-01",
+          note: "یادداشت".repeat(100),
+        }),
         OLD_UPDATED_AT + decimalTasks.findIndex(([taskId]) => taskId === id),
       );
     }
@@ -805,7 +824,7 @@ describe("bounded transactional task compaction", () => {
 
     const [archive] = await h.query<{
       id: string;
-      data: { items: [string, number, { target: number; value: number }][] };
+      data: { v: number; items: [string, number, unknown[]][] };
       updated_at: string;
       seq: string;
     }>(`
@@ -814,7 +833,8 @@ describe("bounded transactional task compaction", () => {
        where user_id = '${OWNER}' and kind = 'taskMonths'
     `);
     expect(archive!.data.items.map(([id]) => id)).toEqual(["Z-decimal", "a-small", "b-tiny"]);
-    expect(archive!.data.items.map(([, , data]) => data.target)).toEqual([1.125, 1e-7, 1e-10]);
+    expect(archive!.data.v).toBe(2);
+    expect(archive!.data.items.map(([, , data]) => data[3])).toEqual([1.125, 1e-7, 1e-10]);
 
     const page = await pullRecords(h.db, OWNER, 0, 10);
     expect(page).toMatchObject({
@@ -823,10 +843,16 @@ describe("bounded transactional task compaction", () => {
       reset: false,
     });
     expect(page.records).toEqual(
-      archive!.data.items.map(([id, updatedAt, data]) => ({
+      archive!.data.items.map(([id, updatedAt], index) => ({
         kind: "tasks",
         id,
-        data,
+        data: task(id, {
+          type: "quantity",
+          target: decimalTasks[index]![1],
+          value: decimalTasks[index]![1],
+          dateKey: "2026-05-01",
+          note: "یادداشت".repeat(100),
+        }),
         updatedAt,
         deleted: false,
         seq: Number(archive!.seq),

@@ -1,4 +1,4 @@
--- Manual, single-owner inverse restore for immutable taskMonths v1 archives.
+-- Manual, single-owner inverse restore for immutable taskMonths v1/v2 archives.
 --
 -- SAFETY:
 --   1. Take and verify a scoped backup and run both precheck/postcheck first.
@@ -133,7 +133,7 @@ begin
   if exists (
     select 1 from pg_temp.routino_restore_archives archive
      where jsonb_typeof(archive.archive_data) is distinct from 'object'
-        or archive.archive_data->'v' is distinct from '1'::jsonb
+        or coalesce(archive.archive_data->'v' not in ('1'::jsonb, '2'::jsonb), true)
   ) then
     raise exception 'task archive restore refused: unknown archive version';
   end if;
@@ -169,7 +169,7 @@ begin
   select archive.archive_id,
          archive.archive_data->>'monthKey',
          item.ordinality::integer,
-         item.value
+         routino_expand_task_archive_item(archive.archive_data->'v', archive.archive_data->>'monthKey', item.value)
     from pg_temp.routino_restore_archives archive
     cross join lateral jsonb_array_elements(archive.archive_data->'items')
       with ordinality item(value, ordinality);

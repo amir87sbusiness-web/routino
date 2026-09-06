@@ -133,19 +133,6 @@ export interface Plan {
   price: number; // toman
 }
 
-export interface Discount {
-  code: string;
-  percent: number;
-  phone?: string; // restricted to one user
-  active: boolean;
-}
-
-export interface Offer {
-  label: string;
-  percent: number;
-  until: number; // timestamp
-}
-
 export interface AppNotification {
   id: string;
   title: string;

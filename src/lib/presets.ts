@@ -1,5 +1,5 @@
 /** Default categories, preset habits, challenge pool, subscription catalog. */
-import type { Category, Discount, Offer, Plan } from "./store";
+import type { Category, Plan } from "./store";
 
 export const DEFAULT_CATEGORIES: Category[] = [
   {
@@ -572,12 +572,6 @@ export const PLANS: Plan[] = [
   { id: "m3", nameFa: "سه‌ماهه", nameEn: "3 Months", months: 3, price: 149000 },
   { id: "m12", nameFa: "یک‌ساله", nameEn: "1 Year", months: 12, price: 449000 },
 ];
-
-/** Note: any code shipped here is readable in the client bundle. Real validation
- * moves to POST /v1/discounts/validate with the backend. */
-export const DISCOUNTS: Discount[] = [{ code: "ROUTINO20", percent: 20, active: true }];
-
-export const OFFER: Offer | null = null;
 
 export const CATEGORY_COLOR_CHOICES = [
   "#F97316",

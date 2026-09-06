@@ -71,7 +71,13 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
     // `unknown`, not `string | undefined`: a repeated key (`?a=1&a=2`) parses to
     // an array, and this endpoint is public. `handlePaymentCallback` normalises.
     const qs = req.query as Record<string, unknown>;
-    const result = await handlePaymentCallback(db, psp, qs, now());
+    const result = await handlePaymentCallback(
+      db,
+      psp,
+      qs,
+      now(),
+      env.PSP_PROVIDER_MAX_CONCURRENCY,
+    );
     return reply.type("text/html; charset=utf-8").send(renderResultPage(env, result));
   });
 
@@ -79,6 +85,6 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
     const user = requireUser(req);
     const { id } = req.params as { id: string };
     if (!UUID_RE.test(id)) throw badRequest("bad_id", "Malformed payment id");
-    return pollPayment(db, psp, user.id, id, now());
+    return pollPayment(db, psp, user.id, id, now(), env.PSP_PROVIDER_MAX_CONCURRENCY);
   });
 };

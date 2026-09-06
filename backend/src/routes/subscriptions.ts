@@ -32,7 +32,7 @@ export const subscriptionRoutes: FastifyPluginAsync = async (app) => {
   app.get("/subscriptions/me", { preHandler: app.authenticate }, async (req) => {
     const user = requireUser(req);
     const t = now();
-    await settleOpenPayments(db, psp, user.id, t);
+    await settleOpenPayments(db, psp, user.id, t, env.PSP_PROVIDER_MAX_CONCURRENCY);
     return { entitlement: await readEntitlement(db, user.id, t) };
   });
 

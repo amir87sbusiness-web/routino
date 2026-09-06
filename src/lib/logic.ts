@@ -149,31 +149,6 @@ export function successRate(db: Db, habit: Habit, cal: Calendar, days: number): 
   return due === 0 ? 0 : Math.round((done / due) * 100);
 }
 
-/** Series of capped daily percents for the last N days (oldest first). */
-export function habitSeries(db: Db, habit: Habit, cal: Calendar, days: number) {
-  const out: { dateKey: string; percent: number | null }[] = [];
-  let dk = addDays(todayKey(), -(days - 1));
-  for (let i = 0; i < days; i++) {
-    out.push({
-      dateKey: dk,
-      percent: isDueOn(habit, dk, cal) ? cappedPercent(habit, getLog(db, habit.id, dk)) : null,
-    });
-    dk = addDays(dk, 1);
-  }
-  return out;
-}
-
-/** Overall daily score series for last N days (oldest first). */
-export function overallSeries(db: Db, cal: Calendar, days: number) {
-  const out: { dateKey: string; percent: number | null }[] = [];
-  let dk = addDays(todayKey(), -(days - 1));
-  for (let i = 0; i < days; i++) {
-    out.push({ dateKey: dk, percent: dayScore(db, dk, cal) });
-    dk = addDays(dk, 1);
-  }
-  return out;
-}
-
 /** Average of non-null percents in a series. */
 export function avgOf(series: { percent: number | null }[]): number {
   const vals = series.filter((s) => s.percent !== null).map((s) => s.percent as number);

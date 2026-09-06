@@ -318,8 +318,40 @@ describe("checkout → gateway → callback", () => {
     expect(grants).toHaveLength(0);
 
     // And the REAL payment still works afterwards — the forgery didn't poison it.
+    const pending = await settleAndCallback(body.authority, "paid");
+    expect(pending.body).toContain("در حال بررسی");
+    await h.raw(
+      `update payments set next_verify_at = now() - interval '1 second' where id = '${body.paymentId}'`,
+    );
     const real = await settleAndCallback(body.authority, "paid");
     expect(real.body).toContain("پرداخت موفق");
+  });
+
+  it("preserves the callback retry when capacity is full and authority persistence was interrupted", async () => {
+    const { access } = await signIn();
+    const body = (await checkout(access, { planId: "m1" })).json();
+    await h.raw(
+      `update payments set authority=null,status='provider_unknown' where id='${body.paymentId}'`,
+    );
+    const oldCapacity = h.env.PSP_PROVIDER_MAX_CONCURRENCY;
+    h.env.PSP_PROVIDER_MAX_CONCURRENCY = 1;
+    try {
+      await h.raw(
+        `insert into provider_capacity_leases(kind,lease_id,expires_at) values('psp',gen_random_uuid(),now()+interval '1 minute')`,
+      );
+      const waiting = await settleAndCallback(body.authority, "paid");
+      expect(waiting.body).toContain('id="retry-verification"');
+      expect(waiting.body).toContain("attempt < 3");
+      expect(await h.query(`select id from grants where source='payment'`)).toHaveLength(0);
+      await h.raw(
+        `delete from provider_capacity_leases where kind='psp'; update payments set next_verify_at=now()-interval '1 second' where id='${body.paymentId}'`,
+      );
+      const recovered = await settleAndCallback(body.authority, "paid");
+      expect(recovered.body).toContain("پرداخت موفق");
+      expect(await h.query(`select id from grants where source='payment'`)).toHaveLength(1);
+    } finally {
+      h.env.PSP_PROVIDER_MAX_CONCURRENCY = oldCapacity;
+    }
   });
 
   it("renders cancellation without making a recoverable payment terminal", async () => {
