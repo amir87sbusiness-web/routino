@@ -4,77 +4,168 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="color-scheme" content="light dark" />
-    <title>پیش‌نمایش فعال‌سازی روتینو</title>
+    <title>پیش‌نمایش شروع روتینو</title>
     <style>
+      @font-face {
+        font-family: "Vazirmatn Preview";
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src:
+          url("../../../node_modules/@fontsource/vazirmatn/files/vazirmatn-arabic-400-normal.woff2") format("woff2"),
+          url("../../../../../node_modules/@fontsource/vazirmatn/files/vazirmatn-arabic-400-normal.woff2") format("woff2");
+        unicode-range: U+0600-06FF, U+0750-077F, U+0870-089F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+      }
+
+      @font-face {
+        font-family: "Vazirmatn Preview";
+        font-style: normal;
+        font-weight: 400;
+        font-display: swap;
+        src:
+          url("../../../node_modules/@fontsource/vazirmatn/files/vazirmatn-latin-400-normal.woff2") format("woff2"),
+          url("../../../../../node_modules/@fontsource/vazirmatn/files/vazirmatn-latin-400-normal.woff2") format("woff2");
+        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+      }
+
+      @font-face {
+        font-family: "Vazirmatn Preview";
+        font-style: normal;
+        font-weight: 700;
+        font-display: swap;
+        src:
+          url("../../../node_modules/@fontsource/vazirmatn/files/vazirmatn-arabic-700-normal.woff2") format("woff2"),
+          url("../../../../../node_modules/@fontsource/vazirmatn/files/vazirmatn-arabic-700-normal.woff2") format("woff2");
+        unicode-range: U+0600-06FF, U+0750-077F, U+0870-089F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+      }
+
+      @font-face {
+        font-family: "Vazirmatn Preview";
+        font-style: normal;
+        font-weight: 700;
+        font-display: swap;
+        src:
+          url("../../../node_modules/@fontsource/vazirmatn/files/vazirmatn-latin-700-normal.woff2") format("woff2"),
+          url("../../../../../node_modules/@fontsource/vazirmatn/files/vazirmatn-latin-700-normal.woff2") format("woff2");
+        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+      }
+
+      @font-face {
+        font-family: "Vazirmatn Preview";
+        font-style: normal;
+        font-weight: 900;
+        font-display: swap;
+        src:
+          url("../../../node_modules/@fontsource/vazirmatn/files/vazirmatn-arabic-900-normal.woff2") format("woff2"),
+          url("../../../../../node_modules/@fontsource/vazirmatn/files/vazirmatn-arabic-900-normal.woff2") format("woff2");
+        unicode-range: U+0600-06FF, U+0750-077F, U+0870-089F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF;
+      }
+
+      @font-face {
+        font-family: "Vazirmatn Preview";
+        font-style: normal;
+        font-weight: 900;
+        font-display: swap;
+        src:
+          url("../../../node_modules/@fontsource/vazirmatn/files/vazirmatn-latin-900-normal.woff2") format("woff2"),
+          url("../../../../../node_modules/@fontsource/vazirmatn/files/vazirmatn-latin-900-normal.woff2") format("woff2");
+        unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+      }
+
       :root {
         color-scheme: light;
-        --bg: #fbfaf7;
-        --surface: #ffffff;
-        --surface-muted: #f5f2ec;
-        --text: #27231f;
-        --text-muted: #746d65;
-        --primary: #e86f2d;
-        --primary-strong: #c94f16;
-        --primary-soft: #fff0e6;
-        --success: #287a54;
-        --success-soft: #e9f6ef;
-        --border: #e7e1d9;
-        --shadow: 0 18px 45px rgba(74, 49, 30, 0.1);
-        --ring: rgba(232, 111, 45, 0.34);
+        --canvas: #f4efe7;
+        --paper: #fffdf8;
+        --paper-soft: #f8f2e9;
+        --ink: #24211d;
+        --ink-soft: #6f685f;
+        --ink-faint: #665f57;
+        --line: #e6ddd1;
+        --orange: #e95d2a;
+        --orange-deep: #c94016;
+        --orange-soft: #ffeadf;
+        --green: #416c5d;
+        --green-soft: #e3eee8;
+        --gold: #d8a446;
+        --shadow-large: 0 32px 90px rgba(91, 61, 36, 0.16);
+        --shadow-soft: 0 12px 35px rgba(76, 52, 34, 0.1);
+        --focus: rgba(233, 93, 42, 0.34);
       }
 
       :root[data-theme="dark"] {
         color-scheme: dark;
-        --bg: #181512;
-        --surface: #221e1a;
-        --surface-muted: #2b2621;
-        --text: #fbf7f1;
-        --text-muted: #b8afa5;
-        --primary: #f18a4d;
-        --primary-strong: #ff9b5f;
-        --primary-soft: #3c281d;
-        --success: #68c391;
-        --success-soft: #1d3328;
-        --border: #3b342e;
-        --shadow: 0 22px 50px rgba(0, 0, 0, 0.28);
-        --ring: rgba(241, 138, 77, 0.42);
+        --canvas: #171512;
+        --paper: #211e1a;
+        --paper-soft: #2a2621;
+        --ink: #fbf7ef;
+        --ink-soft: #c1b8ad;
+        --ink-faint: #b9afa4;
+        --line: #3a342d;
+        --orange: #f27b45;
+        --orange-deep: #aa3b18;
+        --orange-soft: #3c281e;
+        --green: #83b5a2;
+        --green-soft: #21352e;
+        --gold: #e4b85f;
+        --shadow-large: 0 34px 90px rgba(0, 0, 0, 0.35);
+        --shadow-soft: 0 14px 34px rgba(0, 0, 0, 0.24);
+        --focus: rgba(242, 123, 69, 0.42);
       }
 
-      * {
+      *,
+      *::before,
+      *::after {
         box-sizing: border-box;
       }
 
       html {
         min-width: 320px;
-        background: var(--bg);
-        font-family: Vazirmatn, Tahoma, Arial, sans-serif;
+        min-height: 100%;
+        background: var(--canvas);
+        font-family: "Vazirmatn Preview", Tahoma, "Segoe UI", Arial, sans-serif;
         scroll-behavior: smooth;
       }
 
       body {
-        min-height: 100vh;
+        min-height: 100svh;
         margin: 0;
-        color: var(--text);
+        overflow-x: hidden;
+        color: var(--ink);
         background:
-          radial-gradient(circle at 15% -5%, rgba(232, 111, 45, 0.16), transparent 34%),
-          var(--bg);
-        /* Do not animate inherited text color: a theme switch otherwise leaves
-           the headline briefly low-contrast while the background is already dark. */
-        transition: background-color 180ms ease;
+          radial-gradient(circle at 13% 12%, color-mix(in srgb, var(--orange) 15%, transparent), transparent 25rem),
+          radial-gradient(circle at 88% 82%, color-mix(in srgb, var(--green) 13%, transparent), transparent 28rem),
+          var(--canvas);
       }
 
-      button {
+      body::before {
+        position: fixed;
+        z-index: -1;
+        inset: 0;
+        background-image: radial-gradient(color-mix(in srgb, var(--ink) 14%, transparent) 0.7px, transparent 0.7px);
+        background-size: 18px 18px;
+        content: "";
+        opacity: 0.22;
+        pointer-events: none;
+      }
+
+      button,
+      summary {
         font: inherit;
       }
 
-      button:focus-visible {
-        outline: 3px solid var(--ring);
+      button {
+        color: inherit;
+      }
+
+      button:focus-visible,
+      summary:focus-visible {
+        outline: 3px solid var(--focus);
         outline-offset: 3px;
       }
 
       ::selection {
-        color: var(--text);
-        background: var(--primary-soft);
+        color: var(--ink);
+        background: var(--orange-soft);
       }
 
       ::-webkit-scrollbar {
@@ -82,247 +173,291 @@
       }
 
       ::-webkit-scrollbar-track {
-        background: var(--bg);
+        background: var(--canvas);
       }
 
       ::-webkit-scrollbar-thumb {
-        border: 3px solid var(--bg);
+        border: 3px solid var(--canvas);
         border-radius: 999px;
-        background: var(--border);
+        background: var(--ink-faint);
       }
 
-      .page {
-        position: relative;
-        width: min(100%, 480px);
-        min-height: 100vh;
-        margin-inline: auto;
-        padding:
-          calc(18px + env(safe-area-inset-top))
-          20px
-          calc(24px + env(safe-area-inset-bottom));
+      .shell {
+        width: min(1120px, calc(100% - 36px));
+        min-height: min(790px, calc(100svh - 36px));
+        margin: 18px auto;
         overflow: hidden;
-      }
-
-      .page::before {
-        position: absolute;
-        z-index: -1;
-        top: 118px;
-        left: -78px;
-        width: 170px;
-        height: 170px;
-        border: 34px solid rgba(232, 111, 45, 0.06);
-        border-radius: 50%;
-        content: "";
+        border: 1px solid var(--line);
+        border-radius: 36px;
+        background: var(--paper);
+        box-shadow: var(--shadow-large);
       }
 
       .topbar {
         display: flex;
+        min-height: 76px;
         align-items: center;
         justify-content: space-between;
-        min-height: 44px;
+        padding: 16px 26px;
+        border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
       }
 
       .brand {
-        display: inline-flex;
+        display: flex;
         align-items: center;
         gap: 10px;
-        font-size: 15px;
+        font-size: 17px;
         font-weight: 900;
-        letter-spacing: -0.02em;
+        letter-spacing: -0.03em;
       }
 
-      .brand img {
-        width: 34px;
-        height: 34px;
+      .brand-mark {
+        position: relative;
+        width: 36px;
+        height: 36px;
+        overflow: hidden;
+        border-radius: 50%;
+      }
+
+      .brand-mark img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
         object-fit: contain;
       }
 
-      .theme-toggle {
-        display: grid;
-        width: 42px;
-        height: 42px;
-        padding: 0;
-        place-items: center;
-        color: var(--text-muted);
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        background: var(--surface);
-        cursor: pointer;
-        transition: transform 160ms ease, border-color 160ms ease, color 160ms ease;
+      .logo-dark {
+        opacity: 0;
       }
 
-      .theme-toggle:hover {
-        color: var(--primary);
-        border-color: var(--primary);
-        transform: translateY(-1px);
+      :root[data-theme="dark"] .logo-light {
+        opacity: 0;
       }
 
-      .theme-toggle svg {
-        width: 19px;
-        height: 19px;
+      :root[data-theme="dark"] .logo-dark {
+        opacity: 1;
       }
 
-      .hero {
-        padding: 32px 2px 24px;
-        text-align: center;
-      }
-
-      .trial-mark {
-        position: relative;
-        display: grid;
-        width: 68px;
-        height: 68px;
-        margin: 0 auto 18px;
-        place-items: center;
-        color: var(--primary);
-        border: 1px solid rgba(232, 111, 45, 0.2);
-        border-radius: 23px;
-        background: var(--primary-soft);
-        box-shadow: 0 12px 26px rgba(201, 79, 22, 0.13);
-      }
-
-      .trial-mark::after {
-        position: absolute;
-        top: -5px;
-        left: -4px;
-        width: 14px;
-        height: 14px;
-        border: 4px solid var(--bg);
-        border-radius: 50%;
-        background: var(--success);
-        content: "";
-      }
-
-      .trial-mark svg {
-        width: 30px;
-        height: 30px;
-      }
-
-      h1 {
-        max-width: 390px;
-        margin: 0 auto;
-        font-size: clamp(28px, 8vw, 38px);
-        font-weight: 900;
-        line-height: 1.35;
-        letter-spacing: -0.035em;
-        text-wrap: balance;
-      }
-
-      .hero p {
-        max-width: 350px;
-        margin: 12px auto 0;
-        color: var(--text-muted);
-        font-size: 14px;
-        font-weight: 500;
-        line-height: 1.9;
-        text-wrap: balance;
-      }
-
-      .benefits {
-        margin: 0;
-        padding: 4px 4px 18px;
-        list-style: none;
-      }
-
-      .benefit {
-        display: grid;
-        grid-template-columns: 34px 1fr auto;
-        gap: 11px;
+      .toolbar {
+        display: flex;
         align-items: center;
-        min-height: 48px;
-        padding-block: 8px;
+        gap: 8px;
       }
 
-      .benefit + .benefit {
-        border-top: 1px solid var(--border);
+      .locale-switch {
+        display: flex;
+        padding: 3px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: var(--paper-soft);
       }
 
-      .benefit-icon {
+      .locale-button,
+      .icon-button {
         display: grid;
-        width: 34px;
-        height: 34px;
+        min-width: 44px;
+        height: 44px;
         place-items: center;
-        color: var(--primary);
-        border-radius: 12px;
-        background: var(--primary-soft);
+        border: 0;
+        border-radius: 999px;
+        background: transparent;
+        cursor: pointer;
       }
 
-      .benefit-icon svg {
-        width: 18px;
-        height: 18px;
-      }
-
-      .benefit-copy strong {
-        display: block;
-        margin-bottom: 2px;
-        font-size: 13px;
+      .locale-button {
+        padding-inline: 11px;
+        color: var(--ink-soft);
+        font-size: 12px;
         font-weight: 800;
       }
 
-      .benefit-copy span {
-        display: block;
-        color: var(--text-muted);
-        font-size: 11px;
-        line-height: 1.6;
+      .locale-button[aria-pressed="true"] {
+        color: var(--ink);
+        background: var(--paper);
+        box-shadow: 0 2px 9px rgba(71, 48, 31, 0.1);
       }
 
-      .check {
+      .icon-button {
+        border: 1px solid var(--line);
+        color: var(--ink-soft);
+        background: var(--paper-soft);
+      }
+
+      .icon-button svg {
         width: 18px;
         height: 18px;
-        color: var(--success);
       }
 
-      .plans-section {
-        padding-top: 10px;
+      .content {
+        display: grid;
+        min-height: calc(min(790px, calc(100svh - 36px)) - 77px);
+        grid-template-columns: minmax(0, 0.92fr) minmax(440px, 1.08fr);
       }
 
-      .plans-section summary {
+      .story {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: clamp(44px, 6vw, 82px);
+      }
+
+      .story h1 {
+        max-width: 560px;
+        margin: 0;
+        font-size: clamp(45px, 5.1vw, 72px);
+        font-weight: 900;
+        letter-spacing: -0.055em;
+        line-height: 1.08;
+        text-wrap: balance;
+      }
+
+      html[lang="fa"] .story h1 {
+        letter-spacing: -0.045em;
+      }
+
+      .lead {
+        max-width: 570px;
+        margin: 24px 0 0;
+        color: var(--ink-soft);
+        font-size: clamp(16px, 1.5vw, 19px);
+        line-height: 1.9;
+        text-wrap: pretty;
+      }
+
+      .value-line {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 22px;
+        margin: 30px 0 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .value-line li {
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        gap: 8px;
+        color: var(--ink-soft);
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .value-line svg {
+        width: 17px;
+        height: 17px;
+        color: var(--green);
+        flex: 0 0 auto;
+      }
+
+      .actions {
+        max-width: 520px;
+        margin-top: 36px;
+      }
+
+      .primary-action {
+        display: flex;
+        width: 100%;
+        min-height: 60px;
+        align-items: center;
+        justify-content: center;
         gap: 12px;
-        padding: 12px 2px;
-        color: var(--text-muted);
+        padding: 15px 22px;
+        border: 0;
+        border-radius: 20px;
+        color: #fffaf3;
+        background: var(--orange-deep);
+        box-shadow: 0 16px 32px color-mix(in srgb, var(--orange-deep) 28%, transparent);
+        cursor: pointer;
+        transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease;
+      }
+
+      .primary-action:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 20px 38px color-mix(in srgb, var(--orange-deep) 34%, transparent);
+      }
+
+      .primary-action:active {
+        transform: translateY(0);
+      }
+
+      .primary-action strong {
+        font-size: 16px;
+        font-weight: 900;
+      }
+
+      .primary-action svg {
+        width: 19px;
+        height: 19px;
+        transition: transform 180ms ease;
+      }
+
+      html[dir="rtl"] .primary-action svg {
+        transform: scaleX(-1);
+      }
+
+      html[dir="rtl"] .primary-action:hover svg {
+        transform: translateX(-3px) scaleX(-1);
+      }
+
+      html[dir="ltr"] .primary-action:hover svg {
+        transform: translateX(3px);
+      }
+
+      .access-note {
+        margin: 11px 0 0;
+        color: var(--ink-soft);
+        text-align: center;
+        font-size: 12px;
+        line-height: 1.7;
+      }
+
+      .continuation {
+        max-width: 520px;
+        margin-top: 12px;
+      }
+
+      .continuation summary {
+        display: flex;
+        min-height: 44px;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        padding: 8px;
+        color: var(--ink-faint);
         font-size: 11px;
         font-weight: 700;
         cursor: pointer;
         list-style: none;
       }
 
-      .plans-section summary::-webkit-details-marker {
+      .continuation summary::-webkit-details-marker {
         display: none;
       }
 
-      .plans-section summary span {
-        color: var(--primary-strong);
-        font-size: 10px;
-        text-decoration: underline;
-        text-decoration-thickness: 1px;
-        text-underline-offset: 4px;
+      .continuation summary svg {
+        width: 14px;
+        height: 14px;
+        transition: transform 180ms ease;
       }
 
-      .plans-content {
-        padding-top: 4px;
+      .continuation[open] summary svg {
+        transform: rotate(180deg);
       }
 
-      .plans-heading {
-        display: flex;
-        align-items: end;
-        justify-content: space-between;
-        gap: 12px;
-        margin-bottom: 12px;
+      .plan-panel {
+        margin-top: 8px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 22px;
+        background: var(--paper-soft);
       }
 
-      .plans-heading h2 {
-        margin: 0;
-        font-size: 15px;
-        font-weight: 900;
-        letter-spacing: -0.02em;
-      }
-
-      .plans-heading span {
-        color: var(--text-muted);
-        font-size: 10px;
+      .plan-intro {
+        margin: 0 0 14px;
+        color: var(--ink-soft);
+        font-size: 12px;
+        line-height: 1.7;
       }
 
       .plans {
@@ -332,331 +467,595 @@
       }
 
       .plan {
-        position: relative;
         min-width: 0;
-        min-height: 108px;
-        padding: 14px 8px 11px;
-        color: var(--text);
-        text-align: center;
-        border: 1px solid var(--border);
-        border-radius: 18px;
-        background: var(--surface);
+        padding: 12px 8px;
+        border: 1px solid var(--line);
+        border-radius: 15px;
+        background: var(--paper);
         cursor: pointer;
-        transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
-      }
-
-      .plan:hover {
-        transform: translateY(-2px);
       }
 
       .plan[aria-pressed="true"] {
-        border-color: var(--primary);
-        background: var(--primary-soft);
-        box-shadow: 0 10px 25px rgba(201, 79, 22, 0.09);
+        border-color: var(--orange);
+        background: var(--orange-soft);
       }
 
-      .plan-badge {
-        position: absolute;
-        top: -10px;
-        right: 50%;
-        width: max-content;
-        padding: 3px 8px;
-        color: #fff;
-        font-size: 9px;
-        font-weight: 800;
-        border-radius: 999px;
-        background: var(--primary-strong);
-        transform: translateX(50%);
+      .plan-name,
+      .plan-price {
+        display: block;
       }
 
       .plan-name {
-        display: block;
-        margin-bottom: 8px;
-        font-size: 12px;
-        font-weight: 800;
+        color: var(--ink-soft);
+        font-size: 10px;
+        font-weight: 700;
       }
 
       .plan-price {
-        display: block;
-        font-size: 16px;
+        margin-top: 4px;
+        font-size: 13px;
         font-weight: 900;
         font-variant-numeric: tabular-nums;
-        line-height: 1.25;
       }
 
-      .plan-unit {
-        display: block;
-        margin-top: 3px;
-        color: var(--text-muted);
-        font-size: 9px;
-        font-weight: 500;
+      .product-stage {
+        position: relative;
+        display: grid;
+        min-height: 100%;
+        overflow: hidden;
+        place-items: center;
+        padding: 54px 44px;
+        background: var(--paper-soft);
+        isolation: isolate;
       }
 
-      .action-panel {
-        position: sticky;
-        bottom: 0;
-        margin: 20px -4px 0;
-        padding: 14px 4px 0;
-        background: linear-gradient(to top, var(--bg) 75%, transparent);
+      .product-stage::before {
+        position: absolute;
+        z-index: -2;
+        width: 440px;
+        height: 440px;
+        border-radius: 50%;
+        background: var(--orange);
+        content: "";
+        inset-inline-end: -130px;
+        top: -150px;
       }
 
-      .primary-action {
+      .product-stage::after {
+        position: absolute;
+        z-index: -1;
+        width: 230px;
+        height: 230px;
+        border: 1px solid color-mix(in srgb, var(--green) 50%, transparent);
+        border-radius: 50%;
+        content: "";
+        inset-inline-start: -65px;
+        bottom: -62px;
+        box-shadow:
+          0 0 0 30px color-mix(in srgb, var(--green) 8%, transparent),
+          0 0 0 66px color-mix(in srgb, var(--green) 5%, transparent);
+      }
+
+      .product-card {
+        position: relative;
+        width: min(390px, 100%);
+        padding: 24px;
+        border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+        border-radius: 30px;
+        background: color-mix(in srgb, var(--paper) 96%, transparent);
+        box-shadow: var(--shadow-large);
+        transform: rotate(-1.4deg);
+      }
+
+      html[dir="ltr"] .product-card {
+        transform: rotate(1.4deg);
+      }
+
+      .product-head {
         display: flex;
-        width: 100%;
-        min-height: 56px;
-        align-items: center;
-        justify-content: center;
-        gap: 9px;
-        color: #fff;
-        border: 0;
-        border-radius: 18px;
-        background: var(--primary-strong);
-        box-shadow: 0 14px 30px rgba(201, 79, 22, 0.24);
-        cursor: pointer;
-        transition: transform 160ms ease, box-shadow 160ms ease;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
       }
 
-      .primary-action:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 18px 34px rgba(201, 79, 22, 0.3);
+      .product-date {
+        margin: 0;
+        color: var(--ink-faint);
+        font-size: 11px;
+        font-weight: 700;
       }
 
-      .primary-action:active {
-        transform: translateY(0);
-      }
-
-      .primary-action strong {
-        font-size: 15px;
+      .product-title {
+        margin: 4px 0 0;
+        font-size: 23px;
         font-weight: 900;
+        letter-spacing: -0.04em;
       }
 
-      .primary-action svg {
-        width: 20px;
-        height: 20px;
+      .day-progress {
+        display: grid;
+        width: 58px;
+        height: 58px;
+        flex: 0 0 auto;
+        place-items: center;
+        border-radius: 50%;
+        background: conic-gradient(var(--green) calc(var(--progress) * 1%), var(--green-soft) 0);
       }
 
-      .reassurance {
+      .day-progress::before {
+        grid-area: 1 / 1;
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: var(--paper);
+        content: "";
+      }
+
+      .day-progress strong {
+        z-index: 1;
+        grid-area: 1 / 1;
+        color: var(--green);
+        font-size: 12px;
+        font-weight: 900;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .rhythm {
+        display: grid;
+        gap: 10px;
+        margin-top: 24px;
+      }
+
+      .rhythm-item {
+        display: flex;
+        min-height: 64px;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 12px;
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background: var(--paper);
+        cursor: pointer;
+        transition: transform 180ms ease, border-color 180ms ease, opacity 180ms ease;
+      }
+
+      .rhythm-item:hover {
+        transform: translateY(-1px);
+        border-color: color-mix(in srgb, var(--orange) 48%, var(--line));
+      }
+
+      .rhythm-item.is-done {
+        opacity: 0.72;
+      }
+
+      .task-icon {
+        display: grid;
+        width: 40px;
+        height: 40px;
+        flex: 0 0 auto;
+        place-items: center;
+        border-radius: 14px;
+      }
+
+      .task-icon svg {
+        width: 19px;
+        height: 19px;
+      }
+
+      .task-icon.orange {
+        color: var(--orange-deep);
+        background: var(--orange-soft);
+      }
+
+      .task-icon.green {
+        color: var(--green);
+        background: var(--green-soft);
+      }
+
+      .task-icon.gold {
+        color: #8a641e;
+        background: color-mix(in srgb, var(--gold) 20%, var(--paper));
+      }
+
+      .task-copy {
+        min-width: 0;
+        flex: 1;
+      }
+
+      .task-copy strong,
+      .task-copy span {
+        display: block;
+      }
+
+      .task-copy strong {
+        overflow: hidden;
+        font-size: 13px;
+        font-weight: 800;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .task-copy span {
+        margin-top: 3px;
+        color: var(--ink-faint);
+        font-size: 10px;
+      }
+
+      .check-button {
+        display: grid;
+        width: 27px;
+        height: 27px;
+        flex: 0 0 auto;
+        place-items: center;
+        border: 1.5px solid var(--line);
+        border-radius: 50%;
+        background: var(--paper);
+      }
+
+      .check-button svg {
+        width: 15px;
+        height: 15px;
+        color: transparent;
+      }
+
+      .rhythm-item.is-done .check-button {
+        border-color: var(--green);
+        background: var(--green);
+      }
+
+      .rhythm-item.is-done .check-button svg {
+        color: #fff;
+      }
+
+      .reflection {
         display: flex;
         align-items: center;
-        justify-content: center;
-        gap: 6px;
-        margin: 9px 0 2px;
-        color: var(--text-muted);
-        font-size: 10px;
-        font-weight: 500;
+        gap: 12px;
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px dashed var(--line);
       }
 
-      .reassurance svg {
-        width: 13px;
-        height: 13px;
-        color: var(--success);
+      .mood-dots {
+        display: flex;
+        gap: 5px;
       }
 
-      .plans-action {
+      .mood-dots span {
         display: block;
-        margin: 8px auto 0;
-        padding: 8px 12px;
-        color: var(--primary-strong);
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--line);
+      }
+
+      .mood-dots span:nth-child(3) {
+        width: 24px;
+        border-radius: 999px;
+        background: var(--gold);
+      }
+
+      .reflection p {
+        margin: 0;
+        color: var(--ink-soft);
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .floating-note {
+        position: absolute;
+        z-index: 2;
+        inset-inline-start: 28px;
+        bottom: 34px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 11px 14px;
+        border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+        border-radius: 16px;
+        background: var(--paper);
+        box-shadow: var(--shadow-soft);
+        color: var(--ink-soft);
         font-size: 11px;
         font-weight: 800;
-        text-decoration: underline;
-        text-decoration-thickness: 1px;
-        text-underline-offset: 4px;
-        border: 0;
-        background: transparent;
-        cursor: pointer;
+        animation: settle 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+      }
+
+      .floating-note svg {
+        width: 17px;
+        height: 17px;
+        color: var(--green);
       }
 
       .toast {
         position: fixed;
-        z-index: 10;
-        right: 50%;
-        bottom: calc(20px + env(safe-area-inset-bottom));
-        width: min(calc(100% - 32px), 410px);
-        padding: 12px 16px;
-        color: var(--text);
+        z-index: 20;
+        inset-inline-start: 50%;
+        bottom: calc(22px + env(safe-area-inset-bottom));
+        width: min(430px, calc(100% - 32px));
+        padding: 13px 16px;
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--paper);
+        box-shadow: var(--shadow-large);
+        color: var(--ink);
         text-align: center;
         font-size: 12px;
-        font-weight: 700;
-        border: 1px solid var(--border);
-        border-radius: 14px;
-        background: var(--surface);
-        box-shadow: var(--shadow);
+        font-weight: 800;
         opacity: 0;
         pointer-events: none;
-        transform: translate(50%, 14px);
+        transform: translate(-50%, 16px);
         transition: opacity 180ms ease, transform 180ms ease;
+      }
+
+      html[dir="rtl"] .toast {
+        transform: translate(50%, 16px);
       }
 
       .toast.is-visible {
         opacity: 1;
+        transform: translate(-50%, 0);
+      }
+
+      html[dir="rtl"] .toast.is-visible {
         transform: translate(50%, 0);
       }
 
-      @media (min-width: 760px) {
-        body {
-          display: grid;
-          padding-block: 30px;
-          place-items: center;
-        }
-
-        .page {
-          min-height: min(790px, calc(100vh - 60px));
-          border: 1px solid var(--border);
-          border-radius: 30px;
-          background: var(--bg);
-          box-shadow: var(--shadow);
-        }
+      @keyframes settle {
+        from { opacity: 0; filter: blur(5px); transform: translateY(16px) rotate(-2deg); }
+        to { opacity: 1; filter: blur(0); transform: translateY(0) rotate(0); }
       }
 
-      @media (max-width: 370px) {
-        .page {
-          padding-inline: 15px;
+      @media (max-width: 860px) {
+        .shell {
+          width: min(100%, 620px);
+          min-height: 100svh;
+          margin: 0 auto;
+          border-width: 0;
+          border-radius: 0;
+          box-shadow: none;
         }
 
-        .hero {
-          padding-top: 24px;
+        .topbar {
+          min-height: 68px;
+          padding: calc(12px + env(safe-area-inset-top)) 18px 10px;
         }
 
-        .plan-price {
-          font-size: 14px;
+        .content {
+          display: flex;
+          min-height: calc(100svh - 68px);
+          flex-direction: column;
         }
+
+        .story {
+          order: 2;
+          justify-content: flex-start;
+          padding: 30px 22px calc(28px + env(safe-area-inset-bottom));
+        }
+
+        .story h1 {
+          font-size: clamp(35px, 10.5vw, 48px);
+          line-height: 1.15;
+        }
+
+        .lead {
+          margin-top: 16px;
+          font-size: 15px;
+          line-height: 1.85;
+        }
+
+        .value-line {
+          gap: 8px 18px;
+          margin-top: 22px;
+        }
+
+        .actions {
+          margin-top: 28px;
+        }
+
+        .product-stage {
+          min-height: 322px;
+          padding: 24px 48px 30px;
+        }
+
+        .product-stage::before {
+          width: 310px;
+          height: 310px;
+          inset-inline-end: -105px;
+          top: -150px;
+        }
+
+        .product-stage::after {
+          width: 150px;
+          height: 150px;
+        }
+
+        .product-card {
+          width: min(360px, 100%);
+          padding: 18px;
+          border-radius: 24px;
+          transform: rotate(-0.8deg);
+        }
+
+        html[dir="ltr"] .product-card { transform: rotate(0.8deg); }
+        .product-title { font-size: 20px; }
+        .day-progress { width: 50px; height: 50px; }
+        .day-progress::before { width: 38px; height: 38px; }
+        .rhythm { gap: 8px; margin-top: 16px; }
+        .rhythm-item { min-height: 54px; padding: 7px 10px; border-radius: 15px; }
+        .task-icon { width: 35px; height: 35px; border-radius: 12px; }
+        .rhythm-item:nth-child(3), .reflection { display: none; }
+        .floating-note { inset-inline-start: 18px; bottom: 18px; }
+      }
+
+      @media (max-width: 390px) {
+        .brand span { font-size: 15px; }
+        .locale-button { min-width: 44px; height: 44px; padding-inline: 9px; }
+        .icon-button { min-width: 44px; height: 44px; }
+        .product-stage { min-height: 298px; padding: 18px 30px 27px; }
+        .story { padding-inline: 18px; }
+        .value-line li { font-size: 12px; }
+        .floating-note { font-size: 10px; }
       }
 
       @media (prefers-reduced-motion: reduce) {
-        *,
-        *::before,
-        *::after {
+        *, *::before, *::after {
           scroll-behavior: auto !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
           transition-duration: 0.01ms !important;
         }
       }
     </style>
   </head>
   <body>
-    <main class="page" aria-labelledby="page-title">
+    <main class="shell" aria-labelledby="page-title">
       <header class="topbar">
-        <div class="brand" aria-label="روتینو">
-          <picture>
-            <source
-              srcset="../../../public/brand/logo-dark.webp"
-              media="(prefers-color-scheme: dark)"
-            />
-            <img src="../../../public/brand/logo-light.webp" alt="" />
-          </picture>
-          <span>روتینو</span>
+        <div class="brand" data-i18n-aria="brandLabel" aria-label="روتینو">
+          <span class="brand-mark" aria-hidden="true">
+            <img class="logo-light" src="../../../public/brand/logo-light.webp" alt="" />
+            <img class="logo-dark" src="../../../public/brand/logo-dark.webp" alt="" />
+          </span>
+          <span data-i18n="brand">روتینو</span>
         </div>
-        <button class="theme-toggle" type="button" aria-label="تغییر تم پیش‌نمایش">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-            <path d="M20.2 15.1A8.5 8.5 0 0 1 8.9 3.8 8.5 8.5 0 1 0 20.2 15.1Z" />
-          </svg>
-        </button>
+        <div class="toolbar">
+          <div class="locale-switch" role="group" data-i18n-aria="languageLabel" aria-label="انتخاب زبان">
+            <button class="locale-button" type="button" data-locale="fa" aria-pressed="true">فا</button>
+            <button class="locale-button" type="button" data-locale="en" aria-pressed="false">EN</button>
+          </div>
+          <button class="icon-button theme-toggle" type="button" aria-label="رفتن به تم تاریک" aria-pressed="false">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20.2 15.1A8.5 8.5 0 0 1 8.9 3.8 8.5 8.5 0 1 0 20.2 15.1Z" /></svg>
+          </button>
+        </div>
       </header>
 
-      <section class="hero">
-        <div class="trial-mark" aria-hidden="true">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="m12 3 1.7 4.8L18.5 9.5l-4.8 1.7L12 16l-1.7-4.8-4.8-1.7 4.8-1.7L12 3Z" />
-            <path d="m18.5 16 .8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z" />
-          </svg>
-        </div>
-        <h1 id="page-title">هفت روز برای شروعِ یک تغییر واقعی</h1>
-        <p>روتینو را با خیال راحت امتحان کن؛ شروع رایگان است و انتخاب ادامه‌ی مسیر با تو.</p>
-      </section>
+      <div class="content">
+        <section class="story">
+          <h1 id="page-title" data-i18n="headline">همه‌چیزِ روزت، یک‌جا و سرِ جایش.</h1>
+          <p class="lead" data-i18n="lead">کارها، عادت‌ها و حال روزت را کنار هم نگه دار؛ ساده، مرتب و بدون فشار.</p>
+          <ul class="value-line" data-i18n-aria="benefitsLabel" aria-label="مزیت‌های روتینو">
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg><span data-i18n="benefitOne">برنامه‌ی روزانه</span></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg><span data-i18n="benefitTwo">پیگیری عادت‌ها</span></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg><span data-i18n="benefitThree">روند و حال روزها</span></li>
+          </ul>
 
-      <ul class="benefits" aria-label="امکانات دوره رایگان">
-        <li class="benefit">
-          <span class="benefit-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M9 11 12 14 22 4" />
-              <path d="M21 12a9 9 0 1 1-5.3-8.2" />
-            </svg>
-          </span>
-          <span class="benefit-copy">
-            <strong>روزت را به ریتم خودت بچین</strong>
-            <span>عادت‌ها، کارها، ژورنال و تایمر؛ همه یک‌جا</span>
-          </span>
-          <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
-        </li>
-        <li class="benefit">
-          <span class="benefit-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4 19V9M10 19V5M16 19v-7M22 19V3" />
-            </svg>
-          </span>
-          <span class="benefit-copy">
-            <strong>تغییرهای کوچک را ببین</strong>
-            <span>روند روزها و پیشرفتت، روشن و بی‌دردسر</span>
-          </span>
-          <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
-        </li>
-        <li class="benefit">
-          <span class="benefit-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z" />
-              <path d="m9 12 2 2 4-4" />
-            </svg>
-          </span>
-          <span class="benefit-copy">
-            <strong>هرجا بودی، از همان‌جا ادامه بده</strong>
-            <span>اطلاعاتت روی دستگاه می‌ماند و با حسابت هماهنگ می‌شود</span>
-          </span>
-          <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
-        </li>
-      </ul>
-
-      <details class="plans-section">
-        <summary>
-          <span>اگر دوست داشتی، پلن‌ها را هم ببین</span>
-          <span>مشاهده قیمت‌ها</span>
-        </summary>
-        <div class="plans-content">
-          <div class="plans-heading">
-            <h2 id="plans-title">برای وقتی که خواستی ادامه بدهی</h2>
-            <span>انتخاب با توست</span>
+          <div class="actions">
+            <button class="primary-action preview-action" type="button">
+              <strong data-i18n="cta">شروع هفته‌ی من</strong>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
+            </button>
+            <p class="access-note" data-i18n="accessNote">هفت روز دسترسی کامل، برای اینکه واقعاً امتحانش کنی</p>
           </div>
-          <div class="plans" role="group" aria-labelledby="plans-title">
-            <button class="plan" type="button" aria-pressed="false" data-plan="یک‌ماهه">
-              <span class="plan-name">یک‌ماهه</span>
-              <span class="plan-price">۵۹٬۰۰۰</span>
-              <span class="plan-unit">تومان</span>
-            </button>
-            <button class="plan" type="button" aria-pressed="false" data-plan="سه‌ماهه">
-              <span class="plan-name">سه‌ماهه</span>
-              <span class="plan-price">۱۴۹٬۰۰۰</span>
-              <span class="plan-unit">تومان</span>
-            </button>
-            <button class="plan" type="button" aria-pressed="true" data-plan="یک‌ساله">
-              <span class="plan-badge">به‌صرفه‌ترین</span>
-              <span class="plan-name">یک‌ساله</span>
-              <span class="plan-price">۴۴۹٬۰۰۰</span>
-              <span class="plan-unit">تومان</span>
-            </button>
-          </div>
-        </div>
-      </details>
 
-      <section class="action-panel" aria-label="فعال‌سازی">
-        <button class="primary-action preview-action" type="button">
-          <strong>شروع رایگان من</strong>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M5 12h14M13 6l6 6-6 6" />
-          </svg>
-        </button>
-        <p class="reassurance">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
-          ۷ روز رایگان · تصمیم ادامه‌ی مسیر بعداً با توست
-        </p>
-        <button class="plans-action" type="button">قیمت و جزئیات پلن‌ها</button>
-      </section>
+          <details class="continuation">
+            <summary><span data-i18n="continuationSummary">بعد از این هفته چه می‌شود؟</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></summary>
+            <div class="plan-panel">
+              <p class="plan-intro" data-i18n="planIntro">اگر روتینو به کارت آمد، یکی از پلن‌ها را انتخاب می‌کنی؛ ادامه‌دادن فقط با انتخاب خودت است.</p>
+              <div class="plans" role="group" data-i18n-aria="plansLabel" aria-label="پلن‌های روتینو">
+                <button class="plan" type="button" aria-pressed="false"><span class="plan-name" data-i18n="monthly">یک‌ماهه</span><span class="plan-price" data-i18n="monthlyPrice">۵۹٬۰۰۰ تومان</span></button>
+                <button class="plan" type="button" aria-pressed="false"><span class="plan-name" data-i18n="quarterly">سه‌ماهه</span><span class="plan-price" data-i18n="quarterlyPrice">۱۴۹٬۰۰۰ تومان</span></button>
+                <button class="plan" type="button" aria-pressed="true"><span class="plan-name" data-i18n="yearly">یک‌ساله</span><span class="plan-price" data-i18n="yearlyPrice">۴۴۹٬۰۰۰ تومان</span></button>
+              </div>
+            </div>
+          </details>
+        </section>
+
+        <section class="product-stage" data-i18n-aria="previewLabel" aria-label="پیش‌نمایش روتینو">
+          <article class="product-card">
+            <header class="product-head">
+              <div><p class="product-date" data-i18n="date">شنبه، ۱۵ شهریور</p><h2 class="product-title" data-i18n="todayTitle">امروزِ من</h2></div>
+              <div class="day-progress" style="--progress: 67" aria-live="polite"><strong class="progress-copy">۲/۳</strong></div>
+            </header>
+            <div class="rhythm">
+              <button class="rhythm-item is-done" type="button" aria-pressed="true">
+                <span class="task-icon orange" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v18M5.6 6.2l12.8 11.6M18.4 6.2 5.6 17.8" /></svg></span>
+                <span class="task-copy"><strong data-i18n="taskOne">یک لیوان آب</strong><span data-i18n="taskOneMeta">شروع آرام صبح</span></span>
+                <span class="check-button" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m5 12 4 4L19 6" /></svg></span>
+              </button>
+              <button class="rhythm-item is-done" type="button" aria-pressed="true">
+                <span class="task-icon green" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" /></svg></span>
+                <span class="task-copy"><strong data-i18n="taskTwo">۲۰ دقیقه مطالعه</strong><span data-i18n="taskTwoMeta">فقط چند صفحه</span></span>
+                <span class="check-button" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m5 12 4 4L19 6" /></svg></span>
+              </button>
+              <button class="rhythm-item" type="button" aria-pressed="false">
+                <span class="task-icon gold" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4v16M17 7l-4-3-4 3M4 12h4M16 12h4M6 16l2-4M18 16l-2-4" /></svg></span>
+                <span class="task-copy"><strong data-i18n="taskThree">کمی قدم‌زدن</strong><span data-i18n="taskThreeMeta">امروز، هرچقدر شد</span></span>
+                <span class="check-button" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m5 12 4 4L19 6" /></svg></span>
+              </button>
+            </div>
+            <footer class="reflection"><div class="mood-dots" aria-hidden="true"><span></span><span></span><span></span></div><p data-i18n="reflection">حال امروزت را آخر شب ثبت کن</p></footer>
+          </article>
+          <div class="floating-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg><span data-i18n="floatingNote">دو قدم کوچک، انجام شد</span></div>
+        </section>
+      </div>
     </main>
 
-    <div class="toast" role="status" aria-live="polite">نسخه نمایشی — هنوز به برنامه وصل نیست</div>
+    <div class="toast" role="status" aria-live="polite" data-i18n="toast">این فقط پیش‌نمایش است و هنوز به برنامه وصل نیست</div>
 
     <script>
+      const copy = {
+        fa: {
+          title: "پیش‌نمایش شروع روتینو", brand: "روتینو", brandLabel: "روتینو", languageLabel: "انتخاب زبان", themeToDark: "رفتن به تم تاریک", themeToLight: "رفتن به تم روشن",
+          headline: "همه‌چیزِ روزت، یک‌جا و سرِ جایش.", lead: "کارها، عادت‌ها و حال روزت را کنار هم نگه دار؛ ساده، مرتب و بدون فشار.",
+          benefitsLabel: "مزیت‌های روتینو", benefitOne: "برنامه‌ی روزانه", benefitTwo: "پیگیری عادت‌ها", benefitThree: "روند و حال روزها",
+          cta: "شروع هفته‌ی من", accessNote: "هفت روز دسترسی کامل، برای اینکه واقعاً امتحانش کنی", continuationSummary: "بعد از این هفته چه می‌شود؟",
+          planIntro: "اگر روتینو به کارت آمد، یکی از پلن‌ها را انتخاب می‌کنی؛ ادامه‌دادن فقط با انتخاب خودت است.", plansLabel: "پلن‌های روتینو",
+          monthly: "یک‌ماهه", monthlyPrice: "۵۹٬۰۰۰ تومان", quarterly: "سه‌ماهه", quarterlyPrice: "۱۴۹٬۰۰۰ تومان", yearly: "یک‌ساله", yearlyPrice: "۴۴۹٬۰۰۰ تومان",
+          previewLabel: "پیش‌نمایش روتینو", date: "شنبه، ۱۵ شهریور", todayTitle: "امروزِ من", taskOne: "یک لیوان آب", taskOneMeta: "شروع آرام صبح",
+          taskTwo: "۲۰ دقیقه مطالعه", taskTwoMeta: "فقط چند صفحه", taskThree: "کمی قدم‌زدن", taskThreeMeta: "امروز، هرچقدر شد", reflection: "حال امروزت را آخر شب ثبت کن",
+          floatingNote: "دو قدم کوچک، انجام شد", progress: (done) => `${new Intl.NumberFormat("fa-IR").format(done)}/۳`, toast: "این فقط پیش‌نمایش است و هنوز به برنامه وصل نیست"
+        },
+        en: {
+          title: "Routino start preview", brand: "Routino", brandLabel: "Routino", languageLabel: "Choose language", themeToDark: "Switch to dark theme", themeToLight: "Switch to light theme",
+          headline: "Bring your whole day together.", lead: "Keep your tasks, habits, and daily mood in one calm place — organized, flexible, and pressure-free.",
+          benefitsLabel: "Routino benefits", benefitOne: "Daily planning", benefitTwo: "Habit tracking", benefitThree: "Progress and mood",
+          cta: "Start my week", accessNote: "Seven days of full access, so you can truly try it", continuationSummary: "What happens after this week?",
+          planIntro: "If Routino works for you, choose a plan. Continuing is always your decision.", plansLabel: "Routino plans",
+          monthly: "Monthly", monthlyPrice: "59,000 Toman", quarterly: "3 months", quarterlyPrice: "149,000 Toman", yearly: "Yearly", yearlyPrice: "449,000 Toman",
+          previewLabel: "Routino preview", date: "Saturday, September 6", todayTitle: "My today", taskOne: "Drink a glass of water", taskOneMeta: "A gentle start",
+          taskTwo: "Read for 20 minutes", taskTwoMeta: "Just a few pages", taskThree: "Take a short walk", taskThreeMeta: "However much feels right", reflection: "Check in with your mood tonight",
+          floatingNote: "Two small steps, done", progress: (done) => `${done}/3`, toast: "This is a standalone preview and is not connected to the app"
+        }
+      };
+
       const root = document.documentElement;
       const toast = document.querySelector(".toast");
+      const progress = document.querySelector(".day-progress");
+      const progressCopy = document.querySelector(".progress-copy");
+      let activeLocale = "fa";
       let toastTimer;
+
+      function updateProgress() {
+        const done = document.querySelectorAll(".rhythm-item.is-done").length;
+        progress.style.setProperty("--progress", Math.round((done / 3) * 100));
+        progressCopy.textContent = copy[activeLocale].progress(done);
+      }
+
+      function updateThemeState() {
+        const isDark = root.dataset.theme === "dark";
+        const themeButton = document.querySelector(".theme-toggle");
+        themeButton.setAttribute("aria-pressed", String(isDark));
+        themeButton.setAttribute("aria-label", copy[activeLocale][isDark ? "themeToLight" : "themeToDark"]);
+      }
+
+      function setLocale(locale) {
+        activeLocale = locale;
+        const dictionary = copy[locale];
+        root.lang = locale;
+        root.dir = locale === "fa" ? "rtl" : "ltr";
+        document.title = dictionary.title;
+        document.querySelectorAll("[data-i18n]").forEach((element) => {
+          const key = element.dataset.i18n;
+          if (typeof dictionary[key] === "string") element.textContent = dictionary[key];
+        });
+        document.querySelectorAll("[data-i18n-aria]").forEach((element) => {
+          const key = element.dataset.i18nAria;
+          if (dictionary[key]) element.setAttribute("aria-label", dictionary[key]);
+        });
+        document.querySelectorAll("[data-locale]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.locale === locale)));
+        updateProgress();
+        updateThemeState();
+      }
 
       function showPreviewMessage() {
         toast.classList.add("is-visible");
@@ -664,26 +1063,22 @@
         toastTimer = setTimeout(() => toast.classList.remove("is-visible"), 2200);
       }
 
+      document.querySelectorAll("[data-locale]").forEach((button) => button.addEventListener("click", () => setLocale(button.dataset.locale)));
       document.querySelector(".theme-toggle").addEventListener("click", () => {
         root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+        updateThemeState();
       });
-
-      document.querySelectorAll(".plan").forEach((plan) => {
-        plan.addEventListener("click", () => {
-          document.querySelectorAll(".plan").forEach((item) => item.setAttribute("aria-pressed", "false"));
-          plan.setAttribute("aria-pressed", "true");
-        });
-      });
-
-      document.querySelectorAll(".preview-action").forEach((button) => {
-        button.addEventListener("click", showPreviewMessage);
-      });
-
-      document.querySelector(".plans-action").addEventListener("click", () => {
-        const plans = document.querySelector(".plans-section");
-        plans.open = true;
-        plans.scrollIntoView({ behavior: "smooth", block: "center" });
-      });
+      document.querySelectorAll(".rhythm-item").forEach((item) => item.addEventListener("click", () => {
+        const done = item.classList.toggle("is-done");
+        item.setAttribute("aria-pressed", String(done));
+        updateProgress();
+      }));
+      document.querySelectorAll(".plan").forEach((plan) => plan.addEventListener("click", () => {
+        document.querySelectorAll(".plan").forEach((item) => item.setAttribute("aria-pressed", "false"));
+        plan.setAttribute("aria-pressed", "true");
+      }));
+      document.querySelector(".preview-action").addEventListener("click", showPreviewMessage);
+      setLocale("fa");
     </script>
   </body>
 </html>
