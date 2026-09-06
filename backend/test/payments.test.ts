@@ -539,6 +539,35 @@ describe("checkout → gateway → callback", () => {
 });
 
 describe("discount redemption", () => {
+  it("reserves a limited code while another checkout is requesting the provider", async () => {
+    await h.raw(`insert into discounts (code, percent, max_uses) values ('ONLY1', 20, 1)`);
+    const first = await signIn("09123334444");
+    const second = await signIn("09123334445");
+    await h.db.insert(schema.payments).values({
+      userId: first.user.id,
+      planId: "m1",
+      months: 1,
+      amountToman: 47_200,
+      amountRial: 472_000,
+      discountCode: "ONLY1",
+      discountPercent: 20,
+      offerPercent: 0,
+      platform: "web",
+      status: "requesting",
+      requestStartedAt: new Date(),
+    });
+
+    const quote = await h.app.inject({
+      method: "POST",
+      url: "/v1/payments/quote",
+      headers: auth(second.access),
+      payload: { planId: "m1", code: "ONLY1" },
+    });
+
+    expect(quote.statusCode).toBe(200);
+    expect(quote.json().discount).toMatchObject({ valid: false, reason: "exhausted" });
+  });
+
   it("burns the code only after a successful payment, once per user", async () => {
     await h.raw(`insert into discounts (code, percent, max_uses) values ('OFF20', 20, 10)`);
     const { access, user } = await signIn();
@@ -591,6 +620,43 @@ describe("discount redemption", () => {
     expect(p!.amount_toman).toBe(0);
     expect(p!.authority).toBeNull(); // never went near the PSP
     expect(await h.query(`select * from redemptions where user_id = '${user.id}'`)).toHaveLength(1);
+  });
+
+  it("resumes a persisted zero-price payment after an interrupted direct grant and new retry key", async () => {
+    await h.raw(`insert into discounts (code, percent) values ('FREE100', 100)`);
+    const { access, user } = await signIn();
+    const attemptId = crypto.randomUUID();
+    const [payment] = await h.db
+      .insert(schema.payments)
+      .values({
+        userId: user.id,
+        attemptId,
+        planId: "m1",
+        months: 1,
+        amountToman: 0,
+        amountRial: 0,
+        discountCode: "FREE100",
+        discountPercent: 100,
+        offerPercent: 0,
+        platform: "web",
+        checkoutProvider: h.psp.name,
+        status: "pending",
+      })
+      .returning();
+
+    const resumed = await checkout(access, {
+      planId: "m1",
+      code: "FREE100",
+      attemptId: crypto.randomUUID(),
+    });
+
+    expect(resumed.statusCode).toBe(200);
+    expect(resumed.json()).toMatchObject({ free: true, paymentId: payment!.id });
+    expect(await h.query(`select id from payments where user_id = '${user.id}'`)).toHaveLength(1);
+    expect(await h.query(`select id from grants where payment_id = '${payment!.id}'`)).toHaveLength(
+      1,
+    );
+    expect(h.psp._txns.size).toBe(0);
   });
 });
 

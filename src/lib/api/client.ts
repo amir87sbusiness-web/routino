@@ -48,6 +48,28 @@ interface RawResponse {
   headers: Record<string, string>;
 }
 
+function waitForNativeResponse<T>(request: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return request;
+  if (signal.aborted) return Promise.reject(new DOMException("Aborted", "AbortError"));
+  return new Promise((resolve, reject) => {
+    const aborted = () => {
+      signal.removeEventListener("abort", aborted);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    signal.addEventListener("abort", aborted, { once: true });
+    request.then(
+      (value) => {
+        signal.removeEventListener("abort", aborted);
+        resolve(value);
+      },
+      (err) => {
+        signal.removeEventListener("abort", aborted);
+        reject(err);
+      },
+    );
+  });
+}
+
 /**
  * On native, use Capacitor's HTTP bridge rather than `fetch`.
  *
@@ -65,14 +87,18 @@ async function nativeRequest(
   headers: Record<string, string>,
 ): Promise<RawResponse> {
   const { CapacitorHttp } = await import("@capacitor/core");
-  const res = await CapacitorHttp.request({
-    url,
-    method: opts.method ?? "GET",
-    headers,
-    data: opts.body,
-    connectTimeout: opts.timeoutMs ?? 15_000,
-    readTimeout: opts.timeoutMs ?? 15_000,
-  });
+  if (opts.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+  const res = await waitForNativeResponse(
+    CapacitorHttp.request({
+      url,
+      method: opts.method ?? "GET",
+      headers,
+      data: opts.body,
+      connectTimeout: opts.timeoutMs ?? 15_000,
+      readTimeout: opts.timeoutMs ?? 15_000,
+    }),
+    opts.signal,
+  );
   const normalizedHeaders: Record<string, string> = {};
   for (const [key, value] of Object.entries(res.headers ?? {})) {
     normalizedHeaders[key.toLowerCase()] = String(value);

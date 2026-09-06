@@ -51,7 +51,16 @@ export async function releaseProviderLease(
   kind: string,
   leaseId: string,
 ): Promise<void> {
-  await db
-    .delete(providerCapacityLeases)
-    .where(and(eq(providerCapacityLeases.kind, kind), eq(providerCapacityLeases.leaseId, leaseId)));
+  try {
+    await db
+      .delete(providerCapacityLeases)
+      .where(
+        and(eq(providerCapacityLeases.kind, kind), eq(providerCapacityLeases.leaseId, leaseId)),
+      );
+  } catch (err) {
+    // Provider work has already finished at this point. Expiry reclaims the
+    // anonymous lease, so cleanup failure must not turn a delivered SMS or an
+    // issued payment authority into a client-visible failure and duplicate retry.
+    console.error("provider lease cleanup failed; expiry will reclaim it", { kind, err });
+  }
 }

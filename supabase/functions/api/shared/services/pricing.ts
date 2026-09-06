@@ -55,7 +55,13 @@ async function slotsTaken(
         eq(payments.discountCode, code),
         ne(payments.userId, userId),
         isNull(payments.appliedAt),
-        inArray(payments.status, ["pending", "redirected"]),
+        inArray(payments.status, [
+          "pending",
+          "requesting",
+          "redirected",
+          "provider_unknown",
+          "verifying",
+        ]),
         gt(payments.createdAt, since),
       ),
     );

@@ -103,6 +103,7 @@
 ```
 subscribe.tsx (فرانت)
   → POST /payments/checkout با attemptId ثابت برای همان retry
+  → خروج از صفحه signal را abort می‌کند؛ پاسخ دیررس CapacitorHttp دیگر به redirect نمی‌رسد
   → بک قیمت trusted را ذخیره و فقط یک create زرین‌پال می‌فرستد
   → کاربر می‌ره به paymentUrl زرین‌پال (fake فقط در تست/توسعه)
   → درگاه برمی‌گردونه به PUBLIC_API_URL/v1/payments/callback

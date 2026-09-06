@@ -192,11 +192,26 @@ export async function checkoutPayment(
     .from(payments)
     .where(and(eq(payments.userId, user.id), eq(payments.attemptId, body.attemptId)))
     .limit(1);
-  if (prior && !(prior.status === "requesting" && prior.requestStartedAt === null)) {
+  const resumesDirectGrant = Boolean(
+    prior && prior.amountToman <= 0 && prior.status === "pending" && !prior.appliedAt,
+  );
+  if (
+    prior &&
+    !resumesDirectGrant &&
+    !(prior.status === "requesting" && prior.requestStartedAt === null)
+  ) {
     return existingAttemptResult(db, psp, prior, body, t);
   }
   if (prior && !attemptInputsMatch(prior, body)) {
     return existingAttemptResult(db, psp, prior, body, t);
+  }
+  if (prior && resumesDirectGrant) {
+    await applyPaid(db, prior, { kind: "paid", code: 100, refNumber: "FREE" }, t, null);
+    return {
+      free: true,
+      paymentId: prior.id,
+      entitlement: await readEntitlement(db, user.id, t),
+    };
   }
 
   const priced = await quote(db, body.planId, body.code ?? null, user.id, user.phone, t, 0, true);
@@ -257,11 +272,16 @@ export async function checkoutPayment(
       .where(and(...logicalConditions))
       .limit(1);
     if (!logical) throw new Error("failed to create payment");
-    if (!(logical.status === "requesting" && logical.requestStartedAt === null)) {
+    const resumesLogicalDirectGrant =
+      logical.amountToman <= 0 && logical.status === "pending" && !logical.appliedAt;
+    if (
+      !resumesLogicalDirectGrant &&
+      !(logical.status === "requesting" && logical.requestStartedAt === null)
+    ) {
       return existingAttemptResult(db, psp, logical, body, t);
     }
-    // The browser may have reloaded after provider_busy and lost its in-memory
-    // attemptId. Resume the same unissued logical row; never create another.
+    // The browser may have reloaded after provider_busy or a failed direct
+    // grant and lost its in-memory attemptId. Resume the same logical row.
     payment = logical;
   }
 

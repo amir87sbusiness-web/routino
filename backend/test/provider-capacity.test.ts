@@ -1,4 +1,5 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Database } from "../src/db/client.js";
 import { acquireProviderLease, releaseProviderLease } from "../src/services/provider-capacity.js";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
 
@@ -44,5 +45,23 @@ describe("provider capacity leases", () => {
       `select count(*)::int as n from provider_capacity_leases where kind = 'sms'`,
     );
     expect(Number(row!.n)).toBe(1);
+  });
+
+  it("does not mask a completed provider call when lease cleanup fails", async () => {
+    const cleanupError = new Error("temporary database cleanup failure");
+    const failingDb = {
+      delete: () => ({
+        where: async () => {
+          throw cleanupError;
+        },
+      }),
+    } as unknown as Database;
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    await expect(
+      releaseProviderLease(failingDb, "psp", crypto.randomUUID()),
+    ).resolves.toBeUndefined();
+
+    logged.mockRestore();
   });
 });
