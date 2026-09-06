@@ -74,42 +74,36 @@
 
       :root {
         color-scheme: light;
-        --canvas: #f4efe7;
-        --paper: #fffdf8;
-        --paper-soft: #f8f2e9;
-        --ink: #24211d;
-        --ink-soft: #6f685f;
-        --ink-faint: #665f57;
-        --line: #e6ddd1;
-        --orange: #e95d2a;
-        --orange-deep: #c94016;
-        --orange-soft: #ffeadf;
-        --green: #416c5d;
-        --green-soft: #e3eee8;
-        --gold: #d8a446;
-        --shadow-large: 0 32px 90px rgba(91, 61, 36, 0.16);
-        --shadow-soft: 0 12px 35px rgba(76, 52, 34, 0.1);
-        --focus: rgba(233, 93, 42, 0.34);
+        --page: #f4f2ee;
+        --surface: #fffdfa;
+        --surface-soft: #f8f5f0;
+        --text: #25221f;
+        --muted: #6d665f;
+        --line: #e7e0d8;
+        --primary: #e85d2a;
+        --primary-hover: #ce4518;
+        --primary-soft: #ffede4;
+        --success: #39735e;
+        --success-soft: #e6f1ec;
+        --focus: #a93410;
+        --shadow: 0 24px 70px rgba(68, 51, 36, 0.13);
       }
 
       :root[data-theme="dark"] {
         color-scheme: dark;
-        --canvas: #171512;
-        --paper: #211e1a;
-        --paper-soft: #2a2621;
-        --ink: #fbf7ef;
-        --ink-soft: #c1b8ad;
-        --ink-faint: #b9afa4;
-        --line: #3a342d;
-        --orange: #f27b45;
-        --orange-deep: #aa3b18;
-        --orange-soft: #3c281e;
-        --green: #83b5a2;
-        --green-soft: #21352e;
-        --gold: #e4b85f;
-        --shadow-large: 0 34px 90px rgba(0, 0, 0, 0.35);
-        --shadow-soft: 0 14px 34px rgba(0, 0, 0, 0.24);
-        --focus: rgba(242, 123, 69, 0.42);
+        --page: #151412;
+        --surface: #211f1c;
+        --surface-soft: #292622;
+        --text: #fbf8f3;
+        --muted: #c1b8ae;
+        --line: #3c3731;
+        --primary: #f27b45;
+        --primary-hover: #a63816;
+        --primary-soft: #3d281f;
+        --success: #82b6a1;
+        --success-soft: #21362e;
+        --focus: #f49a73;
+        --shadow: 0 28px 76px rgba(0, 0, 0, 0.34);
       }
 
       *,
@@ -121,31 +115,16 @@
       html {
         min-width: 320px;
         min-height: 100%;
-        background: var(--canvas);
-        font-family: "Vazirmatn Preview", Tahoma, "Segoe UI", Arial, sans-serif;
+        background: var(--page);
+        font-family: "Vazirmatn Preview", Tahoma, Arial, sans-serif;
         scroll-behavior: smooth;
       }
 
       body {
         min-height: 100svh;
         margin: 0;
-        overflow-x: hidden;
-        color: var(--ink);
-        background:
-          radial-gradient(circle at 13% 12%, color-mix(in srgb, var(--orange) 15%, transparent), transparent 25rem),
-          radial-gradient(circle at 88% 82%, color-mix(in srgb, var(--green) 13%, transparent), transparent 28rem),
-          var(--canvas);
-      }
-
-      body::before {
-        position: fixed;
-        z-index: -1;
-        inset: 0;
-        background-image: radial-gradient(color-mix(in srgb, var(--ink) 14%, transparent) 0.7px, transparent 0.7px);
-        background-size: 18px 18px;
-        content: "";
-        opacity: 0.22;
-        pointer-events: none;
+        color: var(--text);
+        background: var(--page);
       }
 
       button,
@@ -164,57 +143,39 @@
       }
 
       ::selection {
-        color: var(--ink);
-        background: var(--orange-soft);
+        color: var(--text);
+        background: var(--primary-soft);
       }
 
-      ::-webkit-scrollbar {
-        width: 10px;
-      }
-
-      ::-webkit-scrollbar-track {
-        background: var(--canvas);
-      }
-
-      ::-webkit-scrollbar-thumb {
-        border: 3px solid var(--canvas);
-        border-radius: 999px;
-        background: var(--ink-faint);
-      }
-
-      .shell {
-        width: min(1120px, calc(100% - 36px));
-        min-height: min(790px, calc(100svh - 36px));
-        margin: 18px auto;
-        overflow: hidden;
-        border: 1px solid var(--line);
-        border-radius: 36px;
-        background: var(--paper);
-        box-shadow: var(--shadow-large);
+      .page {
+        display: flex;
+        width: min(100%, 480px);
+        min-height: 100svh;
+        margin-inline: auto;
+        flex-direction: column;
+        background: var(--surface);
       }
 
       .topbar {
         display: flex;
-        min-height: 76px;
+        min-height: 70px;
         align-items: center;
         justify-content: space-between;
-        padding: 16px 26px;
-        border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+        padding: calc(12px + env(safe-area-inset-top)) 20px 10px;
       }
 
       .brand {
         display: flex;
         align-items: center;
-        gap: 10px;
-        font-size: 17px;
+        gap: 9px;
+        font-size: 16px;
         font-weight: 900;
-        letter-spacing: -0.03em;
       }
 
       .brand-mark {
         position: relative;
-        width: 36px;
-        height: 36px;
+        width: 34px;
+        height: 34px;
         overflow: hidden;
         border-radius: 50%;
       }
@@ -224,19 +185,22 @@
         inset: 0;
         width: 100%;
         height: 100%;
-        object-fit: contain;
+        object-fit: cover;
       }
 
-      .logo-dark {
-        opacity: 0;
+      .logo-dark,
+      .sun-icon {
+        display: none;
       }
 
-      :root[data-theme="dark"] .logo-light {
-        opacity: 0;
+      :root[data-theme="dark"] .logo-light,
+      :root[data-theme="dark"] .moon-icon {
+        display: none;
       }
 
-      :root[data-theme="dark"] .logo-dark {
-        opacity: 1;
+      :root[data-theme="dark"] .logo-dark,
+      :root[data-theme="dark"] .sun-icon {
+        display: block;
       }
 
       .toolbar {
@@ -245,136 +209,185 @@
         gap: 8px;
       }
 
-      .locale-switch {
-        display: flex;
-        padding: 3px;
-        border: 1px solid var(--line);
-        border-radius: 999px;
-        background: var(--paper-soft);
-      }
-
-      .locale-button,
-      .icon-button {
+      .language-toggle,
+      .theme-toggle {
         display: grid;
         min-width: 44px;
         height: 44px;
         place-items: center;
-        border: 0;
+        border: 1px solid var(--line);
         border-radius: 999px;
-        background: transparent;
+        background: var(--surface-soft);
         cursor: pointer;
       }
 
-      .locale-button {
-        padding-inline: 11px;
-        color: var(--ink-soft);
-        font-size: 12px;
-        font-weight: 800;
+      .language-toggle {
+        padding-inline: 13px;
+        color: var(--muted);
+        font-size: 11px;
+        font-weight: 900;
       }
 
-      .locale-button[aria-pressed="true"] {
-        color: var(--ink);
-        background: var(--paper);
-        box-shadow: 0 2px 9px rgba(71, 48, 31, 0.1);
+      .theme-toggle {
+        color: var(--muted);
       }
 
-      .icon-button {
-        border: 1px solid var(--line);
-        color: var(--ink-soft);
-        background: var(--paper-soft);
-      }
-
-      .icon-button svg {
+      .theme-toggle svg {
         width: 18px;
         height: 18px;
       }
 
-      .content {
-        display: grid;
-        min-height: calc(min(790px, calc(100svh - 36px)) - 77px);
-        grid-template-columns: minmax(0, 0.92fr) minmax(440px, 1.08fr);
-      }
-
-      .story {
+      .main {
         display: flex;
+        min-height: calc(100svh - 70px);
+        flex: 1;
         flex-direction: column;
-        justify-content: center;
-        padding: clamp(44px, 6vw, 82px);
+        padding: 14px 24px calc(24px + env(safe-area-inset-bottom));
       }
 
-      .story h1 {
-        max-width: 560px;
+      .visual {
+        position: relative;
+        display: grid;
+        width: 152px;
+        height: 152px;
+        margin: 4px auto 24px;
+        place-items: center;
+      }
+
+      .visual::before {
+        position: absolute;
+        inset: 11px;
+        border-radius: 50%;
+        background: var(--primary-soft);
+        content: "";
+      }
+
+      .visual::after {
+        position: absolute;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: var(--success);
+        box-shadow:
+          -67px 36px 0 -4px var(--primary),
+          59px -42px 0 -6px var(--success);
+        content: "";
+        inset-inline-start: 3px;
+        top: 27px;
+      }
+
+      .visual-ring {
+        position: relative;
+        display: grid;
+        width: 108px;
+        height: 108px;
+        place-items: center;
+        border: 1px solid color-mix(in srgb, var(--primary) 22%, var(--line));
+        border-radius: 50%;
+        background: var(--surface);
+        box-shadow: 0 12px 30px color-mix(in srgb, var(--primary) 14%, transparent);
+      }
+
+      .visual-ring svg {
+        width: 52px;
+        height: 52px;
+        color: var(--primary);
+      }
+
+      h1 {
         margin: 0;
-        font-size: clamp(45px, 5.1vw, 72px);
+        text-align: center;
+        font-size: clamp(30px, 8vw, 38px);
         font-weight: 900;
-        letter-spacing: -0.055em;
-        line-height: 1.08;
+        letter-spacing: -0.045em;
+        line-height: 1.3;
         text-wrap: balance;
       }
 
-      html[lang="fa"] .story h1 {
-        letter-spacing: -0.045em;
-      }
-
       .lead {
-        max-width: 570px;
-        margin: 24px 0 0;
-        color: var(--ink-soft);
-        font-size: clamp(16px, 1.5vw, 19px);
-        line-height: 1.9;
+        max-width: 390px;
+        margin: 11px auto 0;
+        color: var(--muted);
+        text-align: center;
+        font-size: 14px;
+        line-height: 1.85;
         text-wrap: pretty;
       }
 
-      .value-line {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px 22px;
-        margin: 30px 0 0;
+      .features {
+        margin: 25px 0 0;
         padding: 0;
         list-style: none;
       }
 
-      .value-line li {
+      .feature {
         display: flex;
+        min-height: 54px;
         align-items: center;
-        gap: 8px;
-        color: var(--ink-soft);
+        gap: 13px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .feature:first-child {
+        border-top: 1px solid var(--line);
+      }
+
+      .feature-icon {
+        display: grid;
+        width: 34px;
+        height: 34px;
+        flex: 0 0 auto;
+        place-items: center;
+        border-radius: 11px;
+        color: var(--primary);
+        background: var(--primary-soft);
+      }
+
+      .feature:nth-child(2) .feature-icon {
+        color: var(--success);
+        background: var(--success-soft);
+      }
+
+      .feature-icon svg {
+        width: 18px;
+        height: 18px;
+      }
+
+      .feature > span:not(.feature-icon) {
+        flex: 1;
         font-size: 13px;
         font-weight: 700;
       }
 
-      .value-line svg {
+      .feature > svg {
         width: 17px;
         height: 17px;
-        color: var(--green);
-        flex: 0 0 auto;
+        color: var(--success);
       }
 
-      .actions {
-        max-width: 520px;
-        margin-top: 36px;
+      .action-area {
+        margin-top: auto;
+        padding-top: 26px;
       }
 
       .primary-action {
         display: flex;
         width: 100%;
-        min-height: 60px;
+        min-height: 56px;
         align-items: center;
         justify-content: center;
-        gap: 12px;
-        padding: 15px 22px;
         border: 0;
-        border-radius: 20px;
-        color: #fffaf3;
-        background: var(--orange-deep);
-        box-shadow: 0 16px 32px color-mix(in srgb, var(--orange-deep) 28%, transparent);
+        border-radius: 16px;
+        color: #fff;
+        background: var(--primary-hover);
+        box-shadow: 0 13px 28px color-mix(in srgb, var(--primary) 24%, transparent);
         cursor: pointer;
-        transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 180ms ease;
+        transition: transform 170ms ease, box-shadow 170ms ease;
       }
 
       .primary-action:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 20px 38px color-mix(in srgb, var(--orange-deep) 34%, transparent);
+        transform: translateY(-1px);
+        box-shadow: 0 16px 32px color-mix(in srgb, var(--primary) 30%, transparent);
       }
 
       .primary-action:active {
@@ -382,414 +395,124 @@
       }
 
       .primary-action strong {
-        font-size: 16px;
+        font-size: 15px;
         font-weight: 900;
       }
 
-      .primary-action svg {
-        width: 19px;
-        height: 19px;
-        transition: transform 180ms ease;
-      }
-
-      html[dir="rtl"] .primary-action svg {
-        transform: scaleX(-1);
-      }
-
-      html[dir="rtl"] .primary-action:hover svg {
-        transform: translateX(-3px) scaleX(-1);
-      }
-
-      html[dir="ltr"] .primary-action:hover svg {
-        transform: translateX(3px);
-      }
-
       .access-note {
-        margin: 11px 0 0;
-        color: var(--ink-soft);
+        margin: 9px 0 0;
+        color: var(--muted);
         text-align: center;
         font-size: 12px;
         line-height: 1.7;
       }
 
-      .continuation {
-        max-width: 520px;
-        margin-top: 12px;
+      .plans-details {
+        margin-top: 5px;
       }
 
-      .continuation summary {
+      .plans-details summary {
         display: flex;
         min-height: 44px;
         align-items: center;
         justify-content: center;
-        gap: 7px;
-        padding: 8px;
-        color: var(--ink-faint);
-        font-size: 11px;
+        gap: 6px;
+        color: var(--muted);
+        font-size: 12px;
         font-weight: 700;
         cursor: pointer;
         list-style: none;
       }
 
-      .continuation summary::-webkit-details-marker {
+      .plans-details summary::-webkit-details-marker {
         display: none;
       }
 
-      .continuation summary svg {
-        width: 14px;
-        height: 14px;
-        transition: transform 180ms ease;
+      .plans-details summary svg {
+        width: 13px;
+        height: 13px;
+        transition: transform 170ms ease;
       }
 
-      .continuation[open] summary svg {
+      .plans-details[open] summary svg {
         transform: rotate(180deg);
       }
 
-      .plan-panel {
-        margin-top: 8px;
-        padding: 18px;
+      .plans-panel {
+        padding: 14px;
         border: 1px solid var(--line);
-        border-radius: 22px;
-        background: var(--paper-soft);
+        border-radius: 16px;
+        background: var(--surface-soft);
       }
 
-      .plan-intro {
-        margin: 0 0 14px;
-        color: var(--ink-soft);
+      .plans-copy {
+        margin: 0 0 12px;
+        color: var(--muted);
         font-size: 12px;
-        line-height: 1.7;
+        line-height: 1.75;
       }
 
       .plans {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
-        gap: 8px;
+        gap: 7px;
       }
 
       .plan {
         min-width: 0;
-        padding: 12px 8px;
+        min-height: 62px;
+        padding: 8px 5px;
         border: 1px solid var(--line);
-        border-radius: 15px;
-        background: var(--paper);
+        border-radius: 12px;
+        background: var(--surface);
         cursor: pointer;
       }
 
       .plan[aria-pressed="true"] {
-        border-color: var(--orange);
-        background: var(--orange-soft);
+        border-color: var(--primary);
+        background: var(--primary-soft);
       }
 
-      .plan-name,
-      .plan-price {
+      .plan span {
         display: block;
       }
 
       .plan-name {
-        color: var(--ink-soft);
+        color: var(--muted);
         font-size: 10px;
         font-weight: 700;
       }
 
       .plan-price {
-        margin-top: 4px;
-        font-size: 13px;
-        font-weight: 900;
-        font-variant-numeric: tabular-nums;
-      }
-
-      .product-stage {
-        position: relative;
-        display: grid;
-        min-height: 100%;
-        overflow: hidden;
-        place-items: center;
-        padding: 54px 44px;
-        background: var(--paper-soft);
-        isolation: isolate;
-      }
-
-      .product-stage::before {
-        position: absolute;
-        z-index: -2;
-        width: 440px;
-        height: 440px;
-        border-radius: 50%;
-        background: var(--orange);
-        content: "";
-        inset-inline-end: -130px;
-        top: -150px;
-      }
-
-      .product-stage::after {
-        position: absolute;
-        z-index: -1;
-        width: 230px;
-        height: 230px;
-        border: 1px solid color-mix(in srgb, var(--green) 50%, transparent);
-        border-radius: 50%;
-        content: "";
-        inset-inline-start: -65px;
-        bottom: -62px;
-        box-shadow:
-          0 0 0 30px color-mix(in srgb, var(--green) 8%, transparent),
-          0 0 0 66px color-mix(in srgb, var(--green) 5%, transparent);
-      }
-
-      .product-card {
-        position: relative;
-        width: min(390px, 100%);
-        padding: 24px;
-        border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
-        border-radius: 30px;
-        background: color-mix(in srgb, var(--paper) 96%, transparent);
-        box-shadow: var(--shadow-large);
-        transform: rotate(-1.4deg);
-      }
-
-      html[dir="ltr"] .product-card {
-        transform: rotate(1.4deg);
-      }
-
-      .product-head {
-        display: flex;
-        align-items: flex-start;
-        justify-content: space-between;
-        gap: 16px;
-      }
-
-      .product-date {
-        margin: 0;
-        color: var(--ink-faint);
-        font-size: 11px;
-        font-weight: 700;
-      }
-
-      .product-title {
-        margin: 4px 0 0;
-        font-size: 23px;
-        font-weight: 900;
-        letter-spacing: -0.04em;
-      }
-
-      .day-progress {
-        display: grid;
-        width: 58px;
-        height: 58px;
-        flex: 0 0 auto;
-        place-items: center;
-        border-radius: 50%;
-        background: conic-gradient(var(--green) calc(var(--progress) * 1%), var(--green-soft) 0);
-      }
-
-      .day-progress::before {
-        grid-area: 1 / 1;
-        width: 44px;
-        height: 44px;
-        border-radius: 50%;
-        background: var(--paper);
-        content: "";
-      }
-
-      .day-progress strong {
-        z-index: 1;
-        grid-area: 1 / 1;
-        color: var(--green);
+        margin-top: 3px;
         font-size: 12px;
         font-weight: 900;
         font-variant-numeric: tabular-nums;
-      }
-
-      .rhythm {
-        display: grid;
-        gap: 10px;
-        margin-top: 24px;
-      }
-
-      .rhythm-item {
-        display: flex;
-        min-height: 64px;
-        align-items: center;
-        gap: 12px;
-        padding: 10px 12px;
-        border: 1px solid var(--line);
-        border-radius: 18px;
-        background: var(--paper);
-        cursor: pointer;
-        transition: transform 180ms ease, border-color 180ms ease, opacity 180ms ease;
-      }
-
-      .rhythm-item:hover {
-        transform: translateY(-1px);
-        border-color: color-mix(in srgb, var(--orange) 48%, var(--line));
-      }
-
-      .rhythm-item.is-done {
-        opacity: 0.72;
-      }
-
-      .task-icon {
-        display: grid;
-        width: 40px;
-        height: 40px;
-        flex: 0 0 auto;
-        place-items: center;
-        border-radius: 14px;
-      }
-
-      .task-icon svg {
-        width: 19px;
-        height: 19px;
-      }
-
-      .task-icon.orange {
-        color: var(--orange-deep);
-        background: var(--orange-soft);
-      }
-
-      .task-icon.green {
-        color: var(--green);
-        background: var(--green-soft);
-      }
-
-      .task-icon.gold {
-        color: #8a641e;
-        background: color-mix(in srgb, var(--gold) 20%, var(--paper));
-      }
-
-      .task-copy {
-        min-width: 0;
-        flex: 1;
-      }
-
-      .task-copy strong,
-      .task-copy span {
-        display: block;
-      }
-
-      .task-copy strong {
-        overflow: hidden;
-        font-size: 13px;
-        font-weight: 800;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-
-      .task-copy span {
-        margin-top: 3px;
-        color: var(--ink-faint);
-        font-size: 10px;
-      }
-
-      .check-button {
-        display: grid;
-        width: 27px;
-        height: 27px;
-        flex: 0 0 auto;
-        place-items: center;
-        border: 1.5px solid var(--line);
-        border-radius: 50%;
-        background: var(--paper);
-      }
-
-      .check-button svg {
-        width: 15px;
-        height: 15px;
-        color: transparent;
-      }
-
-      .rhythm-item.is-done .check-button {
-        border-color: var(--green);
-        background: var(--green);
-      }
-
-      .rhythm-item.is-done .check-button svg {
-        color: #fff;
-      }
-
-      .reflection {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin-top: 16px;
-        padding-top: 16px;
-        border-top: 1px dashed var(--line);
-      }
-
-      .mood-dots {
-        display: flex;
-        gap: 5px;
-      }
-
-      .mood-dots span {
-        display: block;
-        width: 9px;
-        height: 9px;
-        border-radius: 50%;
-        background: var(--line);
-      }
-
-      .mood-dots span:nth-child(3) {
-        width: 24px;
-        border-radius: 999px;
-        background: var(--gold);
-      }
-
-      .reflection p {
-        margin: 0;
-        color: var(--ink-soft);
-        font-size: 11px;
-        font-weight: 700;
-      }
-
-      .floating-note {
-        position: absolute;
-        z-index: 2;
-        inset-inline-start: 28px;
-        bottom: 34px;
-        display: flex;
-        align-items: center;
-        gap: 9px;
-        padding: 11px 14px;
-        border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
-        border-radius: 16px;
-        background: var(--paper);
-        box-shadow: var(--shadow-soft);
-        color: var(--ink-soft);
-        font-size: 11px;
-        font-weight: 800;
-        animation: settle 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
-      }
-
-      .floating-note svg {
-        width: 17px;
-        height: 17px;
-        color: var(--green);
       }
 
       .toast {
         position: fixed;
-        z-index: 20;
+        z-index: 10;
         inset-inline-start: 50%;
-        bottom: calc(22px + env(safe-area-inset-bottom));
-        width: min(430px, calc(100% - 32px));
-        padding: 13px 16px;
+        bottom: calc(18px + env(safe-area-inset-bottom));
+        width: min(410px, calc(100% - 32px));
+        padding: 12px 15px;
         border: 1px solid var(--line);
-        border-radius: 16px;
-        background: var(--paper);
-        box-shadow: var(--shadow-large);
-        color: var(--ink);
+        border-radius: 14px;
+        background: var(--surface);
+        box-shadow: var(--shadow);
+        color: var(--text);
         text-align: center;
-        font-size: 12px;
-        font-weight: 800;
+        font-size: 11px;
+        font-weight: 700;
         opacity: 0;
         pointer-events: none;
-        transform: translate(-50%, 16px);
-        transition: opacity 180ms ease, transform 180ms ease;
+        transform: translate(-50%, 12px);
+        transition: opacity 170ms ease, transform 170ms ease;
       }
 
       html[dir="rtl"] .toast {
-        transform: translate(50%, 16px);
+        transform: translate(50%, 12px);
       }
 
       .toast.is-visible {
@@ -801,156 +524,141 @@
         transform: translate(50%, 0);
       }
 
-      @keyframes settle {
-        from { opacity: 0; filter: blur(5px); transform: translateY(16px) rotate(-2deg); }
-        to { opacity: 1; filter: blur(0); transform: translateY(0) rotate(0); }
+      @media (min-width: 640px) {
+        body {
+          display: grid;
+          padding: 24px;
+          place-items: center;
+        }
+
+        .page {
+          min-height: min(780px, calc(100svh - 48px));
+          overflow: hidden;
+          border: 1px solid var(--line);
+          border-radius: 30px;
+          box-shadow: var(--shadow);
+        }
+
+        .main {
+          min-height: calc(min(780px, calc(100svh - 48px)) - 70px);
+        }
       }
 
-      @media (max-width: 860px) {
-        .shell {
-          width: min(100%, 620px);
-          min-height: 100svh;
-          margin: 0 auto;
-          border-width: 0;
-          border-radius: 0;
-          box-shadow: none;
+      @media (max-height: 720px) {
+        .visual {
+          width: 118px;
+          height: 118px;
+          margin-bottom: 15px;
         }
 
-        .topbar {
-          min-height: 68px;
-          padding: calc(12px + env(safe-area-inset-top)) 18px 10px;
+        .visual-ring {
+          width: 88px;
+          height: 88px;
         }
 
-        .content {
+        .visual-ring svg {
+          width: 43px;
+          height: 43px;
+        }
+
+        .features {
+          margin-top: 17px;
+        }
+
+        .action-area {
+          padding-top: 18px;
+        }
+      }
+
+      @media (max-width: 350px) {
+        .plans {
+          grid-template-columns: 1fr;
+        }
+
+        .plan {
           display: flex;
-          min-height: calc(100svh - 68px);
-          flex-direction: column;
+          min-height: 52px;
+          align-items: center;
+          justify-content: space-between;
+          padding-inline: 12px;
         }
 
-        .story {
-          order: 2;
-          justify-content: flex-start;
-          padding: 30px 22px calc(28px + env(safe-area-inset-bottom));
+        .plan-price {
+          margin-top: 0;
         }
-
-        .story h1 {
-          font-size: clamp(35px, 10.5vw, 48px);
-          line-height: 1.15;
-        }
-
-        .lead {
-          margin-top: 16px;
-          font-size: 15px;
-          line-height: 1.85;
-        }
-
-        .value-line {
-          gap: 8px 18px;
-          margin-top: 22px;
-        }
-
-        .actions {
-          margin-top: 28px;
-        }
-
-        .product-stage {
-          min-height: 322px;
-          padding: 24px 48px 30px;
-        }
-
-        .product-stage::before {
-          width: 310px;
-          height: 310px;
-          inset-inline-end: -105px;
-          top: -150px;
-        }
-
-        .product-stage::after {
-          width: 150px;
-          height: 150px;
-        }
-
-        .product-card {
-          width: min(360px, 100%);
-          padding: 18px;
-          border-radius: 24px;
-          transform: rotate(-0.8deg);
-        }
-
-        html[dir="ltr"] .product-card { transform: rotate(0.8deg); }
-        .product-title { font-size: 20px; }
-        .day-progress { width: 50px; height: 50px; }
-        .day-progress::before { width: 38px; height: 38px; }
-        .rhythm { gap: 8px; margin-top: 16px; }
-        .rhythm-item { min-height: 54px; padding: 7px 10px; border-radius: 15px; }
-        .task-icon { width: 35px; height: 35px; border-radius: 12px; }
-        .rhythm-item:nth-child(3), .reflection { display: none; }
-        .floating-note { inset-inline-start: 18px; bottom: 18px; }
-      }
-
-      @media (max-width: 390px) {
-        .brand span { font-size: 15px; }
-        .locale-button { min-width: 44px; height: 44px; padding-inline: 9px; }
-        .icon-button { min-width: 44px; height: 44px; }
-        .product-stage { min-height: 298px; padding: 18px 30px 27px; }
-        .story { padding-inline: 18px; }
-        .value-line li { font-size: 12px; }
-        .floating-note { font-size: 10px; }
       }
 
       @media (prefers-reduced-motion: reduce) {
-        *, *::before, *::after {
+        *,
+        *::before,
+        *::after {
           scroll-behavior: auto !important;
-          animation-duration: 0.01ms !important;
-          animation-iteration-count: 1 !important;
           transition-duration: 0.01ms !important;
         }
       }
     </style>
   </head>
   <body>
-    <main class="shell" aria-labelledby="page-title">
+    <div class="page">
       <header class="topbar">
         <div class="brand" data-i18n-aria="brandLabel" aria-label="روتینو">
-          <span class="brand-mark" aria-hidden="true">
+          <span class="brand-mark">
             <img class="logo-light" src="../../../public/brand/logo-light.webp" alt="" />
             <img class="logo-dark" src="../../../public/brand/logo-dark.webp" alt="" />
           </span>
           <span data-i18n="brand">روتینو</span>
         </div>
         <div class="toolbar">
-          <div class="locale-switch" role="group" data-i18n-aria="languageLabel" aria-label="انتخاب زبان">
-            <button class="locale-button" type="button" data-locale="fa" aria-pressed="true">فا</button>
-            <button class="locale-button" type="button" data-locale="en" aria-pressed="false">EN</button>
-          </div>
-          <button class="icon-button theme-toggle" type="button" aria-label="رفتن به تم تاریک" aria-pressed="false">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20.2 15.1A8.5 8.5 0 0 1 8.9 3.8 8.5 8.5 0 1 0 20.2 15.1Z" /></svg>
+          <button class="language-toggle" type="button" aria-label="Switch to English">EN</button>
+          <button class="theme-toggle" type="button" aria-label="رفتن به تم تاریک" aria-pressed="false">
+            <svg class="moon-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M20.2 15.1A8.5 8.5 0 0 1 8.9 3.8 8.5 8.5 0 1 0 20.2 15.1Z" /></svg>
+            <svg class="sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>
           </button>
         </div>
       </header>
 
-      <div class="content">
-        <section class="story">
-          <h1 id="page-title" data-i18n="headline">همه‌چیزِ روزت، یک‌جا و سرِ جایش.</h1>
-          <p class="lead" data-i18n="lead">کارها، عادت‌ها و حال روزت را کنار هم نگه دار؛ ساده، مرتب و بدون فشار.</p>
-          <ul class="value-line" data-i18n-aria="benefitsLabel" aria-label="مزیت‌های روتینو">
-            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg><span data-i18n="benefitOne">برنامه‌ی روزانه</span></li>
-            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg><span data-i18n="benefitTwo">پیگیری عادت‌ها</span></li>
-            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg><span data-i18n="benefitThree">روند و حال روزها</span></li>
-          </ul>
-
-          <div class="actions">
-            <button class="primary-action preview-action" type="button">
-              <strong data-i18n="cta">شروع هفته‌ی من</strong>
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
-            </button>
-            <p class="access-note" data-i18n="accessNote">هفت روز دسترسی کامل، برای اینکه واقعاً امتحانش کنی</p>
+      <main class="main" aria-labelledby="page-title">
+        <div class="visual" aria-hidden="true">
+          <div class="visual-ring">
+            <svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M51 18a25 25 0 1 0 5 15" />
+              <path d="m20 31 9 9 26-27" />
+            </svg>
           </div>
+        </div>
 
-          <details class="continuation">
-            <summary><span data-i18n="continuationSummary">بعد از این هفته چه می‌شود؟</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg></summary>
-            <div class="plan-panel">
-              <p class="plan-intro" data-i18n="planIntro">اگر روتینو به کارت آمد، یکی از پلن‌ها را انتخاب می‌کنی؛ ادامه‌دادن فقط با انتخاب خودت است.</p>
+        <h1 id="page-title" data-i18n="headline">هفت روز با روتینو پیش برو</h1>
+        <p class="lead" data-i18n="lead">همه‌ی امکانات را با برنامه‌ی واقعی خودت امتحان کن.</p>
+
+        <ul class="features" data-i18n-aria="featuresLabel" aria-label="امکانات روتینو">
+          <li class="feature">
+            <span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v4M16 2v4M3 9h18" /><rect x="3" y="4" width="18" height="17" rx="3" /></svg></span>
+            <span data-i18n="featureOne">کارها و عادت‌ها، یک‌جا</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
+          </li>
+          <li class="feature">
+            <span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V9M10 19V5M16 19v-7M22 19V3" /></svg></span>
+            <span data-i18n="featureTwo">پیشرفتت را واضح ببین</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
+          </li>
+          <li class="feature">
+            <span class="feature-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg></span>
+            <span data-i18n="featureThree">تمرکز و ژورنال روزانه</span>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
+          </li>
+        </ul>
+
+        <div class="action-area">
+          <button class="primary-action" type="button"><strong data-i18n="cta">شروع رایگان</strong></button>
+          <p class="access-note" data-i18n="accessNote">تمام امکانات برای هفت روز فعال می‌شود</p>
+
+          <details class="plans-details">
+            <summary>
+              <span data-i18n="plansSummary">شرایط ادامه و پلن‌ها</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+            </summary>
+            <div class="plans-panel">
+              <p class="plans-copy" data-i18n="plansCopy">بعد از هفت روز، فقط اگر خودت خواستی یکی از پلن‌ها را انتخاب می‌کنی.</p>
               <div class="plans" role="group" data-i18n-aria="plansLabel" aria-label="پلن‌های روتینو">
                 <button class="plan" type="button" aria-pressed="false"><span class="plan-name" data-i18n="monthly">یک‌ماهه</span><span class="plan-price" data-i18n="monthlyPrice">۵۹٬۰۰۰ تومان</span></button>
                 <button class="plan" type="button" aria-pressed="false"><span class="plan-name" data-i18n="quarterly">سه‌ماهه</span><span class="plan-price" data-i18n="quarterlyPrice">۱۴۹٬۰۰۰ تومان</span></button>
@@ -958,126 +666,125 @@
               </div>
             </div>
           </details>
-        </section>
+        </div>
+      </main>
+    </div>
 
-        <section class="product-stage" data-i18n-aria="previewLabel" aria-label="پیش‌نمایش روتینو">
-          <article class="product-card">
-            <header class="product-head">
-              <div><p class="product-date" data-i18n="date">شنبه، ۱۵ شهریور</p><h2 class="product-title" data-i18n="todayTitle">امروزِ من</h2></div>
-              <div class="day-progress" style="--progress: 67" aria-live="polite"><strong class="progress-copy">۲/۳</strong></div>
-            </header>
-            <div class="rhythm">
-              <button class="rhythm-item is-done" type="button" aria-pressed="true">
-                <span class="task-icon orange" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v18M5.6 6.2l12.8 11.6M18.4 6.2 5.6 17.8" /></svg></span>
-                <span class="task-copy"><strong data-i18n="taskOne">یک لیوان آب</strong><span data-i18n="taskOneMeta">شروع آرام صبح</span></span>
-                <span class="check-button" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m5 12 4 4L19 6" /></svg></span>
-              </button>
-              <button class="rhythm-item is-done" type="button" aria-pressed="true">
-                <span class="task-icon green" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z" /></svg></span>
-                <span class="task-copy"><strong data-i18n="taskTwo">۲۰ دقیقه مطالعه</strong><span data-i18n="taskTwoMeta">فقط چند صفحه</span></span>
-                <span class="check-button" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m5 12 4 4L19 6" /></svg></span>
-              </button>
-              <button class="rhythm-item" type="button" aria-pressed="false">
-                <span class="task-icon gold" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4v16M17 7l-4-3-4 3M4 12h4M16 12h4M6 16l2-4M18 16l-2-4" /></svg></span>
-                <span class="task-copy"><strong data-i18n="taskThree">کمی قدم‌زدن</strong><span data-i18n="taskThreeMeta">امروز، هرچقدر شد</span></span>
-                <span class="check-button" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m5 12 4 4L19 6" /></svg></span>
-              </button>
-            </div>
-            <footer class="reflection"><div class="mood-dots" aria-hidden="true"><span></span><span></span><span></span></div><p data-i18n="reflection">حال امروزت را آخر شب ثبت کن</p></footer>
-          </article>
-          <div class="floating-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg><span data-i18n="floatingNote">دو قدم کوچک، انجام شد</span></div>
-        </section>
-      </div>
-    </main>
-
-    <div class="toast" role="status" aria-live="polite" data-i18n="toast">این فقط پیش‌نمایش است و هنوز به برنامه وصل نیست</div>
+    <div class="toast" role="status" aria-live="polite" data-i18n="toast">این صفحه هنوز به برنامه وصل نیست</div>
 
     <script>
       const copy = {
         fa: {
-          title: "پیش‌نمایش شروع روتینو", brand: "روتینو", brandLabel: "روتینو", languageLabel: "انتخاب زبان", themeToDark: "رفتن به تم تاریک", themeToLight: "رفتن به تم روشن",
-          headline: "همه‌چیزِ روزت، یک‌جا و سرِ جایش.", lead: "کارها، عادت‌ها و حال روزت را کنار هم نگه دار؛ ساده، مرتب و بدون فشار.",
-          benefitsLabel: "مزیت‌های روتینو", benefitOne: "برنامه‌ی روزانه", benefitTwo: "پیگیری عادت‌ها", benefitThree: "روند و حال روزها",
-          cta: "شروع هفته‌ی من", accessNote: "هفت روز دسترسی کامل، برای اینکه واقعاً امتحانش کنی", continuationSummary: "بعد از این هفته چه می‌شود؟",
-          planIntro: "اگر روتینو به کارت آمد، یکی از پلن‌ها را انتخاب می‌کنی؛ ادامه‌دادن فقط با انتخاب خودت است.", plansLabel: "پلن‌های روتینو",
-          monthly: "یک‌ماهه", monthlyPrice: "۵۹٬۰۰۰ تومان", quarterly: "سه‌ماهه", quarterlyPrice: "۱۴۹٬۰۰۰ تومان", yearly: "یک‌ساله", yearlyPrice: "۴۴۹٬۰۰۰ تومان",
-          previewLabel: "پیش‌نمایش روتینو", date: "شنبه، ۱۵ شهریور", todayTitle: "امروزِ من", taskOne: "یک لیوان آب", taskOneMeta: "شروع آرام صبح",
-          taskTwo: "۲۰ دقیقه مطالعه", taskTwoMeta: "فقط چند صفحه", taskThree: "کمی قدم‌زدن", taskThreeMeta: "امروز، هرچقدر شد", reflection: "حال امروزت را آخر شب ثبت کن",
-          floatingNote: "دو قدم کوچک، انجام شد", progress: (done) => `${new Intl.NumberFormat("fa-IR").format(done)}/۳`, toast: "این فقط پیش‌نمایش است و هنوز به برنامه وصل نیست"
+          title: "پیش‌نمایش شروع روتینو",
+          brand: "روتینو",
+          brandLabel: "روتینو",
+          languageAction: "Switch to English",
+          languageButton: "EN",
+          themeToDark: "رفتن به تم تاریک",
+          themeToLight: "رفتن به تم روشن",
+          headline: "هفت روز با روتینو پیش برو",
+          lead: "همه‌ی امکانات را با برنامه‌ی واقعی خودت امتحان کن.",
+          featuresLabel: "امکانات روتینو",
+          featureOne: "کارها و عادت‌ها، یک‌جا",
+          featureTwo: "پیشرفتت را واضح ببین",
+          featureThree: "تمرکز و ژورنال روزانه",
+          cta: "شروع رایگان",
+          accessNote: "تمام امکانات برای هفت روز فعال می‌شود",
+          plansSummary: "شرایط ادامه و پلن‌ها",
+          plansCopy: "بعد از هفت روز، فقط اگر خودت خواستی یکی از پلن‌ها را انتخاب می‌کنی.",
+          plansLabel: "پلن‌های روتینو",
+          monthly: "یک‌ماهه",
+          monthlyPrice: "۵۹٬۰۰۰ تومان",
+          quarterly: "سه‌ماهه",
+          quarterlyPrice: "۱۴۹٬۰۰۰ تومان",
+          yearly: "یک‌ساله",
+          yearlyPrice: "۴۴۹٬۰۰۰ تومان",
+          toast: "این صفحه هنوز به برنامه وصل نیست"
         },
         en: {
-          title: "Routino start preview", brand: "Routino", brandLabel: "Routino", languageLabel: "Choose language", themeToDark: "Switch to dark theme", themeToLight: "Switch to light theme",
-          headline: "Bring your whole day together.", lead: "Keep your tasks, habits, and daily mood in one calm place — organized, flexible, and pressure-free.",
-          benefitsLabel: "Routino benefits", benefitOne: "Daily planning", benefitTwo: "Habit tracking", benefitThree: "Progress and mood",
-          cta: "Start my week", accessNote: "Seven days of full access, so you can truly try it", continuationSummary: "What happens after this week?",
-          planIntro: "If Routino works for you, choose a plan. Continuing is always your decision.", plansLabel: "Routino plans",
-          monthly: "Monthly", monthlyPrice: "59,000 Toman", quarterly: "3 months", quarterlyPrice: "149,000 Toman", yearly: "Yearly", yearlyPrice: "449,000 Toman",
-          previewLabel: "Routino preview", date: "Saturday, September 6", todayTitle: "My today", taskOne: "Drink a glass of water", taskOneMeta: "A gentle start",
-          taskTwo: "Read for 20 minutes", taskTwoMeta: "Just a few pages", taskThree: "Take a short walk", taskThreeMeta: "However much feels right", reflection: "Check in with your mood tonight",
-          floatingNote: "Two small steps, done", progress: (done) => `${done}/3`, toast: "This is a standalone preview and is not connected to the app"
+          title: "Routino start preview",
+          brand: "Routino",
+          brandLabel: "Routino",
+          languageAction: "تغییر زبان به فارسی",
+          languageButton: "فا",
+          themeToDark: "Switch to dark theme",
+          themeToLight: "Switch to light theme",
+          headline: "Try a week with Routino",
+          lead: "Use every feature with your real routines.",
+          featuresLabel: "Routino features",
+          featureOne: "Tasks and habits together",
+          featureTwo: "See your progress clearly",
+          featureThree: "Daily focus and journal",
+          cta: "Start free",
+          accessNote: "Every feature unlocks for seven days",
+          plansSummary: "Plans and what happens next",
+          plansCopy: "After seven days, you only choose a plan if you want to continue.",
+          plansLabel: "Routino plans",
+          monthly: "Monthly",
+          monthlyPrice: "59,000 Toman",
+          quarterly: "3 months",
+          quarterlyPrice: "149,000 Toman",
+          yearly: "Yearly",
+          yearlyPrice: "449,000 Toman",
+          toast: "This preview is not connected to the app"
         }
       };
 
       const root = document.documentElement;
+      const languageButton = document.querySelector(".language-toggle");
+      const themeButton = document.querySelector(".theme-toggle");
       const toast = document.querySelector(".toast");
-      const progress = document.querySelector(".day-progress");
-      const progressCopy = document.querySelector(".progress-copy");
-      let activeLocale = "fa";
+      let locale = "fa";
       let toastTimer;
-
-      function updateProgress() {
-        const done = document.querySelectorAll(".rhythm-item.is-done").length;
-        progress.style.setProperty("--progress", Math.round((done / 3) * 100));
-        progressCopy.textContent = copy[activeLocale].progress(done);
-      }
 
       function updateThemeState() {
         const isDark = root.dataset.theme === "dark";
-        const themeButton = document.querySelector(".theme-toggle");
         themeButton.setAttribute("aria-pressed", String(isDark));
-        themeButton.setAttribute("aria-label", copy[activeLocale][isDark ? "themeToLight" : "themeToDark"]);
+        themeButton.setAttribute("aria-label", copy[locale][isDark ? "themeToLight" : "themeToDark"]);
       }
 
-      function setLocale(locale) {
-        activeLocale = locale;
+      function setLocale(nextLocale) {
+        locale = nextLocale;
         const dictionary = copy[locale];
         root.lang = locale;
         root.dir = locale === "fa" ? "rtl" : "ltr";
         document.title = dictionary.title;
+
         document.querySelectorAll("[data-i18n]").forEach((element) => {
-          const key = element.dataset.i18n;
-          if (typeof dictionary[key] === "string") element.textContent = dictionary[key];
+          const value = dictionary[element.dataset.i18n];
+          if (value) element.textContent = value;
         });
+
         document.querySelectorAll("[data-i18n-aria]").forEach((element) => {
-          const key = element.dataset.i18nAria;
-          if (dictionary[key]) element.setAttribute("aria-label", dictionary[key]);
+          const value = dictionary[element.dataset.i18nAria];
+          if (value) element.setAttribute("aria-label", value);
         });
-        document.querySelectorAll("[data-locale]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.locale === locale)));
-        updateProgress();
+
+        languageButton.textContent = dictionary.languageButton;
+        languageButton.setAttribute("aria-label", dictionary.languageAction);
         updateThemeState();
       }
 
-      function showPreviewMessage() {
-        toast.classList.add("is-visible");
-        clearTimeout(toastTimer);
-        toastTimer = setTimeout(() => toast.classList.remove("is-visible"), 2200);
-      }
+      languageButton.addEventListener("click", () => setLocale(locale === "fa" ? "en" : "fa"));
 
-      document.querySelectorAll("[data-locale]").forEach((button) => button.addEventListener("click", () => setLocale(button.dataset.locale)));
-      document.querySelector(".theme-toggle").addEventListener("click", () => {
+      themeButton.addEventListener("click", () => {
         root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
         updateThemeState();
       });
-      document.querySelectorAll(".rhythm-item").forEach((item) => item.addEventListener("click", () => {
-        const done = item.classList.toggle("is-done");
-        item.setAttribute("aria-pressed", String(done));
-        updateProgress();
-      }));
-      document.querySelectorAll(".plan").forEach((plan) => plan.addEventListener("click", () => {
-        document.querySelectorAll(".plan").forEach((item) => item.setAttribute("aria-pressed", "false"));
-        plan.setAttribute("aria-pressed", "true");
-      }));
-      document.querySelector(".preview-action").addEventListener("click", showPreviewMessage);
+
+      document.querySelectorAll(".plan").forEach((plan) => {
+        plan.addEventListener("click", () => {
+          document.querySelectorAll(".plan").forEach((item) => item.setAttribute("aria-pressed", "false"));
+          plan.setAttribute("aria-pressed", "true");
+        });
+      });
+
+      document.querySelector(".primary-action").addEventListener("click", () => {
+        toast.classList.add("is-visible");
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => toast.classList.remove("is-visible"), 2200);
+      });
+
       setLocale("fa");
     </script>
   </body>
