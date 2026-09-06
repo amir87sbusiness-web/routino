@@ -39,8 +39,8 @@
 - `backend/src/` منبع canonical است. `supabase/functions/api/shared/` فقط با
   `npm run sync:edge` تولید می‌شود و parity test اختلاف را رد می‌کند.
 - SMS و PSP سقف روزانهٔ تجاری ندارند؛ lease دیتابیسی فقط تماس هم‌زمان provider را
-  محدود می‌کند. اشباع موقت قبل از خرج provider پس‌فشار می‌دهد و checkout با همان
-  `attemptId` ادامه پیدا می‌کند، نه با payment تازه.
+  محدود می‌کند. اشباع موقت قبل از خرج provider پس‌فشار می‌دهد؛ retry همان نشست با
+  همان `attemptId` و reload با همان payment منطقی ادامه پیدا می‌کند، نه با ردیف تازه.
 - maintenance دیتابیس batch و timeout ثابت دارد. backlog و تاریخچهٔ pg_cron باید با
   SQL سند deploy پایش شوند؛ عدد schedule×batch به معنی ظرفیت تضمینی کاربر نیست.
 
