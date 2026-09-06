@@ -58,7 +58,9 @@
         background:
           radial-gradient(circle at 15% -5%, rgba(232, 111, 45, 0.16), transparent 34%),
           var(--bg);
-        transition: background-color 180ms ease, color 180ms ease;
+        /* Do not animate inherited text color: a theme switch otherwise leaves
+           the headline briefly low-contrast while the background is already dark. */
+        transition: background-color 180ms ease;
       }
 
       button {
@@ -274,6 +276,35 @@
         padding-top: 10px;
       }
 
+      .plans-section summary {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 12px 2px;
+        color: var(--text-muted);
+        font-size: 11px;
+        font-weight: 700;
+        cursor: pointer;
+        list-style: none;
+      }
+
+      .plans-section summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .plans-section summary span {
+        color: var(--primary-strong);
+        font-size: 10px;
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 4px;
+      }
+
+      .plans-content {
+        padding-top: 4px;
+      }
+
       .plans-heading {
         display: flex;
         align-items: end;
@@ -421,7 +452,7 @@
         color: var(--success);
       }
 
-      .purchase-action {
+      .plans-action {
         display: block;
         margin: 8px auto 0;
         padding: 8px 12px;
@@ -529,8 +560,8 @@
             <path d="m18.5 16 .8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z" />
           </svg>
         </div>
-        <h1 id="page-title">اشتراک کامل روتینو، ۷ روز رایگان</h1>
-        <p>بدون کارت بانکی شروع کن. بعد از هفت روز هم هیچ پرداختی خودکار انجام نمی‌شود.</p>
+        <h1 id="page-title">هفت روز برای شروعِ یک تغییر واقعی</h1>
+        <p>روتینو را با خیال راحت امتحان کن؛ شروع رایگان است و انتخاب ادامه‌ی مسیر با تو.</p>
       </section>
 
       <ul class="benefits" aria-label="امکانات دوره رایگان">
@@ -542,8 +573,8 @@
             </svg>
           </span>
           <span class="benefit-copy">
-            <strong>همه‌چیز برای ساختن یک ریتم خوب</strong>
-            <span>عادت‌ها، کارها، ژورنال و تایمر بدون محدودیت نمایشی</span>
+            <strong>روزت را به ریتم خودت بچین</strong>
+            <span>عادت‌ها، کارها، ژورنال و تایمر؛ همه یک‌جا</span>
           </span>
           <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
         </li>
@@ -554,8 +585,8 @@
             </svg>
           </span>
           <span class="benefit-copy">
-            <strong>پیشرفتت را واضح ببین</strong>
-            <span>آمار، استریک و روند روزها در یک نگاه ساده</span>
+            <strong>تغییرهای کوچک را ببین</strong>
+            <span>روند روزها و پیشرفتت، روشن و بی‌دردسر</span>
           </span>
           <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
         </li>
@@ -567,50 +598,56 @@
             </svg>
           </span>
           <span class="benefit-copy">
-            <strong>اطلاعاتت همیشه همراهت می‌ماند</strong>
-            <span>ذخیره روی دستگاه و همگام‌سازی امن با حسابت</span>
+            <strong>هرجا بودی، از همان‌جا ادامه بده</strong>
+            <span>اطلاعاتت روی دستگاه می‌ماند و با حسابت هماهنگ می‌شود</span>
           </span>
           <svg class="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
         </li>
       </ul>
 
-      <section class="plans-section" aria-labelledby="plans-title">
-        <div class="plans-heading">
-          <h2 id="plans-title">بعد از دوره رایگان، انتخاب با توست</h2>
-          <span>قیمت نهایی</span>
+      <details class="plans-section">
+        <summary>
+          <span>اگر دوست داشتی، پلن‌ها را هم ببین</span>
+          <span>مشاهده قیمت‌ها</span>
+        </summary>
+        <div class="plans-content">
+          <div class="plans-heading">
+            <h2 id="plans-title">برای وقتی که خواستی ادامه بدهی</h2>
+            <span>انتخاب با توست</span>
+          </div>
+          <div class="plans" role="group" aria-labelledby="plans-title">
+            <button class="plan" type="button" aria-pressed="false" data-plan="یک‌ماهه">
+              <span class="plan-name">یک‌ماهه</span>
+              <span class="plan-price">۵۹٬۰۰۰</span>
+              <span class="plan-unit">تومان</span>
+            </button>
+            <button class="plan" type="button" aria-pressed="false" data-plan="سه‌ماهه">
+              <span class="plan-name">سه‌ماهه</span>
+              <span class="plan-price">۱۴۹٬۰۰۰</span>
+              <span class="plan-unit">تومان</span>
+            </button>
+            <button class="plan" type="button" aria-pressed="true" data-plan="یک‌ساله">
+              <span class="plan-badge">به‌صرفه‌ترین</span>
+              <span class="plan-name">یک‌ساله</span>
+              <span class="plan-price">۴۴۹٬۰۰۰</span>
+              <span class="plan-unit">تومان</span>
+            </button>
+          </div>
         </div>
-        <div class="plans" role="group" aria-label="پلن‌های اشتراک">
-          <button class="plan" type="button" aria-pressed="false" data-plan="یک‌ماهه">
-            <span class="plan-name">یک‌ماهه</span>
-            <span class="plan-price">۵۹٬۰۰۰</span>
-            <span class="plan-unit">تومان</span>
-          </button>
-          <button class="plan" type="button" aria-pressed="false" data-plan="سه‌ماهه">
-            <span class="plan-name">سه‌ماهه</span>
-            <span class="plan-price">۱۴۹٬۰۰۰</span>
-            <span class="plan-unit">تومان</span>
-          </button>
-          <button class="plan" type="button" aria-pressed="true" data-plan="یک‌ساله">
-            <span class="plan-badge">به‌صرفه‌ترین</span>
-            <span class="plan-name">یک‌ساله</span>
-            <span class="plan-price">۴۴۹٬۰۰۰</span>
-            <span class="plan-unit">تومان</span>
-          </button>
-        </div>
-      </section>
+      </details>
 
       <section class="action-panel" aria-label="فعال‌سازی">
         <button class="primary-action preview-action" type="button">
-          <strong>شروع ۷ روز رایگان</strong>
+          <strong>شروع رایگان من</strong>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M5 12h14M13 6l6 6-6 6" />
           </svg>
         </button>
         <p class="reassurance">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" /></svg>
-          بدون کارت بانکی · فعال‌سازی فوری · بدون تمدید خودکار
+          ۷ روز رایگان · تصمیم ادامه‌ی مسیر بعداً با توست
         </p>
-        <button class="purchase-action preview-action" type="button">خرید مستقیم اشتراک</button>
+        <button class="plans-action" type="button">قیمت و جزئیات پلن‌ها</button>
       </section>
     </main>
 
@@ -640,6 +677,12 @@
 
       document.querySelectorAll(".preview-action").forEach((button) => {
         button.addEventListener("click", showPreviewMessage);
+      });
+
+      document.querySelector(".plans-action").addEventListener("click", () => {
+        const plans = document.querySelector(".plans-section");
+        plans.open = true;
+        plans.scrollIntoView({ behavior: "smooth", block: "center" });
       });
     </script>
   </body>
