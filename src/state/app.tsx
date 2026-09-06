@@ -40,10 +40,8 @@ import { DEFAULT_CATEGORIES } from "@/lib/presets";
 import {
   defaultDb,
   uid,
-  type Category,
   type Db,
   type Feedback,
-  type Habit,
   type Settings,
   type Subscription,
 } from "@/lib/store";
@@ -77,11 +75,6 @@ interface AppCtx {
   requestProductWrite: () => boolean;
   updatePreferences: (patch: PreferencePatch) => void;
   applyEntitlement: (subscription: Subscription) => void;
-  commitTrialActivation: (
-    subscription: Subscription,
-    habit: Habit | null,
-    category?: Category,
-  ) => void;
   markNotificationsRead: () => void;
   submitFeedback: (feedback: Feedback) => void;
   recordFeedbackPrompt: () => void;
@@ -213,24 +206,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const applyEntitlement = useCallback(
     (subscription: Subscription) => {
       commitSystemUpdate((current) => applyServerEntitlement(current, subscription));
-    },
-    [commitSystemUpdate],
-  );
-
-  const commitTrialActivation = useCallback(
-    (subscription: Subscription, habit: Habit | null, category?: Category) => {
-      commitSystemUpdate((current) => {
-        const entitled = applyServerEntitlement(current, subscription);
-        if (!habit) return entitled;
-        return {
-          ...entitled,
-          categories:
-            category && !entitled.categories.some((item) => item.id === category.id)
-              ? [...entitled.categories, category]
-              : entitled.categories,
-          habits: [...entitled.habits, habit],
-        };
-      });
     },
     [commitSystemUpdate],
   );
@@ -911,7 +886,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       requestProductWrite,
       updatePreferences,
       applyEntitlement,
-      commitTrialActivation,
       markNotificationsRead,
       submitFeedback,
       recordFeedbackPrompt,
@@ -933,7 +907,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       requestProductWrite,
       updatePreferences,
       applyEntitlement,
-      commitTrialActivation,
       markNotificationsRead,
       submitFeedback,
       recordFeedbackPrompt,

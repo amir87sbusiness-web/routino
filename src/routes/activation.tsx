@@ -1,143 +1,51 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { Check, Plus, Sparkles } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { BarChart3, CalendarDays, Check, ChevronDown, Clock3, RefreshCw } from "lucide-react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
-import { draftToHabit, emptyDraft, HabitFormModal, type HabitDraft } from "@/components/habits";
-import { Button, CatIcon } from "@/components/ui";
-import {
-  clearActivationSelection,
-  loadActivationSelection,
-  saveActivationSelection,
-  type ActivationSelection,
-} from "@/lib/activation-selection";
+import { Button, Logo } from "@/components/ui";
 import { entitlementToSubscription, startTrial } from "@/lib/api/auth";
-import { ensurePresetCategory, presetToHabitDraft } from "@/lib/habit-starters";
-import {
-  checkNativeExactAlarmSetting,
-  isNativeRuntime,
-  requestNativeExactAlarmSetting,
-  requestNotificationPermission,
-} from "@/lib/native-notifications";
-import { PRESET_HABITS, type PresetHabit } from "@/lib/presets";
-import type { Habit } from "@/lib/store";
+import { fetchPlans, type ServerPlan } from "@/lib/api/payments";
+import { faNum } from "@/lib/dates";
 import { useAppMaybe } from "@/state/app";
 
 export const Route = createFileRoute("/activation")({
   component: ActivationPage,
 });
 
-const STARTERS: Array<{ categoryId: string; preset: PresetHabit }> = [
-  { categoryId: "study", preset: PRESET_HABITS.study[0]! },
-  { categoryId: "sport", preset: PRESET_HABITS.sport[0]! },
-  { categoryId: "sleep", preset: PRESET_HABITS.sleep[0]! },
-  { categoryId: "growth", preset: PRESET_HABITS.growth[0]! },
-  { categoryId: "health", preset: PRESET_HABITS.health[0]! },
-  { categoryId: "morning", preset: PRESET_HABITS.morning[0]! },
-];
-
-function validDraft(draft: HabitDraft): boolean {
-  return (
-    !!draft.name.trim() &&
-    draft.weekdays.length > 0 &&
-    (draft.type === "binary" || (Number.isFinite(draft.target) && draft.target > 0))
-  );
-}
-
-function activeHabit(habits: Habit[], selection: ActivationSelection): Habit | null {
-  if (selection?.kind !== "existing") return null;
-  return habits.find((habit) => habit.id === selection.habitId && !habit.archived) ?? null;
-}
-
-function selectionIsReady(habits: Habit[], selection: ActivationSelection): boolean {
-  return (
-    !!activeHabit(habits, selection) || (selection?.kind === "draft" && validDraft(selection.draft))
-  );
-}
+type PlansState = "idle" | "loading" | "ready" | "error";
 
 function ActivationPage() {
   const ctx = useAppMaybe();
   const navigate = useNavigate();
-  const [selection, setSelection] = useState<ActivationSelection>(() => loadActivationSelection());
-  const [formOpen, setFormOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [plans, setPlans] = useState<ServerPlan[]>([]);
+  const [plansState, setPlansState] = useState<PlansState>("idle");
+  const startInFlight = useRef(false);
+  const plansInFlight = useRef(false);
 
-  const db = ctx?.db ?? null;
-  const existingHabits = useMemo(
-    () => (db ? db.habits.filter((habit) => !habit.archived) : []),
-    [db],
-  );
-  const ready = selectionIsReady(existingHabits, selection);
+  if (!ctx?.db) return null;
+  const { applyEntitlement, t, lang } = ctx;
 
-  useEffect(() => {
-    if (selection?.kind === "existing" && !activeHabit(existingHabits, selection))
-      setSelection(null);
-    if (!selection && existingHabits[0])
-      setSelection({ kind: "existing", habitId: existingHabits[0].id });
-  }, [existingHabits, selection]);
-
-  useEffect(() => {
-    if (selection) saveActivationSelection(selection);
-  }, [selection]);
-
-  if (!ctx || !db) return null;
-  const { updatePreferences, commitTrialActivation, t, lang } = ctx;
-
-  const choosePreset = (categoryId: string, preset: PresetHabit) => {
-    setSelection({ kind: "draft", draft: presetToHabitDraft(preset, categoryId, lang) });
-    setError("");
-  };
-
-  const openCustom = () => {
-    setSelection((current) =>
-      current?.kind === "draft" ? current : { kind: "draft", draft: emptyDraft("morning") },
-    );
-    setFormOpen(true);
-    setError("");
-  };
-
-  const preparedDraft = selection?.kind === "draft" ? selection.draft : emptyDraft("morning");
-  const setPreparedDraft = (draft: HabitDraft) => setSelection({ kind: "draft", draft });
-
-  const requestReminderPermission = async (habit: Habit) => {
-    if (!habit.reminderTime) return;
+  const loadPlans = async () => {
+    if (plansState === "ready" || plansInFlight.current) return;
+    plansInFlight.current = true;
+    setPlansState("loading");
     try {
-      const granted = await requestNotificationPermission();
-      updatePreferences({ notificationsEnabled: true });
-      if (!granted) {
-        toast.warning(
-          t(
-            "عادت و دورهٔ آزمایشی شروع شد؛ یادآوری‌ها تا فعال‌کردن مجوز اعلان خاموش‌اند.",
-            "Your habit and trial started; reminders stay off until notification permission is enabled.",
-          ),
-        );
-        return;
-      }
-      if (isNativeRuntime()) {
-        const exact = await checkNativeExactAlarmSetting();
-        if (exact !== "granted" && exact !== "not-android") await requestNativeExactAlarmSetting();
-      }
+      const result = await fetchPlans();
+      if (!result.plans.length) throw new Error("plans_empty");
+      setPlans(result.plans);
+      setPlansState("ready");
     } catch {
-      toast.warning(
-        t(
-          "عادت و دورهٔ آزمایشی شروع شد؛ تنظیم یادآوری روی این دستگاه انجام نشد.",
-          "Your habit and trial started, but reminders could not be configured on this device.",
-        ),
-      );
+      setPlansState("error");
+    } finally {
+      plansInFlight.current = false;
     }
   };
 
   const start = async () => {
-    const existing = activeHabit(existingHabits, selection);
-    const draft = selection?.kind === "draft" ? selection.draft : null;
-    if (!existing && (!draft || !validDraft(draft))) {
-      setError(t("اول یک عادت آماده کن.", "Prepare one habit first."));
-      return;
-    }
-
-    // Persist before transport: a failed or interrupted online activation never
-    // removes the work the person just prepared.
-    if (selection) saveActivationSelection(selection);
+    if (startInFlight.current) return;
+    startInFlight.current = true;
     setBusy(true);
     setError("");
     try {
@@ -152,144 +60,148 @@ function ActivationPage() {
         throw new Error("trial_not_active");
       }
 
-      const newHabit = draft ? draftToHabit(draft) : null;
-      const newCategory = newHabit
-        ? ensurePresetCategory(db.categories, newHabit.categoryId).find(
-            (category) =>
-              !db.categories.some((existingCategory) => existingCategory.id === category.id),
-          )
-        : undefined;
-      commitTrialActivation(subscription, newHabit, newCategory);
-      clearActivationSelection();
-      await requestReminderPermission(newHabit ?? existing!);
+      applyEntitlement(subscription);
       navigate({ to: "/" });
     } catch {
-      setError(
-        t(
-          "برای شروع دورهٔ آزمایشی به اتصال اینترنت نیاز داری. عادتت محفوظ است؛ دوباره تلاش کن.",
-          "A connection is needed to start your trial. Your habit is saved here; try again.",
-        ),
-      );
-      toast.error(
-        t("شروع دورهٔ آزمایشی انجام نشد؛ دوباره تلاش کن.", "Trial did not start. Try again."),
-      );
+      setError(t("فعلاً شروع نشد؛ دوباره تلاش کن.", "Could not start yet. Please try again."));
+      toast.error(t("شروع دوره انجام نشد.", "The trial could not be started."));
     } finally {
+      startInFlight.current = false;
       setBusy(false);
     }
   };
 
-  const selectedExisting = activeHabit(existingHabits, selection);
+  const features = [
+    {
+      icon: CalendarDays,
+      text: t("کارها و عادت‌ها، یک‌جا", "Tasks and habits together"),
+    },
+    {
+      icon: BarChart3,
+      text: t("پیشرفتت را واضح ببین", "See your progress clearly"),
+    },
+    {
+      icon: Clock3,
+      text: t("تمرکز و ژورنال روزانه", "Daily focus and journal"),
+    },
+  ];
+
   return (
-    <main className="flex min-h-screen bg-background px-5 py-screen-safe">
-      <section className="mx-auto flex w-full max-w-md flex-col justify-center gap-5 py-8">
-        <div className="text-center">
-          <span className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-soft text-primary">
-            <Sparkles className="h-6 w-6" />
-          </span>
-          <h1 className="text-2xl font-black text-foreground">
-            {t("با یک عادت شروع کنیم", "Start with one habit")}
-          </h1>
-          <p className="mt-2 text-sm leading-7 text-muted-foreground">
-            {t(
-              "یک شروع کوچک انتخاب کن تا ۷ روز آینده از همان امروز قابل استفاده باشد.",
-              "Choose one small start so your next 7 days are useful from today.",
-            )}
-          </p>
-        </div>
+    <main className="min-h-screen bg-background px-5 py-screen-safe">
+      <section className="mx-auto flex min-h-[calc(100svh-3rem)] w-full max-w-md flex-col">
+        <header className="flex items-center gap-2 py-1 text-sm font-black text-foreground">
+          <Logo className="h-8 w-8" />
+          <span>{t("روتینو", "Routino")}</span>
+        </header>
 
-        {existingHabits.length > 0 && (
-          <section className="card-surface p-4">
-            <p className="text-sm font-bold text-foreground">
-              {t("از عادت آماده‌ات استفاده کن", "Use a habit already prepared")}
-            </p>
-            <div className="mt-3 flex flex-col gap-2">
-              {existingHabits.map((habit) => (
-                <button
-                  key={habit.id}
-                  type="button"
-                  onClick={() => setSelection({ kind: "existing", habitId: habit.id })}
-                  className={`flex items-center justify-between rounded-xl border px-3 py-2.5 text-start text-sm font-bold transition-colors ${
-                    selectedExisting?.id === habit.id
-                      ? "border-primary bg-primary-soft text-primary"
-                      : "border-border text-foreground hover:bg-secondary"
-                  }`}
-                >
-                  {habit.name}
-                  {selectedExisting?.id === habit.id && <Check className="h-4 w-4" />}
-                </button>
-              ))}
+        <div className="flex flex-1 flex-col justify-center py-6">
+          <div className="mx-auto mb-6 grid h-32 w-32 place-items-center rounded-full bg-primary-soft/55">
+            <div className="grid h-24 w-24 place-items-center rounded-full border border-primary/20 bg-card shadow-sm">
+              <Logo className="h-16 w-16 shadow-md" />
             </div>
-          </section>
-        )}
-
-        <section>
-          <p className="mb-2 text-sm font-bold text-foreground">
-            {t("یا یک شروع ساده انتخاب کن", "Or pick a simple starter")}
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            {STARTERS.map(({ categoryId, preset }) => {
-              const selected =
-                selection?.kind === "draft" &&
-                selection.draft.name === (lang === "fa" ? preset.nameFa : preset.nameEn);
-              const category = db.categories.find((item) => item.id === categoryId);
-              return (
-                <button
-                  key={`${categoryId}-${preset.nameEn}`}
-                  type="button"
-                  onClick={() => choosePreset(categoryId, preset)}
-                  className={`rounded-2xl border p-3 text-start transition-colors ${
-                    selected
-                      ? "border-primary bg-primary-soft"
-                      : "border-border bg-card hover:bg-secondary"
-                  }`}
-                >
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    {category && <CatIcon icon={category.icon} className="h-3.5 w-3.5" />}
-                    {category ? (lang === "fa" ? category.nameFa : category.nameEn) : categoryId}
-                  </div>
-                  <p className="mt-1 text-sm font-bold text-foreground">
-                    {lang === "fa" ? preset.nameFa : preset.nameEn}
-                  </p>
-                </button>
-              );
-            })}
           </div>
-        </section>
 
-        <Button variant="secondary" onClick={openCustom}>
-          <Plus className="h-4 w-4" />
-          {t("ساخت عادت دلخواه", "Create a custom habit")}
-        </Button>
+          <div className="text-center">
+            <h1 className="text-2xl font-black leading-10 text-foreground">
+              {t("هفت روز با روتینو پیش برو", "Try a week with Routino")}
+            </h1>
+            <p className="mt-1.5 text-sm leading-7 text-muted-foreground">
+              {t(
+                "همه‌ی امکانات را با برنامه‌ی واقعی خودت امتحان کن.",
+                "Use every feature with your real routines.",
+              )}
+            </p>
+          </div>
 
-        {selection?.kind === "draft" && validDraft(selection.draft) && (
-          <p className="rounded-xl bg-secondary px-3 py-2 text-center text-xs font-medium text-muted-foreground">
-            {t("آماده برای شروع:", "Ready to start:")} {selection.draft.name}
-          </p>
-        )}
-        {error && (
-          <p className="rounded-xl bg-destructive/10 px-3 py-2 text-center text-sm text-destructive">
-            {error}
-          </p>
-        )}
+          <ul
+            className="mt-6 overflow-hidden border-y border-border"
+            aria-label={t("امکانات روتینو", "Routino features")}
+          >
+            {features.map(({ icon: Icon, text }) => (
+              <li key={text} className="flex min-h-14 items-center gap-3 border-b border-border py-2.5 last:border-b-0">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary">
+                  <Icon className="h-[18px] w-[18px]" aria-hidden="true" />
+                </span>
+                <span className="flex-1 text-sm font-bold text-foreground">{text}</span>
+                <Check className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+              </li>
+            ))}
+          </ul>
 
-        <Button className="w-full" disabled={!ready || busy} onClick={() => void start()}>
-          {busy ? t("در حال شروع…", "Starting…") : t("شروع ۷ روز رایگان", "Start my 7-day trial")}
-        </Button>
+          <div className="mt-auto pt-7">
+            {error && (
+              <p role="alert" className="mb-3 rounded-xl bg-destructive/10 px-3 py-2 text-center text-sm text-destructive">
+                {error}
+              </p>
+            )}
+
+            <Button className="min-h-14 w-full rounded-2xl text-[15px] font-black shadow-lg shadow-primary/20" disabled={busy} onClick={() => void start()}>
+              {busy
+                ? t("در حال فعال‌سازی…", "Activating…")
+                : error
+                  ? t("تلاش دوباره", "Try again")
+                  : t("شروع رایگان", "Start free")}
+            </Button>
+            <p className="mt-2 text-center text-xs leading-6 text-muted-foreground">
+              {t("تمام امکانات برای هفت روز فعال می‌شود", "Every feature unlocks for seven days")}
+            </p>
+
+            <details
+              className="group mt-1"
+              onToggle={(event) => {
+                if (event.currentTarget.open) void loadPlans();
+              }}
+            >
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-center gap-1.5 text-xs font-bold text-muted-foreground">
+                {t("شرایط ادامه و پلن‌ها", "Plans and what happens next")}
+                <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" aria-hidden="true" />
+              </summary>
+
+              <div className="rounded-2xl border border-border bg-secondary/45 p-3.5">
+                <p className="text-xs leading-6 text-muted-foreground">
+                  {t(
+                    "بعد از هفت روز، فقط اگر خودت خواستی یکی از پلن‌ها را انتخاب می‌کنی.",
+                    "After seven days, you only choose a plan if you want to continue.",
+                  )}
+                </p>
+
+                {plansState === "loading" && (
+                  <p role="status" className="mt-3 text-center text-xs text-muted-foreground">
+                    {t("در حال دریافت قیمت‌های به‌روز…", "Loading current prices…")}
+                  </p>
+                )}
+
+                {plansState === "error" && (
+                  <div className="mt-3 flex items-center justify-between gap-2 rounded-xl bg-card px-3 py-2">
+                    <p className="text-xs text-muted-foreground">
+                      {t("قیمت‌های به‌روز دریافت نشد.", "Current prices could not be loaded.")}
+                    </p>
+                    <button type="button" onClick={() => void loadPlans()} className="flex shrink-0 items-center gap-1 text-xs font-bold text-primary">
+                      <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+                      {t("تلاش دوباره", "Retry")}
+                    </button>
+                  </div>
+                )}
+
+                {plansState === "ready" && (
+                  <div className="mt-3 grid grid-cols-1 gap-2 min-[351px]:grid-cols-3" aria-label={t("پلن‌های روتینو", "Routino plans")}>
+                    {plans.map((plan) => (
+                      <div key={plan.id} className="flex items-center justify-between rounded-xl border border-border bg-card px-3 py-2.5 min-[351px]:block min-[351px]:px-1.5 min-[351px]:text-center">
+                        <p className="text-[11px] font-bold text-muted-foreground">
+                          {lang === "fa" ? plan.nameFa : plan.nameEn}
+                        </p>
+                        <p className="mt-0 min-[351px]:mt-1 text-xs font-black text-foreground">
+                          {faNum(plan.price.toLocaleString("en-US"), lang)} {t("تومان", "Toman")}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </details>
+          </div>
+        </div>
       </section>
-
-      <HabitFormModal
-        open={formOpen}
-        onClose={() => setFormOpen(false)}
-        draft={preparedDraft}
-        setDraft={setPreparedDraft}
-        categories={db.categories}
-        onSave={() => {
-          if (!validDraft(preparedDraft)) return;
-          setFormOpen(false);
-        }}
-        t={t}
-        lang={lang}
-      />
     </main>
   );
 }
