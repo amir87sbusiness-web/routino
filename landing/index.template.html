@@ -485,6 +485,7 @@
       .download-option h2 { font-size: clamp(21px, 2.6vw, 27px); }
       .download-actions { display: flex; flex-wrap: wrap; gap: 12px; }
       .download-btn { min-width: 150px; flex: 1 1 150px; padding-inline: 24px; }
+      .download-btn .pwa-mark { width: 27px; color: var(--brand-lit); }
       .download-btn-primary { box-shadow: var(--emboss), 0 10px 26px rgba(var(--brand-rgb), 0.32); }
       @media (max-width: 680px) {
         .download-grid { grid-template-columns: 1fr; }
@@ -580,6 +581,11 @@
         <g id="i-globe" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none">
           <circle cx="12" cy="12" r="8.8" /><path d="M3.2 12h17.6" />
           <path d="M12 3.2a13.6 13.6 0 0 1 0 17.6a13.6 13.6 0 0 1 0-17.6z" />
+        </g>
+        <g id="i-pwa" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round" fill="none">
+          <path d="M2.2 16V8h3.1a2.7 2.7 0 0 1 0 5.4H2.2" />
+          <path d="m8.8 8 2 8 2.2-5.2 2.2 5.2 2-8" />
+          <path d="m18.3 16 2.8-8 2.7 8M19.4 13h3.3" />
         </g>
         <g id="i-droid" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none">
           <path d="M5.4 10.6a6.6 6.6 0 0 1 13.2 0" /><path d="M4.8 10.6h14.4v6.2a1.6 1.6 0 0 1-1.6 1.6H6.4a1.6 1.6 0 0 1-1.6-1.6z" />
@@ -792,16 +798,16 @@
             <h2>اندروید</h2>
             <div class="download-actions">
 <!--ANDROID-DOWNLOAD-->
-              <a class="btn ghost download-btn" href="/app/" aria-label="نسخه وب روتینو برای اندروید">
-                <svg class="ic" aria-hidden="true"><use href="#i-globe" /></svg><span>نسخه وب</span>
+              <a class="btn ghost download-btn" href="/app/" aria-label="وب اپلیکیشن روتینو برای اندروید">
+                <svg class="ic pwa-mark" aria-hidden="true"><use href="#i-pwa" /></svg><span>وب اپلیکیشن</span>
               </a>
             </div>
           </div>
           <div class="download-option">
             <h2>آیفون، ویندوز و مک</h2>
             <div class="download-actions">
-              <a class="btn ghost download-btn" href="/app/" aria-label="نسخه وب روتینو برای آیفون، ویندوز و مک">
-                <svg class="ic" aria-hidden="true"><use href="#i-globe" /></svg><span>نسخه وب</span>
+              <a class="btn ghost download-btn" href="/app/" aria-label="وب اپلیکیشن روتینو برای آیفون، ویندوز و مک">
+                <svg class="ic pwa-mark" aria-hidden="true"><use href="#i-pwa" /></svg><span>وب اپلیکیشن</span>
               </a>
             </div>
           </div>
