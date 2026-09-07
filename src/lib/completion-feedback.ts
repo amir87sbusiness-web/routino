@@ -23,12 +23,29 @@ export function shouldTriggerCompletionFeedback({
 let completionAudio: HTMLAudioElement | null = null;
 let lastHapticAt = 0;
 
+function getCompletionAudio(): HTMLAudioElement | null {
+  if (typeof Audio === "undefined") return null;
+  completionAudio ??= new Audio(`${import.meta.env.BASE_URL}sounds/completion.mp3`);
+  return completionAudio;
+}
+
+/** Fetch and decode the tiny cue before the first completion interaction. */
+export function preloadCompletionCue(): void {
+  try {
+    const audio = getCompletionAudio();
+    if (!audio) return;
+    audio.preload = "auto";
+    audio.load();
+  } catch {
+    // Audio is supplemental; unsupported or blocked preload must stay silent.
+  }
+}
+
 /** Replays the supplied confirmation sound instead of queueing overlapping cues. */
 function playCompletionCue(): void {
   try {
-    if (typeof Audio === "undefined") return;
-    const audio = completionAudio ?? new Audio(`${import.meta.env.BASE_URL}sounds/completion.mp3`);
-    completionAudio = audio;
+    const audio = getCompletionAudio();
+    if (!audio) return;
     audio.currentTime = 0;
     void audio.play().catch(() => undefined);
   } catch {

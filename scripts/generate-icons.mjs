@@ -105,6 +105,14 @@ async function renderSolid(size) {
     .toBuffer();
 }
 
+async function renderTransparent(size) {
+  return sharp({
+    create: { width: size, height: size, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+  })
+    .png({ compressionLevel: 9, adaptiveFiltering: true })
+    .toBuffer();
+}
+
 /** Remove the near-white source background without changing the mark geometry. */
 async function renderTransparentMark(source, size) {
   const { data, info } = await sharp(source)
@@ -240,22 +248,14 @@ export async function generateIcons({ root = DEFAULT_ROOT } = {}) {
 
   for (const [density, size] of Object.entries(ANDROID_LAUNCHER_SIZES)) {
     const folder = join(root, "android", "app", "src", "main", "res", `mipmap-${density}`);
-    await writeOutput(
-      join(folder, "ic_launcher.png"),
-      await renderInstalledIcon(lightSource, size),
-    );
+    const launcher = await renderInstalledIcon(lightSource, size);
+    await writeOutput(join(folder, "ic_launcher.png"), launcher);
     await writeOutput(
       join(folder, "ic_launcher_round.png"),
       await renderRoundIcon(lightSource, size),
     );
-    await writeOutput(join(folder, "ic_launcher_background.png"), await renderSolid(size));
-    await writeOutput(
-      join(folder, "ic_launcher_foreground.png"),
-      await sharp(foreground1024)
-        .resize(size, size, { kernel: sharp.kernel.lanczos3 })
-        .png({ compressionLevel: 9, adaptiveFiltering: true })
-        .toBuffer(),
-    );
+    await writeOutput(join(folder, "ic_launcher_background.png"), launcher);
+    await writeOutput(join(folder, "ic_launcher_foreground.png"), await renderTransparent(size));
   }
 
   const androidRes = join(root, "android", "app", "src", "main", "res");

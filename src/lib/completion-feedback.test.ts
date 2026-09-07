@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { shouldTriggerCompletionFeedback, triggerCompletionFeedback } from "./completion-feedback";
+import {
+  preloadCompletionCue,
+  shouldTriggerCompletionFeedback,
+  triggerCompletionFeedback,
+} from "./completion-feedback";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -80,10 +84,14 @@ describe("triggerCompletionFeedback", () => {
     const instances: Array<{
       src: string;
       currentTime: number;
+      preload: string;
+      load: ReturnType<typeof vi.fn>;
       play: ReturnType<typeof vi.fn>;
     }> = [];
     class FakeAudio {
       currentTime = 4;
+      preload = "none";
+      load = vi.fn();
       play = vi.fn().mockResolvedValue(undefined);
 
       constructor(public readonly src: string) {
@@ -92,10 +100,13 @@ describe("triggerCompletionFeedback", () => {
     }
     vi.stubGlobal("Audio", FakeAudio);
 
+    preloadCompletionCue();
     triggerCompletionFeedback({ completionSoundEnabled: true, hapticsEnabled: false });
 
     expect(instances).toHaveLength(1);
     expect(instances[0]?.src).toBe("/sounds/completion.mp3");
+    expect(instances[0]?.preload).toBe("auto");
+    expect(instances[0]?.load).toHaveBeenCalledOnce();
     expect(instances[0]?.currentTime).toBe(0);
     expect(instances[0]?.play).toHaveBeenCalledOnce();
   });

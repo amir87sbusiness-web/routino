@@ -93,18 +93,37 @@ describe("Routino brand asset generator", () => {
     }
 
     for (const [density, size] of Object.entries(ANDROID_LAUNCHER_SIZES)) {
+      const folder = join(
+        sandbox,
+        "android",
+        "app",
+        "src",
+        "main",
+        "res",
+        `mipmap-${density}`,
+      );
       for (const name of [
         "ic_launcher.png",
         "ic_launcher_round.png",
         "ic_launcher_background.png",
         "ic_launcher_foreground.png",
       ]) {
-        await expectPngSize(
-          join(sandbox, "android", "app", "src", "main", "res", `mipmap-${density}`, name),
-          size,
-          size,
-        );
+        await expectPngSize(join(folder, name), size, size);
       }
+
+      assert.deepEqual(
+        readFileSync(join(folder, "ic_launcher_background.png")),
+        readFileSync(join(folder, "ic_launcher.png")),
+        `${density} adaptive background must match the web-style launcher icon`,
+      );
+      const foreground = await sharp(readFileSync(join(folder, "ic_launcher_foreground.png")))
+        .ensureAlpha()
+        .raw()
+        .toBuffer();
+      assert.ok(
+        foreground.every((channel, index) => index % 4 !== 3 || channel === 0),
+        `${density} adaptive foreground must stay transparent`,
+      );
     }
 
     for (const [relativePath, [width, height]] of Object.entries(ANDROID_SPLASH_SIZES)) {

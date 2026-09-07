@@ -6,6 +6,7 @@ import { routeTree } from "./routeTree.gen";
 // وارد کردن استایل‌های اصلی (Tailwind)
 import "./styles.css";
 import { initPwa } from "./lib/pwa";
+import { preloadCompletionCue } from "./lib/completion-feedback";
 
 // ایجاد یک نمونه از روتر
 //
@@ -25,6 +26,7 @@ declare module "@tanstack/react-router" {
 
 // سرویس‌ورکر / نصب / استوریج پایدار. روی کپسیتور خودش no-op می‌کند.
 initPwa();
+preloadCompletionCue();
 
 // دیپ‌لینک بازگشت از درگاه پرداخت (فقط نیتیو):
 // صفحه‌ی callback سرور کاربر را به routino://pay/result?paymentId=… می‌فرستد.
