@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 import assert from "node:assert/strict";
-import { cpSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -56,6 +56,43 @@ async function expectPngSize(path, width, height) {
   assert.equal(metadata.height, height, path);
 }
 
+async function expectVisibleMarkCentered(path) {
+  const { data, info } = await sharp(readFileSync(path))
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  let minX = info.width;
+  let minY = info.height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < info.height; y += 1) {
+    for (let x = 0; x < info.width; x += 1) {
+      const index = (y * info.width + x) * 3;
+      const distanceFromWhite = Math.hypot(
+        255 - data[index],
+        255 - data[index + 1],
+        255 - data[index + 2],
+      );
+      if (distanceFromWhite <= 35) continue;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+
+  assert.ok(maxX >= minX && maxY >= minY, `${path} must contain a visible mark`);
+  assert.ok(
+    Math.abs((minX + maxX) / 2 - (info.width - 1) / 2) <= 1,
+    `${path} mark must be horizontally centered`,
+  );
+  assert.ok(
+    Math.abs((minY + maxY) / 2 - (info.height - 1) / 2) <= 1,
+    `${path} mark must be vertically centered`,
+  );
+}
+
 describe("Routino brand asset generator", () => {
   const sandbox = mkdtempSync(join(tmpdir(), "routino-icons-test-"));
 
@@ -102,42 +139,23 @@ describe("Routino brand asset generator", () => {
         "res",
         `mipmap-${density}`,
       );
-      for (const name of [
-        "ic_launcher.png",
+      await expectPngSize(join(folder, "ic_launcher.png"), size, size);
+      await expectVisibleMarkCentered(join(folder, "ic_launcher.png"));
+
+      for (const obsolete of [
         "ic_launcher_round.png",
         "ic_launcher_background.png",
         "ic_launcher_foreground.png",
       ]) {
-        await expectPngSize(join(folder, name), size, size);
+        assert.equal(existsSync(join(folder, obsolete)), false, `${obsolete} must be removed`);
       }
-
-      const expectedLauncher = await sharp(
-        readFileSync(join(sandbox, "public", "icons", "icon-512.png")),
-      )
-        .resize(size, size, { kernel: sharp.kernel.lanczos3 })
-        .sharpen({ sigma: size <= 32 ? 0.65 : 0.35 })
-        .png({ compressionLevel: 9, adaptiveFiltering: true, palette: false, quality: 92 })
-        .toBuffer();
-      assert.deepEqual(
-        readFileSync(join(folder, "ic_launcher.png")),
-        expectedLauncher,
-        `${density} Android launcher must be generated directly from the installed PWA icon`,
-      );
-
-      assert.deepEqual(
-        readFileSync(join(folder, "ic_launcher_background.png")),
-        readFileSync(join(folder, "ic_launcher.png")),
-        `${density} adaptive background must match the web-style launcher icon`,
-      );
-      const foreground = await sharp(readFileSync(join(folder, "ic_launcher_foreground.png")))
-        .ensureAlpha()
-        .raw()
-        .toBuffer();
-      assert.ok(
-        foreground.every((channel, index) => index % 4 !== 3 || channel === 0),
-        `${density} adaptive foreground must stay transparent`,
-      );
     }
+
+    assert.equal(
+      existsSync(join(sandbox, "android", "app", "src", "main", "res", "mipmap-anydpi-v26")),
+      false,
+      "obsolete adaptive launcher resources must be removed",
+    );
 
     for (const [relativePath, [width, height]] of Object.entries(ANDROID_SPLASH_SIZES)) {
       await expectPngSize(
@@ -163,9 +181,14 @@ describe("Routino brand asset generator", () => {
     assert.ok(statSync(join(sandbox, "public", "favicon.ico")).size <= 24 * 1024);
   });
 
-  it("uses a fresh Android package version so launchers replace cached icons", () => {
+  it("uses one launcher icon and a fresh Android package version", () => {
     const gradle = readFileSync(join(ROOT, "android", "app", "build.gradle"), "utf8");
-    assert.match(gradle, /versionCode 2\b/);
-    assert.match(gradle, /versionName "1\.0\.1"/);
+    const manifest = readFileSync(
+      join(ROOT, "android", "app", "src", "main", "AndroidManifest.xml"),
+      "utf8",
+    );
+    assert.match(gradle, /versionCode 4\b/);
+    assert.match(gradle, /versionName "1\.0\.3"/);
+    assert.doesNotMatch(manifest, /android:roundIcon=/);
   });
 });

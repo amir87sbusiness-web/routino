@@ -97,17 +97,47 @@ async function renderInstalledIcon(source, size, { palette = false } = {}) {
     .toBuffer();
 }
 
-async function renderSolid(size) {
+async function renderCenteredAndroidIcon(source, size) {
+  const { data, info } = await sharp(source)
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  let minX = info.width;
+  let minY = info.height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < info.height; y += 1) {
+    for (let x = 0; x < info.width; x += 1) {
+      const index = (y * info.width + x) * 3;
+      const distanceFromWhite = Math.hypot(
+        255 - data[index],
+        255 - data[index + 1],
+        255 - data[index + 2],
+      );
+      if (distanceFromWhite <= 35) continue;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+  if (maxX < minX || maxY < minY) throw new Error("Android icon source has no visible mark");
+
+  const shiftX = Math.round(((info.width - 1) / 2 - (minX + maxX) / 2) * (size / info.width));
+  const shiftY = Math.round(((info.height - 1) / 2 - (minY + maxY) / 2) * (size / info.height));
+  const resized = await renderInstalledIcon(source, size);
   return sharp({
-    create: { width: size, height: size, channels: 4, background: LIGHT_BACKGROUND },
+    create: { width: size, height: size, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } },
   })
+    .composite([{ input: resized, left: shiftX, top: shiftY }])
     .png({ compressionLevel: 9, adaptiveFiltering: true })
     .toBuffer();
 }
 
-async function renderTransparent(size) {
+async function renderSolid(size) {
   return sharp({
-    create: { width: size, height: size, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+    create: { width: size, height: size, channels: 4, background: LIGHT_BACKGROUND },
   })
     .png({ compressionLevel: 9, adaptiveFiltering: true })
     .toBuffer();
@@ -147,17 +177,6 @@ async function renderTransparentMark(source, size) {
   return sharp(output, {
     raw: { width: info.width, height: info.height, channels: 4 },
   })
-    .png({ compressionLevel: 9, adaptiveFiltering: true })
-    .toBuffer();
-}
-
-async function renderRoundIcon(source, size) {
-  const tile = await renderInstalledIcon(source, size);
-  const mask = Buffer.from(
-    `<svg width="${size}" height="${size}"><circle cx="${size / 2}" cy="${size / 2}" r="${size / 2}" fill="#fff"/></svg>`,
-  );
-  return sharp(tile)
-    .composite([{ input: mask, blend: "dest-in" }])
     .png({ compressionLevel: 9, adaptiveFiltering: true })
     .toBuffer();
 }
@@ -207,6 +226,9 @@ export async function generateIcons({ root = DEFAULT_ROOT } = {}) {
   const darkSource = await loadApprovedSource(
     join(root, "assets", "brand", "logo-dark-source.png"),
   );
+  const androidSource = await loadApprovedSource(
+    join(root, "assets", "brand", "android-icon-source.png"),
+  );
 
   await writeOutput(
     join(root, "public", "brand", "logo-light.webp"),
@@ -249,17 +271,20 @@ export async function generateIcons({ root = DEFAULT_ROOT } = {}) {
 
   for (const [density, size] of Object.entries(ANDROID_LAUNCHER_SIZES)) {
     const folder = join(root, "android", "app", "src", "main", "res", `mipmap-${density}`);
-    // Use the exact installed-PWA artwork as Android's launcher source so a
-    // browser-installed Routino and the native app share one icon treatment.
-    const launcher = await renderInstalledIcon(pwaIcon512, size);
+    const launcher = await renderCenteredAndroidIcon(androidSource, size);
     await writeOutput(join(folder, "ic_launcher.png"), launcher);
-    await writeOutput(
-      join(folder, "ic_launcher_round.png"),
-      await renderRoundIcon(pwaIcon512, size),
-    );
-    await writeOutput(join(folder, "ic_launcher_background.png"), launcher);
-    await writeOutput(join(folder, "ic_launcher_foreground.png"), await renderTransparent(size));
+    for (const obsolete of [
+      "ic_launcher_round.png",
+      "ic_launcher_background.png",
+      "ic_launcher_foreground.png",
+    ]) {
+      await rm(join(folder, obsolete), { force: true });
+    }
   }
+  await rm(
+    join(root, "android", "app", "src", "main", "res", "mipmap-anydpi-v26"),
+    { recursive: true, force: true },
+  );
 
   const androidRes = join(root, "android", "app", "src", "main", "res");
   for (const [relativePath, [width, height]] of Object.entries(ANDROID_SPLASH_SIZES)) {
