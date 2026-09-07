@@ -93,6 +93,29 @@ async function expectVisibleMarkCentered(path) {
   );
 }
 
+async function expectComfortableAndroidMarkScale(path) {
+  const { data, info } = await sharp(readFileSync(path))
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  let minX = info.width;
+  let maxX = -1;
+  for (let y = 0; y < info.height; y += 1) {
+    for (let x = 0; x < info.width; x += 1) {
+      const index = (y * info.width + x) * 3;
+      if (
+        Math.hypot(255 - data[index], 255 - data[index + 1], 255 - data[index + 2]) <= 35
+      ) {
+        continue;
+      }
+      minX = Math.min(minX, x);
+      maxX = Math.max(maxX, x);
+    }
+  }
+  const occupancy = (maxX - minX + 1) / info.width;
+  assert.ok(occupancy >= 0.58 && occupancy <= 0.6, `${path} mark occupancy was ${occupancy}`);
+}
+
 describe("Routino brand asset generator", () => {
   const sandbox = mkdtempSync(join(tmpdir(), "routino-icons-test-"));
 
@@ -156,6 +179,18 @@ describe("Routino brand asset generator", () => {
       false,
       "obsolete adaptive launcher resources must be removed",
     );
+    await expectComfortableAndroidMarkScale(
+      join(
+        sandbox,
+        "android",
+        "app",
+        "src",
+        "main",
+        "res",
+        "mipmap-xxxhdpi",
+        "ic_launcher.png",
+      ),
+    );
 
     for (const [relativePath, [width, height]] of Object.entries(ANDROID_SPLASH_SIZES)) {
       await expectPngSize(
@@ -187,8 +222,8 @@ describe("Routino brand asset generator", () => {
       join(ROOT, "android", "app", "src", "main", "AndroidManifest.xml"),
       "utf8",
     );
-    assert.match(gradle, /versionCode 4\b/);
-    assert.match(gradle, /versionName "1\.0\.3"/);
+    assert.match(gradle, /versionCode 5\b/);
+    assert.match(gradle, /versionName "1\.0\.4"/);
     assert.doesNotMatch(manifest, /android:roundIcon=/);
   });
 });

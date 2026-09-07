@@ -16,6 +16,7 @@ const DEFAULT_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SOURCE_SIZE = 1254;
 const LIGHT_BACKGROUND = { r: 248, g: 248, b: 248, alpha: 1 };
 const UI_CROP = { left: 140, top: 110, width: 974, height: 974 };
+const ANDROID_ICON_SCALE = 0.94;
 
 const ANDROID_LAUNCHER_SIZES = {
   ldpi: 36,
@@ -124,13 +125,20 @@ async function renderCenteredAndroidIcon(source, size) {
   }
   if (maxX < minX || maxY < minY) throw new Error("Android icon source has no visible mark");
 
-  const shiftX = Math.round(((info.width - 1) / 2 - (minX + maxX) / 2) * (size / info.width));
-  const shiftY = Math.round(((info.height - 1) / 2 - (minY + maxY) / 2) * (size / info.height));
-  const resized = await renderInstalledIcon(source, size);
+  const tileSize = Math.round(size * ANDROID_ICON_SCALE);
+  const shiftX = Math.round(
+    ((info.width - 1) / 2 - (minX + maxX) / 2) * (tileSize / info.width),
+  );
+  const shiftY = Math.round(
+    ((info.height - 1) / 2 - (minY + maxY) / 2) * (tileSize / info.height),
+  );
+  const resized = await renderInstalledIcon(source, tileSize);
+  const left = Math.round((size - tileSize) / 2) + shiftX;
+  const top = Math.round((size - tileSize) / 2) + shiftY;
   return sharp({
     create: { width: size, height: size, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } },
   })
-    .composite([{ input: resized, left: shiftX, top: shiftY }])
+    .composite([{ input: resized, left, top }])
     .png({ compressionLevel: 9, adaptiveFiltering: true })
     .toBuffer();
 }
