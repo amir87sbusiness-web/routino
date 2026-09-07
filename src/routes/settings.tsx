@@ -716,35 +716,6 @@ function SettingsPage() {
         </Card>
       )}
 
-      {/* danger zone: sign out + erase everything, together in one red box */}
-      <Card className="flex flex-col gap-3 border-destructive/40 bg-destructive/5">
-        <div className="flex items-center gap-2 text-sm font-bold text-destructive">
-          <AlertTriangle className="h-4 w-4" /> {t("منطقهٔ خطر", "Danger zone")}
-        </div>
-
-        {/* sign out */}
-        <Button
-          variant="secondary"
-          className="w-full justify-center text-destructive"
-          onClick={() => setSignOutOpen(true)}
-        >
-          <LogOut className="h-4 w-4" /> {t("خروج از حساب", "Sign out")}
-        </Button>
-
-        <div className="h-px bg-destructive/20" />
-
-        {/* Explicit synced-account content reset; account and entitlement survive. */}
-        <p className="text-[11px] leading-5 text-muted-foreground">
-          {t(
-            "همهٔ عادت‌ها، ثبت‌ها، کارها، ژورنال و تاریخچهٔ تایمر از حساب همگام‌شده پاک می‌شود و این حذف به دستگاه‌های دیگرت هم می‌رسد. خود حساب و اشتراک باقی می‌ماند.",
-            "Erases habits, logs, tasks, journal entries and timer history from your synced account and propagates the deletion to your other devices. Your account and subscription remain.",
-          )}
-        </p>
-        <Button variant="destructive" onClick={() => setWipeOpen(true)}>
-          <Trash2 className="h-4 w-4" /> {t("پاک کردن همهٔ داده‌ها", "Erase all data")}
-        </Button>
-      </Card>
-
       {/* sign-out confirm — one stray tap used to sign the user straight out */}
       <Modal
         open={signOutOpen}
@@ -878,6 +849,29 @@ function SettingsPage() {
       <p className="text-center text-[10px] text-muted-foreground">
         {t("روتینو نسخه 1.0 - آفلاین فرست", "Routino v1.0 · offline-first")}
       </p>
+
+      {/* Keep account actions last; confirmations explain destructive effects. */}
+      <Card className="flex flex-col gap-2 border-destructive/40 bg-destructive/5 p-3">
+        <div className="flex items-center gap-1.5 text-xs font-bold text-destructive">
+          <AlertTriangle className="h-3.5 w-3.5" /> {t("منطقهٔ خطر", "Danger zone")}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="secondary"
+            className="min-h-11 flex-1 whitespace-nowrap px-3 py-2 text-xs text-destructive"
+            onClick={() => setSignOutOpen(true)}
+          >
+            <LogOut className="h-3.5 w-3.5" /> {t("خروج از حساب", "Sign out")}
+          </Button>
+          <Button
+            variant="destructive"
+            className="min-h-11 flex-1 whitespace-nowrap px-3 py-2 text-xs"
+            onClick={() => setWipeOpen(true)}
+          >
+            <Trash2 className="h-3.5 w-3.5" /> {t("پاک کردن همهٔ داده‌ها", "Erase all data")}
+          </Button>
+        </div>
+      </Card>
 
       {/* new category modal */}
       <Modal
