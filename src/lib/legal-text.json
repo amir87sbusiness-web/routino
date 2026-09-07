@@ -32,8 +32,8 @@
       "title": ["۴. اینترنت و دسترسی به سرویس", "4. Internet & service availability"],
       "paras": [
         [
-          "روتینو برای سرویس‌های آنلاینش از Cloudflare و Supabase استفاده می‌کند. ورود، همگام‌سازی و پرداخت به اینترنت نیاز دارند؛ پس اگر اینترنت، اپراتور یا یکی از سرویس‌های بیرونی قطع یا مختل شود، ممکن است این بخش‌ها موقتاً کار نکنند. اتفاق‌هایی که خارج از کنترل معقول ما هستند به عهدهٔ روتینو نیستند، مگر جایی که قانون چیز دیگری بگوید. بخش‌های اصلی با اطلاعات روی دستگاه کار می‌کنند، اما اطلاعات همگام‌نشده ممکن است با حذف برنامه، پاک‌کردن داده‌های مرورگر یا خرابی دستگاه از بین بروند؛ بهتر است خروجی پشتیبان بگیری.",
-          "Routino uses Cloudflare and Supabase for its online services. Sign-in, sync, and payment need an internet connection, so those features may be temporarily unavailable if your internet provider or an external service is interrupted. Routino is not responsible for events outside our reasonable control, except where the law requires otherwise. Core features use data stored on your device, but unsynced data may be lost if you uninstall the app, clear browser data, or lose the device; keeping an export backup is recommended."
+          "روتینو برای سرویس‌های آنلاینش از Cloudflare و Supabase استفاده می‌کند. ورود، همگام‌سازی و پرداخت به اینترنت نیاز دارند؛ پس اگر اینترنت، اپراتور یا یکی از سرویس‌های بیرونی قطع یا مختل شود، ممکن است این بخش‌ها موقتاً کار نکنند. اتفاق‌هایی که خارج از کنترل معقول ما هستند به عهدهٔ روتینو نیستند، مگر جایی که قانون چیز دیگری بگوید.",
+          "Routino uses Cloudflare and Supabase for its online services. Sign-in, sync, and payment need an internet connection, so those features may be temporarily unavailable if your internet provider or an external service is interrupted. Routino is not responsible for events outside our reasonable control, except where the law requires otherwise."
         ]
       ]
     },
@@ -61,8 +61,8 @@
       "title": ["۲. اطلاعات کجا می‌روند و چرا؟", "2. Where information goes and why"],
       "paras": [
         [
-          "بخشی از اطلاعات روی دستگاهت می‌ماند و اطلاعات قابل‌همگام‌سازی از راه زیرساخت Cloudflare و Supabase با سرور روتینو ردوبدل می‌شود. از این اطلاعات فقط برای ورود، همگام‌سازی و بازیابی، پرداخت، پشتیبانی و امنیت استفاده می‌کنیم. اطلاعاتت را نمی‌فروشیم و برای تبلیغات به کسی نمی‌دهیم.",
-          "Some information stays on your device. Syncable information is exchanged with Routino's server through Cloudflare and Supabase infrastructure. We use it only for sign-in, sync and recovery, payment, support, and security. We do not sell your information or share it for advertising."
+          "بخشی از اطلاعات روی دستگاهت می‌ماند و اطلاعات قابل‌همگام‌سازی از راه زیرساخت Cloudflare و Supabase با سرور روتینو ردوبدل می‌شود. از این اطلاعات فقط برای ورود، همگام‌سازی، پرداخت، پشتیبانی و امنیت استفاده می‌کنیم. اطلاعاتت را نمی‌فروشیم و برای تبلیغات به کسی نمی‌دهیم.",
+          "Some information stays on your device. Syncable information is exchanged with Routino's server through Cloudflare and Supabase infrastructure. We use it only for sign-in, sync, payment, support, and security. We do not sell your information or share it for advertising."
         ]
       ]
     },
@@ -88,8 +88,8 @@
       "title": ["۵. انتخاب‌های تو", "5. Your choices"],
       "paras": [
         [
-          "گرفتن خروجی از اطلاعات همیشه در دسترس است. «پاک‌کردن همهٔ داده‌ها» محتوای برنامه را پاک می‌کند، ولی حساب را حذف نمی‌کند. برای حذف حساب و اطلاعات سروری قابل‌حذف به پشتیبانی پیام بده. سوابقی که برای پرداخت، امنیت یا تکالیف قانونی لازم‌اند ممکن است باقی بمانند.",
-          "You can always export your information. “Erase all data” removes app content but does not delete the account. Contact support to request deletion of the account and deletable server data. Records needed for payments, security, or legal duties may be retained."
+          "«پاک‌کردن همهٔ داده‌ها» محتوای برنامه را پاک می‌کند، ولی حساب را حذف نمی‌کند. برای حذف حساب و اطلاعات سروری قابل‌حذف به پشتیبانی پیام بده. سوابقی که برای پرداخت، امنیت یا تکالیف قانونی لازم‌اند ممکن است باقی بمانند.",
+          "“Erase all data” removes app content but does not delete the account. Contact support to request deletion of the account and deletable server data. Records needed for payments, security, or legal duties may be retained."
         ]
       ]
     }

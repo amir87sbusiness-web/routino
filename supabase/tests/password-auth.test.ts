@@ -1,5 +1,7 @@
 /** Password sign-in + admin set-password against the deployed edge (Hono) app. */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { Buffer } from "node:buffer";
+import { scryptSync } from "node:crypto";
 import { adminSignIn, auth, makeHarness, signIn, type Harness } from "./helpers/harness.ts";
 
 let h: Harness;
@@ -16,6 +18,24 @@ const login = (identifier: string, password: string) =>
   h.call("POST", "/v1/auth/password/login", { body: { identifier, password } });
 
 describe("edge password sign-in", () => {
+  it("upgrades a legacy password only after successful verification", async () => {
+    await signIn(h, "09123334444");
+    const salt = Buffer.alloc(16, 7);
+    const derived = scryptSync("LegacyPass1", salt, 32, {
+      N: 32768,
+      r: 8,
+      p: 1,
+      maxmem: 64 * 1024 * 1024,
+    });
+    const legacyHash = `scrypt$32768$8$1$${salt.toString("base64")}$${derived.toString("base64")}`;
+    await h.raw(`update users set password_hash = '${legacyHash}' where phone = '989123334444'`);
+    expect((await login("09123334444", "legacypass1")).status).toBe(401);
+    const [unchanged] = await h.query<{ password_hash: string }>("select password_hash from users");
+    expect(unchanged!.password_hash).toBe(legacyHash);
+    expect((await login("09123334444", "LegacyPass1")).status).toBe(200);
+    expect((await login("09123334444", "LEGACYPASS1")).status).toBe(200);
+    expect((await login("09123334444", "legacypass2")).status).toBe(401);
+  });
   it("set a password via the app, then sign in with it", async () => {
     const { access } = await signIn(h, "09123334444");
     const set = await h.call("POST", "/v1/auth/password", {
@@ -27,6 +47,26 @@ describe("edge password sign-in", () => {
     const res = await login("09123334444", "Amir@1387");
     expect(res.status).toBe(200);
     expect((await res.json()).user.phone).toBe("989123334444");
+  });
+
+  it("treats password and username letters as case-insensitive", async () => {
+    const { access } = await signIn(h, "09123334444");
+    await h.call("POST", "/v1/auth/password", {
+      headers: auth(access),
+      body: { newPassword: "Amir@1387" },
+    });
+    await h.call("POST", "/v1/auth/username", {
+      headers: auth(access),
+      body: { username: "Amir" },
+    });
+
+    for (const [username, password] of [
+      ["amir", "amir@1387"],
+      ["AMIR", "AMIR@1387"],
+      ["aMiR", "aMiR@1387"],
+    ]) {
+      expect((await login(username, password)).status, `${username}/${password}`).toBe(200);
+    }
   });
 
   it("rejects a wrong password with bad_credentials", async () => {

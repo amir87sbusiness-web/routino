@@ -44,6 +44,7 @@ import {
 import { ApiError } from "@/lib/api/client";
 import { fetchAccount, logout, setPassword, setUsername, type AccountInfo } from "@/lib/api/auth";
 import {
+  BACKUP_UI,
   backupSummary,
   copyBackupToClipboard,
   downloadBackup,
@@ -667,51 +668,53 @@ function SettingsPage() {
         </div>
       </Modal>
 
-      <Card className="flex flex-col gap-3">
-        <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-          <Archive className="h-4 w-4 text-primary" />{" "}
-          {t("پشتیبان‌گیری و بازیابی", "Backup & restore")}
-        </div>
-        <p className="text-[11px] leading-5 text-muted-foreground">
-          {t(
-            "اطلاعاتت روی دستگاه و فضای ابری حسابت همگام می‌شود. برای داشتن یک نسخهٔ مستقل، فایل پشتیبان را هم در جای امن نگه دار.",
-            "Your data syncs between this device and your account cloud. Keep an exported backup as an independent copy too.",
-          )}
-        </p>
-        <div className="grid grid-cols-2 gap-2">
-          <Button variant="secondary" onClick={exportData}>
-            <Download className="h-4 w-4" /> {t("گرفتن پشتیبان", "Export")}
-          </Button>
-          <Button
-            variant="secondary"
-            disabled={!paidActive}
-            onClick={() => fileRef.current?.click()}
-          >
-            {paidActive ? <Upload className="h-4 w-4" /> : <Lock className="h-4 w-4" />}{" "}
-            {t("بازیابی", "Import")}
-          </Button>
-        </div>
-        {/* بازیابی داده‌ها فقط برای اشتراک پولی — در اشتراک رایگان قفل است */}
-        {!paidActive && (
-          <Link
-            to="/subscribe"
-            className="flex items-center justify-center gap-1.5 rounded-xl bg-primary-soft px-3 py-2 text-[11px] font-bold text-primary"
-          >
-            <Lock className="h-3.5 w-3.5" />
+      {BACKUP_UI && (
+        <Card className="flex flex-col gap-3">
+          <div className="flex items-center gap-2 text-sm font-bold text-foreground">
+            <Archive className="h-4 w-4 text-primary" />{" "}
+            {t("پشتیبان‌گیری و بازیابی", "Backup & restore")}
+          </div>
+          <p className="text-[11px] leading-5 text-muted-foreground">
             {t(
-              "بازیابی اطلاعات فقط برای اشتراک پولی فعال است",
-              "Restoring data is available on paid plans only",
+              "اطلاعاتت روی دستگاه و فضای ابری حسابت همگام می‌شود. برای داشتن یک نسخهٔ مستقل، فایل پشتیبان را هم در جای امن نگه دار.",
+              "Your data syncs between this device and your account cloud. Keep an exported backup as an independent copy too.",
             )}
-          </Link>
-        )}
-        <input
-          ref={fileRef}
-          type="file"
-          accept="application/json,.json"
-          hidden
-          onChange={onFilePicked}
-        />
-      </Card>
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="secondary" onClick={exportData}>
+              <Download className="h-4 w-4" /> {t("گرفتن پشتیبان", "Export")}
+            </Button>
+            <Button
+              variant="secondary"
+              disabled={!paidActive}
+              onClick={() => fileRef.current?.click()}
+            >
+              {paidActive ? <Upload className="h-4 w-4" /> : <Lock className="h-4 w-4" />}{" "}
+              {t("بازیابی", "Import")}
+            </Button>
+          </div>
+          {/* بازیابی داده‌ها فقط برای اشتراک پولی — در اشتراک رایگان قفل است */}
+          {!paidActive && (
+            <Link
+              to="/subscribe"
+              className="flex items-center justify-center gap-1.5 rounded-xl bg-primary-soft px-3 py-2 text-[11px] font-bold text-primary"
+            >
+              <Lock className="h-3.5 w-3.5" />
+              {t(
+                "بازیابی اطلاعات فقط برای اشتراک پولی فعال است",
+                "Restoring data is available on paid plans only",
+              )}
+            </Link>
+          )}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={onFilePicked}
+          />
+        </Card>
+      )}
 
       {/* danger zone: sign out + erase everything, together in one red box */}
       <Card className="flex flex-col gap-3 border-destructive/40 bg-destructive/5">
@@ -801,53 +804,55 @@ function SettingsPage() {
       </Modal>
 
       {/* restore confirm — restoring REPLACES current data, so ask first */}
-      <Modal
-        open={!!pendingImport}
-        onClose={() => setPendingImport(null)}
-        title={t("بازیابی اطلاعات", "Restore data")}
-      >
-        {pendingImport && (
-          <div className="flex flex-col gap-4">
-            <p className="text-sm text-muted-foreground">
-              {t(
-                "این فایل جایگزین محتوای فعلی حساب همگام‌شده می‌شود و تغییر به دستگاه‌های دیگرت هم می‌رسد. ادامه می‌دهی؟",
-                "This file replaces the current synced-account content and the change reaches your other devices. Continue?",
-              )}
-            </p>
-            <div className="rounded-xl border border-border p-3 text-[11px] leading-6 text-foreground">
-              <p>
-                {t("تاریخ پشتیبان", "Backup date")}:{" "}
-                <span dir="ltr">
-                  {formatDate(dateKey(new Date(pendingImport.exportedAt)), cal, lang)}
-                </span>
+      {BACKUP_UI && (
+        <Modal
+          open={!!pendingImport}
+          onClose={() => setPendingImport(null)}
+          title={t("بازیابی اطلاعات", "Restore data")}
+        >
+          {pendingImport && (
+            <div className="flex flex-col gap-4">
+              <p className="text-sm text-muted-foreground">
+                {t(
+                  "این فایل جایگزین محتوای فعلی حساب همگام‌شده می‌شود و تغییر به دستگاه‌های دیگرت هم می‌رسد. ادامه می‌دهی؟",
+                  "This file replaces the current synced-account content and the change reaches your other devices. Continue?",
+                )}
               </p>
-              <p>
-                {faNum(backupSummary(pendingImport.db).habits, lang)} {t("عادت", "habits")} ·{" "}
-                {faNum(backupSummary(pendingImport.db).logs, lang)} {t("ثبت", "logs")} ·{" "}
-                {faNum(backupSummary(pendingImport.db).journal, lang)} {t("ژورنال", "journal")}
-              </p>
-            </div>
-            {pendingImport.db.auth?.phone &&
-              db.auth?.phone &&
-              pendingImport.db.auth.phone !== db.auth.phone && (
-                <p className="rounded-xl bg-destructive/10 p-3 text-[11px] leading-5 text-destructive">
-                  {t(
-                    `⚠️ این پشتیبان مال شمارهٔ ${faNum(toLocalPhone(pendingImport.db.auth.phone), lang)} است، نه حساب فعلی.`,
-                    `⚠️ This backup belongs to ${toLocalPhone(pendingImport.db.auth.phone)}, not the current account.`,
-                  )}
+              <div className="rounded-xl border border-border p-3 text-[11px] leading-6 text-foreground">
+                <p>
+                  {t("تاریخ پشتیبان", "Backup date")}:{" "}
+                  <span dir="ltr">
+                    {formatDate(dateKey(new Date(pendingImport.exportedAt)), cal, lang)}
+                  </span>
                 </p>
-              )}
-            <div className="flex gap-2">
-              <Button variant="destructive" className="flex-1" onClick={confirmImport}>
-                {t("بازیابی و جایگزینی", "Restore")}
-              </Button>
-              <Button variant="ghost" className="flex-1" onClick={() => setPendingImport(null)}>
-                {t("انصراف", "Cancel")}
-              </Button>
+                <p>
+                  {faNum(backupSummary(pendingImport.db).habits, lang)} {t("عادت", "habits")} ·{" "}
+                  {faNum(backupSummary(pendingImport.db).logs, lang)} {t("ثبت", "logs")} ·{" "}
+                  {faNum(backupSummary(pendingImport.db).journal, lang)} {t("ژورنال", "journal")}
+                </p>
+              </div>
+              {pendingImport.db.auth?.phone &&
+                db.auth?.phone &&
+                pendingImport.db.auth.phone !== db.auth.phone && (
+                  <p className="rounded-xl bg-destructive/10 p-3 text-[11px] leading-5 text-destructive">
+                    {t(
+                      `⚠️ این پشتیبان مال شمارهٔ ${faNum(toLocalPhone(pendingImport.db.auth.phone), lang)} است، نه حساب فعلی.`,
+                      `⚠️ This backup belongs to ${toLocalPhone(pendingImport.db.auth.phone)}, not the current account.`,
+                    )}
+                  </p>
+                )}
+              <div className="flex gap-2">
+                <Button variant="destructive" className="flex-1" onClick={confirmImport}>
+                  {t("بازیابی و جایگزینی", "Restore")}
+                </Button>
+                <Button variant="ghost" className="flex-1" onClick={() => setPendingImport(null)}>
+                  {t("انصراف", "Cancel")}
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
-      </Modal>
+          )}
+        </Modal>
+      )}
 
       {/* قوانین، حریم خصوصی و تماس — یک بخش بازشو */}
       <Card className="!p-0 overflow-hidden">

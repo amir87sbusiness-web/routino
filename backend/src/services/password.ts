@@ -7,9 +7,10 @@
  * library of both runtimes, and the existing shared code already leans on
  * `node:crypto` (randomBytes/timingSafeEqual) on the edge.
  *
- * The stored form is self-describing — `scrypt$N$r$p$saltB64$hashB64` — so the
- * work factor can be raised later without invalidating existing hashes: verify
- * reads the parameters back out of each stored value.
+ * The stored form is self-describing — `scrypt-ci$N$r$p$saltB64$hashB64` — so
+ * the work factor can be raised later without invalidating existing hashes.
+ * The older `scrypt$...` form remains verifiable and is upgraded after the next
+ * successful login.
  */
 // node: specifiers (not the globals) so this runs unchanged on Deno.
 import { Buffer } from "node:buffer";
@@ -25,6 +26,13 @@ const KEYLEN = 32;
 const SALT_LEN = 16;
 // 128 * N * r = 32MB; give scrypt headroom so it never trips the default maxmem.
 const MAXMEM = 64 * 1024 * 1024;
+const LEGACY_SCHEME = "scrypt";
+const CASE_INSENSITIVE_SCHEME = "scrypt-ci";
+
+/** Password letters are intentionally case-insensitive; symbols and digits are untouched. */
+export function normalizePassword(raw: string): string {
+  return raw.toLowerCase();
+}
 
 function scryptAsync(
   password: string,
@@ -42,17 +50,19 @@ function scryptAsync(
   });
 }
 
-/** Returns `scrypt$N$r$p$saltB64$hashB64`. */
+/** Returns the versioned, case-insensitive password hash. */
 export async function hashPassword(raw: string): Promise<string> {
   const salt = randomBytes(SALT_LEN);
-  const derived = await scryptAsync(raw, salt, KEYLEN, N, R, P);
-  return `scrypt$${N}$${R}$${P}$${salt.toString("base64")}$${derived.toString("base64")}`;
+  const derived = await scryptAsync(normalizePassword(raw), salt, KEYLEN, N, R, P);
+  return `${CASE_INSENSITIVE_SCHEME}$${N}$${R}$${P}$${salt.toString("base64")}$${derived.toString("base64")}`;
 }
 
 /** Constant-time verify. Any malformed stored value is a non-match, never a throw. */
 export async function verifyPassword(raw: string, stored: string): Promise<boolean> {
   const parts = stored.split("$");
-  if (parts.length !== 6 || parts[0] !== "scrypt") return false;
+  const scheme = parts[0];
+  if (parts.length !== 6 || (scheme !== LEGACY_SCHEME && scheme !== CASE_INSENSITIVE_SCHEME))
+    return false;
   const n = Number(parts[1]);
   const r = Number(parts[2]);
   const p = Number(parts[3]);
@@ -68,8 +78,14 @@ export async function verifyPassword(raw: string, stored: string): Promise<boole
   }
   if (expected.length === 0) return false;
 
-  const derived = await scryptAsync(raw, salt, expected.length, n, r, p);
+  const candidate = scheme === CASE_INSENSITIVE_SCHEME ? normalizePassword(raw) : raw;
+  const derived = await scryptAsync(candidate, salt, expected.length, n, r, p);
   return derived.length === expected.length && timingSafeEqual(derived, expected);
+}
+
+/** Legacy hashes used exact casing and should be replaced after a successful proof. */
+export function passwordHashNeedsCaseUpgrade(stored: string): boolean {
+  return stored.startsWith(`${LEGACY_SCHEME}$`);
 }
 
 /**
@@ -77,7 +93,7 @@ export async function verifyPassword(raw: string, stored: string): Promise<boole
  * matches keeps the timing of "no such user" the same as "wrong password", so
  * the endpoint can't be used to enumerate who has an account.
  */
-export const DUMMY_HASH = `scrypt$${N}$${R}$${P}$${Buffer.alloc(SALT_LEN).toString("base64")}$${Buffer.alloc(KEYLEN).toString("base64")}`;
+export const DUMMY_HASH = `${CASE_INSENSITIVE_SCHEME}$${N}$${R}$${P}$${Buffer.alloc(SALT_LEN).toString("base64")}$${Buffer.alloc(KEYLEN).toString("base64")}`;
 
 export type PasswordReason = "too_short" | "too_long" | "needs_letter_and_digit";
 

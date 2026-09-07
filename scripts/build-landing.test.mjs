@@ -45,7 +45,7 @@ describe("landing build script", () => {
       assert.match(legalHtml, /Supabase/);
       assert.match(legalHtml, /اتفاق‌هایی که خارج از کنترل معقول ما هستند/);
       assert.match(legalHtml, /اطلاعاتت را نمی‌فروشیم/);
-      assert.match(legalHtml, /۱۲ شهریور ۱۴۰۵/);
+      assert.match(legalHtml, /۱۶ شهریور ۱۴۰۵/);
       assert.equal(legalHtml.includes("فهرست دستگاه‌ها یا نشست قابل‌ابطال"), false);
       assert.match(legalHtml, /https:\/\/t\.me\/routino_support/);
       assert.match(legalHtml, /https:\/\/instagram\.com\/routino\.me/);

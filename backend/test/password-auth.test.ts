@@ -1,6 +1,8 @@
 /** Password sign-in, credential management, admin set-password, and the
  * brute-force limits — driven through the real Fastify app. */
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { Buffer } from "node:buffer";
+import { scryptSync } from "node:crypto";
 import { adminSignIn, makeHarness, type Harness } from "./helpers/pglite.js";
 
 let h: Harness;
@@ -85,6 +87,39 @@ describe("setting a password then signing in with it", () => {
     expect(body).not.toHaveProperty("deviceId");
   });
 
+  it("treats uppercase and lowercase letters as equal in a newly set password", async () => {
+    const { access } = await otpSignIn("09123334444");
+    expect((await setPw(access, "Amir@1387")).statusCode).toBe(200);
+
+    for (const password of ["Amir@1387", "amir@1387", "AMIR@1387", "aMiR@1387"]) {
+      expect((await login("09123334444", password)).statusCode, password).toBe(200);
+    }
+  });
+
+  it("upgrades a legacy case-sensitive hash after an exact successful login", async () => {
+    await otpSignIn("09123334444");
+    const [user] = await h.query<{ id: string }>(
+      `select id from users where phone = '989123334444'`,
+    );
+    const userId = user!.id;
+    const salt = Buffer.alloc(16, 7);
+    const derived = scryptSync("LegacyPass1", salt, 32, {
+      N: 32_768,
+      r: 8,
+      p: 1,
+      maxmem: 64 * 1024 * 1024,
+    });
+    const legacyHash = `scrypt$32768$8$1$${salt.toString("base64")}$${derived.toString("base64")}`;
+    await h.raw(`update users set password_hash = '${legacyHash}' where id = '${userId}'`);
+
+    expect((await login("09123334444", "LegacyPass1")).statusCode).toBe(200);
+    const [upgraded] = await h.query<{ password_hash: string }>(
+      `select password_hash from users where id = '${userId}'`,
+    );
+    expect(upgraded!.password_hash).toMatch(/^scrypt-ci\$/);
+    expect((await login("09123334444", "legacypass1")).statusCode).toBe(200);
+  });
+
   it("accepts any input format of the phone as the identifier", async () => {
     const { access } = await otpSignIn("09123334444");
     await setPw(access, "Amir@1387");
@@ -117,7 +152,7 @@ describe("setting a password then signing in with it", () => {
     const { access } = await otpSignIn("09123334444");
     await setPw(access, "Amir@1387");
     const rows = await h.query<{ password_hash: string }>(`select password_hash from users`);
-    expect(rows[0]!.password_hash).toMatch(/^scrypt\$/);
+    expect(rows[0]!.password_hash).toMatch(/^scrypt-ci\$/);
     expect(rows[0]!.password_hash).not.toContain("Amir@1387");
   });
 
@@ -208,9 +243,11 @@ describe("username", () => {
     await setPw(access, "Amir@1387");
     expect((await setName(access, "Amir")).statusCode).toBe(200); // lowercased server-side
 
-    const res = await login("amir", "Amir@1387");
-    expect(res.statusCode).toBe(200);
-    expect((res.json() as { user: { phone: string } }).user.phone).toBe("989123334444");
+    for (const username of ["amir", "Amir", "AMIR", "aMiR"]) {
+      const res = await login(username, "Amir@1387");
+      expect(res.statusCode, username).toBe(200);
+      expect((res.json() as { user: { phone: string } }).user.phone).toBe("989123334444");
+    }
   });
 
   it("rejects an invalid username and a duplicate", async () => {

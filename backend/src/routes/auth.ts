@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { users } from "../db/schema.js";
@@ -16,6 +16,7 @@ import {
   DUMMY_HASH,
   hashPassword,
   normalizeUsername,
+  passwordHashNeedsCaseUpgrade,
   validatePassword,
   validateUsername,
   verifyPassword,
@@ -212,6 +213,13 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       if (verdict.verifyOnly)
         throw tooMany("Too many attempts. Try again later.", verdict.retryAfter);
       throw unauthorized("bad_credentials", "Wrong phone/username or password");
+    }
+    if (passwordHashNeedsCaseUpgrade(user.passwordHash)) {
+      const legacyHash = user.passwordHash;
+      await db
+        .update(users)
+        .set({ passwordHash: await hashPassword(password) })
+        .where(and(eq(users.id, user.id), eq(users.passwordHash, legacyHash)));
     }
     await clearLoginFailures(db, env, key);
     const entitlement = await readEntitlement(db, user.id, t);

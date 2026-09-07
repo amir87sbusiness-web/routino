@@ -302,12 +302,12 @@
       }
 
       /* ── نوارِ اعتماد ────────────────────────────────────────── */
-      /* جای «۱۵ میلیون دانلود» و «امتیاز اپ‌استور». چهار حرفِ راست، نه چهار عددِ
+      /* جای «۱۵ میلیون دانلود» و «امتیاز اپ‌استور». چهار حرفِ راست، نه عددِ
          ساختگی. مدال‌ها برجسته‌اند تا همان وزنِ بصریِ نشان‌های جایزه را داشته باشند.
          گرید است نه flex-wrap: روی لپ‌تاپ چهارتا در یک ردیفِ هم‌عرض، روی موبایل
          دو‌در‌دو. با wrap، نشانِ چهارم تنها می‌افتاد وسطِ ردیفِ دوم. */
       .awards {
-        display: grid; grid-template-columns: repeat(5, 1fr); gap: clamp(10px, 1.6vw, 18px);
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: clamp(10px, 1.6vw, 18px);
         max-width: 940px; margin: clamp(40px, 5vw, 62px) auto 0;
         padding-bottom: clamp(10px, 2vw, 24px);
       }
@@ -321,12 +321,9 @@
       }
       .medal .ic { width: 27px; height: 27px; color: var(--brand); }
       .award-name { font-size: clamp(13px, 1.5vw, 14px); font-weight: 700; line-height: 1.6; color: #c6c1bc; }
-      /* مستقیم از ۵ به ۲ ستون — ۳ ستون یعنی ردیفِ دوم دوتایی می‌شود و یک خانه‌ی
-         خالی کنارش می‌ماند. با ۲ ستون، نشانِ پنجم عرضِ کامل می‌گیرد تا وسطِ
-         خودش بنشیند نه اینکه گوشه‌ی ردیفِ آخر لق بزند. */
+      /* روی موبایل دو ردیفِ دوتایی؛ بدون خانه‌ی خالی یا نشانِ تنها. */
       @media (max-width: 700px) {
         .awards { grid-template-columns: repeat(2, 1fr); gap: 28px 12px; }
-        .award:last-child { grid-column: 1 / -1; }
       }
 
       /* ── ردیف‌های قابلیت ─────────────────────────────────────── */
@@ -426,8 +423,10 @@
        */
       .rail {
         --fade: 44px;
+        --card-width: clamp(238px, 26vw, 292px);
+        --card-gap: clamp(12px, 1.6vw, 18px);
         display: flex; justify-content: center; align-items: stretch;
-        gap: clamp(12px, 1.6vw, 18px);
+        gap: var(--card-gap);
         overflow: hidden; padding: 6px 0 18px;
         -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--fade),
           #000 calc(100% - var(--fade)), transparent);
@@ -436,10 +435,14 @@
       }
       @media (min-width: 700px) { .rail { --fade: 90px; } }
       @media (min-width: 1000px) { .rail { --fade: 150px; } }
+      /* Keep the highlighted card centered when the feature count is even. */
+      .rail:has(> .card:last-child:nth-child(even)) > .card:first-child {
+        margin-inline-start: calc(-1 * (var(--card-width) + var(--card-gap)));
+      }
 
       /* فقط کارتِ وسط کاملاً واضح است؛ بقیه هستند ولی خوانده نمی‌شوند. */
       .card {
-        flex: 0 0 clamp(238px, 26vw, 292px);
+        flex: 0 0 var(--card-width);
         display: flex; flex-direction: column; justify-content: center;
         border-radius: var(--curve); padding: 26px 22px; text-align: center;
         background: linear-gradient(170deg, var(--card), #141110);
@@ -658,10 +661,6 @@
               <div class="award-name">بدون اینترنت</div>
             </div>
             <div class="award">
-              <div class="medal"><svg class="ic" aria-hidden="true"><use href="#i-devices" /></svg></div>
-              <div class="award-name">پشتیبان‌گیری ساده</div>
-            </div>
-            <div class="award">
               <div class="medal"><svg class="ic" aria-hidden="true"><use href="#i-globe" /></svg></div>
               <div class="award-name">فارسی و انگلیسی</div>
             </div>
@@ -754,7 +753,7 @@
       </section>
 
       <!-- ۶ ── ریلِ «چرا روتینو». جای «نظر کاربران»؛ تا نظرِ واقعی نداشته باشیم،
-               حرفِ خودِ محصول اینجاست. کارتِ چهارم (اندیس ۳) اولین کارتِ وسط است. -->
+               حرفِ خودِ محصول اینجاست. -->
       <section class="choose" id="why">
         <div class="wrap">
           <h2>چرا <span class="hl">روتینو</span>؟</h2>
@@ -773,10 +772,6 @@
               <div class="card">
                 <p>نسخهٔ محلی همیشه در دسترسه و وقتی آنلاین بشی، اطلاعات حسابت بین دستگاه‌ها همگام می‌شه.</p>
                 <b>آفلاین و همگام</b>
-              </div>
-              <div class="card">
-                <p>هر وقت بخوای از اطلاعاتت خروجی بگیر و فایل پشتیبان رو برای خودت نگه دار.</p>
-                <b>پشتیبان‌گیری ساده</b>
               </div>
               <div class="card">
                 <p>تاریخ‌ها شمسی‌ان و هفته از شنبه شروع می‌شه. لازم نیست توی ذهنت تاریخ تبدیل کنی.</p>

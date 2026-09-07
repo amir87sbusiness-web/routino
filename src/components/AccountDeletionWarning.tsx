@@ -3,7 +3,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Button, Modal } from "@/components/ui";
 import { accountDeletionAt } from "@/lib/api/auth";
-import { copyBackupToClipboard, downloadBackup } from "@/lib/backup";
+import { BACKUP_UI, copyBackupToClipboard, downloadBackup } from "@/lib/backup";
 import { isNative, shareBackupNative } from "@/lib/backup-native";
 import { useAppMaybe } from "@/state/app";
 
@@ -49,14 +49,16 @@ export function AccountDeletionWarning() {
       <div className="flex flex-col gap-4">
         <p className="text-sm leading-7 text-muted-foreground">
           {ctx.t(
-            "کمتر از سه روز تا حذف کامل حساب و اطلاعات ابری باقی مانده است. برای نگه‌داشتن اطلاعات، خروجی بگیر یا اشتراک تهیه کن.",
-            "Less than three days remain before this account and its cloud data are permanently deleted. Export your data or purchase a subscription to keep it.",
+            "کمتر از سه روز تا حذف کامل حساب و اطلاعات ابری باقی مانده است. برای نگه‌داشتن اطلاعات، اشتراک تهیه کن.",
+            "Less than three days remain before this account and its cloud data are permanently deleted. Purchase a subscription to keep it.",
           )}
         </p>
         <div className="flex gap-2">
-          <Button variant="secondary" className="flex-1" onClick={() => void exportData()}>
-            {ctx.t("گرفتن خروجی", "Export data")}
-          </Button>
+          {BACKUP_UI && (
+            <Button variant="secondary" className="flex-1" onClick={() => void exportData()}>
+              {ctx.t("گرفتن خروجی", "Export data")}
+            </Button>
+          )}
           <Button
             className="flex-1"
             onClick={() => {

@@ -2,7 +2,7 @@
  * Auth routes — thin edge adapter. Mirrors backend/src/routes/auth.ts exactly;
  * all OTP/token behaviour comes from the shared (tested) services.
  */
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import {
@@ -37,6 +37,7 @@ import {
   DUMMY_HASH,
   hashPassword,
   normalizeUsername,
+  passwordHashNeedsCaseUpgrade,
   validatePassword,
   validateUsername,
   verifyPassword,
@@ -207,6 +208,13 @@ export function authRoutes(deps: Deps) {
       if (verdict.verifyOnly)
         throw tooMany("Too many attempts. Try again later.", verdict.retryAfter);
       throw unauthorized("bad_credentials", "Wrong phone/username or password");
+    }
+    if (passwordHashNeedsCaseUpgrade(user.passwordHash)) {
+      const legacyHash = user.passwordHash;
+      await db
+        .update(users)
+        .set({ passwordHash: await hashPassword(password) })
+        .where(and(eq(users.id, user.id), eq(users.passwordHash, legacyHash)));
     }
     await clearLoginFailures(db, env, key);
     const entitlement = await readEntitlement(db, user.id, t);

@@ -17,7 +17,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@tanstack/react-router", () => ({ useNavigate: () => mocks.navigate }));
 vi.mock("@/lib/api/auth", () => ({ accountDeletionAt: mocks.accountDeletionAt }));
-vi.mock("@/lib/backup", () => ({
+vi.mock("@/lib/backup", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/backup")>()),
   downloadBackup: mocks.downloadBackup,
   copyBackupToClipboard: mocks.copyBackupToClipboard,
 }));
@@ -60,7 +61,7 @@ describe("AccountDeletionWarning", () => {
     await act(async () => root.render(<AccountDeletionWarning />));
 
     expect(document.body.textContent).toContain("هشدار حذف اطلاعات");
-    expect(document.body.textContent).toContain("گرفتن خروجی");
+    expect(document.body.textContent).not.toContain("گرفتن خروجی");
     expect(document.body.textContent).toContain("خرید اشتراک");
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -71,17 +72,11 @@ describe("AccountDeletionWarning", () => {
     expect(document.body.textContent).not.toContain("هشدار حذف اطلاعات");
   });
 
-  it("exports locally or navigates to the existing purchase page", async () => {
+  it("keeps backup UI hidden and navigates to the existing purchase page", async () => {
     mocks.accountDeletionAt.mockReturnValue(Date.now() + 86_400_000);
     await act(async () => root.render(<AccountDeletionWarning />));
 
-    const exportButton = [...document.querySelectorAll("button")].find(
-      (button) => button.textContent === "گرفتن خروجی",
-    )!;
-    await act(async () => exportButton.click());
-    expect(mocks.downloadBackup).toHaveBeenCalledTimes(1);
-
-    await act(async () => root.render(<AccountDeletionWarning />));
+    expect(mocks.downloadBackup).not.toHaveBeenCalled();
     const buyButton = [...document.querySelectorAll("button")].find(
       (button) => button.textContent === "خرید اشتراک",
     )!;

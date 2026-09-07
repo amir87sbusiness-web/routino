@@ -6,6 +6,9 @@
  */
 import type { Db } from "./store";
 
+/** Keep the complete export/import flow ready while removing it from the product UI. */
+export const BACKUP_UI = false;
+
 export interface Backup {
   format: "routino-backup";
   formatVersion: 1;

@@ -62,7 +62,7 @@ Updated 2026-09-07. Read this, then only relevant source files; do not re-analyz
 - Reset preserves dirty/outbox rows; old cursor below gc_seq triggers safe full resync.
 - Task compaction only completed tasks after month end+7days and edit age+7days, chunks<=32/96KiB expanded.
 - Retention requires proven trial/registration-only eligibility, no financial/admin history. Never run manual cleanup for tests.
-- Export always available; import active-paid only. Content reset is not account deletion.
+- Backup/export/import UI is temporarily disabled by BACKUP_UI in src/lib/backup.ts; implementations remain for reactivation. Import policy stays active-paid only. Content reset is not account deletion.
 
 ## Auth and payment invariants
 - OTP TTL120s, cap5 attempts; consume conditionally with consumed_at IS NULL RETURNING.
@@ -70,6 +70,8 @@ Updated 2026-09-07. Read this, then only relevant source files; do not re-analyz
 - Same-statement advisory-lock CTE has stale READ COMMITTED snapshot under concurrency. Do not restore it.
 - Durable phone/IP/global provider limits live in DB, not isolate memory.
 - Password accepts canonical phone/lowercase username; generic errors and dummy hashing prevent enumeration.
+- New passwords use case-insensitive scrypt-ci hashes. Legacy scrypt hashes need one exact-case login (or password reset); successful login conditionally upgrades the hash without overwriting a concurrent password change. Do not roll back to a reader without scrypt-ci support after these hashes exist.
+- 2026-09-07 password/backup release: signed Android versionCode7 (versionName1.0), APK SHA256 29aae285b721e8c71c7778133eb51f78dfe8ae1dcb3646f2ee7707b37d724b0e. Backup UI disabled, shared legal/landing mentions removed. API source delta limited to routes/auth.ts and shared/services/password.ts; no schema migration.
 - Client sends plan/code; server owns amount, entitlement and PSP result. Toman->Rial only in pricing.ts.
 - Verify exact PSP amount before atomic grant. Preserve ambiguous/nonterminal payments for recovery.
 - Checkout and Verify share PSP_PROVIDER_MAX_CONCURRENCY leases. Release in finally; no DB transaction over network.
