@@ -75,10 +75,10 @@ export function renderAndroidDownload(rawUrl) {
     throw new Error("ANDROID_DOWNLOAD_URL باید با HTTPS شروع شود");
   }
   return (
-    `          <a class="btn ghost" id="android-btn" href="${esc(url.href)}" download="routino-android-1.0.apk" rel="noreferrer">\n` +
+    `              <a class="btn download-btn download-btn-primary" id="android-btn" href="${esc(url.href)}" download="routino-android-1.0.apk" rel="noreferrer">\n` +
     '            <svg class="ic" aria-hidden="true"><use href="#i-droid" /></svg>\n' +
-    "            دانلود نسخه اندروید\n" +
-    "          </a>"
+    "                <span>دانلود</span>\n" +
+    "              </a>"
   );
 }
 
