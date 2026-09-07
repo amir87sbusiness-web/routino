@@ -40,6 +40,7 @@ describe("Android download markup", () => {
     expect(() => renderAndroidDownload("http://files.example/app.apk")).toThrow(/HTTPS/);
     const html = renderAndroidDownload("https://files.example/routino.apk?from=site&v=1");
     expect(html).toContain('href="https://files.example/routino.apk?from=site&amp;v=1"');
+    expect(html).toContain('download="routino-android-1.0.apk"');
     expect(html).toContain('rel="noreferrer"');
     expect(html).not.toContain("disabled");
   });

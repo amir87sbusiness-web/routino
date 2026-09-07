@@ -20,6 +20,7 @@ describe("landing build script", () => {
       copyInput("scripts/build-landing.mjs");
       copyInput("landing/index.template.html");
       copyInput("landing/legal.template.html");
+      copyInput("landing/downloads");
       copyInput("landing/shots");
       copyInput("public/brand");
       copyInput("public/icons/favicon-16.png");
@@ -52,6 +53,15 @@ describe("landing build script", () => {
       assert.equal(legalHtml.includes(["amir.templates", "gmail.com"].join("@")), false);
 
       const homeHtml = readFileSync(join(sandbox, "dist", "index.html"), "utf8");
+      assert.match(
+        homeHtml,
+        /<a class="btn ghost" id="android-btn" href="https:\/\/routino\.me\/downloads\/routino-android-1\.0\.apk" download="routino-android-1\.0\.apk" rel="noreferrer">/,
+      );
+      assert.equal(/<(?:link|script)[^>]+routino-android-1\.0\.apk/i.test(homeHtml), false);
+      assert.deepEqual(
+        readFileSync(join(sandbox, "dist", "downloads", "routino-android-1.0.apk")),
+        readFileSync(join(ROOT, "landing", "downloads", "routino-android-1.0.apk")),
+      );
       for (const html of [homeHtml, legalHtml]) {
         assert.match(html, /\/brand\/logo-dark\.webp/);
         assert.match(html, /\/icons\/favicon-32\.png/);
@@ -77,6 +87,10 @@ describe("landing build script", () => {
       assert.match(headers, /\/app\/\n  Cache-Control: no-cache/);
       assert.match(headers, /\/app\/sw\.js\n  Cache-Control: no-cache/);
       assert.match(headers, /\/app\/manifest\.webmanifest\n  Cache-Control: no-cache/);
+      assert.match(
+        headers,
+        /\/downloads\/\*\.apk\n  Cache-Control: no-cache\n  Content-Disposition: attachment/,
+      );
       assert.match(
         headers,
         /\/app\/assets\/\*\n  Cache-Control: public, max-age=31536000, immutable/,

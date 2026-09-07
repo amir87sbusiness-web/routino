@@ -75,7 +75,7 @@ export function renderAndroidDownload(rawUrl) {
     throw new Error("ANDROID_DOWNLOAD_URL باید با HTTPS شروع شود");
   }
   return (
-    `          <a class="btn ghost" id="android-btn" href="${esc(url.href)}" rel="noreferrer">\n` +
+    `          <a class="btn ghost" id="android-btn" href="${esc(url.href)}" download="routino-android-1.0.apk" rel="noreferrer">\n` +
     '            <svg class="ic" aria-hidden="true"><use href="#i-droid" /></svg>\n' +
     "            دانلود نسخه اندروید\n" +
     "          </a>"
@@ -403,6 +403,12 @@ async function main() {
       "",
       "/app/manifest.webmanifest",
       "  Cache-Control: no-cache",
+      "",
+      "# The APK is fetched only after the user clicks the direct download link.",
+      "# Revalidate its stable URL so a future replacement is never stale.",
+      "/downloads/*.apk",
+      "  Cache-Control: no-cache",
+      '  Content-Disposition: attachment; filename="routino-android-1.0.apk"',
       "",
       "# Fonts are content-hashed by name here only by convention, so revalidate.",
       "/fonts/*",
