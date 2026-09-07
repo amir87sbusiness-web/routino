@@ -20,38 +20,17 @@ export function shouldTriggerCompletionFeedback({
   return source === "user" && mutationAccepted && !beforeCompleted && afterCompleted;
 }
 
-let audioContext: AudioContext | null = null;
-let activeOscillator: OscillatorNode | null = null;
+let completionAudio: HTMLAudioElement | null = null;
 let lastHapticAt = 0;
 
-/** A short, original rising confirmation tone. Replaces the active cue instead
- * of queueing more sound when several habits are completed in quick succession. */
+/** Replays the supplied confirmation sound instead of queueing overlapping cues. */
 function playCompletionCue(): void {
   try {
-    if (typeof window === "undefined" || !window.AudioContext) return;
-    const context = audioContext ?? new window.AudioContext();
-    audioContext = context;
-
-    activeOscillator?.stop();
-    const oscillator = context.createOscillator();
-    const gain = context.createGain();
-    const now = context.currentTime;
-    oscillator.type = "sine";
-    oscillator.frequency.setValueAtTime(560, now);
-    oscillator.frequency.exponentialRampToValueAtTime(720, now + 0.075);
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(0.035, now + 0.008);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.09);
-    oscillator.connect(gain).connect(context.destination);
-    oscillator.start(now);
-    oscillator.stop(now + 0.095);
-    activeOscillator = oscillator;
-    oscillator.addEventListener("ended", () => {
-      if (activeOscillator === oscillator) activeOscillator = null;
-      oscillator.disconnect();
-      gain.disconnect();
-    });
-    void context.resume().catch(() => undefined);
+    if (typeof Audio === "undefined") return;
+    const audio = completionAudio ?? new Audio(`${import.meta.env.BASE_URL}sounds/completion.mp3`);
+    completionAudio = audio;
+    audio.currentTime = 0;
+    void audio.play().catch(() => undefined);
   } catch {
     // Audio is supplemental; unsupported or blocked playback must stay silent.
   }

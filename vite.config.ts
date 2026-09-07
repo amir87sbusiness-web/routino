@@ -77,7 +77,7 @@ export default defineConfig({
         // woff2 در globPatterns پیش‌فرض ورک‌باکس **نیست**
         // ({js,css,html,ico,png,svg}). وزیرمتن woff2 است و بدون این، متن فارسی
         // در حالت آفلاین با فونت سیستمی و RTL خراب رندر می‌شود.
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest,woff2}"],
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest,woff2,mp3}"],
 
         // باندل ~۵۹۰KB است؛ سقف پیش‌فرض ۲MB است ولی صریح بودنش بهتر از
         // «چرا فایل اصلی کش نشد؟» است.

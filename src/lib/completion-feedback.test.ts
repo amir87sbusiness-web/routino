@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { shouldTriggerCompletionFeedback } from "./completion-feedback";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { shouldTriggerCompletionFeedback, triggerCompletionFeedback } from "./completion-feedback";
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("shouldTriggerCompletionFeedback", () => {
   it("allows a direct incomplete to completed transition", () => {
@@ -68,5 +72,31 @@ describe("shouldTriggerCompletionFeedback", () => {
         afterCompleted: true,
       }),
     ).toBe(false);
+  });
+});
+
+describe("triggerCompletionFeedback", () => {
+  it("plays the supplied completion sound from the beginning", () => {
+    const instances: Array<{
+      src: string;
+      currentTime: number;
+      play: ReturnType<typeof vi.fn>;
+    }> = [];
+    class FakeAudio {
+      currentTime = 4;
+      play = vi.fn().mockResolvedValue(undefined);
+
+      constructor(public readonly src: string) {
+        instances.push(this);
+      }
+    }
+    vi.stubGlobal("Audio", FakeAudio);
+
+    triggerCompletionFeedback({ completionSoundEnabled: true, hapticsEnabled: false });
+
+    expect(instances).toHaveLength(1);
+    expect(instances[0]?.src).toBe("/sounds/completion.mp3");
+    expect(instances[0]?.currentTime).toBe(0);
+    expect(instances[0]?.play).toHaveBeenCalledOnce();
   });
 });
