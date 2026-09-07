@@ -219,11 +219,12 @@ export async function generateIcons({ root = DEFAULT_ROOT } = {}) {
 
   const favicon16 = await renderInstalledIcon(lightSource, 16, { palette: true });
   const favicon32 = await renderInstalledIcon(lightSource, 32, { palette: true });
+  const pwaIcon512 = await renderInstalledIcon(lightSource, 512);
   const webIcons = [
     ["favicon-16.png", favicon16],
     ["favicon-32.png", favicon32],
     ["icon-192.png", await renderInstalledIcon(lightSource, 192)],
-    ["icon-512.png", await renderInstalledIcon(lightSource, 512)],
+    ["icon-512.png", pwaIcon512],
     ["icon-maskable-192.png", await renderInstalledIcon(lightSource, 192)],
     ["icon-maskable-512.png", await renderInstalledIcon(lightSource, 512)],
     ["apple-touch-icon.png", await renderInstalledIcon(lightSource, 180)],
@@ -248,11 +249,13 @@ export async function generateIcons({ root = DEFAULT_ROOT } = {}) {
 
   for (const [density, size] of Object.entries(ANDROID_LAUNCHER_SIZES)) {
     const folder = join(root, "android", "app", "src", "main", "res", `mipmap-${density}`);
-    const launcher = await renderInstalledIcon(lightSource, size);
+    // Use the exact installed-PWA artwork as Android's launcher source so a
+    // browser-installed Routino and the native app share one icon treatment.
+    const launcher = await renderInstalledIcon(pwaIcon512, size);
     await writeOutput(join(folder, "ic_launcher.png"), launcher);
     await writeOutput(
       join(folder, "ic_launcher_round.png"),
-      await renderRoundIcon(lightSource, size),
+      await renderRoundIcon(pwaIcon512, size),
     );
     await writeOutput(join(folder, "ic_launcher_background.png"), launcher);
     await writeOutput(join(folder, "ic_launcher_foreground.png"), await renderTransparent(size));

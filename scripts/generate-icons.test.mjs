@@ -111,6 +111,19 @@ describe("Routino brand asset generator", () => {
         await expectPngSize(join(folder, name), size, size);
       }
 
+      const expectedLauncher = await sharp(
+        readFileSync(join(sandbox, "public", "icons", "icon-512.png")),
+      )
+        .resize(size, size, { kernel: sharp.kernel.lanczos3 })
+        .sharpen({ sigma: size <= 32 ? 0.65 : 0.35 })
+        .png({ compressionLevel: 9, adaptiveFiltering: true, palette: false, quality: 92 })
+        .toBuffer();
+      assert.deepEqual(
+        readFileSync(join(folder, "ic_launcher.png")),
+        expectedLauncher,
+        `${density} Android launcher must be generated directly from the installed PWA icon`,
+      );
+
       assert.deepEqual(
         readFileSync(join(folder, "ic_launcher_background.png")),
         readFileSync(join(folder, "ic_launcher.png")),
@@ -148,5 +161,11 @@ describe("Routino brand asset generator", () => {
     assert.ok(statSync(join(sandbox, "public", "icons", "favicon-16.png")).size <= 6 * 1024);
     assert.ok(statSync(join(sandbox, "public", "icons", "favicon-32.png")).size <= 12 * 1024);
     assert.ok(statSync(join(sandbox, "public", "favicon.ico")).size <= 24 * 1024);
+  });
+
+  it("uses a fresh Android package version so launchers replace cached icons", () => {
+    const gradle = readFileSync(join(ROOT, "android", "app", "build.gradle"), "utf8");
+    assert.match(gradle, /versionCode 2\b/);
+    assert.match(gradle, /versionName "1\.0\.1"/);
   });
 });
