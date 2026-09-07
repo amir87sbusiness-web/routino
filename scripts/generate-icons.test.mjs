@@ -113,7 +113,7 @@ async function expectComfortableAndroidMarkScale(path) {
     }
   }
   const occupancy = (maxX - minX + 1) / info.width;
-  assert.ok(occupancy >= 0.58 && occupancy <= 0.6, `${path} mark occupancy was ${occupancy}`);
+  assert.ok(occupancy >= 0.7 && occupancy <= 0.72, `${path} mark occupancy was ${occupancy}`);
 }
 
 describe("Routino brand asset generator", () => {
@@ -222,8 +222,8 @@ describe("Routino brand asset generator", () => {
       join(ROOT, "android", "app", "src", "main", "AndroidManifest.xml"),
       "utf8",
     );
-    assert.match(gradle, /versionCode 5\b/);
-    assert.match(gradle, /versionName "1\.0\.4"/);
+    assert.match(gradle, /versionCode 6\b/);
+    assert.match(gradle, /versionName "1\.0"/);
     assert.doesNotMatch(manifest, /android:roundIcon=/);
   });
 });

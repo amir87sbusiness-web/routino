@@ -16,7 +16,7 @@ const DEFAULT_ROOT = fileURLToPath(new URL("..", import.meta.url));
 const SOURCE_SIZE = 1254;
 const LIGHT_BACKGROUND = { r: 248, g: 248, b: 248, alpha: 1 };
 const UI_CROP = { left: 140, top: 110, width: 974, height: 974 };
-const ANDROID_ICON_SCALE = 0.94;
+const ANDROID_ICON_SCALE = 1.14;
 
 const ANDROID_LAUNCHER_SIZES = {
   ldpi: 36,
@@ -135,6 +135,12 @@ async function renderCenteredAndroidIcon(source, size) {
   const resized = await renderInstalledIcon(source, tileSize);
   const left = Math.round((size - tileSize) / 2) + shiftX;
   const top = Math.round((size - tileSize) / 2) + shiftY;
+  if (tileSize >= size) {
+    return sharp(resized)
+      .extract({ left: -left, top: -top, width: size, height: size })
+      .png({ compressionLevel: 9, adaptiveFiltering: true })
+      .toBuffer();
+  }
   return sharp({
     create: { width: size, height: size, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } },
   })
