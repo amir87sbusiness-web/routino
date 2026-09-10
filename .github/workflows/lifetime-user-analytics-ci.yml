@@ -27,8 +27,12 @@ jobs:
       - name: Install frontend/root dependencies
         run: npm ci
 
-      - name: Install backend dependencies without mutating stale backend lockfile
-        run: npm --prefix backend install --package-lock=false
+      - name: Install backend dependencies using package.json only
+        run: |
+          cp backend/package-lock.json /tmp/backend-package-lock.json
+          rm backend/package-lock.json
+          npm --prefix backend install
+          mv /tmp/backend-package-lock.json backend/package-lock.json
 
       - name: Targeted lifetime analytics migration test
         run: npm --prefix backend test -- lifetime-user-analytics-sql.test.ts --maxWorkers=1
