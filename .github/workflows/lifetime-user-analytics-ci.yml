@@ -1,3 +1,4 @@
+# Temporary validation workflow for the lifetime analytics branch.
 name: lifetime-user-analytics-ci
 
 on:
