@@ -1,0 +1,54 @@
+name: lifetime-user-analytics-ci
+
+on:
+  push:
+    branches:
+      - codex/lifetime-user-analytics
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install frontend/root dependencies
+        run: npm ci
+
+      - name: Install backend dependencies
+        run: npm --prefix backend ci
+
+      - name: Targeted lifetime analytics migration test
+        run: npm --prefix backend test -- lifetime-user-analytics-sql.test.ts --maxWorkers=1
+
+      - name: Full backend tests
+        run: npm --prefix backend test -- --maxWorkers=1
+
+      - name: Backend typecheck
+        run: npm --prefix backend run typecheck
+
+      - name: Frontend/root tests
+        run: npm test -- --maxWorkers=1
+
+      - name: Sync generated Edge shared sources
+        run: npm run sync:edge
+
+      - name: Assert Edge generated sources were already in parity
+        run: git diff --exit-code
+
+      - name: Edge tests
+        run: npm run test:edge -- --maxWorkers=1
+
+      - name: Production web build
+        run: npm run build
