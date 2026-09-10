@@ -27,8 +27,8 @@ jobs:
       - name: Install frontend/root dependencies
         run: npm ci
 
-      - name: Install backend dependencies
-        run: npm --prefix backend ci
+      - name: Install backend dependencies without mutating stale backend lockfile
+        run: npm --prefix backend install --package-lock=false
 
       - name: Targeted lifetime analytics migration test
         run: npm --prefix backend test -- lifetime-user-analytics-sql.test.ts --maxWorkers=1
