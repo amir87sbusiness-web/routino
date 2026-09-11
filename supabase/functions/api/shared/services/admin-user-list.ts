@@ -5,6 +5,9 @@ import { toAsciiDigits } from "../lib/phone.ts";
 
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 100;
+const CURSOR_MAX_LENGTH = 1024;
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type AdminUserSort =
   | "name"
@@ -17,10 +20,18 @@ export type AdminUserSort =
   | "createdAt";
 
 export type AdminUserSubscriptionFilter = "all" | "active" | "expired" | "none";
+type SortDirection = "asc" | "desc";
+
+type AdminUserCursor = {
+  sort: AdminUserSort;
+  direction: SortDirection;
+  value: string;
+  id: string;
+};
 
 export type AdminUserListOptions = {
   q?: string;
-  page?: number;
+  cursor?: string;
   limit?: number;
   sort?: string;
   direction?: string;
@@ -48,6 +59,7 @@ type UserSummaryRow = {
   sync_data_bytes: number | string | bigint;
   plan_id: string | null;
   expires_at: Date | string | null;
+  sort_value: number | string | bigint;
 };
 
 const SORTS = new Set<AdminUserSort>([
@@ -91,14 +103,53 @@ const normalizeSort = (value: string | undefined): AdminUserSort =>
 const normalizeSubscription = (value: string | undefined): AdminUserSubscriptionFilter =>
   value === "active" || value === "expired" || value === "none" ? value : "all";
 
-function userSortExpression(sort: AdminUserSort, now: Date) {
+function parseCursor(
+  raw: string | undefined,
+  sort: AdminUserSort,
+  direction: SortDirection,
+): AdminUserCursor | null {
+  if (!raw || raw.length > CURSOR_MAX_LENGTH) return null;
+  try {
+    const parsed = JSON.parse(raw) as Partial<AdminUserCursor>;
+    if (
+      parsed.sort !== sort ||
+      parsed.direction !== direction ||
+      typeof parsed.value !== "string" ||
+      typeof parsed.id !== "string" ||
+      !UUID_PATTERN.test(parsed.id)
+    ) {
+      return null;
+    }
+    if (sort === "name") {
+      if (parsed.value.length > 256) return null;
+    } else if (!/^-?\d+$/.test(parsed.value)) {
+      return null;
+    }
+    return parsed as AdminUserCursor;
+  } catch {
+    return null;
+  }
+}
+
+function encodeCursor(
+  sort: AdminUserSort,
+  direction: SortDirection,
+  value: number | string | bigint,
+  id: string,
+) {
+  return JSON.stringify({ sort, direction, value: String(value), id } satisfies AdminUserCursor);
+}
+
+function userSortExpression(sort: AdminUserSort, direction: SortDirection, now: Date) {
   switch (sort) {
     case "name":
       return sql`lower(coalesce(u.username, u.phone))`;
     case "activeDays":
       return sql`coalesce(u.active_days, 0)`;
     case "lastActiveAt":
-      return sql`u.last_active_at`;
+      return direction === "asc"
+        ? sql`coalesce((extract(epoch from u.last_active_at) * 1000)::bigint, 9223372036854775807::bigint)`
+        : sql`coalesce((extract(epoch from u.last_active_at) * 1000)::bigint, -1::bigint)`;
     case "syncDataBytes":
       return sql`coalesce(u.sync_data_bytes, 0)`;
     case "syncRecordCount":
@@ -110,24 +161,27 @@ function userSortExpression(sort: AdminUserSort, now: Date) {
         else 0
       end`;
     case "expiresAt":
-      return sql`e.expires_at`;
+      return direction === "asc"
+        ? sql`coalesce((extract(epoch from e.expires_at) * 1000)::bigint, 9223372036854775807::bigint)`
+        : sql`coalesce((extract(epoch from e.expires_at) * 1000)::bigint, -1::bigint)`;
     case "createdAt":
     default:
-      return sql`u.created_at`;
+      return sql`(extract(epoch from u.created_at) * 1000)::bigint`;
   }
 }
 
 /**
- * Admin-only user browser. Pagination, filtering and ordering all happen in SQL,
- * so the panel never sorts just the first N rows and mistakes that slice for the
- * whole user base.
+ * Admin-only user browser. Every page is ONE SQL query and reads at most
+ * `pageSize + 1` result rows. It deliberately uses the denormalised counters on
+ * `users` instead of aggregating `records`, and cursor pagination instead of
+ * COUNT/OFFSET so later pages do not get progressively more expensive.
  */
 export async function adminListUsersPage(db: Database, opts: AdminUserListOptions, now: Date) {
-  const requestedPage = positiveInt(opts.page, 1, 1_000_000);
   const pageSize = positiveInt(opts.limit, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
   const sort = normalizeSort(opts.sort);
-  const direction = opts.direction === "asc" ? "asc" : "desc";
+  const direction: SortDirection = opts.direction === "asc" ? "asc" : "desc";
   const subscription = normalizeSubscription(opts.subscription);
+  const cursor = parseCursor(opts.cursor, sort, direction);
 
   const query = opts.q?.trim().toLowerCase() ?? "";
   let digits = toAsciiDigits(query).replace(/\D/g, "");
@@ -144,6 +198,7 @@ export async function adminListUsersPage(db: Database, opts: AdminUserListOption
   const expiresFrom = optionalDate(opts.expiresFrom);
   const expiresTo = optionalDate(opts.expiresTo);
   const nowIso = now.toISOString();
+  const sortExpression = userSortExpression(sort, direction, now);
 
   const filters = sql`
     where (
@@ -169,36 +224,36 @@ export async function adminListUsersPage(db: Database, opts: AdminUserListOption
     and (${expiresTo === null} or e.expires_at <= ${expiresTo?.toISOString() ?? null}::timestamptz)
   `;
 
-  const countResult = await db.execute(sql`
-    select count(*) as total
-      from users u
-      left join entitlements e on e.user_id = u.id
-      ${filters}
-  `);
-  const total = Number(rowsOf<{ total: number | string | bigint }>(countResult)[0]?.total ?? 0);
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const page = Math.min(requestedPage, totalPages);
-  const offset = (page - 1) * pageSize;
-  const sortExpression = userSortExpression(sort, now);
+  const cursorFilter = !cursor
+    ? sql``
+    : direction === "asc"
+      ? sql`where (sort_value > ${cursor.value} or (sort_value = ${cursor.value} and id > ${cursor.id}::uuid))`
+      : sql`where (sort_value < ${cursor.value} or (sort_value = ${cursor.value} and id < ${cursor.id}::uuid))`;
   const ordering =
-    direction === "asc"
-      ? sql`${sortExpression} asc nulls last, u.id asc`
-      : sql`${sortExpression} desc nulls last, u.id desc`;
+    direction === "asc" ? sql`sort_value asc, id asc` : sql`sort_value desc, id desc`;
 
   const result = await db.execute(sql`
-    select u.id, u.phone, u.username, u.created_at,
-           u.active_days, u.last_active_at,
-           u.sync_record_count, u.sync_data_bytes,
-           e.plan_id, e.expires_at
-      from users u
-      left join entitlements e on e.user_id = u.id
-      ${filters}
+    with filtered_users as (
+      select u.id, u.phone, u.username, u.created_at,
+             u.active_days, u.last_active_at,
+             u.sync_record_count, u.sync_data_bytes,
+             e.plan_id, e.expires_at,
+             ${sortExpression} as sort_value
+        from users u
+        left join entitlements e on e.user_id = u.id
+        ${filters}
+    )
+    select *
+      from filtered_users
+      ${cursorFilter}
      order by ${ordering}
-     limit ${pageSize}
-    offset ${offset}
+     limit ${pageSize + 1}
   `);
 
-  const users = rowsOf<UserSummaryRow>(result).map((row) => {
+  const rows = rowsOf<UserSummaryRow>(result);
+  const hasNext = rows.length > pageSize;
+  const visibleRows = hasNext ? rows.slice(0, pageSize) : rows;
+  const users = visibleRows.map((row) => {
     const expiresAt = asDate(row.expires_at);
     const subscriptionActive = !!expiresAt && expiresAt > now;
     return {
@@ -217,15 +272,14 @@ export async function adminListUsersPage(db: Database, opts: AdminUserListOption
     };
   });
 
+  const last = visibleRows.at(-1);
   return {
     users,
     pagination: {
-      page,
       pageSize,
-      total,
-      totalPages,
-      hasPrevious: page > 1,
-      hasNext: page < totalPages,
+      hasNext,
+      nextCursor:
+        hasNext && last ? encodeCursor(sort, direction, last.sort_value, last.id) : null,
     },
     sort: { key: sort, direction },
   };
