@@ -26,11 +26,18 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - name: Install root and backend dependencies
+      - name: Install root dependencies and backend deps into temporary runner
+        shell: bash
         run: |
           npm ci
-          rm backend/package-lock.json
-          npm --prefix backend install --no-package-lock
+          backend_deps=$(node - <<'NODE'
+          const p = require('./backend/package.json');
+          console.log(Object.entries({ ...p.dependencies, ...p.devDependencies })
+            .map(([name, version]) => `${name}@${version}`)
+            .join(' '));
+          NODE
+          )
+          npm install --no-save --package-lock=false $backend_deps
 
       - name: Verify generated Edge and setup SQL are in sync
         shell: bash
@@ -46,10 +53,10 @@ jobs:
         run: npx vitest run --exclude scripts/generate-icons.test.mjs
 
       - name: Backend typecheck
-        run: npm --prefix backend run typecheck
+        run: ./node_modules/.bin/tsc --noEmit -p backend/tsconfig.json
 
       - name: Backend tests
-        run: npm --prefix backend test -- --maxWorkers=1
+        run: cd backend && ../node_modules/.bin/vitest run --maxWorkers=1
 
       - name: Edge parity tests
         run: npm run test:edge
