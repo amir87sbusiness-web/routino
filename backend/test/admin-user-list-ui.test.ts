@@ -89,7 +89,7 @@ describe("admin user list UI", () => {
       await settle();
       await settle();
       const document = dom.window.document;
-      (document.querySelector("#tab-button-users") as HTMLButtonElement).click();
+      (document.querySelector("#tab-button-users") as unknown as { click: () => void }).click();
       await settle();
       await settle();
 
@@ -101,30 +101,30 @@ describe("admin user list UI", () => {
       expect(userUrls.at(-1)).toContain("sort=createdAt");
       expect(userUrls.at(-1)).toContain("direction=desc");
 
-      (document.querySelector('[data-user-page="2"]') as HTMLButtonElement).click();
+      (document.querySelector('[data-user-page="2"]') as unknown as { click: () => void }).click();
       await settle();
       await settle();
       expect(userUrls.at(-1)).toContain("page=2");
 
-      (document.querySelector('[data-user-sort="activeDays"]') as HTMLButtonElement).click();
+      (document.querySelector('[data-user-sort="activeDays"]') as unknown as { click: () => void }).click();
       await settle();
       await settle();
       expect(userUrls.at(-1)).toContain("page=1");
       expect(userUrls.at(-1)).toContain("sort=activeDays");
       expect(userUrls.at(-1)).toContain("direction=desc");
 
-      (document.querySelector('[data-user-sort="activeDays"]') as HTMLButtonElement).click();
+      (document.querySelector('[data-user-sort="activeDays"]') as unknown as { click: () => void }).click();
       await settle();
       await settle();
       expect(userUrls.at(-1)).toContain("sort=activeDays");
       expect(userUrls.at(-1)).toContain("direction=asc");
 
-      (document.querySelector("#uFilterToggle") as HTMLButtonElement).click();
-      (document.querySelector("#uSubscription") as HTMLSelectElement).value = "active";
-      (document.querySelector("#uMinActive") as HTMLInputElement).value = "5";
-      (document.querySelector("#uMinData") as HTMLInputElement).value = "1.5";
-      (document.querySelector("#uRegisteredFrom") as HTMLInputElement).value = "2026-09-01";
-      (document.querySelector("#uApplyFilters") as HTMLButtonElement).click();
+      (document.querySelector("#uFilterToggle") as unknown as { click: () => void }).click();
+      (document.querySelector("#uSubscription") as unknown as { value: string }).value = "active";
+      (document.querySelector("#uMinActive") as unknown as { value: string }).value = "5";
+      (document.querySelector("#uMinData") as unknown as { value: string }).value = "1.5";
+      (document.querySelector("#uRegisteredFrom") as unknown as { value: string }).value = "2026-09-01";
+      (document.querySelector("#uApplyFilters") as unknown as { click: () => void }).click();
       await settle();
       await settle();
 
