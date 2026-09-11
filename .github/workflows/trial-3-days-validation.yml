@@ -31,7 +31,7 @@ jobs:
         run: npm ci
 
       - name: Sync generated Edge shared sources
-        run: npm run sync:edge
+        run: node -e "import('./scripts/sync-edge-shared.mjs').then((m) => m.syncAll())"
 
       - name: Regenerate setup SQL
         run: node scripts/gen-setup-sql.mjs
