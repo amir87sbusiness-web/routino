@@ -103,7 +103,7 @@ function ActivationPage() {
 
           <div className="text-center">
             <h1 className="text-2xl font-black leading-10 text-foreground">
-              {t("هفت روز با روتینو پیش برو", "Try a week with Routino")}
+              {t("سه روز با روتینو پیش برو", "Try Routino for three days")}
             </h1>
             <p className="mt-1.5 text-sm leading-7 text-muted-foreground">
               {t(
@@ -143,7 +143,7 @@ function ActivationPage() {
                   : t("شروع رایگان", "Start free")}
             </Button>
             <p className="mt-2 text-center text-xs leading-6 text-muted-foreground">
-              {t("تمام امکانات برای هفت روز فعال می‌شود", "Every feature unlocks for seven days")}
+              {t("تمام امکانات برای سه روز فعال می‌شود", "Every feature unlocks for three days")}
             </p>
 
             <details
@@ -160,8 +160,8 @@ function ActivationPage() {
               <div className="rounded-2xl border border-border bg-secondary/45 p-3.5">
                 <p className="text-xs leading-6 text-muted-foreground">
                   {t(
-                    "بعد از هفت روز، فقط اگر خودت خواستی یکی از پلن‌ها را انتخاب می‌کنی.",
-                    "After seven days, you only choose a plan if you want to continue.",
+                    "بعد از سه روز، فقط اگر خودت خواستی یکی از پلن‌ها را انتخاب می‌کنی.",
+                    "After three days, you only choose a plan if you want to continue.",
                   )}
                 </p>
 
