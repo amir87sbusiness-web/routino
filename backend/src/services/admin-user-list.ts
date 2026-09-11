@@ -5,8 +5,7 @@ import { toAsciiDigits } from "../lib/phone.js";
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 100;
 const CURSOR_MAX_LENGTH = 1024;
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type AdminUserSort =
   | "name"
@@ -139,12 +138,7 @@ function parseCursor(
   }
 }
 
-function encodeCursor(
-  sort: AdminUserSort,
-  direction: SortDirection,
-  value: string,
-  id: string,
-) {
+function encodeCursor(sort: AdminUserSort, direction: SortDirection, value: string, id: string) {
   return JSON.stringify({ sort, direction, value, id } satisfies AdminUserCursor);
 }
 
