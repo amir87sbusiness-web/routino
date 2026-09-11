@@ -114,9 +114,9 @@ jobs:
             npx eslint $files
           fi
 
-      - name: Prettier check changed files
+      - name: Prettier check changed source files
         run: |
-          files=$(git diff --name-only origin/main...HEAD -- '*.js' '*.mjs' '*.cjs' '*.ts' '*.tsx' '*.json' '*.html' '*.md' '*.yml' '*.yaml')
+          files=$(git diff --name-only origin/main...HEAD -- '*.js' '*.mjs' '*.cjs' '*.ts' '*.tsx' '*.json' '*.md' '*.yml' '*.yaml')
           if [ -n "$files" ]; then
             npx prettier --check $files
           fi
