@@ -1,0 +1,69 @@
+name: Review trial 3 days
+
+on:
+  push:
+    branches:
+      - codex/trial-3-days
+    paths:
+      - '.github/workflows/review-trial-3-days.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Verify generated Edge and setup SQL are in sync
+        shell: bash
+        run: |
+          node -e "import('./scripts/sync-edge-shared.mjs').then((m) => m.syncAll())"
+          node scripts/gen-setup-sql.mjs
+          git diff --exit-code -- backend/src supabase/functions/api/shared supabase/setup.sql
+
+      - name: Frontend and shared unit tests
+        run: npm test
+
+      - name: Backend typecheck
+        run: npm --prefix backend run typecheck
+
+      - name: Backend tests
+        run: npm --prefix backend test -- --maxWorkers=1
+
+      - name: Edge parity tests
+        run: npm run test:edge
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build web and landing
+        run: npm run build
+
+      - name: Trial policy static audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -R -n -E 'Try a week with Routino|Every feature unlocks for seven days|After seven days|هفت روز با روتینو پیش برو|تمام امکانات برای هفت روز فعال می‌شود|بعد از هفت روز' src backend/src supabase/functions landing docs; then
+            echo 'stale user-facing 7-day trial copy found'
+            exit 1
+          fi
+          if grep -R -n -E 'endAt - 7 \* DAY_MS|g\.days = 7' src backend/src supabase/functions; then
+            echo 'stale runtime 7-day trial formula found'
+            exit 1
+          fi
+          count=$(grep -R -n -E 'planId: ["'"']trial["'"'], days: 3, source: ["'"']trial["'"']' backend/src supabase/functions/api/shared | wc -l)
+          test "$count" -ge 2
