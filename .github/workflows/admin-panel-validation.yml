@@ -1,0 +1,41 @@
+name: Admin Panel Validation
+
+on:
+  push:
+    branches:
+      - validation/admin-panel-ci
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Admin regression tests
+        run: npx vitest run backend/test/admin-user-list.test.ts backend/test/admin-user-list-ui.test.ts backend/test/edge-parity.test.ts
+
+      - name: Full test suite
+        run: npm test
+
+      - name: Edge parity suite
+        run: npm run test:edge
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Production build
+        run: npm run build
