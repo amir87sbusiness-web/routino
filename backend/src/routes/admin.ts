@@ -26,6 +26,7 @@ import {
   verifyAdminSession,
 } from "../services/admin-auth.js";
 import { adminDeleteUser } from "../services/admin-user-delete.js";
+import { adminListUsersPage } from "../services/admin-user-list.js";
 import { adminListPaymentsIncludingDeleted } from "../services/admin-payment-history.js";
 import { claimAdminOtpRequest } from "../services/login-throttle.js";
 import { claimSendSlot, releaseSendSlot, verifyCode } from "../services/otp.js";
@@ -35,7 +36,6 @@ import {
   adminGrant,
   adminListDiscounts,
   adminListPlans,
-  adminListUsers,
   adminOverview,
   adminSetPassword,
   adminUpdateDiscount,
@@ -99,6 +99,11 @@ const discountUpdateBody = z.object({
 const planPriceBody = z.object({
   priceToman: z.number().int().min(1_000).max(1_000_000_000),
 });
+
+const queryNumber = (value: string | undefined): number | undefined => {
+  if (value == null || value.trim() === "") return undefined;
+  return Number(value);
+};
 
 export const adminRoutes: FastifyPluginAsync = async (app) => {
   const { db, env, sms } = app.deps;
@@ -206,8 +211,29 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.get("/admin/overview", opts, async () => adminOverview(db, now()));
 
   app.get("/admin/users", opts, async (req) => {
-    const { q, limit } = req.query as { q?: string; limit?: string };
-    return { users: await adminListUsers(db, { q, limit: Number(limit) || undefined }, now()) };
+    const query = req.query as Record<string, string | undefined>;
+    return adminListUsersPage(
+      db,
+      {
+        q: query.q,
+        page: queryNumber(query.page),
+        limit: queryNumber(query.limit),
+        sort: query.sort,
+        direction: query.direction,
+        subscription: query.subscription,
+        minActiveDays: queryNumber(query.minActiveDays),
+        maxActiveDays: queryNumber(query.maxActiveDays),
+        minDataBytes: queryNumber(query.minDataBytes),
+        maxDataBytes: queryNumber(query.maxDataBytes),
+        registeredFrom: query.registeredFrom,
+        registeredTo: query.registeredTo,
+        activeFrom: query.activeFrom,
+        activeTo: query.activeTo,
+        expiresFrom: query.expiresFrom,
+        expiresTo: query.expiresTo,
+      },
+      now(),
+    );
   });
 
   app.get("/admin/users/:id", opts, async (req) => {
