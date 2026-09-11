@@ -64,16 +64,30 @@ describe("ActivationPage", () => {
     app.db = {
       ...defaultDb([]),
       auth: { userId: "user-1", phone: "989123334444", verifiedAt: 1 },
-      habits: [{
-        id: "existing-habit", name: "آب", categoryId: "health", type: "binary", target: 1,
-        schedule: { kind: "daily" }, monthlyGoal: null, reminderTime: null, createdAt: 1,
-      }],
+      habits: [
+        {
+          id: "existing-habit",
+          name: "آب",
+          categoryId: "health",
+          type: "binary",
+          target: 1,
+          schedule: { kind: "daily" },
+          monthlyGoal: null,
+          reminderTime: null,
+          createdAt: 1,
+        },
+      ],
       meta: { ...defaultDb([]).meta, legacyEntitlementMigrationResolved: true },
     };
     app.applyEntitlement.mockClear();
-    authApi.startTrial.mockReset().mockResolvedValue({ entitlement: trialEntitlement, started: true });
+    authApi.startTrial
+      .mockReset()
+      .mockResolvedValue({ entitlement: trialEntitlement, started: true });
     authApi.entitlementToSubscription.mockReset().mockReturnValue({
-      planId: "trial", startedAt: Date.parse(trialEntitlement.startedAt), expiresAt: Date.parse(trialEntitlement.expiresAt), trial: true,
+      planId: "trial",
+      startedAt: Date.parse(trialEntitlement.startedAt),
+      expiresAt: Date.parse(trialEntitlement.expiresAt),
+      trial: true,
     });
     paymentsApi.fetchPlans.mockReset().mockResolvedValue({
       plans: [
@@ -153,10 +167,14 @@ describe("ActivationPage", () => {
 
   it("rejects a non-trial entitlement returned by the server", async () => {
     authApi.startTrial.mockResolvedValueOnce({
-      started: false, entitlement: { ...trialEntitlement, planId: "m1" },
+      started: false,
+      entitlement: { ...trialEntitlement, planId: "m1" },
     });
     authApi.entitlementToSubscription.mockReturnValueOnce({
-      planId: "m1", startedAt: 1, expiresAt: Date.parse(trialEntitlement.expiresAt), trial: false,
+      planId: "m1",
+      startedAt: 1,
+      expiresAt: Date.parse(trialEntitlement.expiresAt),
+      trial: false,
     });
 
     await click(byButtonText(host, "شروع رایگان"));

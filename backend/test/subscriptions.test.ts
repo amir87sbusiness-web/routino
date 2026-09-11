@@ -198,7 +198,13 @@ describe("GET /v1/subscriptions/me", () => {
       headers: { authorization: `Bearer ${access}` },
     });
     const body = res.json() as {
-      entitlement: { status: string; planId: string | null; startedAt: string | null; issuedAt: string; deletionAt: string };
+      entitlement: {
+        status: string;
+        planId: string | null;
+        startedAt: string | null;
+        issuedAt: string;
+        deletionAt: string;
+      };
     };
     expect(body.entitlement.status).toBe("none");
     expect(body.entitlement.planId).toBeNull();
@@ -236,12 +242,20 @@ describe("POST /v1/subscriptions/trial/start", () => {
     const first = (await startTrial(access)).json() as {
       started: boolean;
       access: string;
-      entitlement: { status: string; planId: string; startedAt: string; expiresAt: string; deletionAt: string };
+      entitlement: {
+        status: string;
+        planId: string;
+        startedAt: string;
+        expiresAt: string;
+        deletionAt: string;
+      };
     };
     const second = (await startTrial(access)).json() as typeof first & { reason: string };
     expect(first.started).toBe(true);
     expect(first.entitlement).toMatchObject({ status: "active", planId: "trial" });
-    expect((Date.parse(first.entitlement.expiresAt) - Date.parse(first.entitlement.startedAt)) / DAY).toBeCloseTo(3, 6);
+    expect(
+      (Date.parse(first.entitlement.expiresAt) - Date.parse(first.entitlement.startedAt)) / DAY,
+    ).toBeCloseTo(3, 6);
     expect((Date.parse(first.entitlement.expiresAt) - Date.now()) / DAY).toBeCloseTo(3, 1);
     expect(second).toMatchObject({ started: false, reason: "previous_grant" });
     expect(second.entitlement.expiresAt).toBe(first.entitlement.expiresAt);

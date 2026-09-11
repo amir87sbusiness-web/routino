@@ -146,7 +146,8 @@ describe("POST /v1/subscriptions/trial/start", () => {
     expect(bodies.filter((body) => body.started)).toHaveLength(1);
     expect(new Set(bodies.map((body) => body.entitlement.expiresAt)).size).toBe(1);
     expect(
-      (Date.parse(bodies[0].entitlement.expiresAt) - Date.parse(bodies[0].entitlement.startedAt)) / DAY,
+      (Date.parse(bodies[0].entitlement.expiresAt) - Date.parse(bodies[0].entitlement.startedAt)) /
+        DAY,
     ).toBeCloseTo(3, 6);
     expect((Date.parse(bodies[0].entitlement.expiresAt) - Date.now()) / DAY).toBeCloseTo(3, 1);
     expect(
