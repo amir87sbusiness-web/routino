@@ -19,6 +19,7 @@ import { unauthorized } from "../lib/http-errors.js";
 export interface Entitlement {
   status: "active" | "expired" | "none";
   planId: string | null;
+  startedAt: string | null;
   expiresAt: string | null;
   /** Server clock, so the client can detect a skewed device without trusting it. */
   issuedAt: string;
@@ -43,7 +44,7 @@ export async function readEntitlement(
   now: Date,
 ): Promise<Entitlement> {
   const result = await db.execute(sql`
-    select e.plan_id, e.expires_at,
+    select e.plan_id, e.updated_at as started_at, e.expires_at,
            routino_account_deletion_at(u.id) as deletion_at
       from users u
       left join entitlements e on e.user_id = u.id
@@ -52,6 +53,7 @@ export async function readEntitlement(
   `);
   const row = rowsOf<{
     plan_id: string | null;
+    started_at: Date | string | null;
     expires_at: Date | string | null;
     deletion_at: Date | string | null;
   }>(result)[0];
@@ -66,15 +68,23 @@ export async function readEntitlement(
     return {
       status: "none",
       planId: null,
+      startedAt: null,
       expiresAt: null,
       issuedAt: now.toISOString(),
       deletionAt: deletionAt?.toISOString() ?? null,
     };
   }
+  const startedAt =
+    row.started_at == null
+      ? null
+      : row.started_at instanceof Date
+        ? row.started_at
+        : new Date(row.started_at);
   const expiresAt = row.expires_at instanceof Date ? row.expires_at : new Date(row.expires_at);
   return {
     status: expiresAt > now ? "active" : "expired",
     planId: row.plan_id,
+    startedAt: startedAt?.toISOString() ?? null,
     expiresAt: expiresAt.toISOString(),
     issuedAt: now.toISOString(),
     deletionAt: deletionAt?.toISOString() ?? null,
@@ -229,7 +239,7 @@ export async function startTrialOnce(
     const entitlement = await grantInterval(
       tx,
       userId,
-      { planId: "trial", days: 7, source: "trial" },
+      { planId: "trial", days: 3, source: "trial" },
       now,
     );
     await tx.execute(sql`
