@@ -24,8 +24,14 @@ async function signIn(phone: string) {
   return response.json() as { access: string; user: { id: string } };
 }
 
+type UserPage = {
+  users: { id: string; activeDays: number; createdAt: string }[];
+  pagination: { pageSize: number; hasNext: boolean; nextCursor: string | null };
+  sort: { key: string; direction: string };
+};
+
 describe("admin user browser", () => {
-  it("paginates the complete user set 100 at a time and sorts before slicing", async () => {
+  it("walks the complete user set 100 at a time with a cursor", async () => {
     await h.raw(`
       insert into users (
         phone, username, created_at, active_days, last_active_at,
@@ -44,15 +50,14 @@ describe("admin user browser", () => {
 
     const first = await h.app.inject({
       method: "GET",
-      url: "/v1/admin/users?page=1&limit=100&sort=activeDays&direction=desc",
+      url: "/v1/admin/users?limit=100&sort=activeDays&direction=desc",
       headers: admin,
     });
     expect(first.statusCode).toBe(200);
-    const firstBody = first.json() as {
-      users: { activeDays: number; createdAt: string }[];
-      pagination: { page: number; pageSize: number; total: number; totalPages: number };
-    };
-    expect(firstBody.pagination).toMatchObject({ page: 1, pageSize: 100, total: 205, totalPages: 3 });
+    const firstBody = first.json() as UserPage;
+    expect(firstBody.pagination.pageSize).toBe(100);
+    expect(firstBody.pagination.hasNext).toBe(true);
+    expect(firstBody.pagination.nextCursor).toEqual(expect.any(String));
     expect(firstBody.users).toHaveLength(100);
     expect(firstBody.users[0]?.activeDays).toBe(205);
     expect(firstBody.users.at(-1)?.activeDays).toBe(106);
@@ -60,25 +65,35 @@ describe("admin user browser", () => {
 
     const second = await h.app.inject({
       method: "GET",
-      url: "/v1/admin/users?page=2&limit=999&sort=activeDays&direction=desc",
+      url:
+        "/v1/admin/users?limit=999&sort=activeDays&direction=desc&cursor=" +
+        encodeURIComponent(firstBody.pagination.nextCursor!),
       headers: admin,
     });
-    const secondBody = second.json() as {
-      users: { activeDays: number }[];
-      pagination: { page: number; pageSize: number; total: number; totalPages: number };
-    };
-    expect(secondBody.pagination).toMatchObject({ page: 2, pageSize: 100, total: 205, totalPages: 3 });
+    expect(second.statusCode).toBe(200);
+    const secondBody = second.json() as UserPage;
+    expect(secondBody.pagination.pageSize).toBe(100);
+    expect(secondBody.pagination.hasNext).toBe(true);
+    expect(secondBody.pagination.nextCursor).toEqual(expect.any(String));
     expect(secondBody.users).toHaveLength(100);
     expect(secondBody.users[0]?.activeDays).toBe(105);
     expect(secondBody.users.at(-1)?.activeDays).toBe(6);
 
     const last = await h.app.inject({
       method: "GET",
-      url: "/v1/admin/users?page=3&sort=activeDays&direction=desc",
+      url:
+        "/v1/admin/users?sort=activeDays&direction=desc&cursor=" +
+        encodeURIComponent(secondBody.pagination.nextCursor!),
       headers: admin,
     });
-    const lastBody = last.json() as { users: { activeDays: number }[] };
+    expect(last.statusCode).toBe(200);
+    const lastBody = last.json() as UserPage;
+    expect(lastBody.pagination).toMatchObject({ pageSize: 100, hasNext: false, nextCursor: null });
     expect(lastBody.users.map((user) => user.activeDays)).toEqual([5, 4, 3, 2, 1]);
+
+    const ids = [...firstBody.users, ...secondBody.users, ...lastBody.users].map((user) => user.id);
+    expect(ids).toHaveLength(205);
+    expect(new Set(ids).size).toBe(205);
   });
 
   it("applies activity, storage, registration and name ordering in SQL", async () => {
@@ -94,18 +109,18 @@ describe("admin user browser", () => {
 
     const filtered = await h.app.inject({
       method: "GET",
-      url: "/v1/admin/users?minActiveDays=5&maxActiveDays=10&minDataBytes=2097152&registeredFrom=2026-09-02T00%3A00%3A00.000Z&registeredTo=2026-09-04T23%3A59%3A59.999Z&sort=name&direction=asc",
+      url: "/v1/admin/users?minActiveDays=5&maxActiveDays=10&minDataBytes=2097152&maxDataBytes=6291456&registeredFrom=2026-09-02T00%3A00%3A00.000Z&registeredTo=2026-09-04T23%3A59%3A59.999Z&sort=name&direction=asc",
       headers: admin,
     });
     const body = filtered.json() as {
       users: { username: string; activeDays: number; syncDataBytes: number }[];
-      pagination: { total: number };
+      pagination: { pageSize: number; hasNext: boolean; nextCursor: string | null };
       sort: { key: string; direction: string };
     };
-    expect(body.pagination.total).toBe(1);
     expect(body.users).toEqual([
       expect.objectContaining({ username: "alpha", activeDays: 8, syncDataBytes: 4_194_304 }),
     ]);
+    expect(body.pagination).toMatchObject({ pageSize: 100, hasNext: false, nextCursor: null });
     expect(body.sort).toEqual({ key: "name", direction: "asc" });
   });
 
