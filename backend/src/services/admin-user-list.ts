@@ -58,7 +58,6 @@ type UserSummaryRow = {
   sync_data_bytes: number | string | bigint;
   plan_id: string | null;
   expires_at: Date | string | null;
-  sort_value: number | string | bigint;
 };
 
 const SORTS = new Set<AdminUserSort>([
@@ -71,6 +70,8 @@ const SORTS = new Set<AdminUserSort>([
   "expiresAt",
   "createdAt",
 ]);
+
+const TIMESTAMP_SORTS = new Set<AdminUserSort>(["lastActiveAt", "expiresAt", "createdAt"]);
 
 const asDate = (value: Date | string | null | undefined): Date | null =>
   value == null ? null : value instanceof Date ? value : new Date(value);
@@ -121,6 +122,14 @@ function parseCursor(
     }
     if (sort === "name") {
       if (parsed.value.length > 256) return null;
+    } else if (TIMESTAMP_SORTS.has(sort)) {
+      if (
+        parsed.value !== "infinity" &&
+        parsed.value !== "-infinity" &&
+        !Number.isFinite(new Date(parsed.value).getTime())
+      ) {
+        return null;
+      }
     } else if (!/^-?\d+$/.test(parsed.value)) {
       return null;
     }
@@ -133,10 +142,10 @@ function parseCursor(
 function encodeCursor(
   sort: AdminUserSort,
   direction: SortDirection,
-  value: number | string | bigint,
+  value: string,
   id: string,
 ) {
-  return JSON.stringify({ sort, direction, value: String(value), id } satisfies AdminUserCursor);
+  return JSON.stringify({ sort, direction, value, id } satisfies AdminUserCursor);
 }
 
 function userSortExpression(sort: AdminUserSort, direction: SortDirection, now: Date) {
@@ -147,8 +156,8 @@ function userSortExpression(sort: AdminUserSort, direction: SortDirection, now: 
       return sql`coalesce(u.active_days, 0)`;
     case "lastActiveAt":
       return direction === "asc"
-        ? sql`coalesce((extract(epoch from u.last_active_at) * 1000)::bigint, 9223372036854775807::bigint)`
-        : sql`coalesce((extract(epoch from u.last_active_at) * 1000)::bigint, -1::bigint)`;
+        ? sql`coalesce(u.last_active_at, 'infinity'::timestamptz)`
+        : sql`coalesce(u.last_active_at, '-infinity'::timestamptz)`;
     case "syncDataBytes":
       return sql`coalesce(u.sync_data_bytes, 0)`;
     case "syncRecordCount":
@@ -161,11 +170,50 @@ function userSortExpression(sort: AdminUserSort, direction: SortDirection, now: 
       end`;
     case "expiresAt":
       return direction === "asc"
-        ? sql`coalesce((extract(epoch from e.expires_at) * 1000)::bigint, 9223372036854775807::bigint)`
-        : sql`coalesce((extract(epoch from e.expires_at) * 1000)::bigint, -1::bigint)`;
+        ? sql`coalesce(e.expires_at, 'infinity'::timestamptz)`
+        : sql`coalesce(e.expires_at, '-infinity'::timestamptz)`;
     case "createdAt":
     default:
-      return sql`(extract(epoch from u.created_at) * 1000)::bigint`;
+      return sql`u.created_at`;
+  }
+}
+
+function cursorSqlValue(sort: AdminUserSort, value: string) {
+  if (sort === "name") return sql`${value}`;
+  if (TIMESTAMP_SORTS.has(sort)) return sql`${value}::timestamptz`;
+  return sql`${value}::bigint`;
+}
+
+function cursorValueForRow(
+  sort: AdminUserSort,
+  direction: SortDirection,
+  row: UserSummaryRow,
+  now: Date,
+): string {
+  switch (sort) {
+    case "name":
+      return (row.username ?? row.phone).toLowerCase();
+    case "activeDays":
+      return String(nonnegativeMetric(row.active_days));
+    case "lastActiveAt": {
+      const date = asDate(row.last_active_at);
+      return date ? date.toISOString() : direction === "asc" ? "infinity" : "-infinity";
+    }
+    case "syncDataBytes":
+      return String(nonnegativeMetric(row.sync_data_bytes));
+    case "syncRecordCount":
+      return String(nonnegativeMetric(row.sync_record_count));
+    case "subscription": {
+      const expiresAt = asDate(row.expires_at);
+      return String(expiresAt && expiresAt > now ? 2 : expiresAt ? 1 : 0);
+    }
+    case "expiresAt": {
+      const date = asDate(row.expires_at);
+      return date ? date.toISOString() : direction === "asc" ? "infinity" : "-infinity";
+    }
+    case "createdAt":
+    default:
+      return asDate(row.created_at)!.toISOString();
   }
 }
 
@@ -174,6 +222,9 @@ function userSortExpression(sort: AdminUserSort, direction: SortDirection, now: 
  * `pageSize + 1` result rows. It deliberately uses the denormalised counters on
  * `users` instead of aggregating `records`, and cursor pagination instead of
  * COUNT/OFFSET so later pages do not get progressively more expensive.
+ *
+ * The default created-at ordering keeps the native timestamptz expression so
+ * Postgres can use the existing `(created_at, id)` index directly.
  */
 export async function adminListUsersPage(db: Database, opts: AdminUserListOptions, now: Date) {
   const pageSize = positiveInt(opts.limit, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
@@ -223,27 +274,25 @@ export async function adminListUsersPage(db: Database, opts: AdminUserListOption
     and (${expiresTo === null} or e.expires_at <= ${expiresTo?.toISOString() ?? null}::timestamptz)
   `;
 
+  const cursorValue = cursor ? cursorSqlValue(sort, cursor.value) : null;
   const cursorFilter = !cursor
     ? sql``
     : direction === "asc"
-      ? sql`where (sort_value > ${cursor.value} or (sort_value = ${cursor.value} and id > ${cursor.id}::uuid))`
-      : sql`where (sort_value < ${cursor.value} or (sort_value = ${cursor.value} and id < ${cursor.id}::uuid))`;
+      ? sql`and (${sortExpression} > ${cursorValue} or (${sortExpression} = ${cursorValue} and u.id > ${cursor.id}::uuid))`
+      : sql`and (${sortExpression} < ${cursorValue} or (${sortExpression} = ${cursorValue} and u.id < ${cursor.id}::uuid))`;
   const ordering =
-    direction === "asc" ? sql`sort_value asc, id asc` : sql`sort_value desc, id desc`;
+    direction === "asc"
+      ? sql`${sortExpression} asc, u.id asc`
+      : sql`${sortExpression} desc, u.id desc`;
 
   const result = await db.execute(sql`
-    with filtered_users as (
-      select u.id, u.phone, u.username, u.created_at,
-             u.active_days, u.last_active_at,
-             u.sync_record_count, u.sync_data_bytes,
-             e.plan_id, e.expires_at,
-             ${sortExpression} as sort_value
-        from users u
-        left join entitlements e on e.user_id = u.id
-        ${filters}
-    )
-    select *
-      from filtered_users
+    select u.id, u.phone, u.username, u.created_at,
+           u.active_days, u.last_active_at,
+           u.sync_record_count, u.sync_data_bytes,
+           e.plan_id, e.expires_at
+      from users u
+      left join entitlements e on e.user_id = u.id
+      ${filters}
       ${cursorFilter}
      order by ${ordering}
      limit ${pageSize + 1}
@@ -278,7 +327,9 @@ export async function adminListUsersPage(db: Database, opts: AdminUserListOption
       pageSize,
       hasNext,
       nextCursor:
-        hasNext && last ? encodeCursor(sort, direction, last.sort_value, last.id) : null,
+        hasNext && last
+          ? encodeCursor(sort, direction, cursorValueForRow(sort, direction, last, now), last.id)
+          : null,
     },
     sort: { key: sort, direction },
   };
