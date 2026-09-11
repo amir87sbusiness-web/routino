@@ -1567,7 +1567,7 @@ create index if not exists feedback_user on feedback (user_id) where user_id is 
 create index if not exists discounts_phone on discounts (phone) where phone is not null;
 
 -- NULL means "protected or inconsistent". Eligibility is deliberately an
--- allow-list: no history at all, or one internally consistent seven-day trial.
+-- allow-list: no history at all, or one internally consistent trial grant.
 create or replace function routino_account_deletion_at(p_user_id uuid)
 returns timestamptz
 language sql
@@ -1585,7 +1585,6 @@ as $$
         where g.source = 'trial'
           and g.payment_id is null
           and g.months = 0
-          and g.days = 7
           and g.expires_before is null
           and g.expires_after is not null
       )::integer as valid_trial_count,
