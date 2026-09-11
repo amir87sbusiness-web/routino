@@ -6,7 +6,7 @@ on:
       - validation/admin-panel-ci
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validate:
@@ -27,38 +27,6 @@ jobs:
 
       - name: Install root dependencies
         run: npm ci
-
-      - name: Format admin browser files
-        run: |
-          npx prettier --write \
-            backend/src/lib/admin-user-list-ui.ts \
-            backend/src/services/admin-user-list.ts \
-            backend/test/admin-user-list-ui.test.ts \
-            backend/test/admin-user-list.test.ts \
-            supabase/functions/api/shared/lib/admin-user-list-ui.ts \
-            supabase/functions/api/shared/services/admin-user-list.ts
-
-      - name: Commit formatting if needed
-        run: |
-          if ! git diff --quiet -- \
-            backend/src/lib/admin-user-list-ui.ts \
-            backend/src/services/admin-user-list.ts \
-            backend/test/admin-user-list-ui.test.ts \
-            backend/test/admin-user-list.test.ts \
-            supabase/functions/api/shared/lib/admin-user-list-ui.ts \
-            supabase/functions/api/shared/services/admin-user-list.ts; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add \
-              backend/src/lib/admin-user-list-ui.ts \
-              backend/src/services/admin-user-list.ts \
-              backend/test/admin-user-list-ui.test.ts \
-              backend/test/admin-user-list.test.ts \
-              supabase/functions/api/shared/lib/admin-user-list-ui.ts \
-              supabase/functions/api/shared/services/admin-user-list.ts
-            git commit -m "style: format admin user browser"
-            git push origin HEAD:validation/admin-panel-ci
-          fi
 
       - name: Install backend dependencies
         run: npm --prefix backend ci
