@@ -26,6 +26,7 @@ import {
   verifyAdminSession,
 } from "../shared/services/admin-auth.ts";
 import { adminDeleteUser } from "../shared/services/admin-user-delete.ts";
+import { adminListUsersPage } from "../shared/services/admin-user-list.ts";
 import { adminListPaymentsIncludingDeleted } from "../shared/services/admin-payment-history.ts";
 import { claimAdminOtpRequest } from "../shared/services/login-throttle.ts";
 import { claimSendSlot, releaseSendSlot, verifyCode } from "../shared/services/otp.ts";
@@ -38,7 +39,6 @@ import {
   adminGrant,
   adminListDiscounts,
   adminListPlans,
-  adminListUsers,
   adminOverview,
   adminSetPassword,
   adminUpdateDiscount,
@@ -92,6 +92,11 @@ const discountUpdateBody = z.object({
 const planPriceBody = z.object({
   priceToman: z.number().int().min(1_000).max(1_000_000_000),
 });
+
+const queryNumber = (value: string | undefined): number | undefined => {
+  if (value == null || value.trim() === "") return undefined;
+  return Number(value);
+};
 
 export function adminRoutes(deps: Deps) {
   const { db, env, sms } = deps;
@@ -209,14 +214,32 @@ export function adminRoutes(deps: Deps) {
 
   r.get("/admin/overview", async (c) => c.json(await adminOverview(db, now())));
 
-  r.get("/admin/users", async (c) => {
-    const users = await adminListUsers(
-      db,
-      { q: c.req.query("q"), limit: Number(c.req.query("limit")) || undefined },
-      now(),
-    );
-    return c.json({ users });
-  });
+  r.get("/admin/users", async (c) =>
+    c.json(
+      await adminListUsersPage(
+        db,
+        {
+          q: c.req.query("q"),
+          cursor: c.req.query("cursor"),
+          limit: queryNumber(c.req.query("limit")),
+          sort: c.req.query("sort"),
+          direction: c.req.query("direction"),
+          subscription: c.req.query("subscription"),
+          minActiveDays: queryNumber(c.req.query("minActiveDays")),
+          maxActiveDays: queryNumber(c.req.query("maxActiveDays")),
+          minDataBytes: queryNumber(c.req.query("minDataBytes")),
+          maxDataBytes: queryNumber(c.req.query("maxDataBytes")),
+          registeredFrom: c.req.query("registeredFrom"),
+          registeredTo: c.req.query("registeredTo"),
+          activeFrom: c.req.query("activeFrom"),
+          activeTo: c.req.query("activeTo"),
+          expiresFrom: c.req.query("expiresFrom"),
+          expiresTo: c.req.query("expiresTo"),
+        },
+        now(),
+      ),
+    ),
+  );
 
   r.get("/admin/users/:id", async (c) =>
     c.json(await adminUserDetail(db, c.req.param("id"), now())),
