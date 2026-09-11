@@ -26,6 +26,8 @@ export interface Tokens {
 export interface ServerEntitlement {
   status: "active" | "expired" | "none";
   planId: string | null;
+  /** Missing on older servers; the entitlement row's last grant/update time. */
+  startedAt?: string | null;
   expiresAt: string | null;
   issuedAt: string;
   /** Missing on older servers; null means this account is protected from cleanup. */
@@ -206,7 +208,6 @@ export async function setUsername(username: string): Promise<{ ok: boolean; user
   return authedRequest("/auth/username", { method: "POST", body: { username } });
 }
 
-/** Sets the first password (no `currentPassword`) or changes an existing one. */
 export async function setPassword(
   newPassword: string,
   currentPassword?: string,
@@ -240,7 +241,7 @@ export async function fetchEntitlement(): Promise<{ entitlement: ServerEntitleme
   return result;
 }
 
-/** Starts the server-owned seven-day trial. The client never constructs dates. */
+/** Starts the server-owned three-day trial. The client never constructs dates. */
 export async function startTrial(): Promise<TrialStartResult> {
   const result = await authedRequest<TrialStartResult>("/subscriptions/trial/start", {
     method: "POST",
@@ -312,9 +313,10 @@ export function entitlementToSubscription(
   now = Date.now(),
 ): { planId: string; startedAt: number; expiresAt: number; trial: boolean } | null {
   if (!e.expiresAt || e.status === "none") return null;
+  const serverStartedAt = e.startedAt ? Date.parse(e.startedAt) : Number.NaN;
   return {
     planId: e.planId ?? "unknown",
-    startedAt: now,
+    startedAt: Number.isFinite(serverStartedAt) ? serverStartedAt : now,
     expiresAt: Date.parse(e.expiresAt),
     trial: e.planId === "trial",
   };
