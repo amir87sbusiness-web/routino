@@ -304,7 +304,7 @@ function SubscribePage() {
         <section className="rounded-2xl border border-border bg-card/60 px-4 py-4">
           <h2 className="text-sm font-black text-foreground">
             {progress.kind === "trial"
-              ? t("۷ روز با روتینو", "Your 7 days with Routino")
+              ? t("۳ روز با روتینو", "Your 3 days with Routino")
               : t("ادامهٔ مسیرت با روتینو", "Keep your Routino journey going")}
           </h2>
           <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
