@@ -159,7 +159,9 @@ describe("admin user browser", () => {
       headers: admin,
     });
 
-    expect(activeResult.json().users.map((user: { id: string }) => user.id)).toEqual([active.user.id]);
+    expect(activeResult.json().users.map((user: { id: string }) => user.id)).toEqual([
+      active.user.id,
+    ]);
     expect(expiredResult.json().users.map((user: { id: string }) => user.id)).toEqual([
       expired.user.id,
     ]);
