@@ -357,10 +357,10 @@ describe("anonymous trial start counter", () => {
     `)
         )[0]!.expires_at,
       ).getTime(),
-    ).toBe(new Date(NOW).getTime() + 7 * DAY);
+    ).toBe(new Date(NOW).getTime() + 3 * DAY);
   });
 
-  it("re-registers the same phone through OTP as a new UUID with a fresh seven-day trial", async () => {
+  it("re-registers the same phone through OTP as a new UUID with a fresh three-day trial", async () => {
     const phone = "09120000042";
     await h.app.inject({ method: "POST", url: "/v1/auth/otp/request", payload: { phone } });
     const firstLogin = await h.app.inject({
@@ -415,6 +415,6 @@ describe("anonymous trial start counter", () => {
     expect(trialBody.started).toBe(true);
     expect(
       Date.parse(trialBody.entitlement.expiresAt) - Date.parse(trialBody.entitlement.issuedAt),
-    ).toBe(7 * DAY);
+    ).toBe(3 * DAY);
   });
 });
