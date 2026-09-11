@@ -28,7 +28,7 @@ export function subscriptionProgress(db: Db, now = Date.now()): SubscriptionProg
 
   const kind = subscription.trial ? "trial" : "paid";
   const endAt = subscription.expiresAt;
-  const startAt = subscription.trial ? endAt - 7 * DAY_MS : endAt - PAID_LOOKBACK_MS;
+  const startAt = subscription.trial ? subscription.startedAt : endAt - PAID_LOOKBACK_MS;
   const lastVisibleAt = Math.min(now, endAt - 1);
   const perHabit = new Map<
     string,
