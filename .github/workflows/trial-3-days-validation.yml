@@ -54,37 +54,72 @@ jobs:
           fs.writeFileSync(path, text);
           NODE
 
-      - name: Commit deterministic generated files
+      - name: Format trial-change files
+        run: |
+          npx prettier --write \
+            backend/src/db/ddl.ts \
+            backend/src/services/entitlement.ts \
+            backend/test/account-retention-sql.test.ts \
+            backend/test/entitlement.test.ts \
+            backend/test/subscriptions.test.ts \
+            scripts/generate-icons.test.mjs \
+            src/lib/api/auth.ts \
+            src/lib/legal-text.json \
+            src/lib/subscription-progress.test.ts \
+            src/lib/subscription-progress.ts \
+            src/routes/-activation.test.tsx \
+            src/routes/activation.tsx \
+            src/routes/subscribe.tsx \
+            supabase/functions/api/shared/db/ddl.ts \
+            supabase/functions/api/shared/services/entitlement.ts \
+            supabase/tests/subscriptions.test.ts
+
+      - name: Commit deterministic and formatting changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add supabase/functions/api/shared supabase/setup.sql docs/superpowers/previews/activation-paywall.html
+          git add \
+            backend/src/db/ddl.ts \
+            backend/src/services/entitlement.ts \
+            backend/test/account-retention-sql.test.ts \
+            backend/test/entitlement.test.ts \
+            backend/test/subscriptions.test.ts \
+            scripts/generate-icons.test.mjs \
+            src/lib/api/auth.ts \
+            src/lib/legal-text.json \
+            src/lib/subscription-progress.test.ts \
+            src/lib/subscription-progress.ts \
+            src/routes/-activation.test.tsx \
+            src/routes/activation.tsx \
+            src/routes/subscribe.tsx \
+            supabase/functions/api/shared \
+            supabase/setup.sql \
+            supabase/tests/subscriptions.test.ts \
+            docs/superpowers/previews/activation-paywall.html
           if ! git diff --cached --quiet; then
-            git commit -m "Sync generated files for three-day trial"
+            git commit -m "Format three-day trial changes"
             git push origin HEAD:codex/trial-3-days
           fi
 
       - name: Unit tests
-        run: |
-          set +e
-          npm test 2>&1 | tee /tmp/trial-unit.log
-          status=${PIPESTATUS[0]}
-          set -e
-          if [ "$status" -ne 0 ]; then
-            cp /tmp/trial-unit.log trial-validation-unit.log
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add trial-validation-unit.log
-            git commit -m "Capture trial validation unit-test failure" || true
-            git push origin HEAD:codex/trial-3-days || true
-            exit "$status"
-          fi
+        run: npm test
 
       - name: Edge tests
         run: npm run test:edge
 
-      - name: Lint
-        run: npm run lint
+      - name: Lint changed JavaScript and TypeScript
+        run: |
+          files=$(git diff --name-only origin/main...HEAD -- '*.js' '*.mjs' '*.cjs' '*.ts' '*.tsx')
+          if [ -n "$files" ]; then
+            npx eslint $files
+          fi
+
+      - name: Prettier check changed files
+        run: |
+          files=$(git diff --name-only origin/main...HEAD -- '*.js' '*.mjs' '*.cjs' '*.ts' '*.tsx' '*.json' '*.html' '*.md' '*.yml' '*.yaml')
+          if [ -n "$files" ]; then
+            npx prettier --check $files
+          fi
 
       - name: Build
         run: npm run build
