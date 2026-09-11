@@ -216,7 +216,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
       db,
       {
         q: query.q,
-        page: queryNumber(query.page),
+        cursor: query.cursor,
         limit: queryNumber(query.limit),
         sort: query.sort,
         direction: query.direction,
