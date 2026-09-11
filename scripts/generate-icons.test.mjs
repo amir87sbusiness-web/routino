@@ -103,9 +103,7 @@ async function expectComfortableAndroidMarkScale(path) {
   for (let y = 0; y < info.height; y += 1) {
     for (let x = 0; x < info.width; x += 1) {
       const index = (y * info.width + x) * 3;
-      if (
-        Math.hypot(255 - data[index], 255 - data[index + 1], 255 - data[index + 2]) <= 35
-      ) {
+      if (Math.hypot(255 - data[index], 255 - data[index + 1], 255 - data[index + 2]) <= 35) {
         continue;
       }
       minX = Math.min(minX, x);
@@ -153,15 +151,7 @@ describe("Routino brand asset generator", () => {
     }
 
     for (const [density, size] of Object.entries(ANDROID_LAUNCHER_SIZES)) {
-      const folder = join(
-        sandbox,
-        "android",
-        "app",
-        "src",
-        "main",
-        "res",
-        `mipmap-${density}`,
-      );
+      const folder = join(sandbox, "android", "app", "src", "main", "res", `mipmap-${density}`);
       await expectPngSize(join(folder, "ic_launcher.png"), size, size);
       await expectVisibleMarkCentered(join(folder, "ic_launcher.png"));
 
@@ -180,16 +170,7 @@ describe("Routino brand asset generator", () => {
       "obsolete adaptive launcher resources must be removed",
     );
     await expectComfortableAndroidMarkScale(
-      join(
-        sandbox,
-        "android",
-        "app",
-        "src",
-        "main",
-        "res",
-        "mipmap-xxxhdpi",
-        "ic_launcher.png",
-      ),
+      join(sandbox, "android", "app", "src", "main", "res", "mipmap-xxxhdpi", "ic_launcher.png"),
     );
 
     for (const [relativePath, [width, height]] of Object.entries(ANDROID_SPLASH_SIZES)) {
@@ -222,7 +203,7 @@ describe("Routino brand asset generator", () => {
       join(ROOT, "android", "app", "src", "main", "AndroidManifest.xml"),
       "utf8",
     );
-    assert.match(gradle, /versionCode 6\b/);
+    assert.match(gradle, /versionCode 8\b/);
     assert.match(gradle, /versionName "1\.0"/);
     assert.doesNotMatch(manifest, /android:roundIcon=/);
   });

@@ -96,7 +96,9 @@ describe("a payment whose callback never came back", () => {
     expect(callback.body).toContain(`paymentId=${paymentId}`);
     expect(callback.body).toContain("در حال بررسی");
     expect((await openApp(access)).entitlement.status).not.toBe("active");
-    await h.raw(`update payments set next_verify_at=now()-interval '1 second' where id='${paymentId}'`);
+    await h.raw(
+      `update payments set next_verify_at=now()-interval '1 second' where id='${paymentId}'`,
+    );
     expect((await openApp(access)).entitlement.status).toBe("active");
   });
 
