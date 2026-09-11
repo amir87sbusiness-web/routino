@@ -50,10 +50,10 @@ describe("production account-cleanup dry-run", () => {
         ('10000000-0000-4000-8000-000000000006', 'trial', now() - interval '1 day');
 
       insert into grants (user_id, days, source, expires_before, expires_after) values
-        ('10000000-0000-4000-8000-000000000002', 7, 'trial', null, now() - interval '1 day'),
+        ('10000000-0000-4000-8000-000000000002', 3, 'trial', null, now() - interval '1 day'),
         ('10000000-0000-4000-8000-000000000003', 7, 'trial', null, now() + interval '1 day'),
         ('10000000-0000-4000-8000-000000000005', 0, 'admin', null, now() + interval '1 month'),
-        ('10000000-0000-4000-8000-000000000006', 7, 'trial', null, now() - interval '2 days');
+        ('10000000-0000-4000-8000-000000000006', 3, 'trial', null, now() - interval '2 days');
 
       insert into payments (
         user_id, plan_id, months, amount_toman, amount_rial, status, attempt_id
