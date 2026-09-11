@@ -22,6 +22,7 @@ describe("GET /v1/subscriptions/me", () => {
     const { entitlement } = await res.json();
     expect(entitlement.status).toBe("none");
     expect(entitlement.planId).toBeNull();
+    expect(entitlement.startedAt).toBeNull();
   });
 
   it("repairs a paid checkout when the gateway callback was lost", async () => {
@@ -132,7 +133,7 @@ describe("POST /v1/subscriptions/trial/start", () => {
     expect((await h.call("POST", "/v1/subscriptions/trial/start")).status).toBe(401);
   });
 
-  it("starts once and cannot be stacked by concurrent requests", async () => {
+  it("starts one three-day trial and cannot be stacked by concurrent requests", async () => {
     const firstSession = await signIn(h, "09123334444");
     await h.raw(`delete from otp_codes`);
     const secondSession = await signIn(h, "09123334444");
@@ -144,7 +145,10 @@ describe("POST /v1/subscriptions/trial/start", () => {
     const bodies = await Promise.all(responses.map((response) => response.json()));
     expect(bodies.filter((body) => body.started)).toHaveLength(1);
     expect(new Set(bodies.map((body) => body.entitlement.expiresAt)).size).toBe(1);
-    expect((Date.parse(bodies[0].entitlement.expiresAt) - Date.now()) / DAY).toBeCloseTo(7, 1);
+    expect(
+      (Date.parse(bodies[0].entitlement.expiresAt) - Date.parse(bodies[0].entitlement.startedAt)) / DAY,
+    ).toBeCloseTo(3, 6);
+    expect((Date.parse(bodies[0].entitlement.expiresAt) - Date.now()) / DAY).toBeCloseTo(3, 1);
     expect(
       await h.query(`select id from grants where user_id = '${firstSession.user.id}'`),
     ).toHaveLength(1);
