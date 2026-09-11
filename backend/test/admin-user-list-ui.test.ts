@@ -40,7 +40,7 @@ const sampleUser = {
 describe("admin user list UI", () => {
   afterEach(() => vi.restoreAllMocks());
 
-  it("renders 100-row pagination controls and sends sorting/filtering to the server", async () => {
+  it("renders 100-row cursor navigation and sends sorting/filtering to the server", async () => {
     const userUrls: string[] = [];
     const fetch = vi.fn(async (path: string) => {
       if (path.endsWith("/auth/session")) {
@@ -52,19 +52,16 @@ describe("admin user list UI", () => {
       if (path.includes("/users?")) {
         userUrls.push(path);
         const url = new URL(path, "https://admin.routino.test");
-        const page = Number(url.searchParams.get("page") || 1);
+        const cursor = url.searchParams.get("cursor");
         return {
           status: 200,
           ok: true,
           json: async () => ({
             users: [sampleUser],
             pagination: {
-              page,
               pageSize: 100,
-              total: 205,
-              totalPages: 3,
-              hasPrevious: page > 1,
-              hasNext: page < 3,
+              hasNext: cursor !== "cursor-two",
+              nextCursor: cursor === "cursor-one" ? "cursor-two" : cursor === "cursor-two" ? null : "cursor-one",
             },
             sort: {
               key: url.searchParams.get("sort") || "createdAt",
@@ -95,34 +92,46 @@ describe("admin user list UI", () => {
 
       expect(document.querySelector("#uFilterToggle")).not.toBeNull();
       expect(document.querySelector("#uResults")?.textContent).toContain("ثبت‌نام");
-      expect(document.querySelector("#uResults")?.textContent).toContain("۲۰۵ کاربر");
-      expect(userUrls.at(-1)).toContain("page=1");
+      expect(document.querySelector("#uResults")?.textContent).toContain("صفحه ۱");
+      expect(userUrls.at(-1)).not.toContain("cursor=");
       expect(userUrls.at(-1)).toContain("limit=100");
       expect(userUrls.at(-1)).toContain("sort=createdAt");
       expect(userUrls.at(-1)).toContain("direction=desc");
 
-      (document.querySelector('[data-user-page="2"]') as unknown as { click: () => void }).click();
+      (document.querySelector('[data-user-nav="next"]') as unknown as { click: () => void }).click();
       await settle();
       await settle();
-      expect(userUrls.at(-1)).toContain("page=2");
+      expect(new URL(userUrls.at(-1)!, "https://admin.routino.test").searchParams.get("cursor")).toBe(
+        "cursor-one",
+      );
+      expect(document.querySelector("#uResults")?.textContent).toContain("صفحه ۲");
+
+      (document.querySelector('[data-user-nav="previous"]') as unknown as { click: () => void }).click();
+      await settle();
+      await settle();
+      expect(new URL(userUrls.at(-1)!, "https://admin.routino.test").searchParams.get("cursor")).toBeNull();
+      expect(document.querySelector("#uResults")?.textContent).toContain("صفحه ۱");
 
       (document.querySelector('[data-user-sort="activeDays"]') as unknown as { click: () => void }).click();
       await settle();
       await settle();
-      expect(userUrls.at(-1)).toContain("page=1");
-      expect(userUrls.at(-1)).toContain("sort=activeDays");
-      expect(userUrls.at(-1)).toContain("direction=desc");
+      const sorted = new URL(userUrls.at(-1)!, "https://admin.routino.test");
+      expect(sorted.searchParams.get("cursor")).toBeNull();
+      expect(sorted.searchParams.get("sort")).toBe("activeDays");
+      expect(sorted.searchParams.get("direction")).toBe("desc");
 
       (document.querySelector('[data-user-sort="activeDays"]') as unknown as { click: () => void }).click();
       await settle();
       await settle();
-      expect(userUrls.at(-1)).toContain("sort=activeDays");
-      expect(userUrls.at(-1)).toContain("direction=asc");
+      expect(new URL(userUrls.at(-1)!, "https://admin.routino.test").searchParams.get("direction")).toBe(
+        "asc",
+      );
 
       (document.querySelector("#uFilterToggle") as unknown as { click: () => void }).click();
       (document.querySelector("#uSubscription") as unknown as { value: string }).value = "active";
       (document.querySelector("#uMinActive") as unknown as { value: string }).value = "5";
       (document.querySelector("#uMinData") as unknown as { value: string }).value = "1.5";
+      (document.querySelector("#uMaxData") as unknown as { value: string }).value = "4";
       (document.querySelector("#uRegisteredFrom") as unknown as { value: string }).value = "2026-09-01";
       (document.querySelector("#uApplyFilters") as unknown as { click: () => void }).click();
       await settle();
@@ -132,8 +141,9 @@ describe("admin user list UI", () => {
       expect(filtered.searchParams.get("subscription")).toBe("active");
       expect(filtered.searchParams.get("minActiveDays")).toBe("5");
       expect(filtered.searchParams.get("minDataBytes")).toBe(String(Math.round(1.5 * 1024 * 1024)));
+      expect(filtered.searchParams.get("maxDataBytes")).toBe(String(4 * 1024 * 1024));
       expect(filtered.searchParams.get("registeredFrom")).toBe("2026-09-01T00:00:00.000Z");
-      expect(filtered.searchParams.get("page")).toBe("1");
+      expect(filtered.searchParams.get("cursor")).toBeNull();
     } finally {
       dom.window.close();
     }
