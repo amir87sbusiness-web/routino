@@ -24,14 +24,12 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            backend/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install root and backend dependencies
         run: |
           npm ci
-          npm --prefix backend ci
+          npm --prefix backend install --no-package-lock
 
       - name: Verify generated Edge and setup SQL are in sync
         shell: bash
