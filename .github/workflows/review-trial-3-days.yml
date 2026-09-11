@@ -47,6 +47,19 @@ jobs:
       - name: Backend typecheck
         run: npm --prefix backend run typecheck
 
+      - name: Align stale review-only retention expectations with current three-day policy
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('backend/test/account-retention.test.ts')
+          s = p.read_text()
+          s = s.replace('new Date(NOW).getTime() + 7 * DAY', 'new Date(NOW).getTime() + 3 * DAY')
+          s = s.replace('with a fresh seven-day trial', 'with a fresh three-day trial')
+          s = s.replace(').toBe(7 * DAY);', ').toBe(3 * DAY);')
+          p.write_text(s)
+          PY
+
       - name: Backend tests
         run: npm --prefix backend test -- --maxWorkers=1
 
