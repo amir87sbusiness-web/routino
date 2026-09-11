@@ -74,7 +74,8 @@ if (userSearchRow && !$("#uFilterToggle")) {
 function adminUserDateParam(id, endOfDay) {
   const value = $(id)?.value;
   if (!value) return "";
-  return value + (endOfDay ? "T23:59:59.999Z" : "T00:00:00.000Z");
+  const date = new Date(value + (endOfDay ? "T23:59:59.999" : "T00:00:00"));
+  return Number.isFinite(date.getTime()) ? date.toISOString() : "";
 }
 
 function adminUserNumericParam(id) {
