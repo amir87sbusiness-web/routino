@@ -220,7 +220,7 @@ export function adminRoutes(deps: Deps) {
         db,
         {
           q: c.req.query("q"),
-          page: queryNumber(c.req.query("page")),
+          cursor: c.req.query("cursor"),
           limit: queryNumber(c.req.query("limit")),
           sort: c.req.query("sort"),
           direction: c.req.query("direction"),
