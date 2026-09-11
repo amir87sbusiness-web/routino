@@ -18,7 +18,6 @@ with rollout as materialized (
       where g.source = 'trial'
         and g.payment_id is null
         and g.months = 0
-        and g.days = 7
         and g.expires_before is null
         and g.expires_after is not null
     )::integer as valid_trial_count,
