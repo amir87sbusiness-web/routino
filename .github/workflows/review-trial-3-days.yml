@@ -29,6 +29,7 @@ jobs:
       - name: Install root and backend dependencies
         run: |
           npm ci
+          rm backend/package-lock.json
           npm --prefix backend install --no-package-lock
 
       - name: Verify generated Edge and setup SQL are in sync
