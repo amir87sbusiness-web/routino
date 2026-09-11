@@ -26,6 +26,7 @@ describe("grantInterval", () => {
   it("reports no entitlement for a fresh account", async () => {
     expect(await readEntitlement(h.db, USER, new Date())).toMatchObject({
       status: "none",
+      startedAt: null,
       expiresAt: null,
     });
   });
@@ -63,6 +64,7 @@ describe("grantInterval", () => {
     const now = new Date("2026-07-15T00:00:00Z");
     const e = await grantInterval(h.db, USER, { planId: "trial", days: 7, source: "trial" }, now);
     expect(e.status).toBe("active");
+    expect(e.startedAt).toBe("2026-07-15T00:00:00.000Z");
     expect(e.expiresAt).toBe("2026-07-22T00:00:00.000Z");
   });
 
@@ -153,15 +155,18 @@ describe("hasSettledGrant", () => {
 describe("startTrialOnce", () => {
   const now = new Date("2026-08-21T00:00:00Z");
 
-  it("starts exactly one seven-day trial", async () => {
+  it("starts exactly one three-day trial", async () => {
     const result = await startTrialOnce(h.db, USER, now);
     expect(result.started).toBe(true);
     expect(result.entitlement).toMatchObject({
       status: "active",
       planId: "trial",
-      expiresAt: "2026-08-28T00:00:00.000Z",
+      startedAt: "2026-08-21T00:00:00.000Z",
+      expiresAt: "2026-08-24T00:00:00.000Z",
     });
-    expect(await listGrants(h.db, USER)).toHaveLength(1);
+    const ledger = await listGrants(h.db, USER);
+    expect(ledger).toHaveLength(1);
+    expect(ledger[0]?.days).toBe(3);
   });
 
   it("returns the same entitlement on retry without extending it", async () => {
@@ -178,12 +183,12 @@ describe("startTrialOnce", () => {
     );
     expect(results.filter((result) => result.started)).toHaveLength(1);
     expect(new Set(results.map((result) => result.entitlement.expiresAt))).toEqual(
-      new Set(["2026-08-28T00:00:00.000Z"]),
+      new Set(["2026-08-24T00:00:00.000Z"]),
     );
     expect(await listGrants(h.db, USER)).toHaveLength(1);
   });
 
-  it("does not restart an expired previous trial", async () => {
+  it("does not restart an expired legacy seven-day trial", async () => {
     await grantInterval(
       h.db,
       USER,
