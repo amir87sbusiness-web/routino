@@ -142,7 +142,9 @@ describe("admin user list UI", () => {
       expect(filtered.searchParams.get("minActiveDays")).toBe("5");
       expect(filtered.searchParams.get("minDataBytes")).toBe(String(Math.round(1.5 * 1024 * 1024)));
       expect(filtered.searchParams.get("maxDataBytes")).toBe(String(4 * 1024 * 1024));
-      expect(filtered.searchParams.get("registeredFrom")).toBe("2026-09-01T00:00:00.000Z");
+      expect(filtered.searchParams.get("registeredFrom")).toBe(
+        new Date("2026-09-01T00:00:00").toISOString(),
+      );
       expect(filtered.searchParams.get("cursor")).toBeNull();
     } finally {
       dom.window.close();
