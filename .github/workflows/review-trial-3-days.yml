@@ -1,4 +1,4 @@
-name: Repair trial 3 days review findings
+name: Validate trial 3 days repair
 
 on:
   push:
@@ -9,12 +9,12 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  repair:
+  validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
         with:
@@ -26,111 +26,57 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
-      - name: Install root dependencies
-        run: npm ci
+      - name: Install dependencies using committed lockfiles
+        run: |
+          npm ci
+          npm --prefix backend ci
 
-      - name: Apply narrowly scoped repo-only fixes
+      - name: Verify generated Edge and setup SQL are in sync
         shell: bash
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
+          node -e "import('./scripts/sync-edge-shared.mjs').then((m) => m.syncAll())"
+          node scripts/gen-setup-sql.mjs
+          git diff --exit-code -- backend/src supabase/functions/api/shared supabase/setup.sql
 
-          def replace(path: str, old: str, new: str) -> None:
-              p = Path(path)
-              text = p.read_text()
-              if old not in text:
-                  raise SystemExit(f"expected text not found in {path}: {old!r}")
-              p.write_text(text.replace(old, new))
+      - name: Full frontend and shared tests
+        run: npm test
 
-          replace(
-              'backend/test/account-retention.test.ts',
-              'new Date(NOW).getTime() + 7 * DAY',
-              'new Date(NOW).getTime() + 3 * DAY',
-          )
-          replace(
-              'backend/test/account-retention.test.ts',
-              'with a fresh seven-day trial',
-              'with a fresh three-day trial',
-          )
-          replace(
-              'backend/test/account-retention.test.ts',
-              ').toBe(7 * DAY);',
-              ').toBe(3 * DAY);',
-          )
-          replace(
-              'scripts/generate-icons.test.mjs',
-              'assert.match(gradle, /versionCode 6\\b/);',
-              'assert.match(gradle, /versionCode 8\\b/);',
-          )
-          replace(
-              'supabase/tests/launch-stress-sync.test.ts',
-              'let now = Date.now();',
-              'const now = Date.now();',
-          )
-          replace(
-              'supabase/tests/launch-stress-auth-payment.test.ts',
-              '  const orders = [];',
-              '  const orders: { paymentId: string; authority: string }[] = [];',
-          )
-          replace(
-              'supabase/tests/launch-stress-auth-payment.test.ts',
-              '  for (const user of people) orders.push(await (await call("/v1/payments/checkout", { planId: "m1", attemptId: randomUUID() }, auth(user.access))).json());',
-              '  for (const user of people) {\n    orders.push(\n      (await (await call("/v1/payments/checkout", { planId: "m1", attemptId: randomUUID() }, auth(user.access))).json()) as { paymentId: string; authority: string },\n    );\n  }',
-          )
-          replace(
-              'supabase/tests/launch-stress-auth-payment.test.ts',
-              '  const callback = (order: any) => () => call(`/v1/payments/callback?paymentId=${order.paymentId}&Authority=${order.authority}&Status=OK`);',
-              '  const callback = (order: { paymentId: string; authority: string }) => () =>\n    call(`/v1/payments/callback?paymentId=${order.paymentId}&Authority=${order.authority}&Status=OK`);',
-          )
-          PY
+      - name: Backend typecheck
+        run: npm --prefix backend run typecheck
 
-      - name: Format only files reported by lint
+      - name: Full backend tests
+        run: npm --prefix backend test -- --maxWorkers=1
+
+      - name: Edge parity tests
+        run: npm run test:edge
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build web and landing
+        run: npm run build
+
+      - name: Production dependency audits
         run: |
-          npx prettier --write \
-            backend/test/payment-recovery.test.ts \
-            backend/test/account-retention.test.ts \
-            scripts/generate-icons.mjs \
-            scripts/generate-icons.test.mjs \
-            supabase/tests/launch-stress-auth-payment.test.ts \
-            supabase/tests/launch-stress-sync.test.ts
-
-      - name: Regenerate backend lockfile without changing package manifest
-        shell: bash
-        run: |
-          set -euo pipefail
-          cp backend/package.json /tmp/backend-package.json
-          npm --prefix backend install --package-lock-only --ignore-scripts
-          cmp backend/package.json /tmp/backend-package.json
-          npm --prefix backend ci --ignore-scripts
-
-      - name: Show production dependency audit only
-        shell: bash
-        run: |
-          set +e
-          echo '--- root production audit ---'
           npm audit --omit=dev
-          echo '--- backend production audit ---'
           npm --prefix backend audit --omit=dev
-          exit 0
 
-      - name: Commit repo-only fixes to review branch
+      - name: Trial policy and data-safety static audit
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add \
-            backend/test/payment-recovery.test.ts \
-            backend/test/account-retention.test.ts \
-            backend/package-lock.json \
-            scripts/generate-icons.mjs \
-            scripts/generate-icons.test.mjs \
-            supabase/tests/launch-stress-auth-payment.test.ts \
-            supabase/tests/launch-stress-sync.test.ts
-          if git diff --cached --quiet; then
-            echo 'No repair changes to commit.'
-            exit 0
+          if grep -R -n -E 'Try a week with Routino|Every feature unlocks for seven days|After seven days|هفت روز با روتینو پیش برو|تمام امکانات برای هفت روز فعال می‌شود|بعد از هفت روز' src backend/src supabase/functions landing docs; then
+            echo 'stale user-facing 7-day trial copy found'
+            exit 1
           fi
-          git commit -m 'Fix review findings without touching production data'
-          git push origin HEAD:codex/trial-3-days
+          if grep -R -n -E 'endAt - 7 \* DAY_MS|g\.days = 7' src backend/src supabase/functions; then
+            echo 'stale runtime 7-day trial formula found'
+            exit 1
+          fi
+          count=$(grep -R -n -E 'planId: ["'"']trial["'"'], days: 3, source: ["'"']trial["'"']' backend/src supabase/functions/api/shared | wc -l)
+          test "$count" -ge 2
+          test "$(grep -c 'new Date(NOW).getTime() + 3 \* DAY' backend/test/account-retention.test.ts)" -ge 1
+          test "$(grep -c 'toBe(3 \* DAY)' backend/test/account-retention.test.ts)" -ge 1
+          test "$(grep -c 'versionCode 8' scripts/generate-icons.test.mjs)" -ge 1
+          git diff --exit-code
