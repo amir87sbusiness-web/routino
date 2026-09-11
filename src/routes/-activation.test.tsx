@@ -40,8 +40,9 @@ const ActivationPage = (Route as unknown as { component: () => React.ReactNode }
 const trialEntitlement = {
   status: "active" as const,
   planId: "trial",
+  startedAt: "2027-08-25T00:00:00.000Z",
   expiresAt: "2027-08-28T00:00:00.000Z",
-  issuedAt: "2026-08-21T00:00:00.000Z",
+  issuedAt: "2027-08-25T00:00:00.000Z",
 };
 
 function byButtonText(host: HTMLElement, text: string): HTMLButtonElement {
@@ -72,7 +73,7 @@ describe("ActivationPage", () => {
     app.applyEntitlement.mockClear();
     authApi.startTrial.mockReset().mockResolvedValue({ entitlement: trialEntitlement, started: true });
     authApi.entitlementToSubscription.mockReset().mockReturnValue({
-      planId: "trial", startedAt: 1, expiresAt: Date.parse(trialEntitlement.expiresAt), trial: true,
+      planId: "trial", startedAt: Date.parse(trialEntitlement.startedAt), expiresAt: Date.parse(trialEntitlement.expiresAt), trial: true,
     });
     paymentsApi.fetchPlans.mockReset().mockResolvedValue({
       plans: [
@@ -116,9 +117,9 @@ describe("ActivationPage", () => {
     app.lang = "en";
     await act(async () => root.render(<ActivationPage />));
 
-    expect(host.textContent).toContain("Try a week with Routino");
+    expect(host.textContent).toContain("Try Routino for three days");
     expect(host.textContent).toContain("Start free");
-    expect(host.textContent).not.toContain("هفت روز با روتینو پیش برو");
+    expect(host.textContent).not.toContain("سه روز با روتینو پیش برو");
   });
 
   it("starts once, activates the server trial, preserves habits, and routes home", async () => {
