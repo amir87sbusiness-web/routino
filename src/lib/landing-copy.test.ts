@@ -23,12 +23,25 @@ describe("public landing copy", () => {
 });
 
 describe("Android download markup", () => {
-  it("does not render an Android APK download action", async () => {
+  it("renders an honest disabled action before an upload URL exists", async () => {
     // The build script is JavaScript by design so Cloudflare can run it with
     // plain Node. Vitest exercises the exported renderer directly.
     // @ts-expect-error no declaration file is needed for this build-only module.
     const { renderAndroidDownload } = await import("../../scripts/build-landing.mjs");
-    expect(renderAndroidDownload("")).toBe("");
-    expect(renderAndroidDownload("https://files.example/routino.apk")).toBe("");
+    const html = renderAndroidDownload("");
+    expect(html).toContain("disabled");
+    expect(html).toContain("بعد از انتشار");
+    expect(html).not.toContain("<a ");
+  });
+
+  it("accepts only HTTPS and escapes the cloud URL", async () => {
+    // @ts-expect-error build-only JavaScript module.
+    const { renderAndroidDownload } = await import("../../scripts/build-landing.mjs");
+    expect(() => renderAndroidDownload("http://files.example/app.apk")).toThrow(/HTTPS/);
+    const html = renderAndroidDownload("https://files.example/routino.apk?from=site&v=1");
+    expect(html).toContain('href="https://files.example/routino.apk?from=site&amp;v=1"');
+    expect(html).toContain('download="routino-android-1.0.apk"');
+    expect(html).toContain('rel="noreferrer"');
+    expect(html).not.toContain("disabled");
   });
 });
