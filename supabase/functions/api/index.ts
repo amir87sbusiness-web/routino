@@ -20,7 +20,14 @@ import { fakePsp, zarinpalPsp } from "./shared/providers/psp/index.ts";
 import { consoleSms, kavenegarSms, type SmsProvider } from "./shared/providers/sms/index.ts";
 import { ensureOwner } from "./shared/services/owner-bootstrap.ts";
 
-const env = loadEdgeEnv(Deno.env.toObject());
+const edgeEnv = Deno.env.toObject();
+// Emergency-safe default: Supabase Edge must not call ZarinPal directly. Reuse
+// the already-shared Cloudflare↔Supabase PROXY_SECRET unless a dedicated relay
+// secret is configured later; this lets the fix roll out without another secret
+// rotation while still keeping the relay closed to the public internet.
+edgeEnv.ZARINPAL_API_BASE ||= "https://api.routino.me/_zarinpal";
+edgeEnv.ZARINPAL_PROXY_SECRET ||= edgeEnv.PROXY_SECRET || "";
+const env = loadEdgeEnv(edgeEnv);
 
 const dbUrl = Deno.env.get("DATABASE_URL") ?? Deno.env.get("SUPABASE_DB_URL");
 if (!dbUrl) throw new Error("DATABASE_URL secret is required");
@@ -49,7 +56,10 @@ const sms: SmsProvider =
 
 const psp =
   env.PSP_PROVIDER === "zarinpal"
-    ? zarinpalPsp(env.ZARINPAL_MERCHANT)
+    ? zarinpalPsp(env.ZARINPAL_MERCHANT, {
+        apiBase: env.ZARINPAL_API_BASE,
+        proxySecret: env.ZARINPAL_PROXY_SECRET,
+      })
     : fakePsp(env.PUBLIC_API_URL);
 
 const app = buildApp({ db, env, sms, psp, now: () => Date.now() });
@@ -66,7 +76,7 @@ try {
   console.error("owner bootstrap failed", err);
 }
 
-console.log(`[api] edge function up (sms=${env.SMS_PROVIDER}, psp=${psp.name})`);
+console.log(`[api] edge function up (sms=${env.SMS_PROVIDER}, psp=${psp.name}, zarinpalBase=${env.ZARINPAL_API_BASE})`);
 
 // Loud, every cold start. "Nobody received the SMS" and "there is no money in
 // the merchant account" should be answered by the log, not by a support ticket.
