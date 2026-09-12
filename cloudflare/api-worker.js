@@ -1,36 +1,17 @@
 /**
  * Cloudflare Worker: api.routino.me → the Supabase Edge Function.
  *
- * Why it exists:
- *  - Iranian users reach Cloudflare's edge reliably; the raw *.supabase.co URL
- *    is both uglier and less certain.
- *  - It stamps `x-proxy-secret`, so the function can refuse anything that did
- *    NOT come through this worker (the raw URL is dead), and `x-client-ip`
- *    (from cf-connecting-ip) becomes a trustworthy source for OTP rate limits.
- *  - It repairs HTML responses. Supabase force-downgrades HTML on *.supabase.co
- *    to `text/plain` + a `sandbox` CSP (anti-phishing for the shared domain),
- *    which would render the admin panel and the payment-result page as raw
- *    source with their inline scripts blocked. The function marks HTML with
- *    `x-routino-html`; here — on OUR domain — we restore `text/html` and drop
- *    the sandbox CSP.
- *
- * Deploy from the repository with
- * `npx wrangler deploy --config cloudflare/wrangler.toml`. The config targets
- * the existing `routino-api` service that owns api.routino.me; a different name
- * creates a second Worker and leaves production unchanged.
- *
- * One-time dashboard setup (already done, listed for when it has to be redone):
- *  1. Worker → Settings → Build → connect the repo, Root directory = `cloudflare`
- *  2. Worker → Settings → Variables → Secrets → PROXY_SECRET
- *     (identical to the Supabase function's PROXY_SECRET, or every request 403s)
- *  3. Worker → Settings → Domains & Routes → custom domain: api.routino.me
- *
- * Path mapping: api.routino.me/<path> → <SUPABASE>/functions/v1/api/<path>.
- * The function's Hono app has basePath("/api"), so public paths (/v1/...,
- * /admin, /health) are byte-identical to the old Fastify deployment.
+ * It also exposes a PRIVATE server-to-server ZarinPal relay under
+ * `/_zarinpal/*`. Supabase Edge calls that relay with the same shared secret the
+ * Worker and Edge already use, so request/verify never need a direct
+ * Supabase→ZarinPal connection. StartPay still opens directly on ZarinPal in the
+ * customer's browser.
  */
 
 const ORIGIN = "https://axychfrteevhfdhgvfuv.supabase.co/functions/v1/api";
+const ZARINPAL_ORIGIN = "https://payment.zarinpal.com";
+const ZARINPAL_PROXY_PREFIX = "/_zarinpal";
+const ZARINPAL_PROXY_TIMEOUT_MS = 20_000;
 
 /**
  * Keep dynamic money data out of the explicit Worker Cache API. In particular,
@@ -52,6 +33,96 @@ const ALLOWED_ORIGINS = new Set([
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 /** One promise per public cache key, scoped to this Worker isolate. */
 const IN_FLIGHT = new Map();
+
+const json = (body, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+    },
+  });
+
+/**
+ * Private transparent ZarinPal relay, modelled after Sheetra's working payment
+ * proxy. It accepts only authenticated /pg/* POSTs and strips the proxy secret
+ * before forwarding to ZarinPal.
+ */
+async function proxyZarinpal(request, env, url) {
+  const expected = env.ZARINPAL_PROXY_SECRET || env.PROXY_SECRET || "";
+  if (!expected) return json({ error: "zarinpal proxy secret is not configured" }, 503);
+  if (request.headers.get("x-proxy-secret") !== expected) {
+    return json({ error: "forbidden" }, 403);
+  }
+
+  if (request.method === "GET" && url.pathname === `${ZARINPAL_PROXY_PREFIX}/selftest`) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8_000);
+    const started = Date.now();
+    try {
+      const upstream = await fetch(`${ZARINPAL_ORIGIN}/pg/v4/payment/request.json`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          merchant_id: "00000000-0000-0000-0000-000000000000",
+          amount: 10_000,
+          currency: "IRR",
+          description: "routino-proxy-selftest",
+          callback_url: "https://routino.me",
+        }),
+        signal: controller.signal,
+        cache: "no-store",
+      });
+      const sample = (await upstream.text()).slice(0, 240);
+      return json({ reachable: true, status: upstream.status, ms: Date.now() - started, sample });
+    } catch (err) {
+      return json(
+        {
+          reachable: false,
+          ms: Date.now() - started,
+          error: String((err && err.message) || err),
+        },
+        502,
+      );
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  const upstreamPath = url.pathname.slice(ZARINPAL_PROXY_PREFIX.length);
+  if (!upstreamPath.startsWith("/pg/")) return json({ error: "not found" }, 404);
+  if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ZARINPAL_PROXY_TIMEOUT_MS);
+  try {
+    const upstream = await fetch(`${ZARINPAL_ORIGIN}${upstreamPath}${url.search}`, {
+      method: "POST",
+      headers: {
+        "content-type": request.headers.get("content-type") || "application/json",
+        accept: request.headers.get("accept") || "application/json",
+      },
+      body: await request.text(),
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    const headers = new Headers();
+    headers.set("content-type", upstream.headers.get("content-type") || "application/json");
+    headers.set("cache-control", "no-store");
+    return new Response(await upstream.text(), { status: upstream.status, headers });
+  } catch (err) {
+    const aborted = err && err.name === "AbortError";
+    return json(
+      {
+        error: aborted ? "upstream timeout" : "upstream error",
+        detail: String((err && err.message) || err),
+      },
+      502,
+    );
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /**
  * Cache key for a cacheable path.
@@ -166,6 +237,12 @@ export default {
     const url = new URL(request.url);
     const requestId = requestIdFor(request);
     const requestOrigin = request.headers.get("origin") ?? "";
+
+    // Server-only ZarinPal relay. Handle this before any browser/CORS logic and
+    // never forward its private path to Supabase.
+    if (url.pathname.startsWith(`${ZARINPAL_PROXY_PREFIX}/`)) {
+      return stamped(await proxyZarinpal(request, env, url), requestId, "LOCAL", "");
+    }
 
     // A liveness answer does not need a function invocation or a database read.
     // `/health/ready` deliberately continues upstream for a real readiness check.
