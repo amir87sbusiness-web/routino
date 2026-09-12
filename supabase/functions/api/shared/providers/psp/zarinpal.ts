@@ -34,7 +34,10 @@ function providerCode(body: ProviderBody): number | undefined {
   return typeof errorCode === "number" && Number.isInteger(errorCode) ? errorCode : undefined;
 }
 
-async function postOnce(
+/** ZarinPal may return valid provider errors as HTTP 422. Parse the envelope
+ * regardless of HTTP success; proxy/infra errors have no data/errors code and
+ * therefore still normalize safely to unknown. */
+async function post(
   apiBase: string,
   proxySecret: string | undefined,
   path: string,
@@ -53,23 +56,11 @@ async function postOnce(
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(PSP_TIMEOUT_MS),
     });
-    if (!res.ok) return undefined;
     const body = (await res.json()) as unknown;
     return record(body) as ProviderBody | undefined;
   } catch {
     return undefined;
   }
-}
-
-async function post(
-  apiBase: string,
-  proxySecret: string | undefined,
-  path: string,
-  payload: unknown,
-): Promise<ProviderBody | undefined> {
-  const primary = await postOnce(apiBase, proxySecret, path, payload);
-  if (primary || apiBase === ZARINPAL_ORIGIN) return primary;
-  return postOnce(ZARINPAL_ORIGIN, undefined, path, payload);
 }
 
 export function zarinpalPsp(
@@ -131,7 +122,7 @@ export function zarinpalPsp(
       if (code === 100) return { kind: "paid", code: 100, ...successDetails };
       if (code === 101) return { kind: "already_verified", code: 101, ...successDetails };
 
-      if (code === -51 || code === -12) return { kind: "pending", code };
+      if (code === -51 || code === -55 || code === -12) return { kind: "pending", code };
       if (code === -52) return { kind: "unknown", code };
       return { kind: "failed", code };
     },
