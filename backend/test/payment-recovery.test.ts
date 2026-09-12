@@ -3,9 +3,7 @@
  *
  * The gateway callback is a REDIRECT of the user's browser. In Iran that browser
  * is routinely behind a VPN or a connection that drops, so "money moved but the
- * callback never landed" is an ordinary Tuesday, not an edge case. Every test
- * here is a way that can happen, and the requirement is the same each time: the
- * user ends up subscribed without anyone noticing a support ticket.
+ * callback never landed" must be recoverable without a support ticket.
  */
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
@@ -47,7 +45,6 @@ async function checkout(access: string) {
   return res.json() as { paymentId: string; authority: string };
 }
 
-/** Opening the app: the one request every launch makes. */
 async function openApp(access: string) {
   const res = await h.app.inject({
     method: "GET",
@@ -56,6 +53,26 @@ async function openApp(access: string) {
   });
   expect(res.statusCode).toBe(200);
   return res.json() as { entitlement: { status: string; expiresAt: string | null } };
+}
+
+function stubUnverified(
+  authorities: Array<{ authority: string; amount: number | string }>,
+  options: { status?: number; errorCode?: number } = {},
+) {
+  const status = options.status ?? 200;
+  const body =
+    options.errorCode === undefined
+      ? { data: { code: 100, authorities }, errors: [] }
+      : { data: [], errors: { code: options.errorCode, message: "provider error" } };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { "content-type": "application/json" },
+      }),
+    ),
+  );
 }
 
 const daysLeft = (iso: string | null) =>
@@ -88,7 +105,7 @@ describe("a payment whose callback never came back", () => {
   it("keeps the callback recoverable while respecting a poll cooldown", async () => {
     const { access } = await signIn("09121110007");
     const { paymentId, authority } = await checkout(access);
-    await openApp(access); // pending verify starts the cooldown
+    await openApp(access);
     h.psp._settle(authority, "paid");
 
     const callback = await h.app.inject({
@@ -108,7 +125,6 @@ describe("a payment whose callback never came back", () => {
   it("is finished the next time the user opens the app", async () => {
     const { access } = await signIn("09121110001");
     const { authority } = await checkout(access);
-
     h.psp._settle(authority, "paid");
 
     const before = await openApp(access);
@@ -125,7 +141,6 @@ describe("a payment whose callback never came back", () => {
     h.psp._settle(authority, "canceled");
 
     const after = await openApp(access);
-
     expect(daysLeft(after.entitlement.expiresAt)).toBeLessThan(10);
   });
 
@@ -167,34 +182,54 @@ describe("a payment whose callback never came back", () => {
     expect(daysLeft(after.entitlement.expiresAt)).toBe(daysLeft(healed.entitlement.expiresAt));
   });
 
-  it("reopens an old -55 false failure instead of permanently losing a later paid result", async () => {
-    const { access } = await signIn("09121110008");
-    const { paymentId, authority } = await checkout(access);
-    h.psp._settle(authority, "paid");
-    await h.raw(`
-      update payments
-         set status='failed', psp_result=-55,
-             created_at=now()-interval '30 minutes',
-             verify_started_at=null, next_verify_at=null
-       where id='${paymentId}'
-    `);
+  it.each([-51, -55])(
+    "bounds stale provider code %i but still recovers it from authoritative unVerified",
+    async (providerCode) => {
+      const { access } = await signIn(providerCode === -51 ? "09121110008" : "09121110010");
+      const { paymentId, authority } = await checkout(access);
+      const [stored] = await h.query<{ amount_rial: number }>(`
+        select amount_rial from payments where id='${paymentId}'
+      `);
+      await h.raw(`
+        update payments
+           set status='verifying', psp_result=${providerCode},
+               created_at=now()-interval '30 minutes',
+               verify_started_at=null, next_verify_at=now()-interval '1 second'
+         where id='${paymentId}'
+      `);
 
-    const reconcile = await h.app.inject({
-      method: "POST",
-      url: "/internal/payments/reconcile",
-      headers: reconcileAuth(),
-    });
-    expect(reconcile.statusCode).toBe(200);
-    expect(reconcile.json()).toMatchObject({ success: true, recovered: 1 });
-    expect((await openApp(access)).entitlement.status).toBe("active");
+      const bounded = await h.app.inject({
+        method: "POST",
+        url: "/internal/payments/reconcile",
+        headers: reconcileAuth(),
+      });
+      expect(bounded.statusCode).toBe(200);
+      expect(bounded.json()).toMatchObject({ success: true, finalized: 1 });
+      const [failed] = await h.query<{ status: string }>(`
+        select status from payments where id='${paymentId}'
+      `);
+      expect(failed?.status).toBe("failed");
 
-    const [payment] = await h.query<{ status: string; psp_result: number }>(`
-      select status, psp_result from payments where id='${paymentId}'
-    `);
-    expect(payment).toEqual({ status: "paid", psp_result: 100 });
-  });
+      h.psp._settle(authority, "paid");
+      stubUnverified([{ authority, amount: Number(stored!.amount_rial) }]);
+      const recovered = await h.app.inject({
+        method: "POST",
+        url: "/internal/payments/reconcile-unverified",
+        headers: reconcileAuth(),
+      });
+      expect(recovered.statusCode).toBe(200);
+      expect(recovered.json()).toMatchObject({
+        success: true,
+        discovered: 1,
+        matched: 1,
+        checked: 1,
+        recovered: 1,
+      });
+      expect((await openApp(access)).entitlement.status).toBe("active");
+    },
+  );
 
-  it("uses ZarinPal unVerified discovery to recover a paid transaction without a callback", async () => {
+  it("uses ZarinPal unVerified discovery to recover paid money without a callback", async () => {
     const { access } = await signIn("09121110009");
     const { paymentId, authority } = await checkout(access);
     h.psp._settle(authority, "paid");
@@ -202,19 +237,9 @@ describe("a payment whose callback never came back", () => {
       select amount_rial from payments where id='${paymentId}'
     `);
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () =>
-        new Response(
-          JSON.stringify({
-            data: { authorities: [{ authority, amount: Number(stored!.amount_rial) }] },
-            errors: [],
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        ),
-      ),
-    );
-
+    // Accept a numeric string too: provider JSON clients are not always
+    // consistent about preserving large integer fields as numbers.
+    stubUnverified([{ authority, amount: String(stored!.amount_rial) }]);
     const reconcile = await h.app.inject({
       method: "POST",
       url: "/internal/payments/reconcile-unverified",
@@ -230,5 +255,54 @@ describe("a payment whose callback never came back", () => {
       recovered: 1,
     });
     expect((await openApp(access)).entitlement.status).toBe("active");
+
+    const [grantCount] = await h.query<{ count: number }>(`
+      select count(*)::int as count from grants where payment_id='${paymentId}'
+    `);
+    expect(Number(grantCount?.count)).toBe(1);
+  });
+
+  it("never trusts an unVerified authority whose amount differs from our stored price", async () => {
+    const { access } = await signIn("09121110011");
+    const { paymentId, authority } = await checkout(access);
+    h.psp._settle(authority, "paid");
+    const [stored] = await h.query<{ amount_rial: number }>(`
+      select amount_rial from payments where id='${paymentId}'
+    `);
+
+    stubUnverified([{ authority, amount: Number(stored!.amount_rial) + 10 }]);
+    const reconcile = await h.app.inject({
+      method: "POST",
+      url: "/internal/payments/reconcile-unverified",
+      headers: reconcileAuth(),
+    });
+    expect(reconcile.statusCode).toBe(200);
+    expect(reconcile.json()).toMatchObject({ checked: 0, recovered: 0, skipped: 1 });
+
+    const [payment] = await h.query<{ applied_at: string | null }>(`
+      select applied_at::text from payments where id='${paymentId}'
+    `);
+    const [grantCount] = await h.query<{ count: number }>(`
+      select count(*)::int as count from grants where payment_id='${paymentId}'
+    `);
+    expect(payment?.applied_at).toBeNull();
+    expect(Number(grantCount?.count)).toBe(0);
+  });
+
+  it("surfaces an unavailable unVerified provider as a non-2xx cron failure", async () => {
+    await signIn("09121110012");
+    stubUnverified([], { status: 503, errorCode: -9 });
+
+    const reconcile = await h.app.inject({
+      method: "POST",
+      url: "/internal/payments/reconcile-unverified",
+      headers: reconcileAuth(),
+    });
+    expect(reconcile.statusCode).toBe(502);
+    expect(reconcile.json()).toMatchObject({
+      success: false,
+      error: "provider_unverified_unavailable",
+      providerCode: -9,
+    });
   });
 });
