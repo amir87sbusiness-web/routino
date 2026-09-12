@@ -20,7 +20,12 @@ const RECOVERY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const PROVIDER_FAILURE_GRACE_MS = 20 * 60 * 1000;
 const AMBIGUOUS_PROVIDER_CODES = [-51, -55] as const;
 const UNVERIFIED_LIMIT = 100;
-const ZARINPAL_TIMEOUT_MS = 20_000;
+// pg_net currently gives these cron calls 30 seconds. Leave enough headroom for
+// the HTTP response and DB writes rather than letting the infrastructure abort
+// a Verify halfway through the recovery state-machine.
+const RECONCILE_BUDGET_MS = 27_000;
+const VERIFY_START_RESERVE_MS = 21_000;
+const ZARINPAL_UNVERIFIED_TIMEOUT_MS = 6_000;
 
 type UnverifiedItem = { authority: string; amountRial: number };
 type UnverifiedResult =
@@ -55,6 +60,9 @@ const providerAmount = (value: unknown): number | undefined => {
         : Number.NaN;
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
 };
+
+const canStartVerify = (deadlineMs: number): boolean =>
+  Date.now() + VERIFY_START_RESERVE_MS <= deadlineMs;
 
 async function configuredSecret(app: Parameters<FastifyPluginAsync>[0]): Promise<string> {
   const fromEnv = app.deps.env.PAYMENT_RECONCILE_SECRET.trim();
@@ -92,7 +100,7 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
         method: "POST",
         headers,
         body: JSON.stringify({ merchant_id: env.ZARINPAL_MERCHANT }),
-        signal: AbortSignal.timeout(ZARINPAL_TIMEOUT_MS),
+        signal: AbortSignal.timeout(ZARINPAL_UNVERIFIED_TIMEOUT_MS),
       });
       const parsed = record((await res.json()) as unknown);
       if (!parsed) return { kind: "unknown" };
@@ -143,6 +151,7 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
   };
 
   const runSweep = async (limit: number) => {
+    const deadlineMs = Date.now() + RECONCILE_BUDGET_MS;
     const t = new Date(app.deps.now());
     const since = new Date(t.getTime() - RECOVERY_WINDOW_MS);
     const open = await db
@@ -165,8 +174,13 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
     let finalized = 0;
     let stillOpen = 0;
     let errors = 0;
+    let stoppedEarly = false;
 
     for (const payment of open) {
+      if (!canStartVerify(deadlineMs)) {
+        stoppedEarly = true;
+        break;
+      }
       checked += 1;
       try {
         await settleOne(db, psp, payment, t, env.PSP_PROVIDER_MAX_CONCURRENCY);
@@ -216,10 +230,20 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    return { success: true, mode: "sweep", checked, recovered, finalized, stillOpen, errors };
+    return {
+      success: true,
+      mode: "sweep",
+      checked,
+      recovered,
+      finalized,
+      stillOpen,
+      errors,
+      stoppedEarly,
+    };
   };
 
   const runUnverified = async () => {
+    const deadlineMs = Date.now() + RECONCILE_BUDGET_MS;
     const t = new Date(app.deps.now());
     const since = new Date(t.getTime() - RECOVERY_WINDOW_MS);
     const discovered = await fetchUnverified();
@@ -245,6 +269,7 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
         recovered: 0,
         skipped: 0,
         errors: 0,
+        stoppedEarly: false,
       } as const;
     }
 
@@ -271,6 +296,7 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
     let recovered = 0;
     let skipped = 0;
     let errors = 0;
+    let stoppedEarly = false;
 
     for (const item of items) {
       const found = byAuthority.get(item.authority);
@@ -295,6 +321,11 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
           "unverified payment amount mismatch",
         );
         continue;
+      }
+
+      if (!canStartVerify(deadlineMs)) {
+        stoppedEarly = true;
+        break;
       }
 
       try {
@@ -322,6 +353,7 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
       recovered,
       skipped,
       errors,
+      stoppedEarly,
     } as const;
   };
 
