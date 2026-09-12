@@ -66,11 +66,12 @@ function stubUnverified(
       : { data: [], errors: { code: options.errorCode, message: "provider error" } };
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () =>
-      new Response(JSON.stringify(body), {
-        status,
-        headers: { "content-type": "application/json" },
-      }),
+    vi.fn(
+      async () =>
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "content-type": "application/json" },
+        }),
     ),
   );
 }

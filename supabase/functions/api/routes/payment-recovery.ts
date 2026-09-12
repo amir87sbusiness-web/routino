@@ -24,7 +24,8 @@ const UNVERIFIED_LIMIT = 100;
 const ZARINPAL_TIMEOUT_MS = 20_000;
 
 type UnverifiedItem = { authority: string; amountRial: number };
-type UnverifiedResult = { kind: "ok"; items: UnverifiedItem[] } | { kind: "unknown"; code?: number };
+type UnverifiedResult =
+  { kind: "ok"; items: UnverifiedItem[] } | { kind: "unknown"; code?: number };
 
 const secretEquals = (a: string, b: string): boolean => {
   const aa = Buffer.from(a);
@@ -171,11 +172,7 @@ export function paymentRecoveryRoutes(deps: Deps) {
       try {
         await settleOne(db, psp, payment, t, env.PSP_PROVIDER_MAX_CONCURRENCY);
 
-        let [fresh] = await db
-          .select()
-          .from(payments)
-          .where(eq(payments.id, payment.id))
-          .limit(1);
+        let [fresh] = await db.select().from(payments).where(eq(payments.id, payment.id)).limit(1);
         if (!fresh) {
           errors += 1;
           continue;
