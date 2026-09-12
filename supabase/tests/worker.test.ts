@@ -213,8 +213,8 @@ describe("proxying", () => {
   });
 });
 
-describe("edge cache for /v1/plans", () => {
-  it("coalesces concurrent misses into one Supabase request", async () => {
+describe("live pricing for /v1/plans", () => {
+  it("does not coalesce concurrent pricing requests", async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -230,21 +230,24 @@ describe("edge cache for /v1/plans", () => {
     release();
     const responses = await Promise.all([first, second]);
     expect(responses.map((res) => res.status)).toEqual([200, 200]);
-    expect(origin).toHaveBeenCalledTimes(1);
+    expect(origin).toHaveBeenCalledTimes(2);
+    expect(responses.map((res) => res.headers.get("x-routino-cache"))).toEqual([
+      "BYPASS",
+      "BYPASS",
+    ]);
   });
 
-  it("serves the second request without touching Supabase", async () => {
-    origin.mockResolvedValue(plansResponse());
+  it("fetches fresh plans for every request", async () => {
+    origin.mockImplementation(() => Promise.resolve(plansResponse()));
 
     const first = await get("/v1/plans", { origin: "https://routino.me" });
     expect(await first.json()).toMatchObject({ plans: [{ id: "m1", price: 59000 }] });
-    await settle();
 
     const second = await get("/v1/plans", { origin: "https://routino.me" });
     expect(await second.json()).toMatchObject({ plans: [{ id: "m1", price: 59000 }] });
 
-    // The whole point: one origin fetch, two answers.
-    expect(origin).toHaveBeenCalledTimes(1);
+    expect(origin).toHaveBeenCalledTimes(2);
+    expect(cache.store.size).toBe(0);
   });
 
   it("does not let one origin's CORS header be served to another", async () => {
@@ -264,27 +267,26 @@ describe("edge cache for /v1/plans", () => {
 
     const again = await get("/v1/plans", { origin: "capacitor://localhost" });
     expect(again.headers.get("access-control-allow-origin")).toBe("capacitor://localhost");
-    expect(origin).toHaveBeenCalledTimes(2); // both are cached now
+    expect(origin).toHaveBeenCalledTimes(3);
   });
 
-  it("marks the answer cacheable for the browser too", async () => {
+  it("marks pricing no-store at both fetch and response boundaries", async () => {
     origin.mockResolvedValue(plansResponse());
     const res = await get("/v1/plans");
-    expect(res.headers.get("cache-control")).toBe("public, max-age=300");
-    // A stale `content-encoding` on a body the runtime already decoded would
-    // make the browser fail to parse it.
-    expect(res.headers.get("content-encoding")).toBeNull();
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(origin.mock.calls[0][1].cache).toBe("no-store");
+    expect(res.headers.get("x-routino-cache")).toBe("BYPASS");
   });
 
-  it("strips the upstream Set-Cookie, which the cache refuses to store", async () => {
+  it("strips the upstream Set-Cookie without populating the cache", async () => {
     origin.mockResolvedValue(plansResponse());
 
     const res = await get("/v1/plans");
     // Scoped to supabase.co, so a browser talking to api.routino.me drops it
-    // anyway — but Cloudflare still refuses to cache a response that has it.
+    // anyway; the relay should not forward an unrelated upstream cookie.
     expect(res.headers.get("set-cookie")).toBeNull();
     await settle();
-    expect(cache.store.size).toBe(1);
+    expect(cache.store.size).toBe(0);
   });
 
   it("never caches a failure", async () => {

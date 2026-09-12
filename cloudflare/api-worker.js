@@ -184,6 +184,7 @@ async function fetchOrigin(request, env, ctx, url, key, requestId) {
   // prevents a browser or an outer Cloudflare cache rule from retaining it.
   if (livePricing) {
     const h = new Headers(resp.headers);
+    h.delete("set-cookie");
     h.set("cache-control", "no-store");
     return new Response(resp.body, {
       status: resp.status,

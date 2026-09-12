@@ -58,7 +58,9 @@ try {
   console.error("owner bootstrap failed", err);
 }
 
-console.log(`[api] edge function up (sms=${env.SMS_PROVIDER}, psp=${psp.name}, zarinpalBase=${zarinpalApiBase})`);
+console.log(
+  `[api] edge function up (sms=${env.SMS_PROVIDER}, psp=${psp.name}, zarinpalBase=${zarinpalApiBase})`,
+);
 for (const w of testProviderWarnings(env)) console.warn(`[!] TEST MODE — ${w}`);
 
 Deno.serve(app.fetch);

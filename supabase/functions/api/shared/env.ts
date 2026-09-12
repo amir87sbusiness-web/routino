@@ -140,6 +140,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     if (parsed.data.SMS_PROVIDER === "kavenegar" && !parsed.data.KAVENEGAR_API_KEY) {
       throw new Error("KAVENEGAR_API_KEY is required when SMS_PROVIDER=kavenegar");
     }
+    // PGlite is single-connection; it is a development and test engine only.
     if (parsed.data.DB_DRIVER === "pglite")
       throw new Error("DB_DRIVER=pglite is not supported in production");
 
@@ -157,10 +158,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     ) {
       throw new Error("ZARINPAL_PROXY_SECRET must be at least 32 characters when using a proxy");
     }
-    if (
-      parsed.data.PAYMENT_RECONCILE_SECRET &&
-      parsed.data.PAYMENT_RECONCILE_SECRET.length < 32
-    ) {
+    if (parsed.data.PAYMENT_RECONCILE_SECRET && parsed.data.PAYMENT_RECONCILE_SECRET.length < 32) {
       throw new Error("PAYMENT_RECONCILE_SECRET must be at least 32 characters when configured");
     }
     if (parsed.data.SMS_PROVIDER === "console")

@@ -157,10 +157,7 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     ) {
       throw new Error("ZARINPAL_PROXY_SECRET must be at least 32 characters when using a proxy");
     }
-    if (
-      parsed.data.PAYMENT_RECONCILE_SECRET &&
-      parsed.data.PAYMENT_RECONCILE_SECRET.length < 32
-    ) {
+    if (parsed.data.PAYMENT_RECONCILE_SECRET && parsed.data.PAYMENT_RECONCILE_SECRET.length < 32) {
       throw new Error("PAYMENT_RECONCILE_SECRET must be at least 32 characters when configured");
     }
     if (parsed.data.SMS_PROVIDER === "console")
