@@ -117,7 +117,7 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
     }
   };
 
-  const reopenAmbiguousFailure = async <T extends typeof payments.$inferSelect>(payment: T, t: Date) => {
+  const reopenAmbiguousFailure = async (payment: typeof payments.$inferSelect, t: Date) => {
     if (
       payment.status !== "failed" ||
       payment.pspResult === null ||
