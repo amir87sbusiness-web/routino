@@ -35,6 +35,9 @@ export interface RequestOptions {
   token?: string | null;
   signal?: AbortSignal;
   timeoutMs?: number;
+  /** Browser HTTP-cache mode. Use `no-store` for server-authoritative dynamic
+   * data such as subscription prices so an older cached response cannot win. */
+  cache?: RequestCache;
   /** Lets a small web request continue while the page is being hidden. Native
    * HTTP has its own lifecycle and ignores this browser-only hint. */
   keepalive?: boolean;
@@ -86,6 +89,10 @@ async function nativeRequest(
 ): Promise<RawResponse> {
   const { CapacitorHttp } = await import("@capacitor/core");
   if (opts.signal?.aborted) throw new DOMException("Aborted", "AbortError");
+  if (opts.cache === "no-store") {
+    headers["Cache-Control"] = "no-cache";
+    headers.Pragma = "no-cache";
+  }
   const res = await waitForNativeResponse(
     CapacitorHttp.request({
       url,
@@ -125,6 +132,7 @@ async function webRequest(
       headers,
       body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
       signal: controller.signal,
+      cache: opts.cache,
       keepalive: opts.keepalive,
     });
     const text = await res.text();
