@@ -13,6 +13,8 @@
 # confirmed from Cloudflare's account-level custom-domain API on 2026-08-18.
 # Changing this name does not rename a Worker: it deploys a second service and
 # leaves api.routino.me on old code, even though Wrangler reports success.
+# The private `/_zarinpal/*` relay now lives in this SAME service; no second
+# Worker, route, or DNS record is required for payment verification.
 name = "routino-api"
 
 main = "api-worker.js"
