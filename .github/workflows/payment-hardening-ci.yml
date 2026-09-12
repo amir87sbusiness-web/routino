@@ -6,7 +6,7 @@ on:
       - fix/payment-recovery-hardening-20260912
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   quality:
@@ -22,18 +22,8 @@ jobs:
         run: npm ci
       - name: Install backend dependencies
         run: npm --prefix backend ci
-      - name: Format payment hardening files
-        run: npx prettier --write backend/src/routes/payment-recovery.ts backend/test/payment-recovery.test.ts supabase/functions/api/routes/payment-recovery.ts
-      - name: Commit formatter output when needed
-        run: |
-          if ! git diff --quiet -- backend/src/routes/payment-recovery.ts backend/test/payment-recovery.test.ts supabase/functions/api/routes/payment-recovery.ts; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add backend/src/routes/payment-recovery.ts backend/test/payment-recovery.test.ts supabase/functions/api/routes/payment-recovery.ts
-            git commit -m "style: format payment hardening"
-            git push origin HEAD:fix/payment-recovery-hardening-20260912
-            exit 1
-          fi
+      - name: Prettier check
+        run: npx prettier --check backend/src/routes/payment-recovery.ts backend/test/payment-recovery.test.ts supabase/functions/api/routes/payment-recovery.ts
       - name: Lint
         run: npm run lint
       - name: Root typecheck
