@@ -111,7 +111,12 @@ async function zarinpalSelftest() {
       cache: "no-store",
     });
     const sample = (await upstream.text()).slice(0, 240);
-    return relayJson({ reachable: true, status: upstream.status, ms: Date.now() - started, sample });
+    return relayJson({
+      reachable: true,
+      status: upstream.status,
+      ms: Date.now() - started,
+      sample,
+    });
   } catch (err) {
     return relayJson(
       { reachable: false, ms: Date.now() - started, error: String(err?.message || err) },
@@ -198,7 +203,9 @@ async function handleAndroidDownload(request, incoming) {
     headers: {
       location: target,
       "cache-control": "no-store",
-      "x-routino-android-source": androidReleaseProbe.available ? "github-release" : "bundled-fallback",
+      "x-routino-android-source": androidReleaseProbe.available
+        ? "github-release"
+        : "bundled-fallback",
     },
   });
 }

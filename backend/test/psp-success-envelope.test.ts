@@ -12,7 +12,10 @@ describe("ZarinPal success envelope hardening", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it.each([100, 101] as const)("does not trust code %i without ref_id", async (code) => {
-    vi.stubGlobal("fetch", vi.fn(async () => reply({ data: { code }, errors: [] })));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => reply({ data: { code }, errors: [] })),
+    );
 
     await expect(zarinpalPsp("merchant").verify("A000", 1_990_000)).resolves.toEqual({
       kind: "unknown",
