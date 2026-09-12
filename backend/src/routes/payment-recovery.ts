@@ -1,3 +1,5 @@
+import { Buffer } from "node:buffer";
+import { timingSafeEqual } from "node:crypto";
 import { and, asc, gt, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { rowsOf } from "../db/client.js";
@@ -16,14 +18,17 @@ const RECOVERABLE_STATUSES = [
 
 const RECOVERY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
+const secretEquals = (a: string, b: string): boolean => {
+  const aa = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (aa.length !== bb.length) return false;
+  return timingSafeEqual(aa, bb);
+};
+
 async function configuredSecret(app: Parameters<FastifyPluginAsync>[0]): Promise<string> {
   const fromEnv = app.deps.env.PAYMENT_RECONCILE_SECRET.trim();
   if (fromEnv) return fromEnv;
 
-  // Supabase stores the existing cron secret in Vault. Reading it here keeps the
-  // recovery endpoint aligned with the already-scheduled pg_cron jobs without
-  // copying the secret into source code. Non-Supabase deployments simply fall
-  // through to disabled recovery unless PAYMENT_RECONCILE_SECRET is configured.
   try {
     const rows = rowsOf<{ secret: string }>(
       await app.deps.db.execute(sql`
@@ -85,8 +90,18 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
   const authorize = async (req: { headers: Record<string, unknown> }) => {
     const expected = await configuredSecret(app);
     const got = req.headers["x-payment-reconcile-secret"];
-    return Boolean(expected && typeof got === "string" && got === expected);
+    return Boolean(expected && typeof got === "string" && secretEquals(got, expected));
   };
+
+  app.post("/internal/payments/relay-auth", async (req, reply) => {
+    const got = req.headers["x-relay-candidate"];
+    const candidate = typeof got === "string" ? got : "";
+    const expected = env.PROXY_SECRET || "";
+    if (!expected || !candidate || !secretEquals(candidate, expected)) {
+      return reply.code(403).send();
+    }
+    return reply.code(204).send();
+  });
 
   app.post("/internal/payments/reconcile", async (req, reply) => {
     if (!(await authorize(req))) {
@@ -95,9 +110,6 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
     return runSweep(30);
   });
 
-  // Kept as a separate endpoint because production already has a second cron
-  // pointing here. It intentionally runs the same authoritative DB sweep with a
-  // larger batch; ZarinPal Verify remains the source of truth for every row.
   app.post("/internal/payments/reconcile-unverified", async (req, reply) => {
     if (!(await authorize(req))) {
       return reply.code(401).send({ error: "unauthorized" });
