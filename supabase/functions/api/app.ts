@@ -22,6 +22,7 @@ import { adminPanelRoutes } from "./routes/admin-panel.ts";
 import { authRoutes } from "./routes/auth.ts";
 import { devGatewayRoutes } from "./routes/dev-gateway.ts";
 import { healthRoutes } from "./routes/health.ts";
+import { internalPaymentRoutes } from "./routes/internal-payments.ts";
 import { paymentRoutes } from "./routes/payments.ts";
 import { planRoutes } from "./routes/plans.ts";
 import { subscriptionRoutes } from "./routes/subscriptions.ts";
@@ -149,6 +150,7 @@ export function buildApp(deps: Deps) {
   app.notFound((c) => c.json({ error: "not_found", message: "Route not found" }, 404));
 
   app.route("/", healthRoutes(deps));
+  app.route("/", internalPaymentRoutes(deps));
   app.route("/v1", planRoutes(deps));
   app.route("/v1", authRoutes(deps));
   app.route("/v1", subscriptionRoutes(deps));
