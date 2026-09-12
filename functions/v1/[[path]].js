@@ -7,14 +7,15 @@
 const API_ORIGIN = "https://api.routino.me";
 const ZARINPAL_ORIGIN = "https://payment.zarinpal.com";
 const ZARINPAL_RELAY_PREFIX = "/v1/_zarinpal";
-const ZARINPAL_RELAY_SECRET_SHA256 = "abc3ee9d2cdb1963bfd20a77b6eeb971c12f8a9eb8b8ba960a28a93550279931";
 const MAX_BODY_BYTES = 64 * 1024;
 const ZARINPAL_TIMEOUT_MS = 20_000;
+const RELAY_AUTH_TTL_MS = 5 * 60 * 1000;
 const ZARINPAL_PATHS = new Set([
   "/pg/v4/payment/request.json",
   "/pg/v4/payment/verify.json",
   "/pg/v4/payment/unVerified.json",
 ]);
+const RELAY_AUTH_CACHE = new Map();
 
 const relayJson = (body, status = 200) =>
   Response.json(body, {
@@ -32,17 +33,27 @@ async function sha256Hex(value) {
   return [...digest].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-function equalHex(a, b) {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  return diff === 0;
-}
-
 async function relayAuthorized(request) {
   const secret = request.headers.get("x-proxy-secret") || "";
   if (secret.length < 32 || secret.length > 256) return false;
-  return equalHex(await sha256Hex(secret), ZARINPAL_RELAY_SECRET_SHA256);
+
+  const key = await sha256Hex(secret);
+  const cachedUntil = RELAY_AUTH_CACHE.get(key) || 0;
+  if (cachedUntil > Date.now()) return true;
+
+  try {
+    const validation = await fetch(`${API_ORIGIN}/internal/payments/relay-auth`, {
+      method: "POST",
+      headers: { "x-relay-candidate": secret },
+      cache: "no-store",
+      redirect: "manual",
+    });
+    if (validation.status !== 204) return false;
+    RELAY_AUTH_CACHE.set(key, Date.now() + RELAY_AUTH_TTL_MS);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function readBoundedBody(request) {
