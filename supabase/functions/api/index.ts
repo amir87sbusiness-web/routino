@@ -1,14 +1,5 @@
 /**
  * Supabase Edge Function entry point — the ONLY Deno-specific module.
- *
- * Everything below the HTTP layer is byte-identical to the tested Node backend
- * (see shared/ and the edge-parity test). This file only: reads env, opens the
- * pooled Postgres connection, wires providers, and serves the Hono app.
- *
- * DB connection: Supabase's transaction pooler (port 6543) with
- * `prepare: false` — the documented pattern for serverless runtimes, where many
- * short-lived isolates must share a small connection budget. `max: 2` per
- * isolate keeps the pooler from being exhausted.
  */
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -29,18 +20,16 @@ if (env.NODE_ENV === "production" && dbUrl.includes("localhost")) {
 }
 
 const client = postgres(dbUrl, {
-  prepare: false, // required in transaction-pooling mode
+  prepare: false,
   max: 2,
   idle_timeout: 30,
   connect_timeout: 10,
 });
 const db = drizzle(client, { schema }) as unknown as Database;
 
-// Routino's ZarinPal relay runs as a Cloudflare Pages Function. The plaintext
-// shared secret exists only in Supabase Vault; GitHub stores only its SHA-256 in
-// the Pages Function. If Vault is temporarily unavailable, the provider falls
-// back to the configured/default direct ZarinPal endpoint rather than preventing
-// the API from booting.
+// The Cloudflare relay lives under the already-active /v1 Pages Function
+// namespace, avoiding dependence on the separately-deployed api.routino.me
+// Worker. The plaintext relay secret exists only in Supabase Vault.
 let pagesRelaySecret = "";
 try {
   const rows = await client<{ decrypted_secret: string }[]>`
@@ -55,7 +44,7 @@ try {
 }
 
 const zarinpalApiBase = pagesRelaySecret
-  ? "https://routino.me/zarinpal-relay"
+  ? "https://routino.me/v1/_zarinpal"
   : env.ZARINPAL_API_BASE;
 const zarinpalProxySecret = pagesRelaySecret || env.ZARINPAL_PROXY_SECRET;
 
@@ -74,9 +63,6 @@ const psp =
 
 const app = buildApp({ db, env, sms, psp, now: () => Date.now() });
 
-// Ensure the owner account (if OWNER_PHONE/OWNER_PASSWORD are set) can sign in
-// with a password from the first boot. Idempotent and never overwrites a
-// password already chosen. Failure here must not stop the function serving.
 try {
   await ensureOwner(db, env, new Date(), {
     info: (m) => console.log(m),
@@ -87,7 +73,6 @@ try {
 }
 
 console.log(`[api] edge function up (sms=${env.SMS_PROVIDER}, psp=${psp.name}, zarinpalBase=${zarinpalApiBase})`);
-
 for (const w of testProviderWarnings(env)) console.warn(`[!] TEST MODE — ${w}`);
 
 Deno.serve(app.fetch);
