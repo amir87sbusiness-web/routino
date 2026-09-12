@@ -58,11 +58,8 @@ describe("landing build script", () => {
       assert.match(homeHtml, /<h2>آیفون، ویندوز و مک<\/h2>/);
       assert.equal(homeHtml.match(/>وب اپلیکیشن(?:<|\n)/g)?.length, 2);
       assert.equal(homeHtml.match(/<use href="#i-pwa" \/>/g)?.length, 2);
-      assert.match(
-        homeHtml,
-        /<a class="btn download-btn download-btn-primary" id="android-btn" href="https:\/\/routino\.me\/downloads\/routino-android-1\.0\.apk" download="routino-android-1\.0\.apk" rel="noreferrer">/,
-      );
-      assert.match(homeHtml, /<span>دانلود<\/span>/);
+      assert.equal(homeHtml.includes('id="android-btn"'), false);
+      assert.equal(homeHtml.includes("دانلود اندروید"), false);
       assert.equal(/<(?:link|script)[^>]+routino-android-1\.0\.apk/i.test(homeHtml), false);
       assert.deepEqual(
         readFileSync(join(sandbox, "dist", "downloads", "routino-android-1.0.apk")),
