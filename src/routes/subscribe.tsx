@@ -22,7 +22,6 @@ import {
 } from "@/lib/api/payments";
 import { faNum, formatDate, dateKey } from "@/lib/dates";
 import { subscriptionActive } from "@/lib/logic";
-import { PLANS } from "@/lib/presets";
 import { subscriptionProgress } from "@/lib/subscription-progress";
 import { useAppMaybe } from "@/state/app";
 
@@ -30,20 +29,13 @@ export const Route = createFileRoute("/subscribe")({
   component: SubscribePage,
 });
 
-/** Bundled catalog as a fallback so the page can RENDER offline — buying still
- * needs the server, and the button says so. */
-const FALLBACK_PLANS: ServerPlan[] = PLANS.map((p) => ({
-  id: p.id,
-  nameFa: p.nameFa,
-  nameEn: p.nameEn,
-  months: p.months,
-  price: p.price,
-}));
-
 function SubscribePage() {
   const ctx = useAppMaybe();
   const navigate = useNavigate();
-  const [plans, setPlans] = useState<ServerPlan[]>(FALLBACK_PLANS);
+  // Prices are server-authoritative. Never seed this state from the bundled
+  // catalog: a bundled price can be months old and would flash before /plans
+  // returns. Until the live catalog arrives, render a loading state instead.
+  const [plans, setPlans] = useState<ServerPlan[]>([]);
   const [offline, setOffline] = useState(false);
   const [selected, setSelected] = useState<string>("m3");
   const [codeInput, setCodeInput] = useState("");
@@ -58,12 +50,18 @@ function SubscribePage() {
   const paymentAttempt = useRef<{ id: string; key: string } | null>(null);
   const paymentAbort = useRef<AbortController | null>(null);
 
-  // Server catalog. Failure keeps the bundled fallback and flags offline mode.
+  // Server catalog is the only source of prices. If it is unavailable, do not
+  // substitute bundled numbers: showing no price is safer than showing a stale
+  // price on a checkout screen.
   useEffect(() => {
     let cancelled = false;
     fetchPlans()
       .then((res) => {
-        if (cancelled || !res.plans.length) return;
+        if (cancelled) return;
+        if (!res.plans.length) {
+          setOffline(true);
+          return;
+        }
         setPlans(res.plans);
         setOffline(false);
         // اگر پلنِ پیش‌فرض در فهرست واقعی سرور نبود، به یک پلن معتبر برگرد؛ وگرنه
@@ -121,6 +119,7 @@ function SubscribePage() {
   };
 
   const applyCode = async () => {
+    if (!plans.some((p) => p.id === selected)) return;
     const code = codeInput.trim().toUpperCase();
     if (!code) return;
     setChecking(true);
@@ -150,6 +149,7 @@ function SubscribePage() {
   };
 
   const pay = async () => {
+    if (!plans.some((p) => p.id === selected)) return;
     // React state does not disable the button until the next render. This ref is
     // synchronous, so a double click cannot create two checkout requests.
     if (paymentInFlight.current) return;
@@ -345,6 +345,11 @@ function SubscribePage() {
       )}
 
       <div className="flex flex-col gap-2.5">
+        {!offline && plans.length === 0 && (
+          <div className="rounded-2xl border border-border bg-card px-4 py-5 text-center text-xs text-muted-foreground">
+            {t("در حال دریافت قیمت‌های جدید…", "Loading current prices…")}
+          </div>
+        )}
         {plans.map((p) => {
           const basePrice = p.price;
           const final = priceOf(p.id);
@@ -389,8 +394,13 @@ function SubscribePage() {
             onChange={(e) => setCodeInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && void applyCode()}
             className="text-center uppercase"
+            disabled={plans.length === 0}
           />
-          <Button variant="secondary" onClick={() => void applyCode()} disabled={checking}>
+          <Button
+            variant="secondary"
+            onClick={() => void applyCode()}
+            disabled={checking || plans.length === 0}
+          >
             <Tag className="h-4 w-4" />
             {checking ? t("بررسی…", "Checking…") : t("اعمال", "Apply")}
           </Button>
@@ -426,7 +436,11 @@ function SubscribePage() {
         </div>
       ) : (
         <>
-          <Button onClick={() => void pay()} disabled={paying} className="py-3.5 text-base">
+          <Button
+            onClick={() => void pay()}
+            disabled={paying || plans.length === 0}
+            className="py-3.5 text-base"
+          >
             {paying
               ? t("در حال انتقال به درگاه…", "Opening the gateway…")
               : t("پرداخت و فعال‌سازی", "Pay & activate")}
