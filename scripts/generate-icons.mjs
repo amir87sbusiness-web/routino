@@ -126,12 +126,8 @@ async function renderCenteredAndroidIcon(source, size) {
   if (maxX < minX || maxY < minY) throw new Error("Android icon source has no visible mark");
 
   const tileSize = Math.round(size * ANDROID_ICON_SCALE);
-  const shiftX = Math.round(
-    ((info.width - 1) / 2 - (minX + maxX) / 2) * (tileSize / info.width),
-  );
-  const shiftY = Math.round(
-    ((info.height - 1) / 2 - (minY + maxY) / 2) * (tileSize / info.height),
-  );
+  const shiftX = Math.round(((info.width - 1) / 2 - (minX + maxX) / 2) * (tileSize / info.width));
+  const shiftY = Math.round(((info.height - 1) / 2 - (minY + maxY) / 2) * (tileSize / info.height));
   const resized = await renderInstalledIcon(source, tileSize);
   const left = Math.round((size - tileSize) / 2) + shiftX;
   const top = Math.round((size - tileSize) / 2) + shiftY;
@@ -142,7 +138,12 @@ async function renderCenteredAndroidIcon(source, size) {
       .toBuffer();
   }
   return sharp({
-    create: { width: size, height: size, channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } },
+    create: {
+      width: size,
+      height: size,
+      channels: 4,
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
+    },
   })
     .composite([{ input: resized, left, top }])
     .png({ compressionLevel: 9, adaptiveFiltering: true })
@@ -295,10 +296,10 @@ export async function generateIcons({ root = DEFAULT_ROOT } = {}) {
       await rm(join(folder, obsolete), { force: true });
     }
   }
-  await rm(
-    join(root, "android", "app", "src", "main", "res", "mipmap-anydpi-v26"),
-    { recursive: true, force: true },
-  );
+  await rm(join(root, "android", "app", "src", "main", "res", "mipmap-anydpi-v26"), {
+    recursive: true,
+    force: true,
+  });
 
   const androidRes = join(root, "android", "app", "src", "main", "res");
   for (const [relativePath, [width, height]] of Object.entries(ANDROID_SPLASH_SIZES)) {
