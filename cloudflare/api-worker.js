@@ -33,15 +33,13 @@
 const ORIGIN = "https://axychfrteevhfdhgvfuv.supabase.co/functions/v1/api";
 
 /**
- * GET paths whose answer is the same for everyone and changes only when the
- * owner edits it. Caching them here is worth more than it looks: measured from
- * Iran, `/v1/plans` costs ~1.05s (Tehran → Cloudflare → Stockholm → Postgres and
- * back) and it sits on the paywall — the one screen where a delay costs money.
- * From the Cloudflare edge it is tens of milliseconds, and it stops burning a
- * Supabase function invocation per view.
+ * Keep dynamic money data out of the explicit Worker Cache API. In particular,
+ * `/v1/plans` backs the checkout screen and must reflect a database price edit
+ * immediately; latency is preferable to displaying or charging around a stale
+ * catalog. The cache plumbing stays available for future non-financial public
+ * GETs whose staleness is harmless.
  */
-const CACHEABLE = new Set(["/v1/plans"]);
-/** A price edited in the admin panel goes live at most this late. */
+const CACHEABLE = new Set();
 const CACHE_SECONDS = 300;
 const ALLOWED_ORIGINS = new Set([
   "https://routino.me",
@@ -102,12 +100,26 @@ async function fetchOrigin(request, env, ctx, url, key, requestId) {
   headers.set("x-client-ip", request.headers.get("cf-connecting-ip") ?? "");
   headers.set("x-request-id", requestId);
 
+  const livePricing = request.method === "GET" && url.pathname === "/v1/plans";
   const resp = await fetch(target, {
     method: request.method,
     headers,
     body: request.body,
     redirect: "manual",
+    cache: livePricing ? "no-store" : undefined,
   });
+
+  // The checkout catalog is deliberately non-cacheable end-to-end. This also
+  // prevents a browser or an outer Cloudflare cache rule from retaining it.
+  if (livePricing) {
+    const h = new Headers(resp.headers);
+    h.set("cache-control", "no-store");
+    return new Response(resp.body, {
+      status: resp.status,
+      statusText: resp.statusText,
+      headers: h,
+    });
+  }
 
   // Repair HTML pages the Supabase gateway downgraded to text/plain + sandbox.
   if (resp.headers.get("x-routino-html") === "1") {
