@@ -1,23 +1,9 @@
 import { Buffer } from "node:buffer";
 import { timingSafeEqual } from "node:crypto";
-import { and, asc, eq, gt, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { rowsOf } from "../db/client.js";
-import { payments } from "../db/schema.js";
-import { settleOne } from "../services/payment-flow.js";
-
-const RECOVERABLE_STATUSES = [
-  "pending",
-  "requesting",
-  "redirected",
-  "provider_unknown",
-  "verifying",
-  "operational_error",
-  "manual_review",
-] as const;
-
-const RECOVERY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-const PROVIDER_FAILURE_GRACE_MS = 20 * 60 * 1000;
+import { runPaymentRecoverySweep } from "../services/payment-recovery.js";
 
 const secretEquals = (a: string, b: string): boolean => {
   const aa = Buffer.from(a);
@@ -48,77 +34,13 @@ async function configuredSecret(app: Parameters<FastifyPluginAsync>[0]): Promise
 export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
   const { db, env, psp } = app.deps;
 
-  const runSweep = async (limit: number) => {
-    const t = new Date(app.deps.now());
-    const since = new Date(t.getTime() - RECOVERY_WINDOW_MS);
-    const open = await db
-      .select()
-      .from(payments)
-      .where(
-        and(
-          isNull(payments.appliedAt),
-          isNotNull(payments.authority),
-          gt(payments.createdAt, since),
-          inArray(payments.status, [...RECOVERABLE_STATUSES]),
-          or(isNull(payments.nextVerifyAt), lte(payments.nextVerifyAt, t)),
-        ),
-      )
-      .orderBy(asc(payments.createdAt))
-      .limit(limit);
-
-    let checked = 0;
-    let recovered = 0;
-    let finalized = 0;
-    let stillOpen = 0;
-    let errors = 0;
-
-    for (const payment of open) {
-      checked += 1;
-      try {
-        await settleOne(db, psp, payment, t, env.PSP_PROVIDER_MAX_CONCURRENCY);
-
-        let [fresh] = await db.select().from(payments).where(eq(payments.id, payment.id)).limit(1);
-        if (!fresh) {
-          errors += 1;
-          continue;
-        }
-        if (fresh.appliedAt || fresh.status === "paid") {
-          recovered += 1;
-          continue;
-        }
-        if (["failed", "canceled", "verify_failed"].includes(fresh.status)) {
-          finalized += 1;
-          continue;
-        }
-
-        const staleProviderFailure =
-          (fresh.pspResult === -51 || fresh.pspResult === -55) &&
-          t.getTime() - fresh.createdAt.getTime() >= PROVIDER_FAILURE_GRACE_MS;
-        if (staleProviderFailure) {
-          [fresh] = await db
-            .update(payments)
-            .set({
-              status: "failed",
-              verifyStartedAt: null,
-              nextVerifyAt: null,
-              updatedAt: t,
-            })
-            .where(and(eq(payments.id, fresh.id), isNull(payments.appliedAt)))
-            .returning();
-          if (fresh) finalized += 1;
-          else stillOpen += 1;
-          continue;
-        }
-
-        stillOpen += 1;
-      } catch (err) {
-        errors += 1;
-        app.log.error({ paymentId: payment.id, err }, "payment recovery item failed");
-      }
-    }
-
-    return { success: true, checked, recovered, finalized, stillOpen, errors };
-  };
+  const runSweep = (limit: number) =>
+    runPaymentRecoverySweep(db, psp, new Date(app.deps.now()), {
+      limit,
+      maxConcurrent: env.PSP_PROVIDER_MAX_CONCURRENCY,
+      onError: (paymentId, err) =>
+        app.log.error({ paymentId, err }, "payment recovery item failed"),
+    });
 
   const authorize = async (req: { headers: Record<string, unknown> }) => {
     const expected = await configuredSecret(app);

@@ -1,21 +1,29 @@
 /**
- * Same-origin API bridge for the web app plus a private ZarinPal relay.
+ * Same-origin API bridge for the web app plus private infrastructure endpoints.
  *
- * `/v1/_zarinpal/*` is server-only and terminates at Cloudflare Pages. Every
- * other `/v1/*` path continues to api.routino.me exactly as before.
+ * `/v1/_zarinpal/*` is server-only and terminates at Cloudflare Pages.
+ * `/v1/download/android` resolves to the latest signed GitHub Release and falls
+ * back to the bundled APK until the first release is published.
+ * Every other `/v1/*` path continues to api.routino.me exactly as before.
  */
 const API_ORIGIN = "https://api.routino.me";
 const ZARINPAL_ORIGIN = "https://payment.zarinpal.com";
 const ZARINPAL_RELAY_PREFIX = "/v1/_zarinpal";
+const ANDROID_DOWNLOAD_PATH = "/v1/download/android";
+const ANDROID_LATEST_RELEASE =
+  "https://github.com/amir87sbusiness-web/routino/releases/latest/download/routino-android.apk";
+const ANDROID_BUNDLED_FALLBACK = "/downloads/routino-android-1.0.apk";
 const MAX_BODY_BYTES = 64 * 1024;
 const ZARINPAL_TIMEOUT_MS = 20_000;
 const RELAY_AUTH_TTL_MS = 5 * 60 * 1000;
+const ANDROID_RELEASE_PROBE_TTL_MS = 5 * 60 * 1000;
 const ZARINPAL_PATHS = new Set([
   "/pg/v4/payment/request.json",
   "/pg/v4/payment/verify.json",
   "/pg/v4/payment/unVerified.json",
 ]);
 const RELAY_AUTH_CACHE = new Map();
+let androidReleaseProbe = { available: false, until: 0 };
 
 const relayJson = (body, status = 200) =>
   Response.json(body, {
@@ -103,7 +111,12 @@ async function zarinpalSelftest() {
       cache: "no-store",
     });
     const sample = (await upstream.text()).slice(0, 240);
-    return relayJson({ reachable: true, status: upstream.status, ms: Date.now() - started, sample });
+    return relayJson({
+      reachable: true,
+      status: upstream.status,
+      ms: Date.now() - started,
+      sample,
+    });
   } catch (err) {
     return relayJson(
       { reachable: false, ms: Date.now() - started, error: String(err?.message || err) },
@@ -160,8 +173,49 @@ async function handleZarinpalRelay(request, incoming) {
   }
 }
 
+async function handleAndroidDownload(request, incoming) {
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return new Response(null, { status: 405, headers: { allow: "GET, HEAD" } });
+  }
+
+  const now = Date.now();
+  if (androidReleaseProbe.until <= now) {
+    let available = false;
+    try {
+      const probe = await fetch(ANDROID_LATEST_RELEASE, {
+        method: "HEAD",
+        redirect: "manual",
+        cache: "no-store",
+        headers: { "user-agent": "Routino-Download-Resolver/1.0" },
+      });
+      available = probe.status >= 200 && probe.status < 400;
+    } catch {
+      available = false;
+    }
+    androidReleaseProbe = { available, until: now + ANDROID_RELEASE_PROBE_TTL_MS };
+  }
+
+  const target = androidReleaseProbe.available
+    ? ANDROID_LATEST_RELEASE
+    : new URL(ANDROID_BUNDLED_FALLBACK, incoming.origin).toString();
+  return new Response(null, {
+    status: 302,
+    headers: {
+      location: target,
+      "cache-control": "no-store",
+      "x-routino-android-source": androidReleaseProbe.available
+        ? "github-release"
+        : "bundled-fallback",
+    },
+  });
+}
+
 export async function onRequest({ request }) {
   const incoming = new URL(request.url);
+
+  if (incoming.pathname === ANDROID_DOWNLOAD_PATH) {
+    return handleAndroidDownload(request, incoming);
+  }
 
   if (incoming.pathname.startsWith(`${ZARINPAL_RELAY_PREFIX}/`)) {
     return handleZarinpalRelay(request, incoming);

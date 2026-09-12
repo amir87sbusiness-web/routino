@@ -35,6 +35,13 @@ function providerCode(body: ProviderBody): number | undefined {
   return typeof errorCode === "number" && Number.isInteger(errorCode) ? errorCode : undefined;
 }
 
+function providerReference(value: unknown): string | undefined {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) return String(value);
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  return /^\d+$/.test(normalized) && normalized !== "0" ? normalized : undefined;
+}
+
 /**
  * ZarinPal returns legitimate business/validation errors as non-2xx JSON
  * (commonly 422). Do not discard that body: it contains `errors.code`, which is
@@ -105,7 +112,7 @@ export function zarinpalPsp(
       if (code === 100) {
         return typeof authority === "string" && authority.length > 0
           ? { kind: "issued", authority, code: 100 }
-          : { kind: "unknown" };
+          : { kind: "unknown", code: 100 };
       }
       return code === undefined ? { kind: "unknown" } : { kind: "rejected", code };
     },
@@ -122,14 +129,18 @@ export function zarinpalPsp(
       if (code === undefined) return { kind: "unknown" };
 
       const data = record(body.data);
-      const ref = data?.ref_id;
+      const refNumber = providerReference(data?.ref_id);
       const card = data?.card_pan;
-      const successDetails = {
-        refNumber: typeof ref === "number" || typeof ref === "string" ? String(ref) : undefined,
-        cardNumber: typeof card === "string" ? card : undefined,
-      };
-      if (code === 100) return { kind: "paid", code: 100, ...successDetails };
-      if (code === 101) return { kind: "already_verified", code: 101, ...successDetails };
+      const cardNumber = typeof card === "string" ? card : undefined;
+
+      // A 100/101 without a valid provider reference is malformed. Treat it as
+      // ambiguous and let recovery retry; never grant access on code alone.
+      if (code === 100 || code === 101) {
+        if (!refNumber) return { kind: "unknown", code };
+        return code === 100
+          ? { kind: "paid", code: 100, refNumber, cardNumber }
+          : { kind: "already_verified", code: 101, refNumber, cardNumber };
+      }
 
       // Provider answers that can represent an incomplete/racing payment stay
       // recoverable. -55 is kept retryable like Sheetra's hardened flow because

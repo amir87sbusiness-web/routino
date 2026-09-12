@@ -188,19 +188,28 @@ export async function quote(
   ).quote;
 }
 
-/** Marks a code used. Called inside the grant transaction, never before payment
- * succeeds — otherwise an abandoned checkout burns a use. */
+/**
+ * Marks a code used exactly once. This operation is deliberately idempotent:
+ * callbacks, recovery and a DB-side payment-grant trigger may all converge on
+ * the same redemption, but `used_count` must increase only for the call that
+ * actually inserted the ledger row.
+ */
 export async function redeemDiscount(
   db: Database,
   code: string,
   userId: string,
   paymentId: string,
 ): Promise<void> {
-  await db.insert(redemptions).values({ code, userId, paymentId }).onConflictDoNothing();
+  const inserted = await db
+    .insert(redemptions)
+    .values({ code, userId, paymentId })
+    .onConflictDoNothing()
+    .returning({ code: redemptions.code });
+  if (!inserted.length) return;
+
   // Capped, and atomic. The money has already moved, so a code that somehow
   // slipped past its limit still grants the subscription — but `used_count` must
-  // never climb above `max_uses`, or the admin panel reports a nonsense number
-  // and nobody notices the leak. A refused bump means exactly that happened.
+  // never climb above `max_uses`, or the admin panel reports a nonsense number.
   const bumped = await db
     .update(discounts)
     .set({ usedCount: sql`${discounts.usedCount} + 1` })

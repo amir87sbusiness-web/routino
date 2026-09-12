@@ -27,7 +27,8 @@ export type PspVerifyResult =
   | {
       kind: "paid" | "already_verified";
       code: 100 | 101;
-      refNumber?: string;
+      /** A provider success without a reference id is not trustworthy enough to grant access. */
+      refNumber: string;
       cardNumber?: string;
     }
   | { kind: "pending" | "canceled" | "failed" | "unknown"; code?: number };
