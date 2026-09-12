@@ -11,9 +11,7 @@ const ZARINPAL_ORIGIN = "https://payment.zarinpal.com";
 export const PSP_TIMEOUT_MS = 20_000;
 
 export interface ZarinpalTransportConfig {
-  /** Server-side API base. Production edge uses the Cloudflare ZarinPal relay. */
   apiBase?: string;
-  /** Shared secret expected by the relay. Never sent to StartPay/browser URLs. */
   proxySecret?: string;
 }
 
@@ -36,9 +34,7 @@ function providerCode(body: ProviderBody): number | undefined {
   return typeof errorCode === "number" && Number.isInteger(errorCode) ? errorCode : undefined;
 }
 
-/** Returns undefined for every transport/wire ambiguity. The caller deliberately
- * keeps those outcomes recoverable instead of inventing a provider result. */
-async function post(
+async function postOnce(
   apiBase: string,
   proxySecret: string | undefined,
   path: string,
@@ -65,9 +61,17 @@ async function post(
   }
 }
 
-/** ZarinPal REST v4 adapter. Only server API calls may be proxied; StartPay
- * always stays on ZarinPal's public origin so the customer's browser never sees
- * or depends on the private relay. */
+async function post(
+  apiBase: string,
+  proxySecret: string | undefined,
+  path: string,
+  payload: unknown,
+): Promise<ProviderBody | undefined> {
+  const primary = await postOnce(apiBase, proxySecret, path, payload);
+  if (primary || apiBase === ZARINPAL_ORIGIN) return primary;
+  return postOnce(ZARINPAL_ORIGIN, undefined, path, payload);
+}
+
 export function zarinpalPsp(
   merchant: string,
   transport: ZarinpalTransportConfig = {},
@@ -127,10 +131,6 @@ export function zarinpalPsp(
       if (code === 100) return { kind: "paid", code: 100, ...successDetails };
       if (code === 101) return { kind: "already_verified", code: 101, ...successDetails };
 
-      // -51 means the payment did not complete. A poll may arrive before the
-      // payer finishes, so it stays retryable. -12 is provider throttling and
-      // -52 is an upstream/provider exception; neither is a terminal business
-      // answer. All other normalized errors are definitive for this authority.
       if (code === -51 || code === -12) return { kind: "pending", code };
       if (code === -52) return { kind: "unknown", code };
       return { kind: "failed", code };
