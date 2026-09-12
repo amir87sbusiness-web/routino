@@ -18,14 +18,13 @@ const RECOVERABLE_STATUSES = [
 ] as const;
 
 const RECOVERY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const PROVIDER_FAILURE_GRACE_MS = 20 * 60 * 1000;
 const AMBIGUOUS_PROVIDER_CODES = [-51, -55] as const;
 const UNVERIFIED_LIMIT = 100;
 const ZARINPAL_TIMEOUT_MS = 20_000;
 
 type UnverifiedItem = { authority: string; amountRial: number };
-type UnverifiedResult =
-  | { kind: "ok"; items: UnverifiedItem[] }
-  | { kind: "unknown"; code?: number };
+type UnverifiedResult = { kind: "ok"; items: UnverifiedItem[] } | { kind: "unknown"; code?: number };
 
 const secretEquals = (a: string, b: string): boolean => {
   const aa = Buffer.from(a);
@@ -45,6 +44,16 @@ const providerCode = (body: Record<string, unknown>): number | undefined => {
   const errors = Array.isArray(body.errors) ? record(body.errors[0]) : record(body.errors);
   const errorCode = errors?.code;
   return typeof errorCode === "number" && Number.isInteger(errorCode) ? errorCode : undefined;
+};
+
+const providerAmount = (value: unknown): number | undefined => {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && /^\d+$/.test(value)
+        ? Number(value)
+        : Number.NaN;
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
 };
 
 async function configuredSecret(deps: Deps): Promise<string> {
@@ -106,17 +115,9 @@ export function paymentRecoveryRoutes(deps: Deps) {
       const items: UnverifiedItem[] = [];
       for (const raw of authorities) {
         const item = record(raw);
-        const authority = item?.authority;
-        const amount = item?.amount;
-        if (
-          typeof authority === "string" &&
-          authority.length > 0 &&
-          typeof amount === "number" &&
-          Number.isSafeInteger(amount) &&
-          amount > 0
-        ) {
-          items.push({ authority, amountRial: amount });
-        }
+        const authority = typeof item?.authority === "string" ? item.authority.trim() : "";
+        const amountRial = providerAmount(item?.amount);
+        if (authority && amountRial !== undefined) items.push({ authority, amountRial });
       }
       return { kind: "ok", items };
     } catch {
@@ -124,15 +125,11 @@ export function paymentRecoveryRoutes(deps: Deps) {
     }
   };
 
-  const reopenAmbiguousFailure = async (payment: typeof payments.$inferSelect, t: Date) => {
-    if (
-      payment.status !== "failed" ||
-      payment.pspResult === null ||
-      !AMBIGUOUS_PROVIDER_CODES.includes(payment.pspResult as -51 | -55)
-    ) {
-      return payment;
-    }
-    const [reopened] = await db
+  const prepareAuthoritativeRecovery = async (
+    payment: typeof payments.$inferSelect,
+    t: Date,
+  ): Promise<typeof payments.$inferSelect> => {
+    const [prepared] = await db
       .update(payments)
       .set({
         status: "redirected",
@@ -142,7 +139,7 @@ export function paymentRecoveryRoutes(deps: Deps) {
       })
       .where(and(eq(payments.id, payment.id), isNull(payments.appliedAt)))
       .returning();
-    return reopened ?? payment;
+    return prepared ?? payment;
   };
 
   const runSweep = async (limit: number) => {
@@ -156,13 +153,7 @@ export function paymentRecoveryRoutes(deps: Deps) {
           isNull(payments.appliedAt),
           isNotNull(payments.authority),
           gt(payments.createdAt, since),
-          or(
-            inArray(payments.status, [...RECOVERABLE_STATUSES]),
-            and(
-              eq(payments.status, "failed"),
-              inArray(payments.pspResult, [...AMBIGUOUS_PROVIDER_CODES]),
-            ),
-          ),
+          inArray(payments.status, [...RECOVERABLE_STATUSES]),
           or(isNull(payments.nextVerifyAt), lte(payments.nextVerifyAt, t)),
         ),
       )
@@ -175,13 +166,16 @@ export function paymentRecoveryRoutes(deps: Deps) {
     let stillOpen = 0;
     let errors = 0;
 
-    for (const row of open) {
+    for (const payment of open) {
       checked += 1;
       try {
-        const payment = await reopenAmbiguousFailure(row, t);
         await settleOne(db, psp, payment, t, env.PSP_PROVIDER_MAX_CONCURRENCY);
 
-        const [fresh] = await db.select().from(payments).where(eq(payments.id, payment.id)).limit(1);
+        let [fresh] = await db
+          .select()
+          .from(payments)
+          .where(eq(payments.id, payment.id))
+          .limit(1);
         if (!fresh) {
           errors += 1;
           continue;
@@ -194,10 +188,31 @@ export function paymentRecoveryRoutes(deps: Deps) {
           finalized += 1;
           continue;
         }
+
+        const staleProviderFailure =
+          fresh.pspResult !== null &&
+          AMBIGUOUS_PROVIDER_CODES.includes(fresh.pspResult as -51 | -55) &&
+          t.getTime() - fresh.createdAt.getTime() >= PROVIDER_FAILURE_GRACE_MS;
+        if (staleProviderFailure) {
+          [fresh] = await db
+            .update(payments)
+            .set({
+              status: "failed",
+              verifyStartedAt: null,
+              nextVerifyAt: null,
+              updatedAt: t,
+            })
+            .where(and(eq(payments.id, fresh.id), isNull(payments.appliedAt)))
+            .returning();
+          if (fresh) finalized += 1;
+          else stillOpen += 1;
+          continue;
+        }
+
         stillOpen += 1;
       } catch (err) {
         errors += 1;
-        console.error("payment recovery item failed", { paymentId: row.id, err });
+        console.error("payment recovery item failed", { paymentId: payment.id, err });
       }
     }
 
@@ -214,10 +229,12 @@ export function paymentRecoveryRoutes(deps: Deps) {
         mode: "unverified",
         error: "provider_unverified_unavailable",
         providerCode: discovered.code ?? null,
-      };
+      } as const;
     }
 
-    const items = discovered.items.slice(0, UNVERIFIED_LIMIT);
+    const items = [
+      ...new Map(discovered.items.map((item) => [item.authority, item] as const)).values(),
+    ].slice(0, UNVERIFIED_LIMIT);
     if (items.length === 0) {
       return {
         success: true,
@@ -228,10 +245,10 @@ export function paymentRecoveryRoutes(deps: Deps) {
         recovered: 0,
         skipped: 0,
         errors: 0,
-      };
+      } as const;
     }
 
-    const authorities = [...new Set(items.map((item) => item.authority))];
+    const authorities = items.map((item) => item.authority);
     const candidates = await db
       .select()
       .from(payments)
@@ -244,7 +261,9 @@ export function paymentRecoveryRoutes(deps: Deps) {
         ),
       );
     const byAuthority = new Map(
-      candidates.flatMap((payment) => (payment.authority ? [[payment.authority, payment] as const] : [])),
+      candidates.flatMap((payment) =>
+        payment.authority ? [[payment.authority, payment] as const] : [],
+      ),
     );
 
     let matched = 0;
@@ -260,6 +279,7 @@ export function paymentRecoveryRoutes(deps: Deps) {
         continue;
       }
       matched += 1;
+
       if (found.amountRial !== item.amountRial) {
         skipped += 1;
         console.error("unverified payment amount mismatch", {
@@ -270,26 +290,16 @@ export function paymentRecoveryRoutes(deps: Deps) {
         });
         continue;
       }
-      if (found.status === "canceled" || found.status === "verify_failed") {
-        skipped += 1;
-        continue;
-      }
-      if (
-        found.status === "failed" &&
-        !(
-          found.pspResult !== null &&
-          AMBIGUOUS_PROVIDER_CODES.includes(found.pspResult as -51 | -55)
-        )
-      ) {
-        skipped += 1;
-        continue;
-      }
 
       try {
-        const payment = await reopenAmbiguousFailure(found, t);
+        const payment = await prepareAuthoritativeRecovery(found, t);
         checked += 1;
         await settleOne(db, psp, payment, t, env.PSP_PROVIDER_MAX_CONCURRENCY);
-        const [fresh] = await db.select().from(payments).where(eq(payments.id, payment.id)).limit(1);
+        const [fresh] = await db
+          .select()
+          .from(payments)
+          .where(eq(payments.id, payment.id))
+          .limit(1);
         if (fresh?.appliedAt || fresh?.status === "paid") recovered += 1;
       } catch (err) {
         errors += 1;
@@ -306,7 +316,7 @@ export function paymentRecoveryRoutes(deps: Deps) {
       recovered,
       skipped,
       errors,
-    };
+    } as const;
   };
 
   /** Pages relay cannot read Edge secrets. It presents the candidate secret it
@@ -333,7 +343,8 @@ export function paymentRecoveryRoutes(deps: Deps) {
     if (!(await authorized(c.req.header("x-payment-reconcile-secret")))) {
       return c.json({ error: "unauthorized" }, 401);
     }
-    return c.json(await runUnverified());
+    const result = await runUnverified();
+    return result.success ? c.json(result) : c.json(result, 502);
   });
 
   return r;
