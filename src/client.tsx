@@ -7,6 +7,7 @@ import { routeTree } from "./routeTree.gen";
 import "./styles.css";
 import { initPwa } from "./lib/pwa";
 import { preloadCompletionCue } from "./lib/completion-feedback";
+import { parsePaymentDeepLink } from "./lib/payment-deep-link";
 
 // ایجاد یک نمونه از روتر
 //
@@ -30,22 +31,31 @@ preloadCompletionCue();
 
 // دیپ‌لینک بازگشت از درگاه پرداخت (فقط نیتیو):
 // صفحه‌ی callback سرور کاربر را به routino://pay/result?paymentId=… می‌فرستد.
+//
+// `appUrlOpen` برگشت به اپِ زنده را پوشش می‌دهد. `getLaunchUrl` هم حالت مهمی
+// را پوشش می‌دهد که سیستم در زمان حضور کاربر در مرورگر/درگاه، پروسه‌ی اپ را
+// کشته و custom scheme اپ را از صفر بالا می‌آورد. بدون آن، نتیجه‌ی پرداخت در
+// cold launch ممکن بود قبل از ثبت listener از دست برود.
 void (async () => {
   const { Capacitor } = await import("@capacitor/core");
   if (!Capacitor.isNativePlatform()) return;
   const { App: CapApp } = await import("@capacitor/app");
-  CapApp.addListener("appUrlOpen", ({ url }) => {
-    const m = url.match(/pay\/result\??(.*)$/);
-    if (!m) return;
-    const params = new URLSearchParams(m[1] ?? "");
+
+  let lastHandledUrl = "";
+  const handlePaymentUrl = (url?: string) => {
+    if (!url || url === lastHandledUrl) return;
+    const payment = parsePaymentDeepLink(url);
+    if (!payment) return;
+    lastHandledUrl = url;
     void router.navigate({
       to: "/pay/result",
-      search: {
-        paymentId: params.get("paymentId") ?? undefined,
-        status: params.get("status") ?? undefined,
-      },
+      search: payment,
     });
-  });
+  };
+
+  await CapApp.addListener("appUrlOpen", ({ url }) => handlePaymentUrl(url));
+  const launch = await CapApp.getLaunchUrl();
+  handlePaymentUrl(launch?.url);
 })();
 
 // رندر کردن اپلیکیشن در تگ root
