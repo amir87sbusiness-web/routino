@@ -52,7 +52,10 @@ const sms: SmsProvider =
 
 const psp =
   env.PSP_PROVIDER === "zarinpal"
-    ? zarinpalPsp(env.ZARINPAL_MERCHANT)
+    ? zarinpalPsp(env.ZARINPAL_MERCHANT, {
+        apiBase: env.ZARINPAL_API_BASE,
+        proxySecret: env.ZARINPAL_PROXY_SECRET,
+      })
     : fakePsp(env.PUBLIC_API_URL);
 
 const app = await buildApp({ db, env, sms, psp });
