@@ -22,6 +22,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { Hono } from "hono";
+import type { Context, Next } from "hono";
 import type { AppEnv, Deps } from "../deps.ts";
 import { rowsOf } from "../shared/db/client.ts";
 import { payments } from "../shared/db/schema.ts";
@@ -67,7 +68,10 @@ async function recoverDuePayments(
         or(isNull(payments.nextVerifyAt), lte(payments.nextVerifyAt, t)),
       ),
     )
-    .orderBy(asc(sql`coalesce(${payments.nextVerifyAt}, ${payments.createdAt})`), asc(payments.createdAt))
+    .orderBy(
+      asc(sql`coalesce(${payments.nextVerifyAt}, ${payments.createdAt})`),
+      asc(payments.createdAt),
+    )
     .limit(options.limit);
 
   let changed = 0;
@@ -100,7 +104,7 @@ async function recoverDuePayments(
 export function internalPaymentRoutes(deps: Deps) {
   const r = new Hono<AppEnv>();
 
-  const requireRecoverySecret = async (c: Parameters<Parameters<typeof r.use>[1]>[0], next: () => Promise<void>) => {
+  const requireRecoverySecret = async (c: Context<AppEnv>, next: Next) => {
     if (!(await secretMatches(deps, c.req.header("x-payment-reconcile-secret")))) {
       return c.json({ error: "forbidden", message: "Recovery secret is invalid" }, 403);
     }
