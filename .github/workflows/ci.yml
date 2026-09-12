@@ -44,6 +44,9 @@ jobs:
           npm run sync:edge
           git diff --exit-code -- supabase/functions/api/shared
 
+      - name: Lint
+        run: npm run lint
+
       - name: Frontend and shared tests
         run: npm test
 
@@ -55,9 +58,6 @@ jobs:
 
       - name: Edge tests
         run: npm run test:edge
-
-      - name: Lint
-        run: npm run lint
 
       - name: Build web and landing
         run: npm run build
