@@ -7,21 +7,24 @@
  * here is a way that can happen, and the requirement is the same each time: the
  * user ends up subscribed without anyone noticing a support ticket.
  */
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
 
 let h: Harness;
+const RECONCILE_SECRET = "r".repeat(48);
 
 beforeEach(async () => {
-  h ??= await makeHarness();
+  h ??= await makeHarness({ PAYMENT_RECONCILE_SECRET: RECONCILE_SECRET });
   await h.truncate();
   h.psp._txns.clear();
 });
+afterEach(() => vi.unstubAllGlobals());
 afterAll(async () => {
   await h?.close();
 });
 
 const auth = (access: string) => ({ authorization: `Bearer ${access}` });
+const reconcileAuth = () => ({ "x-payment-reconcile-secret": RECONCILE_SECRET });
 
 async function signIn(phone: string) {
   await h.app.inject({ method: "POST", url: "/v1/auth/otp/request", payload: { phone } });
@@ -106,18 +109,12 @@ describe("a payment whose callback never came back", () => {
     const { access } = await signIn("09121110001");
     const { authority } = await checkout(access);
 
-    // The bank took the money and the gateway settled...
     h.psp._settle(authority, "paid");
-    // ...but the redirect never reached us: no callback is invoked at all.
 
     const before = await openApp(access);
-    // (that open IS the recovery — assert on the state it left behind)
     const after = await openApp(access);
 
     expect(after.entitlement.status).toBe("active");
-    // A plan month is a calendar month (28–31 days), and a few milliseconds
-    // elapse before this assertion. `> 30` therefore rejects a correct
-    // 30-day month the instant after it was granted.
     expect(daysLeft(after.entitlement.expiresAt)).toBeGreaterThan(27);
     expect(daysLeft(before.entitlement.expiresAt)).toBeGreaterThan(27);
   });
@@ -129,13 +126,12 @@ describe("a payment whose callback never came back", () => {
 
     const after = await openApp(access);
 
-    // Still has no entitlement; the canceled payment granted nothing.
     expect(daysLeft(after.entitlement.expiresAt)).toBeLessThan(10);
   });
 
   it("does not grant for a payment that never reached the gateway", async () => {
     const { access } = await signIn("09121110003");
-    await checkout(access); // no settle at all
+    await checkout(access);
 
     const after = await openApp(access);
     expect(daysLeft(after.entitlement.expiresAt)).toBeLessThan(10);
@@ -159,11 +155,9 @@ describe("a payment whose callback never came back", () => {
     const { paymentId, authority } = await checkout(access);
     h.psp._settle(authority, "paid");
 
-    // Recovered on app open first...
     const healed = await openApp(access);
     expect(healed.entitlement.status).toBe("active");
 
-    // ...and then the user's phone finally delivers the redirect it was holding.
     await h.app.inject({
       method: "GET",
       url: `/v1/payments/callback?paymentId=${paymentId}&Authority=${authority}&Status=OK`,
@@ -171,5 +165,70 @@ describe("a payment whose callback never came back", () => {
 
     const after = await openApp(access);
     expect(daysLeft(after.entitlement.expiresAt)).toBe(daysLeft(healed.entitlement.expiresAt));
+  });
+
+  it("reopens an old -55 false failure instead of permanently losing a later paid result", async () => {
+    const { access } = await signIn("09121110008");
+    const { paymentId, authority } = await checkout(access);
+    h.psp._settle(authority, "paid");
+    await h.raw(`
+      update payments
+         set status='failed', psp_result=-55,
+             created_at=now()-interval '30 minutes',
+             verify_started_at=null, next_verify_at=null
+       where id='${paymentId}'
+    `);
+
+    const reconcile = await h.app.inject({
+      method: "POST",
+      url: "/internal/payments/reconcile",
+      headers: reconcileAuth(),
+    });
+    expect(reconcile.statusCode).toBe(200);
+    expect(reconcile.json()).toMatchObject({ success: true, recovered: 1 });
+    expect((await openApp(access)).entitlement.status).toBe("active");
+
+    const [payment] = await h.query<{ status: string; psp_result: number }>(`
+      select status, psp_result from payments where id='${paymentId}'
+    `);
+    expect(payment).toEqual({ status: "paid", psp_result: 100 });
+  });
+
+  it("uses ZarinPal unVerified discovery to recover a paid transaction without a callback", async () => {
+    const { access } = await signIn("09121110009");
+    const { paymentId, authority } = await checkout(access);
+    h.psp._settle(authority, "paid");
+    const [stored] = await h.query<{ amount_rial: number }>(`
+      select amount_rial from payments where id='${paymentId}'
+    `);
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            data: { authorities: [{ authority, amount: Number(stored!.amount_rial) }] },
+            errors: [],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+      ),
+    );
+
+    const reconcile = await h.app.inject({
+      method: "POST",
+      url: "/internal/payments/reconcile-unverified",
+      headers: reconcileAuth(),
+    });
+    expect(reconcile.statusCode).toBe(200);
+    expect(reconcile.json()).toMatchObject({
+      success: true,
+      mode: "unverified",
+      discovered: 1,
+      matched: 1,
+      checked: 1,
+      recovered: 1,
+    });
+    expect((await openApp(access)).entitlement.status).toBe("active");
   });
 });
