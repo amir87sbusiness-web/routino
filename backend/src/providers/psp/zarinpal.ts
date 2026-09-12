@@ -3,8 +3,6 @@ import {
   type PspProvider,
   type PspRequestInput,
   type PspRequestResult,
-  type PspUnverifiedItem,
-  type PspUnverifiedResult,
   type PspVerifyResult,
 } from "./index.js";
 
@@ -35,30 +33,6 @@ function providerCode(body: ProviderBody): number | undefined {
   const errors = Array.isArray(body.errors) ? record(body.errors[0]) : record(body.errors);
   const errorCode = errors?.code;
   return typeof errorCode === "number" && Number.isInteger(errorCode) ? errorCode : undefined;
-}
-
-function parseUnverifiedItems(body: ProviderBody): PspUnverifiedItem[] | undefined {
-  const data = record(body.data);
-  if (!data) return undefined;
-  const authorities = data.authorities;
-  if (!Array.isArray(authorities)) return undefined;
-
-  const items: PspUnverifiedItem[] = [];
-  for (const item of authorities) {
-    const row = record(item);
-    const authority = row?.authority;
-    const amount = row?.amount;
-    if (
-      typeof authority === "string" &&
-      authority.length > 0 &&
-      typeof amount === "number" &&
-      Number.isSafeInteger(amount) &&
-      amount >= ZARINPAL_MIN_AMOUNT_RIAL
-    ) {
-      items.push({ authority, amountRial: amount });
-    }
-  }
-  return items;
 }
 
 /**
@@ -163,19 +137,6 @@ export function zarinpalPsp(
       if (code === -51 || code === -55 || code === -12) return { kind: "pending", code };
       if (code === -52) return { kind: "unknown", code };
       return { kind: "failed", code };
-    },
-
-    async listUnverified(): Promise<PspUnverifiedResult> {
-      const body = await post(apiBase, proxySecret, "unVerified", {
-        merchant_id: merchant,
-      });
-      if (!body) return { kind: "unknown" };
-
-      const code = providerCode(body);
-      if (code !== undefined && code !== 100) return { kind: "unknown", code };
-
-      const items = parseUnverifiedItems(body);
-      return items ? { kind: "ok", items } : { kind: "unknown", code };
     },
 
     startUrl(authority: string): string {
