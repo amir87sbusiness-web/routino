@@ -7,6 +7,8 @@ import process from "node:process";
 import { z } from "zod";
 import { normalizePhone } from "./lib/phone.ts";
 
+const ZARINPAL_ORIGIN = "https://payment.zarinpal.com";
+
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().default(3000),
@@ -64,6 +66,14 @@ const schema = z.object({
   PSP_PROVIDER_MAX_CONCURRENCY: z.coerce.number().int().min(1).max(1000).default(64),
   /** ZarinPal merchant id (36-char UUID). */
   ZARINPAL_MERCHANT: z.string().default("dev-only-zarinpal-merchant"),
+  /** Server-side API base. Supabase production should point this at the dedicated
+   * Cloudflare ZarinPal relay; browser StartPay URLs still use ZarinPal directly. */
+  ZARINPAL_API_BASE: z.string().url().default(ZARINPAL_ORIGIN),
+  /** Shared secret for the dedicated ZarinPal relay. Empty is allowed only when
+   * using ZarinPal directly (local/VPS rollback path). */
+  ZARINPAL_PROXY_SECRET: z.string().default(""),
+  /** Protects server-to-server payment recovery endpoints used by pg_cron. */
+  PAYMENT_RECONCILE_SECRET: z.string().default(""),
 
   /** Public base URL of THIS server. ZarinPal redirects a browser here, so it must
    * be reachable from the user's device — `localhost` works for web dev but can
@@ -130,7 +140,6 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
     if (parsed.data.SMS_PROVIDER === "kavenegar" && !parsed.data.KAVENEGAR_API_KEY) {
       throw new Error("KAVENEGAR_API_KEY is required when SMS_PROVIDER=kavenegar");
     }
-    // PGlite is single-connection; it is a development and test engine only.
     if (parsed.data.DB_DRIVER === "pglite")
       throw new Error("DB_DRIVER=pglite is not supported in production");
 
@@ -142,6 +151,18 @@ export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
       )
     )
       throw new Error("ZARINPAL_MERCHANT must be a valid 36-character merchant UUID");
+    if (
+      parsed.data.ZARINPAL_API_BASE.replace(/\/$/, "") !== ZARINPAL_ORIGIN &&
+      parsed.data.ZARINPAL_PROXY_SECRET.length < 32
+    ) {
+      throw new Error("ZARINPAL_PROXY_SECRET must be at least 32 characters when using a proxy");
+    }
+    if (
+      parsed.data.PAYMENT_RECONCILE_SECRET &&
+      parsed.data.PAYMENT_RECONCILE_SECRET.length < 32
+    ) {
+      throw new Error("PAYMENT_RECONCILE_SECRET must be at least 32 characters when configured");
+    }
     if (parsed.data.SMS_PROVIDER === "console")
       throw new Error("SMS_PROVIDER=console is not allowed in production");
   }
