@@ -1,7 +1,7 @@
 /** App-level behaviour of the edge function: health, CORS, the proxy-secret
  * gate (the edge analogue of TRUST_PROXY), and error shapes. */
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { makeHarness, type Harness } from "./helpers/harness.ts";
+import { auth, makeHarness, signIn, type Harness } from "./helpers/harness.ts";
 
 let h: Harness;
 
@@ -12,6 +12,19 @@ beforeEach(async () => {
 afterAll(async () => {
   await h?.close();
 });
+
+async function installRecoverySecret(secret = "recovery-secret-for-tests") {
+  await h.raw(`
+    create schema if not exists vault;
+    create table if not exists vault.decrypted_secrets (
+      name text primary key,
+      decrypted_secret text not null
+    );
+    truncate vault.decrypted_secrets;
+    insert into vault.decrypted_secrets (name, decrypted_secret)
+    values ('routino_payment_reconcile_secret', '${secret}');
+  `);
+}
 
 describe("health", () => {
   it("GET /health is up", async () => {
@@ -24,6 +37,75 @@ describe("health", () => {
     const res = await h.call("GET", "/health/ready");
     expect(res.status).toBe(200);
     expect((await res.json()).db).toBe("up");
+  });
+});
+
+describe("payment recovery cron routes", () => {
+  it("rejects a wrong recovery secret before touching payments", async () => {
+    await installRecoverySecret();
+    const res = await h.call("POST", "/internal/payments/reconcile", {
+      headers: { "x-payment-reconcile-secret": "wrong" },
+      body: {},
+    });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toMatchObject({ error: "forbidden" });
+  });
+
+  it("recovers a due operational_error through the normal idempotent payment state machine", async () => {
+    const secret = "recovery-secret-for-tests";
+    await installRecoverySecret(secret);
+    const session = await signIn(h);
+    const checkout = await h.call("POST", "/v1/payments/checkout", {
+      headers: auth(session.access),
+      body: {
+        planId: "m1",
+        attemptId: "123e4567-e89b-42d3-a456-426614174111",
+        platform: "web",
+      },
+    });
+    expect(checkout.status).toBe(200);
+    const created = await checkout.json();
+    expect(created.free).toBe(false);
+    h.psp._settle(created.authority, "paid");
+
+    await h.raw(`
+      update payments
+         set status = 'operational_error',
+             next_verify_at = now() - interval '1 minute',
+             verify_started_at = null,
+             verify_attempts = 8
+       where id = '${created.paymentId}';
+    `);
+
+    const first = await h.call("POST", "/internal/payments/reconcile", {
+      headers: { "x-payment-reconcile-secret": secret },
+      body: {},
+    });
+    expect(first.status).toBe(200);
+    expect(await first.json()).toMatchObject({ ok: true, scanned: 1, changed: 1, errors: 0 });
+
+    const [payment] = await h.query<{ status: string; applied_at: string | null }>(
+      `select status, applied_at from payments where id = '${created.paymentId}'`,
+    );
+    expect(payment?.status).toBe("paid");
+    expect(payment?.applied_at).not.toBeNull();
+
+    const [grantCount] = await h.query<{ count: number }>(
+      `select count(*)::int as count from grants where payment_id = '${created.paymentId}'`,
+    );
+    expect(grantCount?.count).toBe(1);
+
+    const second = await h.call("POST", "/internal/payments/reconcile", {
+      headers: { "x-payment-reconcile-secret": secret },
+      body: {},
+    });
+    expect(second.status).toBe(200);
+    expect(await second.json()).toMatchObject({ ok: true, scanned: 0, changed: 0, errors: 0 });
+
+    const [stillOneGrant] = await h.query<{ count: number }>(
+      `select count(*)::int as count from grants where payment_id = '${created.paymentId}'`,
+    );
+    expect(stillOneGrant?.count).toBe(1);
   });
 });
 
