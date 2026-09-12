@@ -263,6 +263,52 @@ describe("a payment whose callback never came back", () => {
     expect(Number(grantCount?.count)).toBe(1);
   });
 
+  it("does not start a second Verify while an authoritative recovery lease is active", async () => {
+    const { access } = await signIn("09121110013");
+    const { paymentId, authority } = await checkout(access);
+    h.psp._settle(authority, "paid");
+    const [stored] = await h.query<{ amount_rial: number }>(`
+      select amount_rial from payments where id='${paymentId}'
+    `);
+    stubUnverified([{ authority, amount: Number(stored!.amount_rial) }]);
+
+    const originalVerify = h.psp.verify.bind(h.psp);
+    let verifyCalls = 0;
+    let releaseFirst!: () => void;
+    const firstVerifyStarted = new Promise<void>((resolve) => {
+      h.psp.verify = async (...args) => {
+        verifyCalls += 1;
+        if (verifyCalls === 1) {
+          resolve();
+          await new Promise<void>((release) => {
+            releaseFirst = release;
+          });
+        }
+        return originalVerify(...args);
+      };
+    });
+
+    const first = h.app.inject({
+      method: "POST",
+      url: "/internal/payments/reconcile-unverified",
+      headers: reconcileAuth(),
+    });
+    await firstVerifyStarted;
+    const second = h.app.inject({
+      method: "POST",
+      url: "/internal/payments/reconcile-unverified",
+      headers: reconcileAuth(),
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const callsWhileFirstWasActive = verifyCalls;
+    releaseFirst();
+    await Promise.all([first, second]);
+
+    expect(callsWhileFirstWasActive).toBe(1);
+    expect(verifyCalls).toBe(1);
+  });
+
   it("never trusts an unVerified authority whose amount differs from our stored price", async () => {
     const { access } = await signIn("09121110011");
     const { paymentId, authority } = await checkout(access);

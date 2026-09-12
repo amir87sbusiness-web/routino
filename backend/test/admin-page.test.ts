@@ -505,7 +505,8 @@ describe("admin page", () => {
               nameFa: "یک‌ماهه",
               nameEn: "1 Month",
               months: 1,
-              priceToman: 69000,
+              priceToman: 199000,
+              compareAtPriceToman: 250000,
               active: true,
             },
           }),
@@ -523,6 +524,7 @@ describe("admin page", () => {
                 nameEn: "1 Month",
                 months: 1,
                 priceToman: 59000,
+                compareAtPriceToman: null,
                 active: true,
               },
             ],
@@ -546,12 +548,17 @@ describe("admin page", () => {
       (document.querySelector("#tab-button-plans") as { click(): void }).click();
       await settlePage();
       await settlePage();
-      const input = document.querySelector("#plansResults input") as unknown as {
+      const saleInput = document.querySelector("#plansResults .plan-sale-price") as unknown as {
         value: string;
         oninput(): void;
       };
-      input.value = "69000";
-      input.oninput();
+      const originalInput = document.querySelector(
+        "#plansResults .plan-original-price",
+      ) as unknown as { value: string; oninput(): void };
+      saleInput.value = "199000";
+      saleInput.oninput();
+      originalInput.value = "250000";
+      originalInput.oninput();
       (document.querySelector("#plansResults .plan-save") as unknown as { click(): void }).click();
       await settlePage();
       await settlePage();
@@ -560,8 +567,12 @@ describe("admin page", () => {
       const mutation = fetch.mock.calls.find(
         ([path, init]) => path === "/v1/admin/plans/m1" && init?.method === "POST",
       );
-      expect(JSON.parse(mutation?.[1]?.body || "{}")).toEqual({ priceToman: 69000 });
-      expect(document.querySelector("#plansResults")?.textContent).toContain("۶۹٬۰۰۰");
+      expect(JSON.parse(mutation?.[1]?.body || "{}")).toEqual({
+        priceToman: 199000,
+        compareAtPriceToman: 250000,
+      });
+      expect(document.querySelector("#plansResults")?.textContent).toContain("۲۵۰٬۰۰۰");
+      expect(document.querySelector("#plansResults")?.textContent).toContain("۱۹۹٬۰۰۰");
     } finally {
       dom.window.close();
     }

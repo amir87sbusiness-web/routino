@@ -161,15 +161,27 @@ export const authRateLimitBuckets = pgTable(
   ],
 );
 
-export const plans = pgTable("plans", {
-  id: text("id").primaryKey(),
-  nameFa: text("name_fa").notNull(),
-  nameEn: text("name_en").notNull(),
-  months: integer("months").notNull(),
-  /** Toman. Rial conversion (×10) happens only at the PSP boundary. */
-  priceToman: integer("price_toman").notNull(),
-  active: boolean("active").notNull().default(true),
-});
+export const plans = pgTable(
+  "plans",
+  {
+    id: text("id").primaryKey(),
+    nameFa: text("name_fa").notNull(),
+    nameEn: text("name_en").notNull(),
+    months: integer("months").notNull(),
+    /** Toman. Rial conversion (×10) happens only at the PSP boundary. */
+    priceToman: integer("price_toman").notNull(),
+    /** Optional crossed-out reference price for a simple, untimed sale display.
+     * Checkout always charges priceToman; this value is presentation metadata. */
+    compareAtPriceToman: integer("compare_at_price_toman"),
+    active: boolean("active").notNull().default(true),
+  },
+  (t) => [
+    check(
+      "plans_compare_at_price_above_sale",
+      sql`${t.compareAtPriceToman} is null or ${t.compareAtPriceToman} > ${t.priceToman}`,
+    ),
+  ],
+);
 
 export const discounts = pgTable(
   "discounts",

@@ -281,11 +281,23 @@ const nonnegativeMetric = (value: number | string | bigint | null | undefined): 
 };
 
 export async function adminListPlans(db: Database) {
-  return db.select().from(plans).orderBy(asc(plans.months));
+  return db.select().from(plans).where(eq(plans.active, true)).orderBy(asc(plans.months));
 }
 
-export async function adminUpdatePlanPrice(db: Database, id: string, priceToman: number) {
-  const [plan] = await db.update(plans).set({ priceToman }).where(eq(plans.id, id)).returning();
+export async function adminUpdatePlanPrice(
+  db: Database,
+  id: string,
+  priceToman: number,
+  compareAtPriceToman: number | null,
+) {
+  if (compareAtPriceToman != null && compareAtPriceToman <= priceToman) {
+    throw badRequest("invalid_original_price", "Original price must be greater than sale price");
+  }
+  const [plan] = await db
+    .update(plans)
+    .set({ priceToman, compareAtPriceToman })
+    .where(eq(plans.id, id))
+    .returning();
   if (!plan) throw notFound("unknown_plan", "No such plan");
   return { ok: true as const, plan };
 }

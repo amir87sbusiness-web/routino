@@ -14,6 +14,7 @@ export interface ServerPlan {
   nameEn: string;
   months: number;
   price: number; // Toman
+  originalPrice: number | null;
 }
 
 export async function fetchPlans(): Promise<{

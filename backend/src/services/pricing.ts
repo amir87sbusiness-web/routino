@@ -6,7 +6,7 @@
  * for a year. The client may now only name a plan and a code; every number comes
  * from here.
  */
-import { and, count, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import type { Database } from "../db/client.js";
 import { discounts, payments, plans, redemptions } from "../db/schema.js";
 import { badRequest, notFound } from "../lib/http-errors.js";
@@ -217,5 +217,5 @@ export async function redeemDiscount(
 }
 
 export async function activePlans(db: Database) {
-  return db.select().from(plans).where(eq(plans.active, true));
+  return db.select().from(plans).where(eq(plans.active, true)).orderBy(asc(plans.months));
 }

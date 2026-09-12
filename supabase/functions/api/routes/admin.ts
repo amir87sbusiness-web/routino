@@ -91,6 +91,7 @@ const discountUpdateBody = z.object({
 
 const planPriceBody = z.object({
   priceToman: z.number().int().min(1_000).max(1_000_000_000),
+  compareAtPriceToman: z.number().int().min(1_000).max(1_000_000_000).nullable(),
 });
 
 const queryNumber = (value: string | undefined): number | undefined => {
@@ -284,7 +285,9 @@ export function adminRoutes(deps: Deps) {
 
   r.post("/admin/plans/:id", async (c) => {
     const body = planPriceBody.parse(await readJson(c));
-    return c.json(await adminUpdatePlanPrice(db, c.req.param("id"), body.priceToman));
+    return c.json(
+      await adminUpdatePlanPrice(db, c.req.param("id"), body.priceToman, body.compareAtPriceToman),
+    );
   });
 
   r.get("/admin/discounts", async (c) => c.json({ discounts: await adminListDiscounts(db) }));

@@ -570,7 +570,7 @@ export const PRESET_HABITS: Record<string, PresetHabit[]> = {
 export const PLANS: Plan[] = [
   { id: "m1", nameFa: "یک‌ماهه", nameEn: "1 Month", months: 1, price: 59000 },
   { id: "m3", nameFa: "سه‌ماهه", nameEn: "3 Months", months: 3, price: 149000 },
-  { id: "m12", nameFa: "یک‌ساله", nameEn: "1 Year", months: 12, price: 449000 },
+  { id: "m6", nameFa: "شش‌ماهه", nameEn: "6 Months", months: 6, price: 999000 },
 ];
 
 export const CATEGORY_COLOR_CHOICES = [

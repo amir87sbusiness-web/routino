@@ -17,6 +17,7 @@ export function planRoutes(deps: Deps) {
         nameEn: p.nameEn,
         months: p.months,
         price: p.priceToman, // Toman, matching the existing client `Plan` shape
+        originalPrice: p.compareAtPriceToman,
       })),
       offer: null as null | { label: string; percent: number; until: number },
     });

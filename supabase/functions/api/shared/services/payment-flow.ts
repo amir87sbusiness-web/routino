@@ -21,7 +21,7 @@ export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 
 const PSP_REQUEST_LEASE_MS = 30_000;
 const PSP_BUSY_RETRY_SECONDS = 2;
-const VERIFY_LEASE_MS = 30_000;
+export const PAYMENT_VERIFY_LEASE_MS = 30_000;
 const VERIFY_BACKOFF_BASE_MS = 5_000;
 const VERIFY_BACKOFF_MAX_MS = 5 * 60_000;
 const SETTLE_WINDOW_MS = 72 * 3_600_000;
@@ -425,7 +425,7 @@ async function verifyAndApplyPayment(
     return { outcome: "pending", changed: false };
   }
 
-  const staleBefore = new Date(t.getTime() - VERIFY_LEASE_MS);
+  const staleBefore = new Date(t.getTime() - PAYMENT_VERIFY_LEASE_MS);
   const cooldownMs = Math.min(
     VERIFY_BACKOFF_MAX_MS,
     VERIFY_BACKOFF_BASE_MS * 2 ** Math.min(payment.verifyAttempts, 6),
@@ -461,7 +461,13 @@ async function verifyAndApplyPayment(
 
   let verified: PspVerifyResult;
   // Reuse checkout's shared PSP capacity. No provider network call holds a DB transaction.
-  const providerLease = await acquireProviderLease(db, "psp", maxConcurrent, t, VERIFY_LEASE_MS);
+  const providerLease = await acquireProviderLease(
+    db,
+    "psp",
+    maxConcurrent,
+    t,
+    PAYMENT_VERIFY_LEASE_MS,
+  );
   if (!providerLease) {
     const fresh = await releaseVerifyLease(db, claimed.id, t);
     return { outcome: fresh?.appliedAt ? "paid" : "pending", payment: fresh, changed: false };
@@ -593,7 +599,7 @@ export async function settleOpenPayments(
   const since = new Date(t.getTime() - SETTLE_WINDOW_MS);
   let healed = 0;
   try {
-    const staleBefore = new Date(t.getTime() - VERIFY_LEASE_MS);
+    const staleBefore = new Date(t.getTime() - PAYMENT_VERIFY_LEASE_MS);
     const open = await db
       .select()
       .from(payments)

@@ -485,7 +485,7 @@ describe("checkout → gateway → callback", () => {
 
   it("refuses to grant when the verified amount differs from what we charged", async () => {
     const { access, user } = await signIn();
-    const body = (await checkout(access, { planId: "m12" })).json() as {
+    const body = (await checkout(access, { planId: "m6" })).json() as {
       authority: string;
       paymentId: string;
     };

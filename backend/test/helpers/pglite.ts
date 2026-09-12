@@ -67,7 +67,7 @@ async function seedPlans(db: PgliteDatabase<typeof schema>): Promise<void> {
   await db.insert(schema.plans).values([
     { id: "m1", nameFa: "یک‌ماهه", nameEn: "1 Month", months: 1, priceToman: 59000 },
     { id: "m3", nameFa: "سه‌ماهه", nameEn: "3 Months", months: 3, priceToman: 149000 },
-    { id: "m12", nameFa: "یک‌ساله", nameEn: "1 Year", months: 12, priceToman: 449000 },
+    { id: "m6", nameFa: "شش‌ماهه", nameEn: "6 Months", months: 6, priceToman: 999000 },
   ]);
 }
 

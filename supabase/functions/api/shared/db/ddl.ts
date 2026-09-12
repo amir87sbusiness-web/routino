@@ -1354,7 +1354,10 @@ create table if not exists plans (
   name_en text not null,
   months integer not null,
   price_toman integer not null,
-  active boolean not null default true
+  compare_at_price_toman integer,
+  active boolean not null default true,
+  constraint plans_compare_at_price_above_sale
+    check (compare_at_price_toman is null or compare_at_price_toman > price_toman)
 );
 
 create table if not exists discounts (
@@ -1732,6 +1735,19 @@ revoke execute on function routino_cleanup_trial_accounts(integer, timestamptz, 
 -- Idempotent upgrades for databases created before a column existed. "create
 -- table if not exists" silently skips existing tables, so new columns must be
 -- added explicitly here.
+alter table plans add column if not exists compare_at_price_toman integer;
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+     where conrelid = 'plans'::regclass
+       and conname = 'plans_compare_at_price_above_sale'
+  ) then
+    alter table plans add constraint plans_compare_at_price_above_sale
+      check (compare_at_price_toman is null or compare_at_price_toman > price_toman);
+  end if;
+end
+$$;
 alter table payments add column if not exists platform text;
 alter table payments add column if not exists authority text;
 -- ZarinPal authority is unique per transaction (multiple NULLs are allowed).
@@ -1757,8 +1773,9 @@ export const SEED_PLANS_SQL = `
 insert into plans (id, name_fa, name_en, months, price_toman) values
   ('m1',  'یک‌ماهه', '1 Month',  1,  59000),
   ('m3',  'سه‌ماهه', '3 Months', 3,  149000),
-  ('m12', 'یک‌ساله', '1 Year',   12, 449000)
+  ('m6',  'شش‌ماهه', '6 Months', 6,  999000)
 on conflict (id) do nothing;
+update plans set active = false where id = 'm12' and active = true;
 `;
 
 /** A dev-only discount code mirroring the one the client used to bundle. */

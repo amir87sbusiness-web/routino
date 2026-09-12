@@ -98,6 +98,7 @@ const discountUpdateBody = z.object({
 
 const planPriceBody = z.object({
   priceToman: z.number().int().min(1_000).max(1_000_000_000),
+  compareAtPriceToman: z.number().int().min(1_000).max(1_000_000_000).nullable(),
 });
 
 const queryNumber = (value: string | undefined): number | undefined => {
@@ -280,7 +281,8 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   app.post("/admin/plans/:id", opts, async (req) => {
     const { id } = req.params as { id: string };
-    return adminUpdatePlanPrice(db, id, planPriceBody.parse(req.body).priceToman);
+    const body = planPriceBody.parse(req.body);
+    return adminUpdatePlanPrice(db, id, body.priceToman, body.compareAtPriceToman);
   });
 
   app.get("/admin/discounts", opts, async () => ({ discounts: await adminListDiscounts(db) }));

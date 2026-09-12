@@ -191,7 +191,7 @@ describe("admin endpoints", () => {
     });
   });
 
-  it("lists plans and changes only a validated Toman price", async () => {
+  it("lists active plans and changes validated sale and original Toman prices", async () => {
     const list = await h.app.inject({ method: "GET", url: "/v1/admin/plans", headers: admin });
     expect(list.statusCode).toBe(200);
     expect(list.json().plans).toEqual(
@@ -202,23 +202,28 @@ describe("admin endpoints", () => {
       method: "POST",
       url: "/v1/admin/plans/m1",
       headers: admin,
-      payload: { priceToman: 69000 },
+      payload: { priceToman: 199000, compareAtPriceToman: 250000 },
     });
     expect(changed.statusCode).toBe(200);
-    expect(changed.json().plan).toMatchObject({ id: "m1", months: 1, priceToman: 69000 });
+    expect(changed.json().plan).toMatchObject({
+      id: "m1",
+      months: 1,
+      priceToman: 199000,
+      compareAtPriceToman: 250000,
+    });
 
     const invalid = await h.app.inject({
       method: "POST",
       url: "/v1/admin/plans/m1",
       headers: admin,
-      payload: { priceToman: 0 },
+      payload: { priceToman: 250000, compareAtPriceToman: 199000 },
     });
     expect(invalid.statusCode).toBe(400);
 
-    const [stored] = await h.query<{ price_toman: number }>(
-      "select price_toman from plans where id = 'm1'",
+    const [stored] = await h.query<{ price_toman: number; compare_at_price_toman: number | null }>(
+      "select price_toman, compare_at_price_toman from plans where id = 'm1'",
     );
-    expect(stored?.price_toman).toBe(69000);
+    expect(stored).toEqual({ price_toman: 199000, compare_at_price_toman: 250000 });
   });
 
   it("does not expose account blocking", async () => {

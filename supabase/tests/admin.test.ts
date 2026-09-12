@@ -136,6 +136,22 @@ describe("manual grant", () => {
   });
 });
 
+describe("plan pricing", () => {
+  it("updates the sale and optional original prices through the Edge route", async () => {
+    const changed = await h.call("POST", "/v1/admin/plans/m3", {
+      headers: admin,
+      body: { priceToman: 199000, compareAtPriceToman: 250000 },
+    });
+
+    expect(changed.status).toBe(200);
+    expect((await changed.json()).plan).toMatchObject({
+      id: "m3",
+      priceToman: 199000,
+      compareAtPriceToman: 250000,
+    });
+  });
+});
+
 describe("user detail", () => {
   it("returns payments, grants and entitlement without device or blocking state", async () => {
     const { user, access } = await signIn(h);

@@ -1,11 +1,11 @@
 import { Buffer } from "node:buffer";
 import { timingSafeEqual } from "node:crypto";
-import { and, asc, eq, gt, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import type { AppEnv, Deps } from "../deps.ts";
 import { rowsOf } from "../shared/db/client.ts";
 import { payments } from "../shared/db/schema.ts";
-import { settleOne } from "../shared/services/payment-flow.ts";
+import { PAYMENT_VERIFY_LEASE_MS, settleOne } from "../shared/services/payment-flow.ts";
 
 const RECOVERABLE_STATUSES = [
   "pending",
@@ -134,7 +134,8 @@ export function paymentRecoveryRoutes(deps: Deps) {
   const prepareAuthoritativeRecovery = async (
     payment: typeof payments.$inferSelect,
     t: Date,
-  ): Promise<typeof payments.$inferSelect> => {
+  ): Promise<typeof payments.$inferSelect | undefined> => {
+    const staleBefore = new Date(t.getTime() - PAYMENT_VERIFY_LEASE_MS);
     const [prepared] = await db
       .update(payments)
       .set({
@@ -143,9 +144,15 @@ export function paymentRecoveryRoutes(deps: Deps) {
         nextVerifyAt: null,
         updatedAt: t,
       })
-      .where(and(eq(payments.id, payment.id), isNull(payments.appliedAt)))
+      .where(
+        and(
+          eq(payments.id, payment.id),
+          isNull(payments.appliedAt),
+          or(isNull(payments.verifyStartedAt), lt(payments.verifyStartedAt, staleBefore)),
+        ),
+      )
       .returning();
-    return prepared ?? payment;
+    return prepared;
   };
 
   const runSweep = async (limit: number) => {
@@ -318,6 +325,10 @@ export function paymentRecoveryRoutes(deps: Deps) {
 
       try {
         const payment = await prepareAuthoritativeRecovery(found, t);
+        if (!payment) {
+          skipped += 1;
+          continue;
+        }
         checked += 1;
         await settleOne(db, psp, payment, t, env.PSP_PROVIDER_MAX_CONCURRENCY);
         const [fresh] = await db

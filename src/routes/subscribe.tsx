@@ -29,12 +29,17 @@ export const Route = createFileRoute("/subscribe")({
   component: SubscribePage,
 });
 
+const PLAN_PRESENTATION = [
+  { id: "m1", nameFa: "یک‌ماهه", nameEn: "1 Month", months: 1 },
+  { id: "m3", nameFa: "سه‌ماهه", nameEn: "3 Months", months: 3 },
+  { id: "m6", nameFa: "شش‌ماهه", nameEn: "6 Months", months: 6 },
+] as const;
+
 function SubscribePage() {
   const ctx = useAppMaybe();
   const navigate = useNavigate();
-  // Prices are server-authoritative. Never seed this state from the bundled
-  // catalog: a bundled price can be months old and would flash before /plans
-  // returns. Until the live catalog arrives, render a loading state instead.
+  // Only presentation metadata is bundled. Money remains server-authoritative,
+  // so the cards stay stable while just their numeric price areas load.
   const [plans, setPlans] = useState<ServerPlan[]>([]);
   const [offline, setOffline] = useState(false);
   const [selected, setSelected] = useState<string>("m3");
@@ -66,9 +71,13 @@ function SubscribePage() {
         setOffline(false);
         // اگر پلنِ پیش‌فرض در فهرست واقعی سرور نبود، به یک پلن معتبر برگرد؛ وگرنه
         // دکمه‌ی پرداخت روی چیزی می‌ماند که سرور نمی‌شناسد و خرید با خطا رد می‌شود.
-        setSelected((cur) =>
-          res.plans.some((p) => p.id === cur) ? cur : (res.plans[1] ?? res.plans[0]).id,
-        );
+        setSelected((cur) => {
+          if (res.plans.some((p) => p.id === cur)) return cur;
+          return (
+            PLAN_PRESENTATION.find((item) => res.plans.some((plan) => plan.id === item.id))?.id ??
+            res.plans[0].id
+          );
+        });
       })
       .catch(() => {
         if (!cancelled) setOffline(true);
@@ -345,40 +354,73 @@ function SubscribePage() {
       )}
 
       <div className="flex flex-col gap-2.5">
-        {!offline && plans.length === 0 && (
-          <div className="rounded-2xl border border-border bg-card px-4 py-5 text-center text-xs text-muted-foreground">
-            {t("در حال دریافت قیمت‌های جدید…", "Loading current prices…")}
-          </div>
-        )}
-        {plans.map((p) => {
-          const basePrice = p.price;
-          const final = priceOf(p.id);
+        {PLAN_PRESENTATION.map((presentation) => {
+          const plan = plans.find((item) => item.id === presentation.id);
+          const final = plan ? priceOf(plan.id) : null;
+          const oneMonthPrice = plans.find((item) => item.id === "m1")?.price ?? null;
+          const payMonthlyPrice = oneMonthPrice ? oneMonthPrice * presentation.months : null;
+          const referencePrice = plan
+            ? plan.originalPrice != null && plan.originalPrice > plan.price
+              ? plan.originalPrice
+              : payMonthlyPrice != null && payMonthlyPrice > plan.price
+                ? payMonthlyPrice
+                : plan.price
+            : null;
+          const saving = final != null && referencePrice != null ? referencePrice - final : 0;
+          const savingPercent =
+            saving > 0 && referencePrice ? Math.round((saving * 100) / referencePrice) : 0;
           return (
             <button
-              key={p.id}
-              onClick={() => setSelected(p.id)}
+              key={presentation.id}
+              type="button"
+              data-plan-id={presentation.id}
+              aria-pressed={selected === presentation.id}
+              onClick={() => setSelected(presentation.id)}
               className={`flex items-center justify-between rounded-2xl border-2 p-4 text-start transition-all ${
-                selected === p.id ? "border-primary bg-primary-soft" : "border-border bg-card"
+                selected === presentation.id
+                  ? "border-primary bg-primary-soft"
+                  : "border-border bg-card"
               }`}
             >
               <div>
                 <p className="text-sm font-bold text-foreground">
-                  {lang === "fa" ? p.nameFa : p.nameEn}
+                  {lang === "fa" ? presentation.nameFa : presentation.nameEn}
                 </p>
                 <p className="text-[10px] text-muted-foreground">
-                  {faNum(p.months, lang)} {t("ماه دسترسی کامل", "months full access")}
+                  {faNum(presentation.months, lang)} {t("ماه دسترسی کامل", "months full access")}
                 </p>
               </div>
-              <div className="text-end">
-                {final < basePrice && (
-                  <p className="text-[10px] text-muted-foreground line-through">
-                    {faNum(basePrice.toLocaleString("en-US"), lang)}
-                  </p>
+              <div className="flex min-w-32 flex-col items-end text-end tabular-nums">
+                {!plan && !offline ? (
+                  <>
+                    <span
+                      data-price-loading="true"
+                      className="h-5 w-24 animate-pulse rounded-md bg-secondary"
+                      aria-hidden="true"
+                    />
+                    <span className="sr-only">{t("در حال دریافت قیمت", "Loading price")}</span>
+                  </>
+                ) : plan && final != null ? (
+                  <>
+                    {saving > 0 && referencePrice != null && (
+                      <p className="text-[10px] text-muted-foreground line-through">
+                        {faNum(referencePrice.toLocaleString("en-US"), lang)}
+                      </p>
+                    )}
+                    <p className="text-sm font-black text-foreground">
+                      {faNum(final.toLocaleString("en-US"), lang)}{" "}
+                      <span className="text-[10px] font-normal">{t("تومان", "Toman")}</span>
+                    </p>
+                    {saving > 0 && (
+                      <p className="mt-1 text-[10px] font-bold text-success">
+                        {faNum(saving.toLocaleString("en-US"), lang)}{" "}
+                        {t("تومان به‌صرفه‌تر", "Toman saved")} · {faNum(savingPercent, lang)}٪
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-sm font-bold text-muted-foreground">—</span>
                 )}
-                <p className="text-sm font-black text-foreground">
-                  {faNum(final.toLocaleString("en-US"), lang)}{" "}
-                  <span className="text-[10px] font-normal">{t("تومان", "Toman")}</span>
-                </p>
               </div>
             </button>
           );

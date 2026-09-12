@@ -55,10 +55,14 @@ describe("GET /v1/plans", () => {
     const res = await h.app.inject({ method: "GET", url: "/v1/plans" });
     expect(res.statusCode).toBe(200);
     const body = res.json() as { plans: { id: string; price: number; months: number }[] };
-    expect(body.plans.map((p) => p.id).sort()).toEqual(["m1", "m12", "m3"]);
+    expect(body.plans.map((p) => p.id)).toEqual(["m1", "m3", "m6"]);
     // Must match src/lib/presets.ts, or the displayed price and the charge diverge.
     expect(body.plans.find((p) => p.id === "m1")).toMatchObject({ price: 59000, months: 1 });
-    expect(body.plans.find((p) => p.id === "m12")).toMatchObject({ price: 449000, months: 12 });
+    expect(body.plans.find((p) => p.id === "m6")).toMatchObject({
+      price: 999000,
+      originalPrice: null,
+      months: 6,
+    });
   });
 
   it("hides inactive plans", async () => {

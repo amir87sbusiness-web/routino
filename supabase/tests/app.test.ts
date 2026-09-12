@@ -174,6 +174,11 @@ describe("plans", () => {
     const res = await h.call("GET", "/v1/plans");
     const { plans } = await res.json();
     expect(plans).toHaveLength(3);
-    expect(plans.find((p: { id: string }) => p.id === "m12").price).toBe(449000);
+    expect(plans.map((p: { id: string }) => p.id)).toEqual(["m1", "m3", "m6"]);
+    expect(plans.find((p: { id: string }) => p.id === "m6")).toMatchObject({
+      price: 999000,
+      originalPrice: null,
+      months: 6,
+    });
   });
 });

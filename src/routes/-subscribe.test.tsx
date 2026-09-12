@@ -65,8 +65,30 @@ describe("SubscribePage payment attempts", () => {
     payments.fetchQuote.mockReset();
     payments.fetchPlans.mockReset().mockResolvedValue({
       plans: [
-        { id: "m1", nameFa: "یک‌ماهه", nameEn: "1 Month", months: 1, price: 59_000 },
-        { id: "m3", nameFa: "سه‌ماهه", nameEn: "3 Months", months: 3, price: 149_000 },
+        {
+          id: "m6",
+          nameFa: "شش‌ماهه",
+          nameEn: "6 Months",
+          months: 6,
+          price: 999_000,
+          originalPrice: null,
+        },
+        {
+          id: "m1",
+          nameFa: "یک‌ماهه",
+          nameEn: "1 Month",
+          months: 1,
+          price: 199_000,
+          originalPrice: null,
+        },
+        {
+          id: "m3",
+          nameFa: "سه‌ماهه",
+          nameEn: "3 Months",
+          months: 3,
+          price: 549_000,
+          originalPrice: null,
+        },
       ],
       offer: null,
     });
@@ -101,6 +123,35 @@ describe("SubscribePage payment attempts", () => {
 
     expect(payments.checkoutWithProviderBusyRetry).toHaveBeenCalledTimes(1);
     await act(async () => release({ free: false, paymentId: "payment-1" }));
+  });
+
+  it("keeps plan cards visible while only price numbers load and defaults to three months", async () => {
+    payments.fetchPlans.mockReset().mockReturnValue(new Promise(() => undefined));
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    await act(async () => {
+      root.render(<SubscribePage />);
+      await Promise.resolve();
+    });
+
+    const choices = [...host.querySelectorAll<HTMLButtonElement>("[data-plan-id]")];
+    expect(choices.map((choice) => choice.dataset.planId)).toEqual(["m1", "m3", "m6"]);
+    expect(
+      choices.find((choice) => choice.dataset.planId === "m3")?.getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(host.querySelectorAll('[data-price-loading="true"]')).toHaveLength(3);
+    expect(host.textContent).not.toContain("در حال دریافت قیمت‌های جدید");
+  });
+
+  it("renders plans in fixed order with the configured saving", () => {
+    const choices = [...host.querySelectorAll<HTMLButtonElement>("[data-plan-id]")];
+    expect(choices.map((choice) => choice.dataset.planId)).toEqual(["m1", "m3", "m6"]);
+    expect(choices[1]?.textContent).toContain("۵۹۷,۰۰۰");
+    expect(choices[1]?.textContent).toContain("۵۴۹,۰۰۰");
+    expect(choices[1]?.textContent).toContain("۴۸,۰۰۰ تومان به‌صرفه‌تر");
+    expect(choices[2]?.textContent).toContain("۱,۱۹۴,۰۰۰");
+    expect(choices[2]?.textContent).toContain("۹۹۹,۰۰۰");
+    expect(choices[2]?.textContent).toContain("۱۹۵,۰۰۰ تومان به‌صرفه‌تر");
   });
 
   it("reuses one UUID after a retryable timeout", async () => {

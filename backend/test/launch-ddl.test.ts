@@ -55,6 +55,8 @@ const ELASTIC_CHECKOUT_MIGRATION_SQL = readFileSync(
 const ELASTIC_MAINTENANCE_ORIGINAL_SHA256 =
   "84b0baea221fd41054a99a3d1e34fe9ae6ff23f9ee5473e6e0b757c771156912";
 
+const normalizedText = (path: string) => readFileSync(path, "utf8").replaceAll("\r\n", "\n");
+
 function cronBody(sql: string, jobName: string, delimiter: "$$" | "$job$"): string {
   const job = sql.indexOf(`'${jobName}'`);
   expect(job).toBeGreaterThan(-1);
@@ -76,8 +78,8 @@ afterAll(async () => {
 });
 
 describe("launch schema repairs", () => {
-  it("keeps the committed elastic-maintenance migration byte-identical", () => {
-    const migration = readFileSync(ELASTIC_MAINTENANCE_MIGRATION_PATH);
+  it("keeps the committed elastic-maintenance migration content-identical", () => {
+    const migration = normalizedText(ELASTIC_MAINTENANCE_MIGRATION_PATH);
     expect(createHash("sha256").update(migration).digest("hex")).toBe(
       ELASTIC_MAINTENANCE_ORIGINAL_SHA256,
     );
@@ -85,7 +87,7 @@ describe("launch schema repairs", () => {
 
   it("installs review corrections through a new forward-only migration without cleanup", async () => {
     expect(() => readFileSync(SYNC_GC_FIX_MIGRATION_PATH, "utf8")).not.toThrow();
-    const migration = readFileSync(SYNC_GC_FIX_MIGRATION_PATH, "utf8");
+    const migration = normalizedText(SYNC_GC_FIX_MIGRATION_PATH);
     const owner = "a0444444-4444-4444-8444-444444444444";
     await h.raw(`
       insert into users (id, phone, seq, gc_seq)
@@ -923,7 +925,7 @@ commit;$$
   it("executes every bounded maintenance cron body with PostgreSQL-valid transaction syntax", async () => {
     execFileSync(process.execPath, ["scripts/gen-setup-sql.mjs"], { cwd: root, stdio: "pipe" });
     const setup = readFileSync(resolve(root, "supabase/setup.sql"), "utf8");
-    const migration = readFileSync(SYNC_GC_FIX_MIGRATION_PATH, "utf8");
+    const migration = normalizedText(SYNC_GC_FIX_MIGRATION_PATH);
     for (const body of [
       cronBody(setup, "routino-task-month-compaction", "$$"),
       cronBody(setup, "routino-tombstone-purge", "$$"),
@@ -936,7 +938,7 @@ commit;$$
 
   it("installs indexed advisory-locked maintenance entrypoints without running them", async () => {
     expect(() => readFileSync(SYNC_GC_FIX_MIGRATION_PATH, "utf8")).not.toThrow();
-    const migration = readFileSync(SYNC_GC_FIX_MIGRATION_PATH, "utf8");
+    const migration = normalizedText(SYNC_GC_FIX_MIGRATION_PATH);
     const owner = "a0333333-3333-4333-8333-333333333333";
     await h.raw(`
       insert into users (id, phone, seq, gc_seq)
