@@ -20,14 +20,7 @@ import { fakePsp, zarinpalPsp } from "./shared/providers/psp/index.ts";
 import { consoleSms, kavenegarSms, type SmsProvider } from "./shared/providers/sms/index.ts";
 import { ensureOwner } from "./shared/services/owner-bootstrap.ts";
 
-const edgeEnv = Deno.env.toObject();
-// Emergency-safe default: Supabase Edge must not call ZarinPal directly. Reuse
-// the already-shared Cloudflare↔Supabase PROXY_SECRET unless a dedicated relay
-// secret is configured later; this lets the fix roll out without another secret
-// rotation while still keeping the relay closed to the public internet.
-edgeEnv.ZARINPAL_API_BASE ||= "https://api.routino.me/_zarinpal";
-edgeEnv.ZARINPAL_PROXY_SECRET ||= edgeEnv.PROXY_SECRET || "";
-const env = loadEdgeEnv(edgeEnv);
+const env = loadEdgeEnv(Deno.env.toObject());
 
 const dbUrl = Deno.env.get("DATABASE_URL") ?? Deno.env.get("SUPABASE_DB_URL");
 if (!dbUrl) throw new Error("DATABASE_URL secret is required");
@@ -40,14 +33,31 @@ const client = postgres(dbUrl, {
   max: 2,
   idle_timeout: 30,
   connect_timeout: 10,
-  // TLS comes from the URL's sslmode param (postgres-js honours it); the
-  // documented Supabase edge pattern omits a hardcoded ssl option because the
-  // function talks to the pooler inside Supabase's own network.
 });
-// postgres-js is not in the NodePg|PGlite type union the shared code was written
-// against; the drizzle query-builder surface used is identical across drivers
-// (rowsOf() already normalises the one raw-SQL result shape difference).
 const db = drizzle(client, { schema }) as unknown as Database;
+
+// Routino's ZarinPal relay runs as a Cloudflare Pages Function. The plaintext
+// shared secret exists only in Supabase Vault; GitHub stores only its SHA-256 in
+// the Pages Function. If Vault is temporarily unavailable, the provider falls
+// back to the configured/default direct ZarinPal endpoint rather than preventing
+// the API from booting.
+let pagesRelaySecret = "";
+try {
+  const rows = await client<{ decrypted_secret: string }[]>`
+    select decrypted_secret
+    from vault.decrypted_secrets
+    where name = 'routino_zarinpal_pages_relay_secret'
+    limit 1
+  `;
+  pagesRelaySecret = typeof rows[0]?.decrypted_secret === "string" ? rows[0].decrypted_secret : "";
+} catch (err) {
+  console.error("could not read ZarinPal relay secret from Vault", err);
+}
+
+const zarinpalApiBase = pagesRelaySecret
+  ? "https://routino.me/zarinpal-relay"
+  : env.ZARINPAL_API_BASE;
+const zarinpalProxySecret = pagesRelaySecret || env.ZARINPAL_PROXY_SECRET;
 
 const sms: SmsProvider =
   env.SMS_PROVIDER === "kavenegar"
@@ -57,8 +67,8 @@ const sms: SmsProvider =
 const psp =
   env.PSP_PROVIDER === "zarinpal"
     ? zarinpalPsp(env.ZARINPAL_MERCHANT, {
-        apiBase: env.ZARINPAL_API_BASE,
-        proxySecret: env.ZARINPAL_PROXY_SECRET,
+        apiBase: zarinpalApiBase,
+        proxySecret: zarinpalProxySecret,
       })
     : fakePsp(env.PUBLIC_API_URL);
 
@@ -76,10 +86,8 @@ try {
   console.error("owner bootstrap failed", err);
 }
 
-console.log(`[api] edge function up (sms=${env.SMS_PROVIDER}, psp=${psp.name}, zarinpalBase=${env.ZARINPAL_API_BASE})`);
+console.log(`[api] edge function up (sms=${env.SMS_PROVIDER}, psp=${psp.name}, zarinpalBase=${zarinpalApiBase})`);
 
-// Loud, every cold start. "Nobody received the SMS" and "there is no money in
-// the merchant account" should be answered by the log, not by a support ticket.
 for (const w of testProviderWarnings(env)) console.warn(`[!] TEST MODE — ${w}`);
 
 Deno.serve(app.fetch);
