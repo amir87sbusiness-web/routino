@@ -17,7 +17,8 @@ const RECOVERABLE_STATUSES = [
 ] as const;
 
 const RECOVERY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-const PROVIDER_FAILURE_GRACE_MS = 20 * 60 * 1000;
+const AMBIGUOUS_PROVIDER_CODES = [-51, -55] as const;
+const UNVERIFIED_LIMIT = 100;
 
 const secretEquals = (a: string, b: string): boolean => {
   const aa = Buffer.from(a);
@@ -59,7 +60,13 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
           isNull(payments.appliedAt),
           isNotNull(payments.authority),
           gt(payments.createdAt, since),
-          inArray(payments.status, [...RECOVERABLE_STATUSES]),
+          or(
+            inArray(payments.status, [...RECOVERABLE_STATUSES]),
+            and(
+              eq(payments.status, "failed"),
+              inArray(payments.pspResult, [...AMBIGUOUS_PROVIDER_CODES]),
+            ),
+          ),
           or(isNull(payments.nextVerifyAt), lte(payments.nextVerifyAt, t)),
         ),
       )
@@ -72,12 +79,38 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
     let stillOpen = 0;
     let errors = 0;
 
-    for (const payment of open) {
+    for (let payment of open) {
       checked += 1;
       try {
+        // Older code permanently marked -51/-55 as failed after twenty minutes.
+        // Those codes are intentionally classified as ambiguous by the adapter,
+        // so reopen only that historical subset before retrying. Definitive
+        // provider failures remain terminal.
+        if (
+          payment.status === "failed" &&
+          payment.pspResult !== null &&
+          AMBIGUOUS_PROVIDER_CODES.includes(payment.pspResult as -51 | -55)
+        ) {
+          const [reopened] = await db
+            .update(payments)
+            .set({
+              status: "redirected",
+              verifyStartedAt: null,
+              nextVerifyAt: null,
+              updatedAt: t,
+            })
+            .where(and(eq(payments.id, payment.id), isNull(payments.appliedAt)))
+            .returning();
+          if (!reopened) {
+            stillOpen += 1;
+            continue;
+          }
+          payment = reopened;
+        }
+
         await settleOne(db, psp, payment, t, env.PSP_PROVIDER_MAX_CONCURRENCY);
 
-        let [fresh] = await db.select().from(payments).where(eq(payments.id, payment.id)).limit(1);
+        const [fresh] = await db.select().from(payments).where(eq(payments.id, payment.id)).limit(1);
         if (!fresh) {
           errors += 1;
           continue;
@@ -91,25 +124,8 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
           continue;
         }
 
-        const staleProviderFailure =
-          (fresh.pspResult === -51 || fresh.pspResult === -55) &&
-          t.getTime() - fresh.createdAt.getTime() >= PROVIDER_FAILURE_GRACE_MS;
-        if (staleProviderFailure) {
-          [fresh] = await db
-            .update(payments)
-            .set({
-              status: "failed",
-              verifyStartedAt: null,
-              nextVerifyAt: null,
-              updatedAt: t,
-            })
-            .where(and(eq(payments.id, fresh.id), isNull(payments.appliedAt)))
-            .returning();
-          if (fresh) finalized += 1;
-          else stillOpen += 1;
-          continue;
-        }
-
+        // Ambiguous provider answers remain open and use payment-flow's stored
+        // exponential backoff. Do not turn them into a false terminal failure.
         stillOpen += 1;
       } catch (err) {
         errors += 1;
@@ -117,7 +133,139 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
-    return { success: true, checked, recovered, finalized, stillOpen, errors };
+    return { success: true, mode: "sweep", checked, recovered, finalized, stillOpen, errors };
+  };
+
+  const runUnverified = async () => {
+    if (!psp.listUnverified) {
+      return { success: false, mode: "unverified", error: "provider_unverified_unsupported" };
+    }
+
+    const t = new Date(app.deps.now());
+    const since = new Date(t.getTime() - RECOVERY_WINDOW_MS);
+    const discovered = await psp.listUnverified();
+    if (discovered.kind !== "ok") {
+      return {
+        success: false,
+        mode: "unverified",
+        error: "provider_unverified_unavailable",
+        providerCode: discovered.code ?? null,
+      };
+    }
+
+    const items = discovered.items.slice(0, UNVERIFIED_LIMIT);
+    if (items.length === 0) {
+      return {
+        success: true,
+        mode: "unverified",
+        discovered: 0,
+        matched: 0,
+        checked: 0,
+        recovered: 0,
+        skipped: 0,
+        errors: 0,
+      };
+    }
+
+    const authorities = [...new Set(items.map((item) => item.authority))];
+    const candidates = await db
+      .select()
+      .from(payments)
+      .where(
+        and(
+          isNull(payments.appliedAt),
+          isNotNull(payments.authority),
+          inArray(payments.authority, authorities),
+          gt(payments.createdAt, since),
+        ),
+      );
+    const byAuthority = new Map(
+      candidates.flatMap((payment) => (payment.authority ? [[payment.authority, payment] as const] : [])),
+    );
+
+    let matched = 0;
+    let checked = 0;
+    let recovered = 0;
+    let skipped = 0;
+    let errors = 0;
+
+    for (const item of items) {
+      let payment = byAuthority.get(item.authority);
+      if (!payment) {
+        skipped += 1;
+        continue;
+      }
+      matched += 1;
+
+      // Amount equality is mandatory before any verification/grant. The PSP feed
+      // is discovery only; our persisted server-priced payment remains canonical.
+      if (payment.amountRial !== item.amountRial) {
+        skipped += 1;
+        app.log.error(
+          {
+            paymentId: payment.id,
+            authority: item.authority,
+            storedAmountRial: payment.amountRial,
+            providerAmountRial: item.amountRial,
+          },
+          "unverified payment amount mismatch",
+        );
+        continue;
+      }
+      if (payment.status === "canceled" || payment.status === "verify_failed") {
+        skipped += 1;
+        continue;
+      }
+      if (
+        payment.status === "failed" &&
+        !(
+          payment.pspResult !== null &&
+          AMBIGUOUS_PROVIDER_CODES.includes(payment.pspResult as -51 | -55)
+        )
+      ) {
+        skipped += 1;
+        continue;
+      }
+
+      try {
+        if (payment.status === "failed") {
+          const [reopened] = await db
+            .update(payments)
+            .set({
+              status: "redirected",
+              verifyStartedAt: null,
+              nextVerifyAt: null,
+              updatedAt: t,
+            })
+            .where(and(eq(payments.id, payment.id), isNull(payments.appliedAt)))
+            .returning();
+          if (!reopened) {
+            skipped += 1;
+            continue;
+          }
+          payment = reopened;
+        }
+
+        checked += 1;
+        await settleOne(db, psp, payment, t, env.PSP_PROVIDER_MAX_CONCURRENCY);
+        const [fresh] = await db.select().from(payments).where(eq(payments.id, payment.id)).limit(1);
+        if (fresh?.appliedAt || fresh?.status === "paid") recovered += 1;
+      } catch (err) {
+        errors += 1;
+        app.log.error({ paymentId: payment.id, err }, "unverified payment recovery failed");
+      }
+    }
+
+    return {
+      success: true,
+      mode: "unverified",
+      discovered: items.length,
+      matched,
+      checked,
+      recovered,
+      skipped,
+      errors,
+    };
   };
 
   const authorize = async (req: { headers: Record<string, unknown> }) => {
@@ -147,6 +295,6 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
     if (!(await authorize(req))) {
       return reply.code(401).send({ error: "unauthorized" });
     }
-    return runSweep(80);
+    return runUnverified();
   });
 };
