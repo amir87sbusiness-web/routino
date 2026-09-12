@@ -20,7 +20,9 @@ export async function fetchPlans(): Promise<{
   plans: ServerPlan[];
   offer: null | { label: string; percent: number; until: number };
 }> {
-  return apiRequest("/plans");
+  // Prices are live money data. Do not allow a browser HTTP-cache entry from an
+  // older deployment to satisfy this request before the server is contacted.
+  return apiRequest("/plans", { cache: "no-store" });
 }
 
 export interface QuoteResult {
