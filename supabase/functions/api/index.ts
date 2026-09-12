@@ -27,26 +27,12 @@ const client = postgres(dbUrl, {
 });
 const db = drizzle(client, { schema }) as unknown as Database;
 
-// The Cloudflare relay lives under the already-active /v1 Pages Function
-// namespace, avoiding dependence on the separately-deployed api.routino.me
-// Worker. The plaintext relay secret exists only in Supabase Vault.
-let pagesRelaySecret = "";
-try {
-  const rows = await client<{ decrypted_secret: string }[]>`
-    select decrypted_secret
-    from vault.decrypted_secrets
-    where name = 'routino_zarinpal_pages_relay_secret'
-    limit 1
-  `;
-  pagesRelaySecret = typeof rows[0]?.decrypted_secret === "string" ? rows[0].decrypted_secret : "";
-} catch (err) {
-  console.error("could not read ZarinPal relay secret from Vault", err);
-}
-
-const zarinpalApiBase = pagesRelaySecret
-  ? "https://routino.me/v1/_zarinpal"
-  : env.ZARINPAL_API_BASE;
-const zarinpalProxySecret = pagesRelaySecret || env.ZARINPAL_PROXY_SECRET;
+// Supabase already has PROXY_SECRET in production and env validation guarantees
+// it is at least 32 characters. Reuse that existing server-only secret for the
+// Pages ZarinPal relay; the relay validates the candidate against this Edge
+// function through api.routino.me before forwarding anything to ZarinPal.
+const zarinpalApiBase = "https://routino.me/v1/_zarinpal";
+const zarinpalProxySecret = env.PROXY_SECRET;
 
 const sms: SmsProvider =
   env.SMS_PROVIDER === "kavenegar"
