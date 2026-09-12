@@ -35,9 +35,14 @@ function providerCode(body: ProviderBody): number | undefined {
   return typeof errorCode === "number" && Number.isInteger(errorCode) ? errorCode : undefined;
 }
 
-/** One transport attempt. Any non-2xx or malformed wire response is ambiguous
- * and must never be translated into a terminal payment result. */
-async function postOnce(
+/**
+ * ZarinPal returns legitimate business/validation errors as non-2xx JSON
+ * (commonly 422). Do not discard that body: it contains `errors.code`, which is
+ * the difference between a real provider answer (-51/-55/etc.) and a transport
+ * ambiguity. Infrastructure/proxy responses do not have the ZarinPal envelope,
+ * so they still normalize to `unknown` safely.
+ */
+async function post(
   apiBase: string,
   proxySecret: string | undefined,
   path: string,
@@ -56,26 +61,12 @@ async function postOnce(
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(PSP_TIMEOUT_MS),
     });
-    if (!res.ok) return undefined;
+
     const body = (await res.json()) as unknown;
     return record(body) as ProviderBody | undefined;
   } catch {
     return undefined;
   }
-}
-
-/** During rollout, try the Cloudflare relay first. Until that Worker version is
- * live, fall back to the previous direct route instead of creating downtime.
- * Once the relay answers, the direct path is never touched. */
-async function post(
-  apiBase: string,
-  proxySecret: string | undefined,
-  path: string,
-  payload: unknown,
-): Promise<ProviderBody | undefined> {
-  const primary = await postOnce(apiBase, proxySecret, path, payload);
-  if (primary || apiBase === ZARINPAL_ORIGIN) return primary;
-  return postOnce(ZARINPAL_ORIGIN, undefined, path, payload);
 }
 
 /** ZarinPal REST v4 adapter. Only server API calls may be proxied; StartPay
@@ -140,7 +131,10 @@ export function zarinpalPsp(
       if (code === 100) return { kind: "paid", code: 100, ...successDetails };
       if (code === 101) return { kind: "already_verified", code: 101, ...successDetails };
 
-      if (code === -51 || code === -12) return { kind: "pending", code };
+      // Provider answers that can represent an incomplete/racing payment stay
+      // recoverable. -55 is kept retryable like Sheetra's hardened flow because
+      // ZarinPal can briefly report transaction-not-found around callback races.
+      if (code === -51 || code === -55 || code === -12) return { kind: "pending", code };
       if (code === -52) return { kind: "unknown", code };
       return { kind: "failed", code };
     },
