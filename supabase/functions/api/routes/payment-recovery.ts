@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { timingSafeEqual } from "node:crypto";
-import { and, asc, gt, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import type { AppEnv, Deps } from "../deps.ts";
 import { rowsOf } from "../shared/db/client.ts";
@@ -18,6 +18,7 @@ const RECOVERABLE_STATUSES = [
 ] as const;
 
 const RECOVERY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+const PROVIDER_FAILURE_GRACE_MS = 20 * 60 * 1000;
 
 const secretEquals = (a: string, b: string): boolean => {
   const aa = Buffer.from(a);
@@ -74,24 +75,61 @@ export function paymentRecoveryRoutes(deps: Deps) {
 
     let checked = 0;
     let recovered = 0;
+    let finalized = 0;
     let stillOpen = 0;
     let errors = 0;
 
     for (const payment of open) {
       checked += 1;
       try {
-        if (await settleOne(db, psp, payment, t, env.PSP_PROVIDER_MAX_CONCURRENCY)) {
-          recovered += 1;
-        } else {
-          stillOpen += 1;
+        await settleOne(db, psp, payment, t, env.PSP_PROVIDER_MAX_CONCURRENCY);
+
+        let [fresh] = await db.select().from(payments).where(eq(payments.id, payment.id)).limit(1);
+        if (!fresh) {
+          errors += 1;
+          continue;
         }
+        if (fresh.appliedAt || fresh.status === "paid") {
+          recovered += 1;
+          continue;
+        }
+        if (["failed", "canceled", "verify_failed"].includes(fresh.status)) {
+          finalized += 1;
+          continue;
+        }
+
+        // -51 (payment unsuccessful/inactive) and -55 (transaction not found)
+        // may appear briefly while the gateway session is racing. Keep a grace
+        // window, then stop treating that authority as an active checkout. The
+        // row/history remains intact, but a new checkout can be created because
+        // `failed` is outside the nonterminal uniqueness constraint.
+        const staleProviderFailure =
+          (fresh.pspResult === -51 || fresh.pspResult === -55) &&
+          t.getTime() - fresh.createdAt.getTime() >= PROVIDER_FAILURE_GRACE_MS;
+        if (staleProviderFailure) {
+          [fresh] = await db
+            .update(payments)
+            .set({
+              status: "failed",
+              verifyStartedAt: null,
+              nextVerifyAt: null,
+              updatedAt: t,
+            })
+            .where(and(eq(payments.id, fresh.id), isNull(payments.appliedAt)))
+            .returning();
+          if (fresh) finalized += 1;
+          else stillOpen += 1;
+          continue;
+        }
+
+        stillOpen += 1;
       } catch (err) {
         errors += 1;
         console.error("payment recovery item failed", { paymentId: payment.id, err });
       }
     }
 
-    return { success: true, checked, recovered, stillOpen, errors };
+    return { success: true, checked, recovered, finalized, stillOpen, errors };
   };
 
   /** Pages relay cannot read Edge secrets. It presents the candidate secret it
