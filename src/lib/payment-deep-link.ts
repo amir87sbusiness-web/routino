@@ -13,7 +13,11 @@ export interface PaymentDeepLink {
 export function parsePaymentDeepLink(url: string): PaymentDeepLink | null {
   try {
     const parsed = new URL(url);
-    if (parsed.protocol !== "routino:" || parsed.hostname !== "pay" || parsed.pathname !== "/result") {
+    if (
+      parsed.protocol !== "routino:" ||
+      parsed.hostname !== "pay" ||
+      parsed.pathname !== "/result"
+    ) {
       return null;
     }
 
