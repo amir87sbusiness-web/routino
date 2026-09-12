@@ -9,18 +9,7 @@
  * Authentication uses the existing pg_cron secret stored in Supabase Vault.
  * The secret is compared inside Postgres and is never returned or logged.
  */
-import {
-  and,
-  asc,
-  gte,
-  inArray,
-  isNotNull,
-  isNull,
-  lt,
-  lte,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, asc, gte, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import type { Context, Next } from "hono";
 import type { AppEnv, Deps } from "../deps.ts";
@@ -78,15 +67,7 @@ async function recoverDuePayments(
   let errors = 0;
   for (const payment of due) {
     try {
-      if (
-        await settleOne(
-          deps.db,
-          deps.psp,
-          payment,
-          t,
-          deps.env.PSP_PROVIDER_MAX_CONCURRENCY,
-        )
-      ) {
+      if (await settleOne(deps.db, deps.psp, payment, t, deps.env.PSP_PROVIDER_MAX_CONCURRENCY)) {
         changed += 1;
       }
     } catch (error) {
