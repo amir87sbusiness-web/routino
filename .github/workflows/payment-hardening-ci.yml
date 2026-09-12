@@ -23,7 +23,7 @@ jobs:
       - name: Install backend dependencies
         run: npm --prefix backend ci
       - name: Prettier check
-        run: npx prettier --check backend/src/routes/payment-recovery.ts backend/test/payment-recovery.test.ts supabase/functions/api/routes/payment-recovery.ts scripts/generate-icons.test.mjs
+        run: npx prettier --check backend/src/routes/payment-recovery.ts backend/test/payment-recovery.test.ts supabase/functions/api/routes/payment-recovery.ts scripts/generate-icons.test.mjs scripts/gen-setup-sql.mjs
       - name: Lint
         run: npm run lint
       - name: Root typecheck
@@ -54,4 +54,6 @@ jobs:
         run: npm run cap:sync
       - name: Android debug compile
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
