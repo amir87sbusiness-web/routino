@@ -4,17 +4,14 @@ on:
   push:
     branches:
       - fix/payment-recovery-hardening-20260912
-  pull_request:
-    branches:
-      - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   quality:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -25,14 +22,32 @@ jobs:
         run: npm ci
       - name: Install backend dependencies
         run: npm --prefix backend ci
+      - name: Format payment hardening files
+        run: npx prettier --write backend/src/routes/payment-recovery.ts backend/test/payment-recovery.test.ts supabase/functions/api/routes/payment-recovery.ts
+      - name: Commit formatter output when needed
+        run: |
+          if ! git diff --quiet -- backend/src/routes/payment-recovery.ts backend/test/payment-recovery.test.ts supabase/functions/api/routes/payment-recovery.ts; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add backend/src/routes/payment-recovery.ts backend/test/payment-recovery.test.ts supabase/functions/api/routes/payment-recovery.ts
+            git commit -m "style: format payment hardening"
+            git push origin HEAD:fix/payment-recovery-hardening-20260912
+            exit 1
+          fi
       - name: Lint
         run: npm run lint
+      - name: Root typecheck
+        run: npx tsc --noEmit -p tsconfig.json
+      - name: Root unused-symbol check
+        run: npx tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters
       - name: Frontend tests
         run: npm test
       - name: Frontend and landing build
         run: npm run build
       - name: Backend typecheck
         run: npm --prefix backend run typecheck
+      - name: Backend unused-symbol check
+        run: cd backend && npx tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters
       - name: Backend tests
         run: npm --prefix backend test -- --maxWorkers=1
       - name: Sync canonical backend into Edge
@@ -41,6 +56,10 @@ jobs:
         run: git diff --exit-code -- supabase/functions/api/shared
       - name: Edge tests
         run: npm run test:edge
+      - name: Production dependency audit (root)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Production dependency audit (backend)
+        run: npm --prefix backend audit --omit=dev --audit-level=high
       - name: Mobile Capacitor sync
         run: npm run cap:sync
       - name: Android debug compile
