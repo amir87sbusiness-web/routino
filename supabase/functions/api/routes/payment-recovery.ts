@@ -1,3 +1,5 @@
+import { Buffer } from "node:buffer";
+import { timingSafeEqual } from "node:crypto";
 import { and, asc, gt, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { Hono } from "hono";
 import type { AppEnv, Deps } from "../deps.ts";
@@ -16,6 +18,13 @@ const RECOVERABLE_STATUSES = [
 ] as const;
 
 const RECOVERY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+
+const secretEquals = (a: string, b: string): boolean => {
+  const aa = Buffer.from(a);
+  const bb = Buffer.from(b);
+  if (aa.length !== bb.length) return false;
+  return timingSafeEqual(aa, bb);
+};
 
 async function configuredSecret(deps: Deps): Promise<string> {
   const fromEnv = deps.env.PAYMENT_RECONCILE_SECRET.trim();
@@ -42,7 +51,7 @@ export function paymentRecoveryRoutes(deps: Deps) {
 
   const authorized = async (got: string | undefined) => {
     const expected = await configuredSecret(deps);
-    return Boolean(expected && got && got === expected);
+    return Boolean(expected && got && secretEquals(got, expected));
   };
 
   const runSweep = async (limit: number) => {
@@ -84,6 +93,19 @@ export function paymentRecoveryRoutes(deps: Deps) {
 
     return { success: true, checked, recovered, stillOpen, errors };
   };
+
+  /** Pages relay cannot read Edge secrets. It presents the candidate secret it
+   * received from the caller; this endpoint validates it against the live
+   * PROXY_SECRET. The surrounding Edge middleware already guarantees this
+   * validator itself was reached through api.routino.me's trusted Worker. */
+  r.post("/internal/payments/relay-auth", (c) => {
+    const candidate = c.req.header("x-relay-candidate") || "";
+    const expected = env.PROXY_SECRET || "";
+    if (!expected || !candidate || !secretEquals(candidate, expected)) {
+      return c.body(null, 403);
+    }
+    return c.body(null, 204);
+  });
 
   r.post("/internal/payments/reconcile", async (c) => {
     if (!(await authorized(c.req.header("x-payment-reconcile-secret")))) {
