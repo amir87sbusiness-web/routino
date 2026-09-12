@@ -61,7 +61,12 @@ describe("admin user list UI", () => {
             pagination: {
               pageSize: 100,
               hasNext: cursor !== "cursor-two",
-              nextCursor: cursor === "cursor-one" ? "cursor-two" : cursor === "cursor-two" ? null : "cursor-one",
+              nextCursor:
+                cursor === "cursor-one"
+                  ? "cursor-two"
+                  : cursor === "cursor-two"
+                    ? null
+                    : "cursor-one",
             },
             sort: {
               key: url.searchParams.get("sort") || "createdAt",
@@ -98,21 +103,29 @@ describe("admin user list UI", () => {
       expect(userUrls.at(-1)).toContain("sort=createdAt");
       expect(userUrls.at(-1)).toContain("direction=desc");
 
-      (document.querySelector('[data-user-nav="next"]') as unknown as { click: () => void }).click();
+      (
+        document.querySelector('[data-user-nav="next"]') as unknown as { click: () => void }
+      ).click();
       await settle();
       await settle();
-      expect(new URL(userUrls.at(-1)!, "https://admin.routino.test").searchParams.get("cursor")).toBe(
-        "cursor-one",
-      );
+      expect(
+        new URL(userUrls.at(-1)!, "https://admin.routino.test").searchParams.get("cursor"),
+      ).toBe("cursor-one");
       expect(document.querySelector("#uResults")?.textContent).toContain("صفحه ۲");
 
-      (document.querySelector('[data-user-nav="previous"]') as unknown as { click: () => void }).click();
+      (
+        document.querySelector('[data-user-nav="previous"]') as unknown as { click: () => void }
+      ).click();
       await settle();
       await settle();
-      expect(new URL(userUrls.at(-1)!, "https://admin.routino.test").searchParams.get("cursor")).toBeNull();
+      expect(
+        new URL(userUrls.at(-1)!, "https://admin.routino.test").searchParams.get("cursor"),
+      ).toBeNull();
       expect(document.querySelector("#uResults")?.textContent).toContain("صفحه ۱");
 
-      (document.querySelector('[data-user-sort="activeDays"]') as unknown as { click: () => void }).click();
+      (
+        document.querySelector('[data-user-sort="activeDays"]') as unknown as { click: () => void }
+      ).click();
       await settle();
       await settle();
       const sorted = new URL(userUrls.at(-1)!, "https://admin.routino.test");
@@ -120,19 +133,22 @@ describe("admin user list UI", () => {
       expect(sorted.searchParams.get("sort")).toBe("activeDays");
       expect(sorted.searchParams.get("direction")).toBe("desc");
 
-      (document.querySelector('[data-user-sort="activeDays"]') as unknown as { click: () => void }).click();
+      (
+        document.querySelector('[data-user-sort="activeDays"]') as unknown as { click: () => void }
+      ).click();
       await settle();
       await settle();
-      expect(new URL(userUrls.at(-1)!, "https://admin.routino.test").searchParams.get("direction")).toBe(
-        "asc",
-      );
+      expect(
+        new URL(userUrls.at(-1)!, "https://admin.routino.test").searchParams.get("direction"),
+      ).toBe("asc");
 
       (document.querySelector("#uFilterToggle") as unknown as { click: () => void }).click();
       (document.querySelector("#uSubscription") as unknown as { value: string }).value = "active";
       (document.querySelector("#uMinActive") as unknown as { value: string }).value = "5";
       (document.querySelector("#uMinData") as unknown as { value: string }).value = "1.5";
       (document.querySelector("#uMaxData") as unknown as { value: string }).value = "4";
-      (document.querySelector("#uRegisteredFrom") as unknown as { value: string }).value = "2026-09-01";
+      (document.querySelector("#uRegisteredFrom") as unknown as { value: string }).value =
+        "2026-09-01";
       (document.querySelector("#uApplyFilters") as unknown as { click: () => void }).click();
       await settle();
       await settle();
