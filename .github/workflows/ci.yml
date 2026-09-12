@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run test:edge
+
+      # backend/src is canonical. Generation must produce a clean tree or the
+      # committed Supabase Edge copy has drifted from tested business logic.
+      - run: npm run sync:edge
+      - name: Fail on generated Edge drift
+        run: git diff --exit-code
+
+      - run: npm run build
