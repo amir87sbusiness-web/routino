@@ -21,7 +21,9 @@ const RECOVERY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const PROVIDER_FAILURE_GRACE_MS = 20 * 60 * 1000;
 const AMBIGUOUS_PROVIDER_CODES = [-51, -55] as const;
 const UNVERIFIED_LIMIT = 100;
-const ZARINPAL_TIMEOUT_MS = 20_000;
+const RECONCILE_BUDGET_MS = 27_000;
+const VERIFY_START_RESERVE_MS = 21_000;
+const ZARINPAL_UNVERIFIED_TIMEOUT_MS = 6_000;
 
 type UnverifiedItem = { authority: string; amountRial: number };
 type UnverifiedResult =
@@ -56,6 +58,9 @@ const providerAmount = (value: unknown): number | undefined => {
         : Number.NaN;
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
 };
+
+const canStartVerify = (deadlineMs: number): boolean =>
+  Date.now() + VERIFY_START_RESERVE_MS <= deadlineMs;
 
 async function configuredSecret(deps: Deps): Promise<string> {
   const fromEnv = deps.env.PAYMENT_RECONCILE_SECRET.trim();
@@ -99,7 +104,7 @@ export function paymentRecoveryRoutes(deps: Deps) {
         method: "POST",
         headers,
         body: JSON.stringify({ merchant_id: env.ZARINPAL_MERCHANT }),
-        signal: AbortSignal.timeout(ZARINPAL_TIMEOUT_MS),
+        signal: AbortSignal.timeout(ZARINPAL_UNVERIFIED_TIMEOUT_MS),
       });
       const parsed = record((await res.json()) as unknown);
       if (!parsed) return { kind: "unknown" };
@@ -144,6 +149,7 @@ export function paymentRecoveryRoutes(deps: Deps) {
   };
 
   const runSweep = async (limit: number) => {
+    const deadlineMs = Date.now() + RECONCILE_BUDGET_MS;
     const t = new Date(deps.now());
     const since = new Date(t.getTime() - RECOVERY_WINDOW_MS);
     const open = await db
@@ -166,8 +172,13 @@ export function paymentRecoveryRoutes(deps: Deps) {
     let finalized = 0;
     let stillOpen = 0;
     let errors = 0;
+    let stoppedEarly = false;
 
     for (const payment of open) {
+      if (!canStartVerify(deadlineMs)) {
+        stoppedEarly = true;
+        break;
+      }
       checked += 1;
       try {
         await settleOne(db, psp, payment, t, env.PSP_PROVIDER_MAX_CONCURRENCY);
@@ -213,10 +224,20 @@ export function paymentRecoveryRoutes(deps: Deps) {
       }
     }
 
-    return { success: true, mode: "sweep", checked, recovered, finalized, stillOpen, errors };
+    return {
+      success: true,
+      mode: "sweep",
+      checked,
+      recovered,
+      finalized,
+      stillOpen,
+      errors,
+      stoppedEarly,
+    };
   };
 
   const runUnverified = async () => {
+    const deadlineMs = Date.now() + RECONCILE_BUDGET_MS;
     const t = new Date(deps.now());
     const since = new Date(t.getTime() - RECOVERY_WINDOW_MS);
     const discovered = await fetchUnverified();
@@ -242,6 +263,7 @@ export function paymentRecoveryRoutes(deps: Deps) {
         recovered: 0,
         skipped: 0,
         errors: 0,
+        stoppedEarly: false,
       } as const;
     }
 
@@ -268,6 +290,7 @@ export function paymentRecoveryRoutes(deps: Deps) {
     let recovered = 0;
     let skipped = 0;
     let errors = 0;
+    let stoppedEarly = false;
 
     for (const item of items) {
       const found = byAuthority.get(item.authority);
@@ -286,6 +309,11 @@ export function paymentRecoveryRoutes(deps: Deps) {
           providerAmountRial: item.amountRial,
         });
         continue;
+      }
+
+      if (!canStartVerify(deadlineMs)) {
+        stoppedEarly = true;
+        break;
       }
 
       try {
@@ -313,6 +341,7 @@ export function paymentRecoveryRoutes(deps: Deps) {
       recovered,
       skipped,
       errors,
+      stoppedEarly,
     } as const;
   };
 
