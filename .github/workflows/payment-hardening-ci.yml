@@ -1,0 +1,59 @@
+name: Payment hardening validation
+
+on:
+  push:
+    branches:
+      - fix/payment-recovery-hardening-20260912
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: npm
+      - name: Install root dependencies
+        run: npm ci
+      - name: Install backend dependencies
+        run: npm --prefix backend ci
+      - name: Prettier check
+        run: npx prettier --check backend/src/routes/payment-recovery.ts backend/test/payment-recovery.test.ts supabase/functions/api/routes/payment-recovery.ts scripts/generate-icons.test.mjs scripts/gen-setup-sql.mjs
+      - name: Lint
+        run: npm run lint
+      - name: Root typecheck
+        run: npx tsc --noEmit -p tsconfig.json
+      - name: Root unused-symbol check
+        run: npx tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters
+      - name: Frontend tests
+        run: npm test
+      - name: Frontend and landing build
+        run: npm run build
+      - name: Backend typecheck
+        run: npm --prefix backend run typecheck
+      - name: Backend unused-symbol check
+        run: cd backend && npx tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters
+      - name: Backend tests
+        run: npm --prefix backend test -- --maxWorkers=1
+      - name: Sync canonical backend into Edge
+        run: npm run sync:edge
+      - name: Assert Edge generated parity is committed
+        run: git diff --exit-code -- supabase/functions/api/shared
+      - name: Edge tests
+        run: npm run test:edge
+      - name: Production dependency audit (root)
+        run: npm audit --omit=dev --audit-level=high
+      - name: Production dependency audit (backend)
+        run: npm --prefix backend audit --omit=dev --audit-level=high
+      - name: Mobile Capacitor sync
+        run: npm run cap:sync
+      - name: Android debug compile
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
