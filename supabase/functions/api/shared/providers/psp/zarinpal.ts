@@ -7,8 +7,15 @@ import {
   type PspVerifyResult,
 } from "./index.ts";
 
-const BASE = "https://payment.zarinpal.com";
-export const PSP_TIMEOUT_MS = 12_000;
+const ZARINPAL_ORIGIN = "https://payment.zarinpal.com";
+export const PSP_TIMEOUT_MS = 20_000;
+
+export interface ZarinpalTransportConfig {
+  /** Server-side API base. Production edge uses the Cloudflare ZarinPal relay. */
+  apiBase?: string;
+  /** Shared secret expected by the relay. Never sent to StartPay/browser URLs. */
+  proxySecret?: string;
+}
 
 type ProviderBody = {
   data?: unknown;
@@ -31,11 +38,22 @@ function providerCode(body: ProviderBody): number | undefined {
 
 /** Returns undefined for every transport/wire ambiguity. The caller deliberately
  * keeps those outcomes recoverable instead of inventing a provider result. */
-async function post(path: string, payload: unknown): Promise<ProviderBody | undefined> {
+async function post(
+  apiBase: string,
+  proxySecret: string | undefined,
+  path: string,
+  payload: unknown,
+): Promise<ProviderBody | undefined> {
   try {
-    const res = await fetch(`${BASE}/pg/v4/payment/${path}.json`, {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    };
+    if (proxySecret) headers["x-proxy-secret"] = proxySecret;
+
+    const res = await fetch(`${apiBase}/pg/v4/payment/${path}.json`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      headers,
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(PSP_TIMEOUT_MS),
     });
@@ -47,8 +65,16 @@ async function post(path: string, payload: unknown): Promise<ProviderBody | unde
   }
 }
 
-/** Direct REST v4 adapter, dependency-free so it runs in Node and Deno. */
-export function zarinpalPsp(merchant: string): PspProvider {
+/** ZarinPal REST v4 adapter. Only server API calls may be proxied; StartPay
+ * always stays on ZarinPal's public origin so the customer's browser never sees
+ * or depends on the private relay. */
+export function zarinpalPsp(
+  merchant: string,
+  transport: ZarinpalTransportConfig = {},
+): PspProvider {
+  const apiBase = (transport.apiBase || ZARINPAL_ORIGIN).replace(/\/$/, "");
+  const proxySecret = transport.proxySecret?.trim() || undefined;
+
   return {
     name: "zarinpal" as const,
     async request(input: PspRequestInput): Promise<PspRequestResult> {
@@ -60,7 +86,7 @@ export function zarinpalPsp(merchant: string): PspProvider {
         return { kind: "rejected", code: -9 };
       }
 
-      const body = await post("request", {
+      const body = await post(apiBase, proxySecret, "request", {
         merchant_id: merchant,
         amount: input.amountRial,
         currency: "IRR",
@@ -81,7 +107,7 @@ export function zarinpalPsp(merchant: string): PspProvider {
     },
 
     async verify(authority: string, amountRial: number): Promise<PspVerifyResult> {
-      const body = await post("verify", {
+      const body = await post(apiBase, proxySecret, "verify", {
         merchant_id: merchant,
         amount: amountRial,
         authority,
@@ -111,7 +137,7 @@ export function zarinpalPsp(merchant: string): PspProvider {
     },
 
     startUrl(authority: string): string {
-      return `${BASE}/pg/StartPay/${encodeURIComponent(authority)}`;
+      return `${ZARINPAL_ORIGIN}/pg/StartPay/${encodeURIComponent(authority)}`;
     },
   };
 }
