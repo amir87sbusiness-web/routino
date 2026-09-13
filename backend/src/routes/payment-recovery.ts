@@ -99,8 +99,7 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
         : [];
     const batchStart =
       uniqueItems.length > RECOVERY_LIMIT
-        ? (Math.floor(t.getTime() / RECOVERY_BATCH_SLOT_MS) * RECOVERY_LIMIT) %
-          uniqueItems.length
+        ? (Math.floor(t.getTime() / RECOVERY_BATCH_SLOT_MS) * RECOVERY_LIMIT) % uniqueItems.length
         : 0;
     const items =
       uniqueItems.length <= RECOVERY_LIMIT
@@ -218,8 +217,7 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
             closed += 1;
             continue;
           }
-          const shouldReview =
-            t.getTime() - payment.createdAt.getTime() >= MANUAL_REVIEW_AFTER_MS;
+          const shouldReview = t.getTime() - payment.createdAt.getTime() >= MANUAL_REVIEW_AFTER_MS;
           await db
             .update(payments)
             .set({
