@@ -184,13 +184,17 @@ describe("a payment whose callback never came back", () => {
   });
 
   it.each([-51, -55])(
-    "bounds stale provider code %i but still recovers it from authoritative unVerified",
+    "keeps provider code %i recoverable through the 30-minute gateway window, then reviews it without losing authoritative recovery",
     async (providerCode) => {
       const { access } = await signIn(providerCode === -51 ? "09121110008" : "09121110010");
       const { paymentId, authority } = await checkout(access);
       const [stored] = await h.query<{ amount_rial: number }>(`
         select amount_rial from payments where id='${paymentId}'
       `);
+
+      // At 30 minutes the provider checkout can still be valid. Do not call the
+      // transaction failed just because Verify is still returning an ambiguous
+      // -51/-55 response.
       await h.raw(`
         update payments
            set status='verifying', psp_result=${providerCode},
@@ -198,7 +202,32 @@ describe("a payment whose callback never came back", () => {
                verify_started_at=null, next_verify_at=now()-interval '1 second'
          where id='${paymentId}'
       `);
+      const withinProviderWindow = await h.app.inject({
+        method: "POST",
+        url: "/internal/payments/reconcile",
+        headers: reconcileAuth(),
+      });
+      expect(withinProviderWindow.statusCode).toBe(200);
+      expect(withinProviderWindow.json()).toMatchObject({
+        success: true,
+        finalized: 0,
+        stillOpen: 1,
+      });
+      let [payment] = await h.query<{ status: string }>(`
+        select status from payments where id='${paymentId}'
+      `);
+      expect(payment?.status).not.toBe("failed");
+      expect(payment?.status).not.toBe("manual_review");
 
+      // Once the 30-minute provider lifetime plus five minutes of headroom has
+      // elapsed, stop blind Verify retries. This is still not proof of failure.
+      await h.raw(`
+        update payments
+           set status='verifying', psp_result=${providerCode},
+               created_at=now()-interval '36 minutes',
+               verify_started_at=null, next_verify_at=now()-interval '1 second'
+         where id='${paymentId}'
+      `);
       const bounded = await h.app.inject({
         method: "POST",
         url: "/internal/payments/reconcile",
@@ -206,11 +235,23 @@ describe("a payment whose callback never came back", () => {
       });
       expect(bounded.statusCode).toBe(200);
       expect(bounded.json()).toMatchObject({ success: true, finalized: 1 });
-      const [failed] = await h.query<{ status: string }>(`
+      [payment] = await h.query<{ status: string }>(`
         select status from payments where id='${paymentId}'
       `);
-      expect(failed?.status).toBe("failed");
+      expect(payment?.status).toBe("manual_review");
 
+      const [beforePoll] = await h.query<{ verify_attempts: number }>(`
+        select verify_attempts from payments where id='${paymentId}'
+      `);
+      await openApp(access);
+      const [afterPoll] = await h.query<{ verify_attempts: number }>(`
+        select verify_attempts from payments where id='${paymentId}'
+      `);
+      expect(Number(afterPoll?.verify_attempts)).toBe(Number(beforePoll?.verify_attempts));
+
+      // `manual_review` is not a dead end: the PSP's authoritative paid-but-
+      // unverified feed can reopen it, and normal 100/101 Verify is still the
+      // only path that grants entitlement.
       h.psp._settle(authority, "paid");
       stubUnverified([{ authority, amount: Number(stored!.amount_rial) }]);
       const recovered = await h.app.inject({
@@ -339,7 +380,6 @@ describe("a payment whose callback never came back", () => {
   it("surfaces an unavailable unVerified provider as a non-2xx cron failure", async () => {
     await signIn("09121110012");
     stubUnverified([], { status: 503, errorCode: -9 });
-
     const reconcile = await h.app.inject({
       method: "POST",
       url: "/internal/payments/reconcile-unverified",

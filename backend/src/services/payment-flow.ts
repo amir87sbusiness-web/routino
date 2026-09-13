@@ -1,5 +1,5 @@
 import { and, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
-import type { Database } from "../db/client.js";
+import type { Database, DatabaseExecutor } from "../db/client.js";
 import { grants, payments, users } from "../db/schema.js";
 import {
   badRequest,
@@ -226,20 +226,44 @@ export async function checkoutPayment(
   let ownsRequest = false;
   if (!payment) {
     const createPayment = async (tx: DatabaseExecutor) => {
-      const result = await quoteWithDiscount(tx, body.planId, body.code ?? null, user.id, user.phone, t, 0, true);
+      const result = await quoteWithDiscount(
+        tx,
+        body.planId,
+        body.code ?? null,
+        user.id,
+        user.phone,
+        t,
+        0,
+        true,
+      );
       if (rawCode && !result.discount.valid) {
-        throw badRequest("invalid_discount", `Discount code cannot be used for this checkout (${result.discount.reason ?? "unknown"})`);
+        throw badRequest(
+          "invalid_discount",
+          `Discount code cannot be used for this checkout (${result.discount.reason ?? "unknown"})`,
+        );
       }
       const quoted = result.quote;
-      const [created] = await tx.insert(payments).values({
-        userId: user.id, planId: quoted.planId, months: quoted.months,
-        amountToman: quoted.finalToman, amountRial: quoted.finalRial,
-        discountCode: quoted.discountCode, discountPercent: quoted.discountPercent,
-        offerPercent: quoted.offerPercent, platform: body.platform ?? "web",
-        checkoutProvider: psp.name, attemptId: body.attemptId,
-        status: quoted.finalToman <= 0 ? "pending" : "requesting",
-        requestStartedAt: quoted.finalToman <= 0 ? null : t, createdAt: t, updatedAt: t,
-      }).onConflictDoNothing().returning();
+      const [created] = await tx
+        .insert(payments)
+        .values({
+          userId: user.id,
+          planId: quoted.planId,
+          months: quoted.months,
+          amountToman: quoted.finalToman,
+          amountRial: quoted.finalRial,
+          discountCode: quoted.discountCode,
+          discountPercent: quoted.discountPercent,
+          offerPercent: quoted.offerPercent,
+          platform: body.platform ?? "web",
+          checkoutProvider: psp.name,
+          attemptId: body.attemptId,
+          status: quoted.finalToman <= 0 ? "pending" : "requesting",
+          requestStartedAt: quoted.finalToman <= 0 ? null : t,
+          createdAt: t,
+          updatedAt: t,
+        })
+        .onConflictDoNothing()
+        .returning();
       return { quoted, created };
     };
     const rawCode = body.code?.trim();
