@@ -45,9 +45,7 @@ function SubscribePage() {
   const [codeInput, setCodeInput] = useState("");
   const [appliedCode, setAppliedCode] = useState<{
     code: string;
-    planId: string;
-    percent: number;
-    amountToman: number;
+    finalPriceByPlan: Record<string, number>;
   } | null>(null);
   const [codeError, setCodeError] = useState("");
   const [checking, setChecking] = useState(false);
@@ -55,6 +53,7 @@ function SubscribePage() {
   const [payError, setPayError] = useState("");
   const [needsLogin, setNeedsLogin] = useState(false);
   const [freeSuccess, setFreeSuccess] = useState(false);
+  const codeCheckInFlight = useRef(false);
   const paymentInFlight = useRef(false);
   const paymentAttempt = useRef<{ id: string; key: string } | null>(null);
   const paymentAbort = useRef<AbortController | null>(null);
@@ -107,12 +106,7 @@ function SubscribePage() {
   const priceOf = (planId: string) => {
     const plan = plans.find((p) => p.id === planId);
     if (!plan) return 0;
-    let price = plan.price;
-    if (appliedCode?.planId === planId && appliedCode.amountToman)
-      price = Math.max(0, price - appliedCode.amountToman);
-    else if (appliedCode?.planId === planId)
-      price = Math.round((price * (100 - appliedCode.percent)) / 100);
-    return price;
+    return appliedCode?.finalPriceByPlan[planId] ?? plan.price;
   };
 
   const explainReason = (reason?: string): string => {
@@ -135,23 +129,36 @@ function SubscribePage() {
   };
 
   const applyCode = async () => {
-    if (!plans.some((p) => p.id === selected)) return;
     const code = codeInput.trim().toUpperCase();
-    if (!code) return;
+    if (!code || !plans.length || codeCheckInFlight.current) return;
+    if (appliedCode?.code === code) return;
+    codeCheckInFlight.current = true;
     setChecking(true);
     setCodeError("");
     try {
-      const res = await fetchQuote(selected, code);
-      if (res.discount.valid && res.discount.code) {
-        setAppliedCode({
-          code: res.discount.code,
-          planId: selected,
-          percent: res.discount.percent,
-          amountToman: res.discount.amountToman,
-        });
+      const finalPriceByPlan: Record<string, number> = {};
+      let canonicalCode = code;
+      let firstReason: string | undefined;
+
+      // At most three sequential checks keep peak server load to one request.
+      // A globally invalid code stops immediately; only plan-specific misses
+      // continue because the same code can still be valid for another plan.
+      for (const plan of plans) {
+        const res = await fetchQuote(plan.id, code);
+        if (res.discount.valid && res.discount.code) {
+          canonicalCode = res.discount.code;
+          finalPriceByPlan[plan.id] = res.quote.finalToman;
+          continue;
+        }
+        firstReason ??= res.discount.reason;
+        if (res.discount.reason !== "not_applicable") break;
+      }
+
+      if (Object.keys(finalPriceByPlan).length) {
+        setAppliedCode({ code: canonicalCode, finalPriceByPlan });
       } else {
         setAppliedCode(null);
-        setCodeError(explainReason(res.discount.reason));
+        setCodeError(explainReason(firstReason));
       }
     } catch (err) {
       setAppliedCode(null);
@@ -165,6 +172,7 @@ function SubscribePage() {
         );
       }
     } finally {
+      codeCheckInFlight.current = false;
       setChecking(false);
     }
   };
@@ -182,13 +190,15 @@ function SubscribePage() {
     paymentAbort.current = controller;
     try {
       const platform = Capacitor.getPlatform() as "web" | "android" | "ios";
-      const attemptKey = JSON.stringify([selected, appliedCode?.code ?? null, platform]);
+      const discountCode =
+        appliedCode?.finalPriceByPlan[selected] != null ? appliedCode.code : undefined;
+      const attemptKey = JSON.stringify([selected, discountCode ?? null, platform]);
       if (!paymentAttempt.current || paymentAttempt.current.key !== attemptKey) {
         paymentAttempt.current = { id: crypto.randomUUID(), key: attemptKey };
       }
       const res = await checkoutWithProviderBusyRetry(
         selected,
-        appliedCode?.code,
+        discountCode,
         platform,
         paymentAttempt.current.id,
         controller.signal,
@@ -338,7 +348,6 @@ function SubscribePage() {
               aria-pressed={selected === presentation.id}
               onClick={() => {
                 setSelected(presentation.id);
-                setAppliedCode(null);
                 setCodeError("");
               }}
               className={`flex items-center justify-between rounded-2xl border p-4 text-start transition-colors ${
@@ -392,7 +401,10 @@ function SubscribePage() {
             dir="ltr"
             placeholder={t("کد تخفیف", "Discount code")}
             value={codeInput}
-            onChange={(e) => setCodeInput(e.target.value)}
+            onChange={(e) => {
+              setCodeInput(e.target.value);
+              if (e.target.value.trim().toUpperCase() !== appliedCode?.code) setAppliedCode(null);
+            }}
             onKeyDown={(e) => e.key === "Enter" && void applyCode()}
             className="text-center uppercase"
             disabled={plans.length === 0}

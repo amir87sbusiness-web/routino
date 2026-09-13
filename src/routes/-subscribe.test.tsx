@@ -151,23 +151,53 @@ describe("SubscribePage payment attempts", () => {
     expect(host.textContent).not.toContain("تومان به‌صرفه‌تر");
   });
 
-  it("updates only the selected price without redundant success copy", async () => {
-    payments.fetchQuote.mockResolvedValue({
-      quote: {
-        planId: "m3",
-        months: 3,
-        basePriceToman: 549_000,
-        discountPercent: 20,
-        discountAmountToman: 0,
-        discountCode: "MINIMAL20",
-        finalToman: 439_200,
-      },
-      discount: {
-        valid: true,
-        percent: 20,
-        amountToman: 0,
-        code: "MINIMAL20",
-      },
+  it("applies one code to every eligible plan and keeps ineligible plans unchanged", async () => {
+    payments.fetchQuote.mockImplementation(async (planId: string) => {
+      const quotes = {
+        m1: {
+          quote: {
+            planId: "m1",
+            months: 1,
+            basePriceToman: 199_000,
+            discountPercent: 50,
+            discountAmountToman: 0,
+            discountCode: "MINIMAL20",
+            finalToman: 99_500,
+          },
+          discount: { valid: true, percent: 50, amountToman: 0, code: "MINIMAL20" },
+        },
+        m3: {
+          quote: {
+            planId: "m3",
+            months: 3,
+            basePriceToman: 549_000,
+            discountPercent: 20,
+            discountAmountToman: 0,
+            discountCode: "MINIMAL20",
+            finalToman: 439_200,
+          },
+          discount: { valid: true, percent: 20, amountToman: 0, code: "MINIMAL20" },
+        },
+        m6: {
+          quote: {
+            planId: "m6",
+            months: 6,
+            basePriceToman: 999_000,
+            discountPercent: 0,
+            discountAmountToman: 0,
+            discountCode: null,
+            finalToman: 999_000,
+          },
+          discount: {
+            valid: false,
+            percent: 0,
+            amountToman: 0,
+            code: null,
+            reason: "not_applicable",
+          },
+        },
+      } as const;
+      return quotes[planId as keyof typeof quotes];
     });
 
     const input = host.querySelector<HTMLInputElement>('input[placeholder="کد تخفیف"]')!;
@@ -183,12 +213,16 @@ describe("SubscribePage payment attempts", () => {
     )!;
     await click(apply);
 
+    expect(host.querySelector<HTMLElement>('[data-plan-id="m1"]')?.textContent).toContain(
+      "۹۹,۵۰۰",
+    );
     expect(host.querySelector<HTMLElement>('[data-plan-id="m3"]')?.textContent).toContain(
       "۴۳۹,۲۰۰",
     );
-    expect(host.querySelector<HTMLElement>('[data-plan-id="m1"]')?.textContent).toContain(
-      "۱۹۹,۰۰۰",
+    expect(host.querySelector<HTMLElement>('[data-plan-id="m6"]')?.textContent).toContain(
+      "۹۹۹,۰۰۰",
     );
+    expect(payments.fetchQuote).toHaveBeenCalledTimes(3);
     expect(host.textContent).not.toContain("کد MINIMAL20 اعمال شد");
   });
 
