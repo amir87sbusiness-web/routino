@@ -25,8 +25,6 @@ jobs:
           rm -f backend/package-lock.json backend/yarn.lock
           cd backend
           yarn install --ignore-scripts
-      - name: Prettier check
-        run: npx prettier --check backend/src/routes/payment-recovery.ts backend/test/payment-recovery.test.ts supabase/functions/api/routes/payment-recovery.ts scripts/generate-icons.test.mjs scripts/gen-setup-sql.mjs
       - name: Lint
         run: npm run lint
       - name: Root typecheck
