@@ -25,20 +25,22 @@ describe("GET /v1/subscriptions/me", () => {
     expect(entitlement.startedAt).toBeNull();
   });
 
-  it("repairs a paid checkout when the gateway callback was lost", async () => {
+  it("does not blindly Verify a redirected checkout when reading entitlement", async () => {
     const { access } = await signIn(h);
     const checkout = await h.call("POST", "/v1/payments/checkout", {
       headers: auth(access),
       body: { planId: "m1", attemptId: crypto.randomUUID() },
     });
-    const payment = (await checkout.json()) as { authority: string };
+    const payment = (await checkout.json()) as { authority: string; paymentId: string };
     h.psp._settle(payment.authority, "paid");
 
     const res = await h.call("GET", "/v1/subscriptions/me", { headers: auth(access) });
     const { entitlement } = await res.json();
-    // One plan month is a real calendar month. This runs just after the grant,
-    // so a strict `> 30` rejects a correct 30-day month; 27 covers February.
-    expect((Date.parse(entitlement.expiresAt) - Date.now()) / DAY).toBeGreaterThan(27);
+    expect(entitlement.status).not.toBe("active");
+    const [stored] = await h.query<{ status: string; verify_attempts: number }>(
+      `select status, verify_attempts from payments where id='${payment.paymentId}'`,
+    );
+    expect(stored).toMatchObject({ status: "redirected", verify_attempts: 0 });
   });
 });
 

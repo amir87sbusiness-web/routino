@@ -315,24 +315,30 @@ describe("discount redemption", () => {
 });
 
 describe("GET /v1/payments/:id", () => {
-  it("self-heals a paid-but-never-called-back payment", async () => {
+  it("does not blindly Verify a fresh redirected payment", async () => {
     const { access, user } = await signIn(h);
     const body = (await (await checkout(access, { planId: "m1" })).json()) as {
       authority: string;
       paymentId: string;
     };
 
-    // User paid, then the callback never reached us (closed tab, network).
+    // The provider test double knows this authority was paid, but the app poll
+    // has no trusted callback/provider-feed evidence. Asking Verify here can
+    // race the payer while they are still in the bank flow in production.
     h.psp._settle(body.authority, "paid");
 
     const res = await h.call("GET", `/v1/payments/${body.paymentId}`, { headers: auth(access) });
     const out = await res.json();
-    expect(out.payment.status).toBe("paid");
-    expect(out.entitlement.status).toBe("active");
+    expect(out.payment.status).toBe("redirected");
+    expect(out.entitlement.status).not.toBe("active");
+    const [payment] = await h.query<{ verify_attempts: number }>(
+      `select verify_attempts from payments where id = '${body.paymentId}'`,
+    );
+    expect(Number(payment?.verify_attempts)).toBe(0);
     const grants = await h.query(
       `select id from grants where user_id = '${user.id}' and source = 'payment'`,
     );
-    expect(grants).toHaveLength(1);
+    expect(grants).toHaveLength(0);
   });
 
   it("hides other users' payments", async () => {
@@ -366,16 +372,16 @@ describe("edge: the public callback only acts for a proven caller", () => {
     );
     expect(p!.status).toBe("redirected"); // untouched — nothing was proven
 
-    // The victim really paid but their browser never came back: the poll must
-    // still heal it.
+    // The victim really paid but their browser never came back. A generic poll
+    // still must not guess: the authoritative unVerified job owns recovery.
     h.psp._settle(body.authority, "paid");
     const poll = await h.call("GET", `/v1/payments/${body.paymentId}`, { headers: auth(access) });
-    expect((await poll.json()).payment.status).toBe("paid");
+    expect((await poll.json()).payment.status).toBe("redirected");
 
     const grants = await h.query(
       `select id from grants where user_id = '${user.id}' and source = 'payment'`,
     );
-    expect(grants).toHaveLength(1);
+    expect(grants).toHaveLength(0);
   });
 
   it("rejects duplicated callback keys instead of silently choosing one", async () => {

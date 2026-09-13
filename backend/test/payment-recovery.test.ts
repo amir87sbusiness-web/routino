@@ -80,34 +80,23 @@ const daysLeft = (iso: string | null) =>
   iso === null ? 0 : Math.round((new Date(iso).getTime() - Date.now()) / 86_400_000);
 
 describe("a payment whose callback never came back", () => {
-  it("coalesces rapid recovery polls and retries only after the stored cooldown", async () => {
+  it("does not Verify a fresh authority during ordinary app opens", async () => {
     const { access } = await signIn("09121110006");
     const { paymentId } = await checkout(access);
 
     await openApp(access);
     await openApp(access);
     await openApp(access);
-    let [payment] = await h.query<{ verify_attempts: number; next_verify_at: string }>(`
+    const [payment] = await h.query<{ verify_attempts: number; next_verify_at: string | null }>(`
       select verify_attempts, next_verify_at::text from payments where id = '${paymentId}'
     `);
-    expect(Number(payment!.verify_attempts)).toBe(1);
-    expect(new Date(payment!.next_verify_at).getTime()).toBeGreaterThan(Date.now());
-
-    await h.raw(
-      `update payments set next_verify_at = now() - interval '1 second' where id = '${paymentId}'`,
-    );
-    await openApp(access);
-    [payment] = await h.query<{ verify_attempts: number; next_verify_at: string }>(`
-      select verify_attempts, next_verify_at::text from payments where id = '${paymentId}'
-    `);
-    expect(Number(payment!.verify_attempts)).toBe(2);
+    expect(Number(payment!.verify_attempts)).toBe(0);
+    expect(payment!.next_verify_at).toBeNull();
   });
 
-  it("keeps the callback recoverable while respecting a poll cooldown", async () => {
+  it("continues a callback-proven Verify after its stored cooldown", async () => {
     const { access } = await signIn("09121110007");
     const { paymentId, authority } = await checkout(access);
-    await openApp(access);
-    h.psp._settle(authority, "paid");
 
     const callback = await h.app.inject({
       method: "GET",
@@ -116,6 +105,7 @@ describe("a payment whose callback never came back", () => {
     expect(callback.statusCode).toBe(200);
     expect(callback.body).toContain(`paymentId=${paymentId}`);
     expect(callback.body).toContain("در حال بررسی");
+    h.psp._settle(authority, "paid");
     expect((await openApp(access)).entitlement.status).not.toBe("active");
     await h.raw(
       `update payments set next_verify_at=now()-interval '1 second' where id='${paymentId}'`,
@@ -123,17 +113,20 @@ describe("a payment whose callback never came back", () => {
     expect((await openApp(access)).entitlement.status).toBe("active");
   });
 
-  it("is finished the next time the user opens the app", async () => {
+  it("leaves paid-but-never-called-back recovery to the authoritative feed", async () => {
     const { access } = await signIn("09121110001");
-    const { authority } = await checkout(access);
+    const { paymentId, authority } = await checkout(access);
     h.psp._settle(authority, "paid");
 
     const before = await openApp(access);
     const after = await openApp(access);
 
-    expect(after.entitlement.status).toBe("active");
-    expect(daysLeft(after.entitlement.expiresAt)).toBeGreaterThan(27);
-    expect(daysLeft(before.entitlement.expiresAt)).toBeGreaterThan(27);
+    expect(after.entitlement.status).not.toBe("active");
+    expect(before.entitlement.status).not.toBe("active");
+    const [payment] = await h.query<{ status: string; verify_attempts: number }>(`
+      select status, verify_attempts from payments where id='${paymentId}'
+    `);
+    expect(payment).toMatchObject({ status: "redirected", verify_attempts: 0 });
   });
 
   it("does not grant when the user actually cancelled", async () => {
@@ -155,8 +148,13 @@ describe("a payment whose callback never came back", () => {
 
   it("grants exactly once however many times the app is opened", async () => {
     const { access } = await signIn("09121110004");
-    const { authority } = await checkout(access);
+    const { paymentId, authority } = await checkout(access);
     h.psp._settle(authority, "paid");
+
+    await h.app.inject({
+      method: "GET",
+      url: `/v1/payments/callback?paymentId=${paymentId}&Authority=${authority}&Status=OK`,
+    });
 
     await openApp(access);
     const once = await openApp(access);
@@ -171,8 +169,8 @@ describe("a payment whose callback never came back", () => {
     const { paymentId, authority } = await checkout(access);
     h.psp._settle(authority, "paid");
 
-    const healed = await openApp(access);
-    expect(healed.entitlement.status).toBe("active");
+    const before = await openApp(access);
+    expect(before.entitlement.status).not.toBe("active");
 
     await h.app.inject({
       method: "GET",
@@ -180,7 +178,8 @@ describe("a payment whose callback never came back", () => {
     });
 
     const after = await openApp(access);
-    expect(daysLeft(after.entitlement.expiresAt)).toBe(daysLeft(healed.entitlement.expiresAt));
+    expect(after.entitlement.status).toBe("active");
+    expect(daysLeft(after.entitlement.expiresAt)).toBeGreaterThan(27);
   });
 
   it.each([-51, -55])(

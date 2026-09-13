@@ -402,20 +402,20 @@ describe("checkout → gateway → callback", () => {
     // that would have made the next attempt "proven".
     expect(attack.body).not.toContain(body.paymentId);
 
-    // The victim really pays, but their browser never makes it back. The poll
-    // must still be able to heal it.
+    // The victim really pays, but their browser never makes it back. A generic
+    // poll still must not guess: the authoritative unVerified job owns recovery.
     h.psp._settle(body.authority, "paid");
     const poll = await h.app.inject({
       method: "GET",
       url: `/v1/payments/${body.paymentId}`,
       headers: auth(access),
     });
-    expect(poll.json().payment.status).toBe("paid");
+    expect(poll.json().payment.status).toBe("redirected");
 
     const grants = await h.query(
       `select id from grants where user_id = '${user.id}' and source = 'payment'`,
     );
-    expect(grants).toHaveLength(1);
+    expect(grants).toHaveLength(0);
   });
 
   it("survives a duplicated query param and stays a neutral page", async () => {
@@ -733,14 +733,16 @@ describe("grant durability", () => {
 });
 
 describe("GET /v1/payments/:id", () => {
-  it("self-heals a paid-but-never-called-back payment", async () => {
+  it("does not blindly Verify a fresh redirected payment", async () => {
     const { access, user } = await signIn();
     const body = (await checkout(access, { planId: "m1" })).json() as {
       authority: string;
       paymentId: string;
     };
 
-    // User paid, then the callback never reached us (closed tab, network).
+    // The provider test double knows this authority was paid, but the app poll
+    // has no trusted callback/provider-feed evidence. Asking Verify here can
+    // race the payer while they are still in the bank flow in production.
     h.psp._settle(body.authority, "paid");
 
     const res = await h.app.inject({
@@ -748,12 +750,16 @@ describe("GET /v1/payments/:id", () => {
       url: `/v1/payments/${body.paymentId}`,
       headers: auth(access),
     });
-    expect(res.json().payment.status).toBe("paid");
-    expect(res.json().entitlement.status).toBe("active");
+    expect(res.json().payment.status).toBe("redirected");
+    expect(res.json().entitlement.status).not.toBe("active");
+    const [payment] = await h.query<{ verify_attempts: number }>(
+      `select verify_attempts from payments where id = '${body.paymentId}'`,
+    );
+    expect(Number(payment?.verify_attempts)).toBe(0);
     const grants = await h.query(
       `select id from grants where user_id = '${user.id}' and source = 'payment'`,
     );
-    expect(grants).toHaveLength(1);
+    expect(grants).toHaveLength(0);
   });
 
   it("recovers a payment whose grant failed after the money moved", async () => {

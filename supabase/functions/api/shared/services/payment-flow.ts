@@ -626,7 +626,13 @@ export async function settleOne(
   return (await verifyAndApplyPayment(db, psp, payment, t, undefined, maxConcurrent)).changed;
 }
 
-/** Bounded app-open recovery for callbacks/tabs that never returned. */
+/** Bounded app-open recovery after provider truth was already established.
+ *
+ * A fresh `redirected` row only proves that an Authority was issued. Generic
+ * sync/subscription traffic must not Verify it: that request can race the payer
+ * while they are still in the bank flow. Callback `Status=OK` moves the row to
+ * `verifying`; the authoritative unVerified feed prepares its own candidate.
+ */
 export async function settleOpenPayments(
   db: Database,
   psp: PspProvider,
@@ -645,7 +651,7 @@ export async function settleOpenPayments(
         and(
           eq(payments.userId, userId),
           isNull(payments.appliedAt),
-          inArray(payments.status, ["redirected", "verifying"]),
+          inArray(payments.status, ["verifying", "paid"]),
           or(isNull(payments.verifyStartedAt), lt(payments.verifyStartedAt, staleBefore)),
           or(isNull(payments.nextVerifyAt), lte(payments.nextVerifyAt, t)),
           gt(payments.createdAt, since),
@@ -694,7 +700,12 @@ export async function pollPayment(
   if (!owned) throw unauthorized("unknown_user", "User no longer exists");
   let payment = owned.payment;
   if (!payment) throw notFound("unknown_payment", "No such payment");
-  await settleOne(db, psp, payment, t, maxConcurrent);
+  // Polling is an observation, not provider evidence. Only continue a Verify
+  // that a trusted callback already started, or repair a verified paid row
+  // whose atomic entitlement application did not finish.
+  if (["verifying", "paid"].includes(payment.status)) {
+    await settleOne(db, psp, payment, t, maxConcurrent);
+  }
   const [refreshed] = await db.select().from(payments).where(eq(payments.id, id)).limit(1);
   payment = refreshed ?? null;
   if (!payment) throw notFound("unknown_payment", "No such payment");
