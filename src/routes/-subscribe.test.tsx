@@ -143,15 +143,53 @@ describe("SubscribePage payment attempts", () => {
     expect(host.textContent).not.toContain("در حال دریافت قیمت‌های جدید");
   });
 
-  it("renders plans in fixed order with the configured saving", () => {
+  it("renders plans in fixed order without savings copy", () => {
     const choices = [...host.querySelectorAll<HTMLButtonElement>("[data-plan-id]")];
     expect(choices.map((choice) => choice.dataset.planId)).toEqual(["m1", "m3", "m6"]);
-    expect(choices[1]?.textContent).toContain("۵۹۷,۰۰۰");
     expect(choices[1]?.textContent).toContain("۵۴۹,۰۰۰");
-    expect(choices[1]?.textContent).toContain("۴۸,۰۰۰ تومان به‌صرفه‌تر");
-    expect(choices[2]?.textContent).toContain("۱,۱۹۴,۰۰۰");
     expect(choices[2]?.textContent).toContain("۹۹۹,۰۰۰");
-    expect(choices[2]?.textContent).toContain("۱۹۵,۰۰۰ تومان به‌صرفه‌تر");
+    expect(host.textContent).not.toContain("تومان به‌صرفه‌تر");
+  });
+
+  it("updates only the selected price without redundant success copy", async () => {
+    payments.fetchQuote.mockResolvedValue({
+      quote: {
+        planId: "m3",
+        months: 3,
+        basePriceToman: 549_000,
+        discountPercent: 20,
+        discountAmountToman: 0,
+        discountCode: "MINIMAL20",
+        finalToman: 439_200,
+      },
+      discount: {
+        valid: true,
+        percent: 20,
+        amountToman: 0,
+        code: "MINIMAL20",
+      },
+    });
+
+    const input = host.querySelector<HTMLInputElement>('input[placeholder="کد تخفیف"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+        input,
+        "MINIMAL20",
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const apply = [...host.querySelectorAll<HTMLButtonElement>("button")].find((button) =>
+      button.textContent?.includes("اعمال"),
+    )!;
+    await click(apply);
+
+    expect(host.querySelector<HTMLElement>('[data-plan-id="m3"]')?.textContent).toContain(
+      "۴۳۹,۲۰۰",
+    );
+    expect(host.querySelector<HTMLElement>('[data-plan-id="m1"]')?.textContent).toContain(
+      "۱۹۹,۰۰۰",
+    );
+    expect(host.textContent).not.toContain("کد MINIMAL20 اعمال شد");
   });
 
   it("reuses one UUID after a retryable timeout", async () => {

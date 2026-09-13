@@ -9,7 +9,7 @@
  */
 import { Capacitor } from "@capacitor/core";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { BadgeCheck, LogIn, ShieldAlert, Tag, WifiOff } from "lucide-react";
+import { BadgeCheck, LogIn, ShieldAlert, WifiOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button, Input, Logo } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
@@ -22,7 +22,6 @@ import {
 } from "@/lib/api/payments";
 import { faNum, formatDate, dateKey } from "@/lib/dates";
 import { subscriptionActive } from "@/lib/logic";
-import { subscriptionProgress } from "@/lib/subscription-progress";
 import { useAppMaybe } from "@/state/app";
 
 export const Route = createFileRoute("/subscribe")({
@@ -44,7 +43,12 @@ function SubscribePage() {
   const [offline, setOffline] = useState(false);
   const [selected, setSelected] = useState<string>("m3");
   const [codeInput, setCodeInput] = useState("");
-  const [appliedCode, setAppliedCode] = useState<{ code: string; percent: number; amountToman: number } | null>(null);
+  const [appliedCode, setAppliedCode] = useState<{
+    code: string;
+    planId: string;
+    percent: number;
+    amountToman: number;
+  } | null>(null);
   const [codeError, setCodeError] = useState("");
   const [checking, setChecking] = useState(false);
   const [paying, setPaying] = useState(false);
@@ -99,15 +103,15 @@ function SubscribePage() {
   const { db, applyEntitlement, t, lang, cal } = ctx;
 
   const active = subscriptionActive(db);
-  const progress = !active ? subscriptionProgress(db) : null;
-
   /** Display-only. The charged amount is recomputed server-side at checkout. */
   const priceOf = (planId: string) => {
     const plan = plans.find((p) => p.id === planId);
     if (!plan) return 0;
     let price = plan.price;
-    if (appliedCode?.amountToman) price = Math.max(0, price - appliedCode.amountToman);
-    else if (appliedCode) price = Math.round((price * (100 - appliedCode.percent)) / 100);
+    if (appliedCode?.planId === planId && appliedCode.amountToman)
+      price = Math.max(0, price - appliedCode.amountToman);
+    else if (appliedCode?.planId === planId)
+      price = Math.round((price * (100 - appliedCode.percent)) / 100);
     return price;
   };
 
@@ -139,7 +143,12 @@ function SubscribePage() {
     try {
       const res = await fetchQuote(selected, code);
       if (res.discount.valid && res.discount.code) {
-        setAppliedCode({ code: res.discount.code, percent: res.discount.percent, amountToman: res.discount.amountToman });
+        setAppliedCode({
+          code: res.discount.code,
+          planId: selected,
+          percent: res.discount.percent,
+          amountToman: res.discount.amountToman,
+        });
       } else {
         setAppliedCode(null);
         setCodeError(explainReason(res.discount.reason));
@@ -270,9 +279,9 @@ function SubscribePage() {
   };
 
   return (
-    <div className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-5 bg-background px-5 py-screen-safe">
+    <div className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 bg-background px-5 py-screen-safe">
       <div className="flex flex-col items-center gap-2 text-center">
-        <Logo className="h-14 w-14" />
+        <Logo className="h-12 w-12" />
         <h1 className="text-xl font-black text-foreground">
           {t("اشتراک روتینو", "Routino Subscription")}
         </h1>
@@ -312,74 +321,27 @@ function SubscribePage() {
         )}
       </div>
 
-      {progress && (
-        <section className="rounded-2xl border border-border bg-card/60 px-4 py-4">
-          <h2 className="text-sm font-black text-foreground">
-            {progress.kind === "trial"
-              ? t("۳ روز با روتینو", "Your 3 days with Routino")
-              : t("ادامهٔ مسیرت با روتینو", "Keep your Routino journey going")}
-          </h2>
-          <p className="mt-1 text-[11px] leading-5 text-muted-foreground">
-            {t(
-              "این اعداد از ثبت‌های واقعی خودت در همین بازه ساخته شده‌اند.",
-              "These numbers come from your real check-ins in this period.",
-            )}
-          </p>
-          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 border-t border-border pt-3 text-xs">
-            <div className="flex items-baseline justify-between gap-2">
-              <dt className="text-muted-foreground">{t("ثبت موفق", "Check-ins")}</dt>
-              <dd className="font-black text-foreground">
-                {faNum(progress.completedCheckIns, lang)}
-              </dd>
-            </div>
-            <div className="flex items-baseline justify-between gap-2">
-              <dt className="text-muted-foreground">{t("روز فعال", "Active days")}</dt>
-              <dd className="font-black text-foreground">{faNum(progress.activeDays, lang)}</dd>
-            </div>
-            {progress.completionRate !== null && (
-              <div className="col-span-2 flex items-baseline justify-between gap-2">
-                <dt className="text-muted-foreground">{t("نرخ انجام", "Completion rate")}</dt>
-                <dd className="font-black text-foreground">
-                  {faNum(progress.completionRate, lang)}٪
-                </dd>
-              </div>
-            )}
-            {progress.bestHabit && (
-              <div className="col-span-2 flex items-baseline justify-between gap-2">
-                <dt className="text-muted-foreground">{t("عادت برجسته", "Standout habit")}</dt>
-                <dd className="max-w-[55%] truncate font-bold text-foreground">
-                  {progress.bestHabit.name}
-                </dd>
-              </div>
-            )}
-          </dl>
-        </section>
-      )}
-
       <div className="flex flex-col gap-2.5">
         {PLAN_PRESENTATION.map((presentation) => {
           const plan = plans.find((item) => item.id === presentation.id);
           const final = plan ? priceOf(plan.id) : null;
-          const oneMonthPrice = plans.find((item) => item.id === "m1")?.price ?? null;
-          const payMonthlyPrice = oneMonthPrice ? oneMonthPrice * presentation.months : null;
           const referencePrice = plan
             ? plan.originalPrice != null && plan.originalPrice > plan.price
               ? plan.originalPrice
-              : payMonthlyPrice != null && payMonthlyPrice > plan.price
-                ? payMonthlyPrice
-                : plan.price
+              : plan.price
             : null;
-          const saving = final != null && referencePrice != null ? referencePrice - final : 0;
-          const savingPercent =
-            saving > 0 && referencePrice ? Math.round((saving * 100) / referencePrice) : 0;
           return (
             <button
               key={presentation.id}
               type="button"
               data-plan-id={presentation.id}
               aria-pressed={selected === presentation.id}
-              onClick={() => { setSelected(presentation.id); setAppliedCode(null); setCodeError(""); }}
-              className={`flex items-center justify-between rounded-2xl border-2 p-4 text-start transition-all ${
+              onClick={() => {
+                setSelected(presentation.id);
+                setAppliedCode(null);
+                setCodeError("");
+              }}
+              className={`flex items-center justify-between rounded-2xl border p-4 text-start transition-colors ${
                 selected === presentation.id
                   ? "border-primary bg-primary-soft"
                   : "border-border bg-card"
@@ -405,7 +367,7 @@ function SubscribePage() {
                   </>
                 ) : plan && final != null ? (
                   <>
-                    {saving > 0 && referencePrice != null && (
+                    {referencePrice != null && final < referencePrice && (
                       <p className="text-[10px] text-muted-foreground line-through">
                         {faNum(referencePrice.toLocaleString("en-US"), lang)}
                       </p>
@@ -414,12 +376,6 @@ function SubscribePage() {
                       {faNum(final.toLocaleString("en-US"), lang)}{" "}
                       <span className="text-[10px] font-normal">{t("تومان", "Toman")}</span>
                     </p>
-                    {saving > 0 && (
-                      <p className="mt-1 text-[10px] font-bold text-success">
-                        {faNum(saving.toLocaleString("en-US"), lang)}{" "}
-                        {t("تومان به‌صرفه‌تر", "Toman saved")} · {faNum(savingPercent, lang)}٪
-                      </p>
-                    )}
                   </>
                 ) : (
                   <span className="text-sm font-bold text-muted-foreground">—</span>
@@ -446,17 +402,10 @@ function SubscribePage() {
             onClick={() => void applyCode()}
             disabled={checking || plans.length === 0}
           >
-            <Tag className="h-4 w-4" />
             {checking ? t("بررسی…", "Checking…") : t("اعمال", "Apply")}
           </Button>
         </div>
         {codeError && <p className="text-xs text-destructive">{codeError}</p>}
-        {appliedCode && (
-          <p className="text-xs font-medium text-success">
-            ✓ {t(`کد ${appliedCode.code} اعمال شد`, `Code ${appliedCode.code} applied`)} (
-            {appliedCode.amountToman ? faNum(appliedCode.amountToman.toLocaleString("en-US"), lang) + " " + t("تومان", "Toman") : faNum(appliedCode.percent, lang) + "٪"})
-          </p>
-        )}
       </div>
 
       {freeSuccess ? (
