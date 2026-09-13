@@ -14,11 +14,16 @@ const RECOVERABLE_STATUSES = [
   "provider_unknown",
   "verifying",
   "operational_error",
-  "manual_review",
 ] as const;
 
 const RECOVERY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-const PROVIDER_FAILURE_GRACE_MS = 20 * 60 * 1000;
+// ZarinPal checkout authorities are expected to be usable for roughly 30 minutes.
+// Leave five minutes of clock/network headroom before classifying an ambiguous
+// -51/-55 result. This state is NOT proof that a payment failed.
+const PROVIDER_AMBIGUITY_GRACE_MS = 35 * 60 * 1000;
+// A manual-review row must not be re-verified by ordinary app polling. The
+// authoritative unVerified feed can still reset it to redirected immediately.
+const MANUAL_REVIEW_HOLD_MS = 365 * 24 * 60 * 60 * 1000;
 const AMBIGUOUS_PROVIDER_CODES = [-51, -55] as const;
 const UNVERIFIED_LIMIT = 100;
 const RECONCILE_BUDGET_MS = 27_000;
@@ -199,22 +204,26 @@ export function paymentRecoveryRoutes(deps: Deps) {
           recovered += 1;
           continue;
         }
-        if (["failed", "canceled", "verify_failed"].includes(fresh.status)) {
+        if (["failed", "canceled", "verify_failed", "manual_review"].includes(fresh.status)) {
           finalized += 1;
           continue;
         }
 
-        const staleProviderFailure =
+        // -51/-55 around the gateway/callback boundary are ambiguous. Keep them
+        // recoverable through the provider's checkout lifetime plus headroom;
+        // after that classify them for human/authoritative reconciliation, not
+        // as a proven failed payment. `unVerified` can still resurrect safely.
+        const staleProviderAmbiguity =
           fresh.pspResult !== null &&
           AMBIGUOUS_PROVIDER_CODES.includes(fresh.pspResult as -51 | -55) &&
-          t.getTime() - fresh.createdAt.getTime() >= PROVIDER_FAILURE_GRACE_MS;
-        if (staleProviderFailure) {
+          t.getTime() - fresh.createdAt.getTime() >= PROVIDER_AMBIGUITY_GRACE_MS;
+        if (staleProviderAmbiguity) {
           [fresh] = await db
             .update(payments)
             .set({
-              status: "failed",
+              status: "manual_review",
               verifyStartedAt: null,
-              nextVerifyAt: null,
+              nextVerifyAt: new Date(t.getTime() + MANUAL_REVIEW_HOLD_MS),
               updatedAt: t,
             })
             .where(and(eq(payments.id, fresh.id), isNull(payments.appliedAt)))
