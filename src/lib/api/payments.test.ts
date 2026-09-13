@@ -55,6 +55,23 @@ describe("payment checkout API", () => {
     vi.useRealTimers();
   });
 
+  it("turns a closed duplicate attempt into a non-retryable client error after one request", async () => {
+    auth.authedRequest.mockRejectedValueOnce(
+      new ApiError(409, "duplicate_payment_attempt", "closed attempt"),
+    );
+    const attemptId = crypto.randomUUID();
+
+    await expect(
+      checkoutWithProviderBusyRetry("m1", undefined, "android", attemptId),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "payment_attempt_closed",
+    });
+
+    expect(auth.authedRequest).toHaveBeenCalledTimes(1);
+    expect(auth.authedRequest.mock.calls[0]?.[1].body.attemptId).toBe(attemptId);
+  });
+
   it("stops provider_busy retries when the checkout screen aborts", async () => {
     vi.useFakeTimers();
     auth.authedRequest.mockRejectedValue(new ApiError(503, "provider_busy", "busy", false, 2));
