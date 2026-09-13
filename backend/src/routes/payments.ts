@@ -67,16 +67,16 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
     const t = now();
     const result = await checkoutPayment(db, env, psp, user, body, t);
 
-    // Idempotent replays of an already-applied paid checkout must never send the
-    // user back to its old StartPay URL. Treat the completed checkout as a
-    // no-gateway result and return the current entitlement instead.
+    // Idempotent replays of an already-applied checkout must never send the
+    // user back to its old StartPay URL. appliedAt is the authoritative local
+    // proof that entitlement was granted; status text alone is not sufficient.
     if (!result.free) {
       const [payment] = await db
-        .select({ status: payments.status, appliedAt: payments.appliedAt })
+        .select({ appliedAt: payments.appliedAt })
         .from(payments)
         .where(eq(payments.id, result.paymentId))
         .limit(1);
-      if (payment?.appliedAt || payment?.status === "paid") {
+      if (payment?.appliedAt) {
         return {
           free: true,
           paymentId: result.paymentId,
