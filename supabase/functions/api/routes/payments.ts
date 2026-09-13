@@ -66,14 +66,15 @@ export function paymentRoutes(deps: Deps) {
     const result = await checkoutPayment(db, env, psp, user, body, t);
 
     // A replay of an already-applied checkout is complete. Never return its old
-    // StartPay URL: the native/web client should consume current entitlement.
+    // StartPay URL. appliedAt is the authoritative local proof that entitlement
+    // was granted; status text alone is not sufficient.
     if (!result.free) {
       const [payment] = await db
-        .select({ status: payments.status, appliedAt: payments.appliedAt })
+        .select({ appliedAt: payments.appliedAt })
         .from(payments)
         .where(eq(payments.id, result.paymentId))
         .limit(1);
-      if (payment?.appliedAt || payment?.status === "paid") {
+      if (payment?.appliedAt) {
         return c.json({
           free: true,
           paymentId: result.paymentId,
