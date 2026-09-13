@@ -10,7 +10,7 @@ import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { html, makeAuthenticate, readJson, requireUser, type AppEnv, type Deps } from "../deps.ts";
-import { users } from "../shared/db/schema.ts";
+import { payments, users } from "../shared/db/schema.ts";
 import { badRequest, unauthorized } from "../shared/lib/http-errors.ts";
 import { renderResultPage } from "../shared/lib/pay-result-page.ts";
 import {
@@ -19,6 +19,7 @@ import {
   pollPayment,
   UUID_RE,
 } from "../shared/services/payment-flow.ts";
+import { readEntitlement } from "../shared/services/entitlement.ts";
 import { quoteWithDiscount } from "../shared/services/pricing.ts";
 
 const quoteBody = z.object({
@@ -61,7 +62,26 @@ export function paymentRoutes(deps: Deps) {
     const authenticated = requireUser(c);
     const user = await paymentUser(authenticated.id);
     const body = checkoutBody.parse(await readJson(c));
-    return c.json(await checkoutPayment(db, env, psp, user, body, now()));
+    const t = now();
+    const result = await checkoutPayment(db, env, psp, user, body, t);
+
+    // A replay of an already-applied checkout is complete. Never return its old
+    // StartPay URL: the native/web client should consume current entitlement.
+    if (!result.free) {
+      const [payment] = await db
+        .select({ status: payments.status, appliedAt: payments.appliedAt })
+        .from(payments)
+        .where(eq(payments.id, result.paymentId))
+        .limit(1);
+      if (payment?.appliedAt || payment?.status === "paid") {
+        return c.json({
+          free: true,
+          paymentId: result.paymentId,
+          entitlement: await readEntitlement(db, user.id, t),
+        });
+      }
+    }
+    return c.json(result);
   });
 
   /** The PSP redirects the user's browser here after the gateway. Public. */
