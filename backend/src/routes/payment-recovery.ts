@@ -1,14 +1,19 @@
 import { Buffer } from "node:buffer";
 import { timingSafeEqual } from "node:crypto";
-import { and, asc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { rowsOf } from "../db/client.js";
 import { payments } from "../db/schema.js";
 import { PAYMENT_VERIFY_LEASE_MS, settleOne } from "../services/payment-flow.js";
 
 const RECOVERY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-const INQUIRY_AFTER_MS = 35 * 60 * 1000;
+const INQUIRY_AFTER_MS = 10 * 60 * 1000;
+const MANUAL_REVIEW_AFTER_MS = 35 * 60 * 1000;
+const INQUIRY_RETRY_MS = 10 * 60 * 1000;
+const MANUAL_REVIEW_RETRY_MS = 60 * 60 * 1000;
 const RECOVERY_LIMIT = 100;
+const INQUIRY_LIMIT = 20;
+const RECOVERY_BATCH_SLOT_MS = 5 * 60 * 1000;
 const RECONCILE_BUDGET_MS = 27_000;
 const VERIFY_START_RESERVE_MS = 21_000;
 
@@ -77,19 +82,32 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
     const deadlineMs = Date.now() + RECONCILE_BUDGET_MS;
     const t = new Date(app.deps.now());
     const since = new Date(t.getTime() - RECOVERY_WINDOW_MS);
-    const listed = psp.listUnverified ? await psp.listUnverified() : { kind: "unknown" as const };
-    if (listed.kind !== "ok") {
-      return {
-        success: false,
-        mode: "authoritative",
-        error: "provider_unverified_unavailable",
-        providerCode: listed.code ?? null,
-      } as const;
-    }
-
-    const items = [
-      ...new Map(listed.items.map((item) => [item.authority, item] as const)).values(),
-    ].slice(0, RECOVERY_LIMIT);
+    const listed = await (async () => {
+      try {
+        return psp.listUnverified
+          ? await psp.listUnverified()
+          : { kind: "unknown" as const, code: undefined };
+      } catch (err) {
+        app.log.error({ err }, "payment recovery unVerified lookup failed");
+        return { kind: "unknown" as const, code: undefined };
+      }
+    })();
+    const unverifiedAvailable = listed.kind === "ok";
+    const uniqueItems =
+      listed.kind === "ok"
+        ? [...new Map(listed.items.map((item) => [item.authority, item] as const)).values()]
+        : [];
+    const batchStart =
+      uniqueItems.length > RECOVERY_LIMIT
+        ? (Math.floor(t.getTime() / RECOVERY_BATCH_SLOT_MS) * RECOVERY_LIMIT) % uniqueItems.length
+        : 0;
+    const items =
+      uniqueItems.length <= RECOVERY_LIMIT
+        ? uniqueItems
+        : [...uniqueItems.slice(batchStart), ...uniqueItems.slice(0, batchStart)].slice(
+            0,
+            RECOVERY_LIMIT,
+          );
     const authorities = items.map((item) => item.authority);
     const candidates =
       authorities.length === 0
@@ -113,6 +131,7 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
 
     let matched = 0;
     let checked = 0;
+    let inquired = 0;
     let recovered = 0;
     let skipped = 0;
     let reviewed = 0;
@@ -167,37 +186,53 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
               "canceled",
               "paid",
             ]),
+            or(isNull(payments.nextVerifyAt), lte(payments.nextVerifyAt, t)),
           ),
         )
         .orderBy(asc(payments.createdAt))
-        .limit(Math.max(0, RECOVERY_LIMIT - checked));
+        .limit(INQUIRY_LIMIT);
 
       for (const payment of stale) {
         if (!payment.authority || authorities.includes(payment.authority)) continue;
+        if (inquired >= INQUIRY_LIMIT) break;
         if (!canStartProviderCall(deadlineMs)) {
           stoppedEarly = true;
           break;
         }
         try {
           const inquiry = await psp.inquire(payment.authority);
+          inquired += 1;
+          checked += 1;
           if (inquiry.kind === "paid" || inquiry.kind === "verified") {
-            checked += 1;
             if (await verifyCandidate(payment, t)) recovered += 1;
             continue;
           }
           if (inquiry.kind === "failed" || inquiry.kind === "reversed") {
             await db
               .update(payments)
-              .set({ status: "canceled", pspResult: inquiry.code ?? null, updatedAt: t })
+              .set({
+                status: "failed",
+                pspResult: inquiry.code ?? null,
+                nextVerifyAt: null,
+                updatedAt: t,
+              })
               .where(and(eq(payments.id, payment.id), isNull(payments.appliedAt)));
             closed += 1;
             continue;
           }
+          const shouldReview = t.getTime() - payment.createdAt.getTime() >= MANUAL_REVIEW_AFTER_MS;
           await db
             .update(payments)
-            .set({ status: "manual_review", pspResult: inquiry.code ?? null, updatedAt: t })
+            .set({
+              status: shouldReview ? "manual_review" : payment.status,
+              pspResult: inquiry.code ?? null,
+              nextVerifyAt: new Date(
+                t.getTime() + (shouldReview ? MANUAL_REVIEW_RETRY_MS : INQUIRY_RETRY_MS),
+              ),
+              updatedAt: t,
+            })
             .where(and(eq(payments.id, payment.id), isNull(payments.appliedAt)));
-          reviewed += 1;
+          if (shouldReview) reviewed += 1;
         } catch (err) {
           errors += 1;
           app.log.error({ paymentId: payment.id, err }, "payment recovery Inquiry failed");
@@ -205,12 +240,17 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
       }
     }
 
+    const success = unverifiedAvailable || inquired > 0;
     return {
-      success: true,
+      success,
       mode: "authoritative",
+      error: success ? undefined : "provider_unverified_unavailable",
+      providerCode: listed.kind === "ok" ? null : (listed.code ?? null),
+      unverifiedAvailable,
       discovered: items.length,
       matched,
       checked,
+      inquired,
       recovered,
       skipped,
       reviewed,
