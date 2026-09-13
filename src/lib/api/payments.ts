@@ -96,7 +96,14 @@ function abortableDelay(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 /** A short technical backpressure retry. It never creates a second logical
- * checkout: every call carries the caller's exact same attemptId. */
+ * checkout: every provider-busy retry carries the caller's exact same attemptId.
+ *
+ * A duplicate attempt is different: the server has told us that this logical
+ * attempt is already terminal/non-reusable. Re-surfacing that same error code
+ * would make the subscribe page retain the UUID and send it again forever.
+ * Translate it to a non-retryable client error so the page discards the stale
+ * UUID; a deliberate next click then creates one fresh checkout intent.
+ */
 export async function checkoutWithProviderBusyRetry(
   planId: string,
   code: string | undefined,
@@ -111,6 +118,16 @@ export async function checkoutWithProviderBusyRetry(
     } catch (err) {
       if (signal?.aborted) {
         throw new DOMException("Aborted", "AbortError");
+      }
+      if (err instanceof ApiError && err.code === "duplicate_payment_attempt") {
+        throw new ApiError(
+          err.status,
+          "payment_attempt_closed",
+          err.message,
+          err.offline,
+          err.retryAfter,
+          err.support,
+        );
       }
       if (
         !(err instanceof ApiError) ||
@@ -139,7 +156,8 @@ export interface PaymentStatus {
       | "paid"
       | "failed"
       | "canceled"
-      | "verify_failed";
+      | "verify_failed"
+      | "manual_review";
     planId: string;
     months: number;
     amountToman: number;
