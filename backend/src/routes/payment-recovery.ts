@@ -206,7 +206,9 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
           recovered += 1;
           continue;
         }
-        if (["failed", "canceled", "verify_failed", "manual_review"].includes(fresh.status)) {
+        if (
+          ["failed", "canceled", "verify_failed", "manual_review"].includes(fresh.status)
+        ) {
           finalized += 1;
           continue;
         }
