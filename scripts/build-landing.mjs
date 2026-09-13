@@ -123,6 +123,21 @@ function readLegalInfo() {
   };
 }
 
+/**
+ * The Android app reads this value from its own signed source when the public
+ * site is built. A release therefore cannot publish an arbitrary endpoint or
+ * a stale hand-maintained version number.
+ */
+function readAndroidVersionCode() {
+  const gradle = readFileSync(join(ROOT, "android", "app", "build.gradle"), "utf8");
+  const match = gradle.match(/^\s*versionCode\s+(\d+)\s*$/m);
+  if (!match) throw new Error("android/app/build.gradle: versionCode پیدا نشد");
+  const versionCode = Number(match[1]);
+  if (!Number.isSafeInteger(versionCode) || versionCode < 1)
+    throw new Error("android/app/build.gradle: versionCode نامعتبر است");
+  return versionCode;
+}
+
 const renderSections = (list) =>
   list
     .map(
@@ -292,6 +307,11 @@ async function main() {
   const info = readLegalInfo();
 
   mkdirSync(OUT_DIR, { recursive: true });
+  mkdirSync(join(OUT_DIR, "app"), { recursive: true });
+  writeFileSync(
+    join(OUT_DIR, "app", "android-update.json"),
+    JSON.stringify({ versionCode: readAndroidVersionCode() }) + "\n",
+  );
   const apkName = "routino-android-1.0.apk";
   const bundledApk = join(ROOT, "landing", "downloads", apkName);
   let androidUrl = process.env.ANDROID_DOWNLOAD_URL;
@@ -404,6 +424,10 @@ async function main() {
       "/app/manifest.webmanifest",
       "  Cache-Control: no-cache",
       "",
+      "/app/android-update.json",
+      "  Cache-Control: no-cache",
+      "  Access-Control-Allow-Origin: *",
+      "",
       "# The APK is fetched only after the user clicks the direct download link.",
       "# Revalidate its stable URL so a future replacement is never stale.",
       "/downloads/*.apk",
@@ -444,6 +468,7 @@ async function main() {
           "/app/sw.js",
           "/app/workbox-*.js",
           "/app/manifest.webmanifest",
+          "/app/android-update.json",
           "/app/favicon.ico",
           "/app/robots.txt",
         ],

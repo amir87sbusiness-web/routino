@@ -22,6 +22,7 @@ describe("landing build script", () => {
       copyInput("landing/legal.template.html");
       copyInput("landing/downloads");
       copyInput("landing/shots");
+      copyInput("android/app/build.gradle");
       copyInput("public/brand");
       copyInput("public/icons/favicon-16.png");
       copyInput("public/icons/favicon-32.png");
@@ -78,6 +79,10 @@ describe("landing build script", () => {
       assert.equal(existsSync(join(sandbox, "dist", "icons", "favicon-16.png")), true);
       assert.equal(existsSync(join(sandbox, "dist", "icons", "favicon-32.png")), true);
       assert.equal(existsSync(join(sandbox, "dist", "favicon.ico")), true);
+      assert.deepEqual(
+        JSON.parse(readFileSync(join(sandbox, "dist", "app", "android-update.json"), "utf8")),
+        { versionCode: 10 },
+      );
 
       const headers = readFileSync(join(sandbox, "dist", "_headers"), "utf8");
       assert.match(
@@ -93,6 +98,10 @@ describe("landing build script", () => {
       assert.match(headers, /\/app\/\n  Cache-Control: no-cache/);
       assert.match(headers, /\/app\/sw\.js\n  Cache-Control: no-cache/);
       assert.match(headers, /\/app\/manifest\.webmanifest\n  Cache-Control: no-cache/);
+      assert.match(
+        headers,
+        /\/app\/android-update\.json\n  Cache-Control: no-cache\n  Access-Control-Allow-Origin: \*/,
+      );
       assert.match(
         headers,
         /\/downloads\/\*\.apk\n  Cache-Control: no-cache\n  Content-Disposition: attachment/,
@@ -120,6 +129,7 @@ describe("landing build script", () => {
           "/app/sw.js",
           "/app/workbox-*.js",
           "/app/manifest.webmanifest",
+          "/app/android-update.json",
           "/app/favicon.ico",
           "/app/robots.txt",
         ],

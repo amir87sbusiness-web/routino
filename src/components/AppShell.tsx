@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { FeedbackModal } from "@/components/FeedbackModal";
+import { AndroidUpdateBanner } from "@/components/AndroidUpdateBanner";
 import { InstallBanner } from "@/components/pwa";
 import { Button, Logo, Modal } from "@/components/ui";
 import { faNum } from "@/lib/dates";
@@ -284,6 +285,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
         )}
 
+        <AndroidUpdateBanner />
         <InstallBanner />
         <main className="px-4 py-4">{children}</main>
       </div>
