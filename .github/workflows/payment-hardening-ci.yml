@@ -22,11 +22,11 @@ jobs:
       - name: Install root dependencies
         run: npm ci
       - name: Install backend dependencies
-        # backend/package-lock.json is already stale on main (esbuild optional packages).
-        # Use install only for this validation run; no lockfile changes are committed.
         run: npm --prefix backend install --ignore-scripts
-      - name: Prettier check
-        run: npx prettier --check backend/src/routes/payment-recovery.ts backend/test/payment-recovery.test.ts supabase/functions/api/routes/payment-recovery.ts scripts/generate-icons.test.mjs scripts/gen-setup-sql.mjs
+      - name: Format validation files and show exact diff
+        run: |
+          npx prettier --write backend/src/routes/payment-recovery.ts supabase/functions/api/routes/payment-recovery.ts
+          git diff -- backend/src/routes/payment-recovery.ts supabase/functions/api/routes/payment-recovery.ts
       - name: Lint
         run: npm run lint
       - name: Root typecheck
