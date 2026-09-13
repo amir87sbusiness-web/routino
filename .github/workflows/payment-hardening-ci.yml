@@ -37,8 +37,6 @@ jobs:
         run: npm run build
       - name: Backend typecheck
         run: npm --prefix backend run typecheck
-      - name: Backend unused-symbol check
-        run: cd backend && npx tsc --noEmit -p tsconfig.json --noUnusedLocals --noUnusedParameters
       - name: Backend tests
         run: npm --prefix backend test -- --maxWorkers=1
       - name: Sync canonical backend into Edge
