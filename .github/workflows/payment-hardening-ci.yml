@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - fix/payment-recovery-hardening-20260912
+      - fix/payment-retry-recovery-hardening
 
 permissions:
   contents: read
