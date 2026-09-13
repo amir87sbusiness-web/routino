@@ -374,7 +374,13 @@ export async function adminDeleteDiscount(db: Database, code: string) {
       and(
         eq(payments.discountCode, normalized),
         isNull(payments.appliedAt),
-        inArray(payments.status, ["pending", "requesting", "redirected", "provider_unknown", "verifying"]),
+        inArray(payments.status, [
+          "pending",
+          "requesting",
+          "redirected",
+          "provider_unknown",
+          "verifying",
+        ]),
       ),
     )
     .limit(1);

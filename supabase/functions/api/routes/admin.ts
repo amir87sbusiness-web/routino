@@ -79,12 +79,14 @@ const discountCreateBody = z.object({
     .max(32)
     .regex(/^[A-Za-z0-9_-]+$/, "letters/digits/dash only"),
   percent: z.number().int().min(1).max(100).optional(),
-  planRules: z.record(
-    z.discriminatedUnion("kind", [
-      z.object({ kind: z.literal("percent"), value: z.number().int().min(1).max(100) }),
-      z.object({ kind: z.literal("fixed"), value: z.number().int().min(1).max(1_000_000_000) }),
-    ]),
-  ).optional(),
+  planRules: z
+    .record(
+      z.discriminatedUnion("kind", [
+        z.object({ kind: z.literal("percent"), value: z.number().int().min(1).max(100) }),
+        z.object({ kind: z.literal("fixed"), value: z.number().int().min(1).max(1_000_000_000) }),
+      ]),
+    )
+    .optional(),
   maxUses: z.number().int().min(1).max(1_000_000).nullable().optional(),
   expiresAt: z.number().int().positive().nullable().optional(), // epoch ms
   phone: z.string().max(20).nullable().optional(),

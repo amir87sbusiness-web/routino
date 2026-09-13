@@ -213,9 +213,7 @@ describe("SubscribePage payment attempts", () => {
     )!;
     await click(apply);
 
-    expect(host.querySelector<HTMLElement>('[data-plan-id="m1"]')?.textContent).toContain(
-      "۹۹,۵۰۰",
-    );
+    expect(host.querySelector<HTMLElement>('[data-plan-id="m1"]')?.textContent).toContain("۹۹,۵۰۰");
     expect(host.querySelector<HTMLElement>('[data-plan-id="m3"]')?.textContent).toContain(
       "۴۳۹,۲۰۰",
     );
