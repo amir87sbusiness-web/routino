@@ -41,7 +41,14 @@ export interface QuoteResult {
     percent: number;
     amountToman: number;
     code: string | null;
-    reason?: "unknown" | "inactive" | "expired" | "exhausted" | "other_user" | "already_used" | "not_applicable";
+    reason?:
+      | "unknown"
+      | "inactive"
+      | "expired"
+      | "exhausted"
+      | "other_user"
+      | "already_used"
+      | "not_applicable";
   };
 }
 
