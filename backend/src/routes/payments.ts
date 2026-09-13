@@ -14,7 +14,7 @@
 import type { FastifyPluginAsync } from "fastify";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
-import { users } from "../db/schema.js";
+import { payments, users } from "../db/schema.js";
 import { renderResultPage } from "../lib/pay-result-page.js";
 import { requireUser } from "../plugins/auth.js";
 import { badRequest, unauthorized } from "../plugins/errors.js";
@@ -24,6 +24,7 @@ import {
   pollPayment,
   UUID_RE,
 } from "../services/payment-flow.js";
+import { readEntitlement } from "../services/entitlement.js";
 import { quoteWithDiscount } from "../services/pricing.js";
 
 const quoteBody = z.object({
@@ -63,7 +64,27 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
     const auth = requireUser(req);
     const user = await paymentUser(auth.id);
     const body = checkoutBody.parse(req.body);
-    return checkoutPayment(db, env, psp, user, body, now());
+    const t = now();
+    const result = await checkoutPayment(db, env, psp, user, body, t);
+
+    // Idempotent replays of an already-applied paid checkout must never send the
+    // user back to its old StartPay URL. Treat the completed checkout as a
+    // no-gateway result and return the current entitlement instead.
+    if (!result.free) {
+      const [payment] = await db
+        .select({ status: payments.status, appliedAt: payments.appliedAt })
+        .from(payments)
+        .where(eq(payments.id, result.paymentId))
+        .limit(1);
+      if (payment?.appliedAt || payment?.status === "paid") {
+        return {
+          free: true,
+          paymentId: result.paymentId,
+          entitlement: await readEntitlement(db, user.id, t),
+        };
+      }
+    }
+    return result;
   });
 
   /** The PSP redirects the user's browser here after the gateway. */
