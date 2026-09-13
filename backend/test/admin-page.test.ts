@@ -391,7 +391,6 @@ describe("admin page", () => {
       await settlePage();
       const document = dom.window.document;
       (document.querySelector("#dCode") as unknown as { value: string }).value = "SAFE30";
-      (document.querySelector("#dPercent") as unknown as { value: string }).value = "30";
       (document.querySelector("#dCreate") as unknown as { click(): void }).click();
       await settlePage();
       const mutation = fetch.mock.calls.find(([path]) => path === "/v1/admin/discounts");
