@@ -53,4 +53,10 @@ describe("AndroidUpdateBanner", () => {
 
     expect(host.textContent).not.toContain("نسخهٔ جدید روتینو آماده است");
   });
+
+  it("keeps the update action visible until the user updates", async () => {
+    await act(async () => root.render(<AndroidUpdateBanner />));
+    expect(host.textContent).toContain("نسخهٔ جدید روتینو آماده است");
+    expect(host.querySelector('[aria-label="فعلاً نه"]')).toBeNull();
+  });
 });

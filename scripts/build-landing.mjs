@@ -138,6 +138,29 @@ function readAndroidVersionCode() {
   return versionCode;
 }
 
+/** Prevent advertising a build until the exact signed APK is bundled with it. */
+function verifyBundledAndroidRelease(versionCode) {
+  const apk = join(ROOT, "landing", "downloads", "routino-android-1.0.apk");
+  const manifest = `${apk}.json`;
+  if (!existsSync(apk) || !existsSync(manifest))
+    throw new Error("نسخهٔ APK امضاشده برای انتشار پیدا نشد");
+
+  let release;
+  try {
+    release = JSON.parse(readFileSync(manifest, "utf8"));
+  } catch {
+    throw new Error("فایل مشخصات نسخهٔ APK قابل‌خواندن نیست");
+  }
+  const digest = createHash("sha256").update(readFileSync(apk)).digest("hex");
+  if (
+    release?.versionCode !== versionCode ||
+    release?.bytes !== statSync(apk).size ||
+    release?.sha256 !== digest
+  ) {
+    throw new Error("نسخهٔ APK امضاشده با versionCode انتشار یکی نیست");
+  }
+}
+
 const renderSections = (list) =>
   list
     .map(
@@ -308,9 +331,11 @@ async function main() {
 
   mkdirSync(OUT_DIR, { recursive: true });
   mkdirSync(join(OUT_DIR, "app"), { recursive: true });
+  const androidVersionCode = readAndroidVersionCode();
+  verifyBundledAndroidRelease(androidVersionCode);
   writeFileSync(
     join(OUT_DIR, "app", "android-update.json"),
-    JSON.stringify({ versionCode: readAndroidVersionCode() }) + "\n",
+    JSON.stringify({ versionCode: androidVersionCode }) + "\n",
   );
   const apkName = "routino-android-1.0.apk";
   const bundledApk = join(ROOT, "landing", "downloads", apkName);

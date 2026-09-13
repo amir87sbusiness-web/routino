@@ -1,4 +1,4 @@
-import { Download, X } from "lucide-react";
+import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   checkAndroidUpdateOnBoot,
@@ -8,24 +8,6 @@ import {
 import { Button } from "@/components/ui";
 import { useAppMaybe } from "@/state/app";
 
-const DISMISSED_VERSION_KEY = "routino:android-update:dismissed-version:v1";
-
-function isDismissed(versionCode: number): boolean {
-  try {
-    return Number(localStorage.getItem(DISMISSED_VERSION_KEY)) >= versionCode;
-  } catch {
-    return false;
-  }
-}
-
-function dismiss(versionCode: number): void {
-  try {
-    localStorage.setItem(DISMISSED_VERSION_KEY, String(versionCode));
-  } catch {
-    // The user can still dismiss this launch when WebView storage is unavailable.
-  }
-}
-
 /** A release notice rendered only inside the Android app while it is open. */
 export function AndroidUpdateBanner() {
   const ctx = useAppMaybe();
@@ -34,7 +16,7 @@ export function AndroidUpdateBanner() {
   useEffect(() => {
     let active = true;
     void checkAndroidUpdateOnBoot().then((next) => {
-      if (active && next && !isDismissed(next.versionCode)) setRelease(next);
+      if (active && next) setRelease(next);
     });
     return () => {
       active = false;
@@ -60,16 +42,6 @@ export function AndroidUpdateBanner() {
       <Button className="px-3 py-1.5 text-xs" onClick={() => void openAndroidUpdatePage()}>
         {t("بروزرسانی", "Update")}
       </Button>
-      <button
-        aria-label={t("فعلاً نه", "Not now")}
-        className="text-muted-foreground hover:text-foreground"
-        onClick={() => {
-          dismiss(release.versionCode);
-          setRelease(null);
-        }}
-      >
-        <X className="h-4 w-4" aria-hidden="true" />
-      </button>
     </div>
   );
 }

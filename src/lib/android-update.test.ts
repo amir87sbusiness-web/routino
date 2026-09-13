@@ -33,6 +33,31 @@ describe("Android in-app update checks", () => {
     expect(fetchRelease).not.toHaveBeenCalled();
   });
 
+  it("fails closed when persistent storage is unavailable or the device clock moves back", async () => {
+    const unavailable = {
+      getItem: () => {
+        throw new Error("storage unavailable");
+      },
+      setItem: () => {
+        throw new Error("storage unavailable");
+      },
+    };
+    const fetchRelease = vi.fn(async () => ({ ok: true, json: async () => ({ versionCode: 10 }) }));
+
+    await expect(
+      checkAndroidUpdate(driver({ fetchRelease, storage: unavailable })),
+    ).resolves.toBeNull();
+    await expect(
+      checkAndroidUpdate(
+        driver({
+          fetchRelease,
+          storage: memory({ "routino:android-update:last-check:v1": "100000001" }),
+        }),
+      ),
+    ).resolves.toBeNull();
+    expect(fetchRelease).not.toHaveBeenCalled();
+  });
+
   it("ignores web, malformed responses, and releases that are not newer", async () => {
     await expect(checkAndroidUpdate(driver({ isAndroid: async () => false }))).resolves.toBeNull();
     await expect(

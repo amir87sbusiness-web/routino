@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -29,6 +39,15 @@ describe("landing build script", () => {
       copyInput("public/favicon.ico");
       copyInput("src/lib/legal-info.ts");
       copyInput("src/lib/legal-text.json");
+      const apk = join(sandbox, "landing", "downloads", "routino-android-1.0.apk");
+      writeFileSync(
+        `${apk}.json`,
+        JSON.stringify({
+          versionCode: 10,
+          bytes: statSync(apk).size,
+          sha256: createHash("sha256").update(readFileSync(apk)).digest("hex"),
+        }),
+      );
       symlinkSync(
         join(ROOT, "node_modules"),
         join(sandbox, "node_modules"),
@@ -83,6 +102,20 @@ describe("landing build script", () => {
         JSON.parse(readFileSync(join(sandbox, "dist", "app", "android-update.json"), "utf8")),
         { versionCode: 10 },
       );
+
+      writeFileSync(
+        join(sandbox, "android", "app", "build.gradle"),
+        readFileSync(join(sandbox, "android", "app", "build.gradle"), "utf8").replace(
+          "versionCode 10",
+          "versionCode 11",
+        ),
+      );
+      const mismatchedRelease = spawnSync(process.execPath, ["scripts/build-landing.mjs"], {
+        cwd: sandbox,
+        encoding: "utf8",
+      });
+      assert.notEqual(mismatchedRelease.status, 0);
+      assert.match(mismatchedRelease.stderr, /نسخهٔ APK/);
 
       const headers = readFileSync(join(sandbox, "dist", "_headers"), "utf8");
       assert.match(

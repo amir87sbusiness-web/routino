@@ -38,20 +38,20 @@ function releaseFrom(value: unknown): AndroidUpdate | null {
   return versionCode ? { versionCode } : null;
 }
 
-function lastCheck(storage: KeyValueStorage): number | null {
+function lastCheck(storage: KeyValueStorage): { available: boolean; value: number | null } {
   try {
-    return positiveInteger(storage.getItem(LAST_CHECK_KEY));
+    return { available: true, value: positiveInteger(storage.getItem(LAST_CHECK_KEY)) };
   } catch {
-    return null;
+    return { available: false, value: null };
   }
 }
 
-function recordCheck(storage: KeyValueStorage, at: number): void {
+function recordCheck(storage: KeyValueStorage, at: number): boolean {
   try {
     storage.setItem(LAST_CHECK_KEY, String(at));
+    return true;
   } catch {
-    // Storage can be unavailable in privacy-restricted WebViews. The check is
-    // still safe: it is only reached by Android's foreground app shell.
+    return false;
   }
 }
 
@@ -63,15 +63,15 @@ export async function checkAndroidUpdate(
 
   const now = driver.now();
   const previous = lastCheck(driver.storage);
+  if (!previous.available) return null;
   if (
-    previous !== null &&
-    now - previous >= 0 &&
-    now - previous < ANDROID_UPDATE_CHECK_INTERVAL_MS
+    previous.value !== null &&
+    (previous.value > now || now - previous.value < ANDROID_UPDATE_CHECK_INTERVAL_MS)
   ) {
     return null;
   }
 
-  recordCheck(driver.storage, now);
+  if (!recordCheck(driver.storage, now)) return null;
   const currentVersion = positiveInteger(await driver.currentBuild());
   if (!currentVersion) return null;
 
