@@ -32,14 +32,16 @@ export interface QuoteResult {
     months: number;
     basePriceToman: number;
     discountPercent: number;
+    discountAmountToman: number;
     discountCode: string | null;
     finalToman: number;
   };
   discount: {
     valid: boolean;
     percent: number;
+    amountToman: number;
     code: string | null;
-    reason?: "unknown" | "inactive" | "expired" | "exhausted" | "other_user" | "already_used";
+    reason?: "unknown" | "inactive" | "expired" | "exhausted" | "other_user" | "already_used" | "not_applicable";
   };
 }
 

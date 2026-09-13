@@ -8,7 +8,7 @@
  * from here.
  */
 import { and, asc, count, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
-import type { Database } from "../db/client.ts";
+import type { Database, DatabaseExecutor } from "../db/client.ts";
 import { discounts, payments, plans, redemptions } from "../db/schema.ts";
 import { badRequest, notFound } from "../lib/http-errors.ts";
 
@@ -36,7 +36,7 @@ const RESERVATION_MINUTES = 30;
  * a user's own retry report the code as exhausted.
  */
 async function slotsTaken(
-  db: Database,
+  db: DatabaseExecutor,
   code: string,
   usedCount: number,
   userId: string,
@@ -74,6 +74,7 @@ export interface Quote {
   basePriceToman: number;
   offerPercent: number;
   discountPercent: number;
+  discountAmountToman: number;
   discountCode: string | null;
   finalToman: number;
   /** What actually goes to ZarinPal, in Rial. */
@@ -87,29 +88,56 @@ export const tomanToRial = (toman: number): number => toman * 10;
 export interface DiscountCheck {
   valid: boolean;
   percent: number;
+  amountToman: number;
   code: string | null;
-  reason?: "unknown" | "inactive" | "expired" | "exhausted" | "other_user" | "already_used";
+  reason?:
+    | "unknown"
+    | "inactive"
+    | "expired"
+    | "exhausted"
+    | "other_user"
+    | "already_used"
+    | "not_applicable";
+}
+
+type DiscountRule = { kind: "percent" | "fixed"; value: number };
+
+function planRule(rules: Record<string, unknown>, planId: string | undefined): DiscountRule | null {
+  if (!planId || !Object.keys(rules).length) return null;
+  const candidate = rules[planId];
+  if (
+    !candidate ||
+    typeof candidate !== "object" ||
+    !["percent", "fixed"].includes((candidate as { kind?: unknown }).kind as string) ||
+    !Number.isInteger((candidate as { value?: unknown }).value) ||
+    (candidate as { value: number }).value < 1
+  ) {
+    return null;
+  }
+  return candidate as DiscountRule;
 }
 
 export async function checkDiscount(
-  db: Database,
+  db: DatabaseExecutor,
   rawCode: string | null | undefined,
   userId: string,
   userPhone: string,
   now: Date,
+  planId?: string,
 ): Promise<DiscountCheck> {
-  if (!rawCode?.trim()) return { valid: false, percent: 0, code: null };
+  if (!rawCode?.trim()) return { valid: false, percent: 0, amountToman: 0, code: null };
   const code = rawCode.trim().toUpperCase();
 
   const [d] = await db.select().from(discounts).where(eq(discounts.code, code)).limit(1);
-  if (!d) return { valid: false, percent: 0, code: null, reason: "unknown" };
-  if (!d.active) return { valid: false, percent: 0, code: null, reason: "inactive" };
+  if (!d) return { valid: false, percent: 0, amountToman: 0, code: null, reason: "unknown" };
+  if (!d.active)
+    return { valid: false, percent: 0, amountToman: 0, code: null, reason: "inactive" };
   if (d.expiresAt && d.expiresAt <= now)
-    return { valid: false, percent: 0, code: null, reason: "expired" };
+    return { valid: false, percent: 0, amountToman: 0, code: null, reason: "expired" };
   if (d.maxUses != null && (await slotsTaken(db, d.code, d.usedCount, userId, now)) >= d.maxUses)
-    return { valid: false, percent: 0, code: null, reason: "exhausted" };
+    return { valid: false, percent: 0, amountToman: 0, code: null, reason: "exhausted" };
   if (d.phone && d.phone !== userPhone)
-    return { valid: false, percent: 0, code: null, reason: "other_user" };
+    return { valid: false, percent: 0, amountToman: 0, code: null, reason: "other_user" };
 
   // One redemption per user, enforced by the redemptions PK at write time; this
   // is the friendly check that avoids a constraint violation at checkout.
@@ -118,16 +146,25 @@ export async function checkDiscount(
     .from(redemptions)
     .where(and(eq(redemptions.code, code), eq(redemptions.userId, userId)))
     .limit(1);
-  if (already) return { valid: false, percent: 0, code: null, reason: "already_used" };
+  if (already)
+    return { valid: false, percent: 0, amountToman: 0, code: null, reason: "already_used" };
 
-  return { valid: true, percent: d.percent, code: d.code };
+  const rule = planRule(d.planRules, planId);
+  if (Object.keys(d.planRules).length && !rule)
+    return { valid: false, percent: 0, amountToman: 0, code: null, reason: "not_applicable" };
+  return {
+    valid: true,
+    percent: rule?.kind === "percent" ? rule.value : d.percent,
+    amountToman: rule?.kind === "fixed" ? rule.value : 0,
+    code: d.code,
+  };
 }
 
 /** Computes the quote and exposes the exact discount validation result from the
  * same pass. The quote-preview route needs both; returning them together avoids
  * running the discount queries twice for one button press. */
 export async function quoteWithDiscount(
-  db: Database,
+  db: DatabaseExecutor,
   planId: string,
   rawCode: string | null | undefined,
   userId: string,
@@ -143,13 +180,14 @@ export async function quoteWithDiscount(
     .limit(1);
   if (!plan) throw notFound("unknown_plan", `No active plan '${planId}'`);
 
-  const discount = await checkDiscount(db, rawCode, userId, userPhone, now);
+  const discount = await checkDiscount(db, rawCode, userId, userPhone, now, plan.id);
 
   // Offer and discount stack multiplicatively — same order the client UI has
   // always shown, so the displayed price matches what gets charged.
   let price = plan.priceToman;
   if (offerPercent > 0) price = Math.round((price * (100 - offerPercent)) / 100);
-  if (discount.valid) price = Math.round((price * (100 - discount.percent)) / 100);
+  if (discount.valid && discount.amountToman > 0) price -= discount.amountToman;
+  else if (discount.valid) price = Math.round((price * (100 - discount.percent)) / 100);
 
   // ZarinPal has a minimum charge; a 100% discount would also
   // mean "free", which should never reach a payment gateway at all.
@@ -164,6 +202,7 @@ export async function quoteWithDiscount(
       basePriceToman: plan.priceToman,
       offerPercent,
       discountPercent: discount.valid ? discount.percent : 0,
+      discountAmountToman: discount.valid ? discount.amountToman : 0,
       discountCode: discount.code,
       finalToman: price,
       finalRial: tomanToRial(price),
@@ -173,7 +212,7 @@ export async function quoteWithDiscount(
 }
 
 export async function quote(
-  db: Database,
+  db: DatabaseExecutor,
   planId: string,
   rawCode: string | null | undefined,
   userId: string,
@@ -192,7 +231,7 @@ export async function quote(
 /** Marks a code used. Called inside the grant transaction, never before payment
  * succeeds — otherwise an abandoned checkout burns a use. */
 export async function redeemDiscount(
-  db: Database,
+  db: DatabaseExecutor,
   code: string,
   userId: string,
   paymentId: string,
@@ -219,4 +258,17 @@ export async function redeemDiscount(
 
 export async function activePlans(db: Database) {
   return db.select().from(plans).where(eq(plans.active, true)).orderBy(asc(plans.months));
+}
+
+/** Serialises one discounted checkout against just its code row. The caller
+ * holds this only while validating the cap and inserting the payment row; PSP
+ * work always happens after the transaction commits. */
+export async function lockDiscountForCheckout(db: DatabaseExecutor, rawCode: string | undefined) {
+  const code = rawCode?.trim().toUpperCase();
+  if (!code) return;
+  await db
+    .select({ code: discounts.code })
+    .from(discounts)
+    .where(eq(discounts.code, code))
+    .for("update");
 }

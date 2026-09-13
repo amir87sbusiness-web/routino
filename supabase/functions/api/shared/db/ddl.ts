@@ -1363,6 +1363,7 @@ create table if not exists plans (
 create table if not exists discounts (
   code text primary key,
   percent integer not null,
+  plan_rules jsonb not null default '{}'::jsonb,
   phone text,
   active boolean not null default true,
   max_uses integer,
@@ -1371,7 +1372,7 @@ create table if not exists discounts (
 );
 
 create table if not exists redemptions (
-  code text not null references discounts(code),
+  code text not null references discounts(code) on delete cascade,
   user_id uuid not null references users(id) on delete cascade,
   payment_id uuid,
   created_at timestamptz not null default now(),
@@ -1750,6 +1751,10 @@ end
 $$;
 alter table payments add column if not exists platform text;
 alter table payments add column if not exists authority text;
+alter table discounts add column if not exists plan_rules jsonb not null default '{}'::jsonb;
+alter table redemptions drop constraint if exists redemptions_code_fkey;
+alter table redemptions add constraint redemptions_code_fkey
+  foreign key (code) references discounts(code) on delete cascade;
 -- ZarinPal authority is unique per transaction (multiple NULLs are allowed).
 create unique index if not exists payments_authority on payments (authority);
 

@@ -33,6 +33,7 @@ import { claimSendSlot, releaseSendSlot, verifyCode } from "../services/otp.js";
 import { acquireProviderLease, releaseProviderLease } from "../services/provider-capacity.js";
 import {
   adminCreateDiscount,
+  adminDeleteDiscount,
   adminGrant,
   adminListDiscounts,
   adminListPlans,
@@ -84,7 +85,13 @@ const discountCreateBody = z.object({
     .min(3)
     .max(32)
     .regex(/^[A-Za-z0-9_-]+$/, "letters/digits/dash only"),
-  percent: z.number().int().min(1).max(100),
+  percent: z.number().int().min(1).max(100).optional(),
+  planRules: z.record(
+    z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("percent"), value: z.number().int().min(1).max(100) }),
+      z.object({ kind: z.literal("fixed"), value: z.number().int().min(1).max(1_000_000_000) }),
+    ]),
+  ).optional(),
   maxUses: z.number().int().min(1).max(1_000_000).nullable().optional(),
   expiresAt: z.number().int().positive().nullable().optional(), // epoch ms
   phone: z.string().max(20).nullable().optional(),
@@ -138,7 +145,7 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
 
   const requireAdmin = async (req: FastifyRequest, reply: FastifyReply) => {
     await requireSession(req, reply);
-    if (req.method === "POST") {
+    if (req.method !== "GET") {
       const csrf = readCookie(req.headers.cookie, ADMIN_CSRF_COOKIE);
       const header = req.headers["x-admin-csrf"];
       if (!adminCsrfMatches(csrf, typeof header === "string" ? header : undefined)) {
@@ -294,5 +301,10 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   app.post("/admin/discounts/:code", opts, async (req) => {
     const { code } = req.params as { code: string };
     return adminUpdateDiscount(db, code, discountUpdateBody.parse(req.body));
+  });
+
+  app.delete("/admin/discounts/:code", opts, async (req) => {
+    const { code } = req.params as { code: string };
+    return adminDeleteDiscount(db, code);
   });
 };

@@ -44,7 +44,7 @@ function SubscribePage() {
   const [offline, setOffline] = useState(false);
   const [selected, setSelected] = useState<string>("m3");
   const [codeInput, setCodeInput] = useState("");
-  const [appliedCode, setAppliedCode] = useState<{ code: string; percent: number } | null>(null);
+  const [appliedCode, setAppliedCode] = useState<{ code: string; percent: number; amountToman: number } | null>(null);
   const [codeError, setCodeError] = useState("");
   const [checking, setChecking] = useState(false);
   const [paying, setPaying] = useState(false);
@@ -106,7 +106,8 @@ function SubscribePage() {
     const plan = plans.find((p) => p.id === planId);
     if (!plan) return 0;
     let price = plan.price;
-    if (appliedCode) price = Math.round((price * (100 - appliedCode.percent)) / 100);
+    if (appliedCode?.amountToman) price = Math.max(0, price - appliedCode.amountToman);
+    else if (appliedCode) price = Math.round((price * (100 - appliedCode.percent)) / 100);
     return price;
   };
 
@@ -120,6 +121,8 @@ function SubscribePage() {
         return t("قبلاً از این کد استفاده کردی.", "You have already used this code.");
       case "other_user":
         return t("این کد مخصوص حساب دیگه‌ایه.", "This code belongs to another account.");
+      case "not_applicable":
+        return t("این کد برای این پلن نیست.", "This code does not apply to this plan.");
       case "inactive":
       case "unknown":
       default:
@@ -136,7 +139,7 @@ function SubscribePage() {
     try {
       const res = await fetchQuote(selected, code);
       if (res.discount.valid && res.discount.code) {
-        setAppliedCode({ code: res.discount.code, percent: res.discount.percent });
+        setAppliedCode({ code: res.discount.code, percent: res.discount.percent, amountToman: res.discount.amountToman });
       } else {
         setAppliedCode(null);
         setCodeError(explainReason(res.discount.reason));
@@ -375,7 +378,7 @@ function SubscribePage() {
               type="button"
               data-plan-id={presentation.id}
               aria-pressed={selected === presentation.id}
-              onClick={() => setSelected(presentation.id)}
+              onClick={() => { setSelected(presentation.id); setAppliedCode(null); setCodeError(""); }}
               className={`flex items-center justify-between rounded-2xl border-2 p-4 text-start transition-all ${
                 selected === presentation.id
                   ? "border-primary bg-primary-soft"
@@ -451,7 +454,7 @@ function SubscribePage() {
         {appliedCode && (
           <p className="text-xs font-medium text-success">
             ✓ {t(`کد ${appliedCode.code} اعمال شد`, `Code ${appliedCode.code} applied`)} (
-            {faNum(appliedCode.percent, lang)}٪)
+            {appliedCode.amountToman ? faNum(appliedCode.amountToman.toLocaleString("en-US"), lang) + " " + t("تومان", "Toman") : faNum(appliedCode.percent, lang) + "٪"})
           </p>
         )}
       </div>

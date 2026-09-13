@@ -8,7 +8,7 @@
  * table is scanned at most once. The per-user detail view still fans out its
  * independent, on-demand history reads.
  */
-import { asc, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { rowsOf, type Database } from "../db/client.js";
 import {
   anonymousCounters,
@@ -20,7 +20,7 @@ import {
   plans,
   users,
 } from "../db/schema.js";
-import { badRequest, notFound } from "../lib/http-errors.js";
+import { badRequest, conflict, notFound } from "../lib/http-errors.js";
 import { normalizePhone, toAsciiDigits } from "../lib/phone.js";
 import { grantInterval, listGrants, readEntitlement } from "./entitlement.js";
 import { hashPassword, validatePassword } from "./password.js";
@@ -325,13 +325,25 @@ export async function adminCreateDiscount(
   db: Database,
   body: {
     code: string;
-    percent: number;
+    percent?: number;
+    planRules?: Record<string, { kind: "percent" | "fixed"; value: number }>;
     maxUses?: number | null;
     expiresAt?: number | null;
     phone?: string | null;
   },
 ) {
   const code = body.code.toUpperCase();
+  const planRules = body.planRules ?? {};
+  if (!body.percent && !Object.keys(planRules).length)
+    throw badRequest("missing_discount_rule", "Choose at least one plan discount");
+  if (Object.keys(planRules).length) {
+    const existingPlans = await db
+      .select({ id: plans.id })
+      .from(plans)
+      .where(inArray(plans.id, Object.keys(planRules)));
+    if (existingPlans.length !== Object.keys(planRules).length)
+      throw badRequest("unknown_discount_plan", "Discount rule references an unknown plan");
+  }
   const [existing] = await db.select().from(discounts).where(eq(discounts.code, code)).limit(1);
   if (existing) throw badRequest("duplicate_code", "Code already exists");
 
@@ -339,7 +351,8 @@ export async function adminCreateDiscount(
     .insert(discounts)
     .values({
       code,
-      percent: body.percent,
+      percent: body.percent ?? 0,
+      planRules,
       maxUses: body.maxUses ?? null,
       expiresAt: toExpiry(body.expiresAt),
       phone: body.phone || null,
@@ -347,6 +360,28 @@ export async function adminCreateDiscount(
     })
     .returning();
   return { ok: true as const, discount: row };
+}
+
+/** Deletes operational code state but never payment history. In-flight
+ * checkouts are blocked so a recreated code cannot alter their accounting. */
+export async function adminDeleteDiscount(db: Database, code: string) {
+  const normalized = code.toUpperCase();
+  const [inFlight] = await db
+    .select({ id: payments.id })
+    .from(payments)
+    .where(
+      and(
+        eq(payments.discountCode, normalized),
+        isNull(payments.appliedAt),
+        inArray(payments.status, ["pending", "requesting", "redirected", "provider_unknown", "verifying"]),
+      ),
+    )
+    .limit(1);
+  if (inFlight)
+    throw conflict("discount_in_use", "Wait for the in-progress payment before deleting this code");
+  const [removed] = await db.delete(discounts).where(eq(discounts.code, normalized)).returning();
+  if (!removed) throw notFound("unknown_code", "No such discount");
+  return { ok: true as const, code: removed.code };
 }
 
 export async function adminUpdateDiscount(

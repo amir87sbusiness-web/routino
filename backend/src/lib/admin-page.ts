@@ -105,7 +105,7 @@ export const ADMIN_PAGE = `<!doctype html>
   </section>
 
   <section id="tab-discounts" role="tabpanel" aria-labelledby="tab-button-discounts" style="display:none">
-    <div class="section-surface"><div class="row"><input id="dCode" placeholder="کد (مثل EID1405)" aria-label="کد تخفیف" dir="ltr"><input id="dPercent" type="number" min="1" max="100" placeholder="درصد" aria-label="درصد تخفیف" style="width:82px"><input id="dMax" type="number" min="1" placeholder="سقف استفاده" aria-label="سقف استفاده" style="width:118px"><input id="dExp" type="date" title="تاریخ انقضا" aria-label="تاریخ انقضا"><button class="btn" type="button" id="dCreate">ساخت کد</button></div><div class="err" id="dErr" role="alert"></div><div class="result" id="dResults" aria-live="polite"></div></div>
+    <div class="section-surface"><div class="row"><input id="dCode" placeholder="کد (مثل EID1405)" aria-label="کد تخفیف" dir="ltr"><input id="dMax" type="number" min="1" placeholder="سقف استفاده" aria-label="سقف استفاده" style="width:118px"><input id="dExp" type="date" title="تاریخ انقضا" aria-label="تاریخ انقضا"><button class="btn" type="button" id="dCreate">ساخت کد</button></div><p class="muted">برای هر پلن، نوع تخفیف و مقدارش را وارد کن؛ خالی یعنی این کد برای آن پلن نیست.</p><div id="dPlanRules" class="row"></div><div class="err" id="dErr" role="alert"></div><div class="result" id="dResults" aria-live="polite"></div></div>
   </section>
 </main>
 
@@ -196,7 +196,7 @@ async function authApi(path, opts = {}) {
 async function api(path, opts = {}) {
   const method = opts.method || "GET";
   const headers = opts.body ? { "content-type": "application/json" } : {};
-  if (method === "POST") headers["x-admin-csrf"] = cookieValue("routino_admin_csrf");
+  if (method !== "GET") headers["x-admin-csrf"] = cookieValue("routino_admin_csrf");
   const res = await request("/v1/admin" + path, {
     method, credentials: "same-origin", headers,
     body: opts.body ? JSON.stringify(opts.body) : undefined,
@@ -275,7 +275,7 @@ function selectTab(name, refresh) {
   if (name === "users") loadUsers();
   if (name === "payments") loadPayments();
   if (name === "plans") loadPlans();
-  if (name === "discounts") loadDiscounts();
+  if (name === "discounts") { loadDiscountRuleInputs(); loadDiscounts(); }
 }
 document.querySelectorAll("nav button").forEach((button) => button.onclick = () => selectTab(button.dataset.tab, true));
 
@@ -502,14 +502,25 @@ async function loadDiscounts() {
   try {
     const result = await api("/discounts");
     if (!result.discounts.length) { $("#dResults").innerHTML = emptyState("هنوز کد تخفیفی ساخته نشده است."); return; }
-    $("#dResults").innerHTML = '<div class="table-wrap"><table><thead><tr><th>کد</th><th>درصد</th><th>استفاده</th><th>سقف</th><th>انقضا</th><th>وضعیت</th><th><span class="muted">عمل</span></th></tr></thead><tbody>' + result.discounts.map((d) => "<tr><td dir='ltr'><b>" + esc(d.code) + "</b></td><td>" + fa(d.percent) + "٪</td><td>" + fa(d.usedCount) + "</td><td>" + (d.maxUses == null ? "∞" : fa(d.maxUses)) + "</td><td>" + dt(d.expiresAt) + "</td><td>" + (d.active ? "<span class='pill ok'>فعال</span>" : "<span class='pill mut'>خاموش</span>") + "</td><td><button class='btn secondary mini' type='button' onclick='toggleDiscount(&quot;" + esc(d.code) + "&quot;," + !d.active + ")'>" + (d.active ? "غیرفعال کن" : "فعال کن") + "</button></td></tr>").join("") + "</tbody></table></div>";
+    const ruleText = (d) => Object.entries(d.planRules || {}).map(([id, rule]) => esc(id) + ": " + fa(rule.value) + (rule.kind === "fixed" ? " تومان" : "٪")).join("<br>") || fa(d.percent) + "٪ برای همه";
+    $("#dResults").innerHTML = '<div class="table-wrap"><table><thead><tr><th>کد</th><th>تخفیف پلن‌ها</th><th>استفاده</th><th>سقف</th><th>انقضا</th><th>وضعیت</th><th><span class="muted">عمل</span></th></tr></thead><tbody>' + result.discounts.map((d) => "<tr><td dir='ltr'><b>" + esc(d.code) + "</b></td><td>" + ruleText(d) + "</td><td>" + fa(d.usedCount) + "</td><td>" + (d.maxUses == null ? "∞" : fa(d.maxUses)) + "</td><td>" + dt(d.expiresAt) + "</td><td>" + (d.active ? "<span class='pill ok'>فعال</span>" : "<span class='pill mut'>خاموش</span>") + "</td><td><button class='btn secondary mini' type='button' onclick='toggleDiscount(&quot;" + esc(d.code) + "&quot;," + !d.active + ")'>" + (d.active ? "غیرفعال کن" : "فعال کن") + "</button> <button class='btn secondary mini' type='button' onclick='deleteDiscount(&quot;" + esc(d.code) + "&quot;)'>حذف</button></td></tr>").join("") + "</tbody></table></div>";
   } catch (error) { errorState("dResults", error.message || "کدهای تخفیف دریافت نشدند", loadDiscounts); }
 }
 window.toggleDiscount = async (code, active) => { if (!active && !confirm("این کد تخفیف غیرفعال شود؟")) return; await api("/discounts/" + encodeURIComponent(code), { method: "POST", body: { active } }); loadDiscounts(); };
+window.deleteDiscount = async (code) => { if (!confirm("خود کد حذف می‌شود؛ سابقه پرداخت‌ها می‌ماند و بعداً می‌توانی همین کد را دوباره بسازی. ادامه؟")) return; try { await api("/discounts/" + encodeURIComponent(code), { method: "DELETE" }); loadDiscounts(); } catch (error) { $("#dErr").textContent = error.message || "حذف کد ممکن نشد"; } };
+async function loadDiscountRuleInputs() {
+  if ($("#dPlanRules").children.length) return;
+  try {
+    const result = await api("/plans");
+    $("#dPlanRules").innerHTML = result.plans.map((p) => '<label class="field-label">' + esc(p.nameFa) + '<select data-rule-kind="' + esc(p.id) + '"><option value="percent">درصد</option><option value="fixed">مبلغ تومان</option></select><input data-rule-value="' + esc(p.id) + '" type="number" min="1" placeholder="خالی = ندارد"></label>').join("");
+  } catch (error) { $("#dErr").textContent = error.message || "پلن‌ها دریافت نشدند"; }
+}
 $("#dCreate").onclick = async () => {
   $("#dErr").textContent = "";
-  const body = { code: $("#dCode").value.trim(), percent: Number($("#dPercent").value), maxUses: $("#dMax").value ? Number($("#dMax").value) : null, expiresAt: $("#dExp").value ? new Date($("#dExp").value + "T23:59:59").getTime() : null };
-  try { await api("/discounts", { method: "POST", body }); $("#dCode").value = ""; $("#dPercent").value = ""; $("#dMax").value = ""; $("#dExp").value = ""; loadDiscounts(); }
+  const planRules = {};
+  document.querySelectorAll("[data-rule-value]").forEach((input) => { if (input.value) { const id = input.dataset.ruleValue; planRules[id] = { kind: document.querySelector('[data-rule-kind="' + id + '"]').value, value: Number(input.value) }; } });
+  const body = { code: $("#dCode").value.trim(), planRules, maxUses: $("#dMax").value ? Number($("#dMax").value) : null, expiresAt: $("#dExp").value ? new Date($("#dExp").value + "T23:59:59").getTime() : null };
+  try { await api("/discounts", { method: "POST", body }); $("#dCode").value = ""; document.querySelectorAll("[data-rule-value]").forEach((input) => input.value = ""); $("#dMax").value = ""; $("#dExp").value = ""; loadDiscounts(); }
   catch (error) { $("#dErr").textContent = error.message || "ساخت کد ممکن نشد"; }
 };
 

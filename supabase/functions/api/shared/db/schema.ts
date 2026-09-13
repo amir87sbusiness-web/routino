@@ -189,6 +189,11 @@ export const discounts = pgTable(
   {
     code: text("code").primaryKey(),
     percent: integer("percent").notNull(),
+    /** Empty means the legacy `percent` applies to every active plan. */
+    planRules: jsonb("plan_rules")
+      .$type<Record<string, { kind: "percent" | "fixed"; value: number }>>()
+      .notNull()
+      .default({}),
     /** Restrict to one user's phone, optional. */
     phone: text("phone"),
     active: boolean("active").notNull().default(true),
@@ -210,7 +215,7 @@ export const redemptions = pgTable(
   {
     code: text("code")
       .notNull()
-      .references(() => discounts.code),
+      .references(() => discounts.code, { onDelete: "cascade" }),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
