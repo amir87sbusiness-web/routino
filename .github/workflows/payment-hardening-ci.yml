@@ -99,9 +99,7 @@ jobs:
         run: npm --prefix backend test -- --maxWorkers=1
 
       - name: Assert Edge generated parity
-        run: |
-          npm run sync:edge
-          git diff --exit-code -- supabase/functions/api/shared
+        run: npm --prefix backend test -- test/edge-parity.test.ts --maxWorkers=1
 
       - name: Edge tests
         run: npm run test:edge
