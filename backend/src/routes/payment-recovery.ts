@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { timingSafeEqual } from "node:crypto";
-import { and, asc, eq, gt, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { rowsOf } from "../db/client.js";
 import { payments } from "../db/schema.js";
@@ -9,7 +9,7 @@ import { PAYMENT_VERIFY_LEASE_MS, settleOne } from "../services/payment-flow.js"
 const RECOVERY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const INQUIRY_AFTER_MS = 10 * 60 * 1000;
 const MANUAL_REVIEW_AFTER_MS = 35 * 60 * 1000;
-const INQUIRY_RETRY_MS = 5 * 60 * 1000;
+const INQUIRY_RETRY_MS = 10 * 60 * 1000;
 const MANUAL_REVIEW_RETRY_MS = 60 * 60 * 1000;
 const RECOVERY_LIMIT = 100;
 const INQUIRY_LIMIT = 20;
@@ -179,16 +179,14 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
             isNotNull(payments.authority),
             gt(payments.createdAt, since),
             lt(payments.createdAt, new Date(t.getTime() - INQUIRY_AFTER_MS)),
-            or(
-              and(
-                inArray(payments.status, ["redirected", "verifying", "canceled", "paid"]),
-                lt(payments.updatedAt, new Date(t.getTime() - INQUIRY_RETRY_MS)),
-              ),
-              and(
-                eq(payments.status, "manual_review"),
-                lt(payments.updatedAt, new Date(t.getTime() - MANUAL_REVIEW_RETRY_MS)),
-              ),
-            ),
+            inArray(payments.status, [
+              "redirected",
+              "verifying",
+              "manual_review",
+              "canceled",
+              "paid",
+            ]),
+            or(isNull(payments.nextVerifyAt), lte(payments.nextVerifyAt, t)),
           ),
         )
         .orderBy(asc(payments.createdAt))
@@ -212,7 +210,12 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
           if (inquiry.kind === "failed" || inquiry.kind === "reversed") {
             await db
               .update(payments)
-              .set({ status: "failed", pspResult: inquiry.code ?? null, updatedAt: t })
+              .set({
+                status: "failed",
+                pspResult: inquiry.code ?? null,
+                nextVerifyAt: null,
+                updatedAt: t,
+              })
               .where(and(eq(payments.id, payment.id), isNull(payments.appliedAt)));
             closed += 1;
             continue;
@@ -223,6 +226,9 @@ export const paymentRecoveryRoutes: FastifyPluginAsync = async (app) => {
             .set({
               status: shouldReview ? "manual_review" : payment.status,
               pspResult: inquiry.code ?? null,
+              nextVerifyAt: new Date(
+                t.getTime() + (shouldReview ? MANUAL_REVIEW_RETRY_MS : INQUIRY_RETRY_MS),
+              ),
               updatedAt: t,
             })
             .where(and(eq(payments.id, payment.id), isNull(payments.appliedAt)));
