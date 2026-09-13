@@ -13,7 +13,7 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const SRC_DIR = join(ROOT, "backend", "src");
@@ -81,11 +81,9 @@ export function syncAll() {
   return written;
 }
 
-// Run directly (not imported by the parity test).
-if (
-  process.argv[1] &&
-  import.meta.url === new URL(`file:///${process.argv[1].replace(/\\/g, "/")}`).href
-) {
+// Run directly (not imported by the parity test). pathToFileURL handles both
+// POSIX and Windows argv paths, unlike hand-building a file:/// URL.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const files = syncAll();
   console.log(`[sync-edge-shared] copied ${files.length} files -> supabase/functions/api/shared/`);
 }
