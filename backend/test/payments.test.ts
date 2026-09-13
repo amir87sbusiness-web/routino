@@ -135,6 +135,22 @@ describe("checkout → gateway → callback", () => {
     ]);
   });
 
+  it("creates a fresh authority for a new user click even when an older checkout is still open", async () => {
+    const { access, user } = await signIn();
+
+    const first = await checkout(access, { planId: "m1", attemptId: crypto.randomUUID() });
+    const second = await checkout(access, { planId: "m1", attemptId: crypto.randomUUID() });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(second.json().paymentId).not.toBe(first.json().paymentId);
+    expect(second.json().authority).not.toBe(first.json().authority);
+    expect(h.psp._txns.size).toBe(2);
+    expect(
+      await h.query(`select id from payments where user_id = '${user.id}' order by created_at`),
+    ).toHaveLength(2);
+  });
+
   it("rejects an in-progress duplicate and changed immutable attempt inputs", async () => {
     const { access, user } = await signIn();
     const attemptId = crypto.randomUUID();
@@ -188,9 +204,9 @@ describe("checkout → gateway → callback", () => {
     expect(payment).toEqual({ status: "provider_unknown", authority: null });
 
     const fresh = await checkout(access, { planId: "m1", attemptId: crypto.randomUUID() });
-    expect(fresh.statusCode).toBe(503);
-    expect(fresh.json()).toMatchObject({ error: "payment_request_unknown" });
-    expect(h.psp._txns.size).toBe(0);
+    expect(fresh.statusCode).toBe(200);
+    expect(fresh.json()).toMatchObject({ authority: expect.any(String) });
+    expect(h.psp._txns.size).toBe(1);
   });
 
   it("recovers when the authority callback arrives after token persistence was interrupted", async () => {
@@ -354,7 +370,7 @@ describe("checkout → gateway → callback", () => {
     }
   });
 
-  it("renders cancellation without making a recoverable payment terminal", async () => {
+  it("persists a complete NOK callback as canceled without granting", async () => {
     const { access, user } = await signIn();
     const body = (await checkout(access, { planId: "m1" })).json() as {
       authority: string;
@@ -367,7 +383,7 @@ describe("checkout → gateway → callback", () => {
     const [p] = await h.query<{ status: string }>(
       `select status from payments where id = '${body.paymentId}'`,
     );
-    expect(p!.status).toBe("redirected");
+    expect(p!.status).toBe("canceled");
     const grants = await h.query(
       `select id from grants where user_id = '${user.id}' and source = 'payment'`,
     );
@@ -522,7 +538,7 @@ describe("checkout → gateway → callback", () => {
     }
   });
 
-  it("keeps one requesting row when PSP capacity is busy and survives a client reload", async () => {
+  it("allows a fresh click after PSP capacity was busy without duplicating a provider request", async () => {
     const { access } = await signIn();
     const attemptId = crypto.randomUUID();
     await h.raw(`
@@ -562,11 +578,11 @@ describe("checkout → gateway → callback", () => {
 
     const resumed = await checkout(access, { planId: "m1", attemptId: crypto.randomUUID() });
     expect(resumed.statusCode).toBe(200);
-    expect((resumed.json() as { paymentId: string }).paymentId).toBe(busyBody.paymentId);
+    expect((resumed.json() as { paymentId: string }).paymentId).not.toBe(busyBody.paymentId);
     expect(requestCalls).toBe(1);
     expect(
-      await h.query(`select id from payments where id = '${busyBody.paymentId}'`),
-    ).toHaveLength(1);
+      await h.query(`select id from payments where user_id is not null and plan_id = 'm1'`),
+    ).toHaveLength(2);
   });
 });
 
@@ -582,8 +598,6 @@ describe("discount redemption", () => {
       amountToman: 47_200,
       amountRial: 472_000,
       discountCode: "ONLY1",
-      discountPercent: 20,
-      offerPercent: 0,
       platform: "web",
       status: "requesting",
       requestStartedAt: new Date(),
@@ -654,7 +668,7 @@ describe("discount redemption", () => {
     expect(await h.query(`select * from redemptions where user_id = '${user.id}'`)).toHaveLength(1);
   });
 
-  it("resumes a persisted zero-price payment after an interrupted direct grant and new retry key", async () => {
+  it("uses a fresh row for a new zero-price checkout key", async () => {
     await h.raw(`insert into discounts (code, percent) values ('FREE100', 100)`);
     const { access, user } = await signIn();
     const attemptId = crypto.randomUUID();
@@ -668,10 +682,7 @@ describe("discount redemption", () => {
         amountToman: 0,
         amountRial: 0,
         discountCode: "FREE100",
-        discountPercent: 100,
-        offerPercent: 0,
         platform: "web",
-        checkoutProvider: h.psp.name,
         status: "pending",
       })
       .returning();
@@ -683,10 +694,11 @@ describe("discount redemption", () => {
     });
 
     expect(resumed.statusCode).toBe(200);
-    expect(resumed.json()).toMatchObject({ free: true, paymentId: payment!.id });
-    expect(await h.query(`select id from payments where user_id = '${user.id}'`)).toHaveLength(1);
+    expect(resumed.json()).toMatchObject({ free: true });
+    expect(resumed.json().paymentId).not.toBe(payment!.id);
+    expect(await h.query(`select id from payments where user_id = '${user.id}'`)).toHaveLength(2);
     expect(await h.query(`select id from grants where payment_id = '${payment!.id}'`)).toHaveLength(
-      1,
+      0,
     );
     expect(h.psp._txns.size).toBe(0);
   });
@@ -733,6 +745,30 @@ describe("grant durability", () => {
 });
 
 describe("GET /v1/payments/:id", () => {
+  it("is read-only even when a Verify was previously started", async () => {
+    const { access, user } = await signIn();
+    const body = (await checkout(access, { planId: "m1" })).json() as {
+      authority: string;
+      paymentId: string;
+    };
+    h.psp._settle(body.authority, "paid");
+    await h.raw(
+      `update payments set status='verifying', verify_started_at=null, next_verify_at=now()-interval '1 second' where id='${body.paymentId}'`,
+    );
+
+    const res = await h.app.inject({
+      method: "GET",
+      url: `/v1/payments/${body.paymentId}`,
+      headers: auth(access),
+    });
+
+    expect(res.json().payment.status).toBe("verifying");
+    expect(res.json().entitlement.status).not.toBe("active");
+    expect(
+      await h.query(`select id from grants where user_id='${user.id}' and source='payment'`),
+    ).toHaveLength(0);
+  });
+
   it("does not blindly Verify a fresh redirected payment", async () => {
     const { access, user } = await signIn();
     const body = (await checkout(access, { planId: "m1" })).json() as {
@@ -752,17 +788,13 @@ describe("GET /v1/payments/:id", () => {
     });
     expect(res.json().payment.status).toBe("redirected");
     expect(res.json().entitlement.status).not.toBe("active");
-    const [payment] = await h.query<{ verify_attempts: number }>(
-      `select verify_attempts from payments where id = '${body.paymentId}'`,
-    );
-    expect(Number(payment?.verify_attempts)).toBe(0);
     const grants = await h.query(
       `select id from grants where user_id = '${user.id}' and source = 'payment'`,
     );
     expect(grants).toHaveLength(0);
   });
 
-  it("recovers a payment whose grant failed after the money moved", async () => {
+  it("leaves status reads side-effect free for legacy paid rows", async () => {
     // Regression, and the worst outcome in the codebase: when granting threw,
     // applyPaid un-claimed `applied_at` for a retry but left `status = 'paid'`.
     // The recovery branch only re-verified rows still marked `redirected`, so
@@ -774,7 +806,7 @@ describe("GET /v1/payments/:id", () => {
     };
     h.psp._settle(body.authority, "paid");
     await h.raw(
-      `update payments set status = 'paid', applied_at = null, verified_at = now(), paid_at = now()
+      `update payments set status = 'paid', applied_at = null
        where id = '${body.paymentId}'`,
     );
 
@@ -784,11 +816,11 @@ describe("GET /v1/payments/:id", () => {
       headers: auth(access),
     });
     expect(res.json().payment.status).toBe("paid");
-    expect(res.json().entitlement.status).toBe("active");
+    expect(res.json().entitlement.status).not.toBe("active");
     const grants = await h.query(
       `select id from grants where user_id = '${user.id}' and source = 'payment'`,
     );
-    expect(grants).toHaveLength(1);
+    expect(grants).toHaveLength(0);
   });
 
   it("never re-verifies a cancelled or amount-mismatched payment", async () => {

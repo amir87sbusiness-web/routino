@@ -200,7 +200,7 @@ describe("checkout → gateway → callback", () => {
     expect(await real.text()).toContain("پرداخت موفق");
   });
 
-  it("renders cancellation without making a recoverable payment terminal", async () => {
+  it("persists a complete NOK callback as canceled without granting", async () => {
     const { access, user } = await signIn(h);
     const body = (await (await checkout(access, { planId: "m1" })).json()) as {
       authority: string;
@@ -213,7 +213,7 @@ describe("checkout → gateway → callback", () => {
     const [p] = await h.query<{ status: string }>(
       `select status from payments where id = '${body.paymentId}'`,
     );
-    expect(p!.status).toBe("redirected");
+    expect(p!.status).toBe("canceled");
     const grants = await h.query(
       `select id from grants where user_id = '${user.id}' and source = 'payment'`,
     );
@@ -331,10 +331,6 @@ describe("GET /v1/payments/:id", () => {
     const out = await res.json();
     expect(out.payment.status).toBe("redirected");
     expect(out.entitlement.status).not.toBe("active");
-    const [payment] = await h.query<{ verify_attempts: number }>(
-      `select verify_attempts from payments where id = '${body.paymentId}'`,
-    );
-    expect(Number(payment?.verify_attempts)).toBe(0);
     const grants = await h.query(
       `select id from grants where user_id = '${user.id}' and source = 'payment'`,
     );

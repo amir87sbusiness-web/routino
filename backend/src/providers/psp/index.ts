@@ -27,15 +27,24 @@ export type PspVerifyResult =
       kind: "paid" | "already_verified";
       code: 100 | 101;
       refNumber?: string;
-      cardNumber?: string;
     }
   | { kind: "pending" | "canceled" | "failed" | "unknown"; code?: number };
+
+export type PspInquiryResult =
+  | { kind: "paid" | "verified" | "in_bank" | "failed" | "reversed"; code?: number }
+  | { kind: "unknown"; code?: number };
+
+export type PspUnverifiedResult =
+  | { kind: "ok"; items: Array<{ authority: string; amountRial: number }> }
+  | { kind: "unknown"; code?: number };
 
 export interface PspProvider {
   readonly name: "fake" | "zarinpal";
   request(input: PspRequestInput): Promise<PspRequestResult>;
   /** Verify uses only the authority and amount persisted by Routino. */
   verify(authority: string, amountRial: number): Promise<PspVerifyResult>;
+  inquire?(authority: string): Promise<PspInquiryResult>;
+  listUnverified?(): Promise<PspUnverifiedResult>;
   startUrl(authority: string): string;
 }
 

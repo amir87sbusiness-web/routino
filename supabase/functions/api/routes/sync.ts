@@ -8,7 +8,6 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { makeAuthenticate, readJson, requireUser, type AppEnv, type Deps } from "../deps.ts";
 import { readEntitlement } from "../shared/services/entitlement.ts";
-import { settleOpenPayments } from "../shared/services/payment-flow.ts";
 import { touchUserActivity } from "../shared/services/user-activity.ts";
 import {
   MAX_PUSH_RECORDS,
@@ -52,7 +51,7 @@ const exchangeBody = pushBody
   });
 
 export function syncRoutes(deps: Deps) {
-  const { db, env, psp } = deps;
+  const { db } = deps;
   const now = () => new Date(deps.now());
   const auth = makeAuthenticate(deps);
   const r = new Hono<AppEnv>();
@@ -71,7 +70,6 @@ export function syncRoutes(deps: Deps) {
       input.fullResyncGcSeq,
     );
     if (!input.includeAccountState || page.hasMore || page.reset) return c.json(page);
-    await settleOpenPayments(db, psp, user.id, t, env.PSP_PROVIDER_MAX_CONCURRENCY);
     return c.json({ ...page, entitlement: await readEntitlement(db, user.id, t) });
   });
 
@@ -96,10 +94,6 @@ export function syncRoutes(deps: Deps) {
     const page = await pullRecords(db, user.id, cursor, limit);
     if (page.hasMore) return c.json(page);
     await touchUserActivity(db, user.id, t);
-    // Finish any payment whose gateway callback never made it back — see the
-    // Fastify twin. A VPN-routed browser drops that redirect often enough that
-    // without this the money moves and nothing is granted.
-    await settleOpenPayments(db, psp, user.id, t, env.PSP_PROVIDER_MAX_CONCURRENCY);
     return c.json({ ...page, entitlement: await readEntitlement(db, user.id, t) });
   });
 

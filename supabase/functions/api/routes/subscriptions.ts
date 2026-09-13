@@ -14,7 +14,6 @@ import {
   readEntitlement,
   startTrialOnce,
 } from "../shared/services/entitlement.ts";
-import { settleOpenPayments } from "../shared/services/payment-flow.ts";
 import { issueAccessToken } from "../shared/services/tokens.ts";
 
 /** The largest instant a JS `Date` can represent; past this it is Invalid Date. */
@@ -29,7 +28,7 @@ const importBody = z.object({
 });
 
 export function subscriptionRoutes(deps: Deps) {
-  const { db, env, psp } = deps;
+  const { db, env } = deps;
   const now = () => new Date(deps.now());
   const auth = makeAuthenticate(deps);
   const r = new Hono<AppEnv>();
@@ -37,7 +36,6 @@ export function subscriptionRoutes(deps: Deps) {
   r.get("/subscriptions/me", auth, async (c) => {
     const user = requireUser(c);
     const t = now();
-    await settleOpenPayments(db, psp, user.id, t, env.PSP_PROVIDER_MAX_CONCURRENCY);
     return c.json({ entitlement: await readEntitlement(db, user.id, t) });
   });
 

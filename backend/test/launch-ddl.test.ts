@@ -32,6 +32,10 @@ const PAYMENT_BACKOFF_MIGRATION_SQL = readFileSync(
   resolve(root, "supabase/migrations/20260831142000_payment_verify_backoff.sql"),
   "utf8",
 );
+const PAYMENT_SIMPLIFICATION_MIGRATION_SQL = readFileSync(
+  resolve(root, "supabase/migrations/20260914010500_simplify_payment_runtime.sql"),
+  "utf8",
+);
 const TASK_ARCHIVE_QUOTA_MIGRATION_SQL = readFileSync(
   resolve(root, "supabase/migrations/20260901150000_task_archive_quota_expand.sql"),
   "utf8",
@@ -125,7 +129,8 @@ describe("launch schema repairs", () => {
   it("aborts checkout uniqueness over duplicate live history without changing money rows", async () => {
     const owner = "a0555555-5555-4555-8555-555555555555";
     await h.raw(`
-      drop index payments_nonterminal_checkout_unique;
+      drop index if exists payments_nonterminal_checkout_unique;
+      alter table payments add column if not exists checkout_provider text not null default 'zarinpal';
       insert into users (id, phone) values ('${owner}', '989122299955');
       insert into payments (
         user_id, plan_id, months, amount_toman, amount_rial, status, platform,
@@ -385,6 +390,8 @@ describe("launch schema repairs", () => {
   });
   it("adds payment cooldown state without changing paid rows or grants", async () => {
     await h.raw(`
+      alter table payments add column verify_attempts integer not null default 0;
+      alter table payments add constraint payments_verify_attempts_nonnegative check (verify_attempts >= 0);
       alter table payments drop constraint payments_verify_attempts_nonnegative;
       alter table payments drop column verify_attempts;
       alter table payments drop column next_verify_at;
@@ -392,11 +399,11 @@ describe("launch schema repairs", () => {
         values ('91111111-1111-4111-8111-111111111111', '989122299993');
       insert into payments (
         id, user_id, plan_id, months, amount_toman, amount_rial, status, attempt_id,
-        paid_at, verified_at, applied_at
+        applied_at
       ) values (
         '92222222-2222-4222-8222-222222222222',
         '91111111-1111-4111-8111-111111111111', 'm1', 1, 59000, 590000, 'paid',
-        '93333333-3333-4333-8333-333333333333', now(), now(), now()
+        '93333333-3333-4333-8333-333333333333', now()
       );
       insert into grants (user_id, months, source, payment_id)
         values (
@@ -695,6 +702,44 @@ describe("launch schema repairs", () => {
         and column_name in ('provider', 'provider_ref', 'track_id', 'psp_status')
     `);
     expect(retired).toHaveLength(0);
+  });
+
+  it("removes redundant payment storage without deleting financial rows", async () => {
+    const owner = "a0888888-8888-4888-8888-888888888888";
+    await h.raw(`
+      alter table payments add column if not exists discount_percent integer;
+      alter table payments add column if not exists offer_percent integer;
+      alter table payments add column if not exists card_number text;
+      alter table payments add column if not exists verify_attempts integer not null default 0;
+      alter table payments add column if not exists paid_at timestamptz;
+      alter table payments add column if not exists verified_at timestamptz;
+      alter table payments add column if not exists checkout_provider text not null default 'zarinpal';
+      create index if not exists grants_payment on grants (payment_id) where payment_id is not null;
+      insert into users (id, phone) values ('${owner}', '989122288888');
+      insert into payments (
+        user_id, plan_id, months, amount_toman, amount_rial, status, attempt_id,
+        discount_percent, offer_percent, card_number, verify_attempts, paid_at, verified_at,
+        applied_at
+      ) values (
+        '${owner}', 'm1', 1, 59000, 590000, 'paid', gen_random_uuid(),
+        10, 0, '603799******1234', 2, now(), now(), now()
+      );
+    `);
+
+    await h.raw(PAYMENT_SIMPLIFICATION_MIGRATION_SQL);
+
+    const retiredColumns = await h.query<{ column_name: string }>(`
+      select column_name from information_schema.columns
+       where table_name='payments' and column_name in (
+         'discount_percent', 'offer_percent', 'card_number',
+         'verify_attempts', 'paid_at', 'verified_at', 'checkout_provider'
+       )
+    `);
+    expect(retiredColumns).toHaveLength(0);
+    expect(await h.query(`select id from payments where user_id='${owner}'`)).toHaveLength(1);
+    expect(
+      await h.query(`select indexname from pg_indexes where indexname='grants_payment'`),
+    ).toHaveLength(0);
   });
 
   it("refuses to install grant uniqueness over duplicate financial history", async () => {

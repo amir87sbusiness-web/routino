@@ -11,7 +11,6 @@ import {
   readEntitlement,
   startTrialOnce,
 } from "../services/entitlement.js";
-import { settleOpenPayments } from "../services/payment-flow.js";
 import { issueAccessToken } from "../services/tokens.js";
 
 /** The largest instant a JS `Date` can represent; past this it is Invalid Date. */
@@ -26,13 +25,12 @@ const importBody = z.object({
 });
 
 export const subscriptionRoutes: FastifyPluginAsync = async (app) => {
-  const { db, env, psp } = app.deps;
+  const { db, env } = app.deps;
   const now = () => new Date(app.deps.now());
 
   app.get("/subscriptions/me", { preHandler: app.authenticate }, async (req) => {
     const user = requireUser(req);
     const t = now();
-    await settleOpenPayments(db, psp, user.id, t, env.PSP_PROVIDER_MAX_CONCURRENCY);
     return { entitlement: await readEntitlement(db, user.id, t) };
   });
 

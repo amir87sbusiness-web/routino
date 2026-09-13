@@ -1,5 +1,5 @@
 // AUTO-GENERATED from backend/src — do not edit. Run `node scripts/sync-edge-shared.mjs`.
-import { and, eq, gt, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
 import type { Database, DatabaseExecutor } from "../db/client.ts";
 import { grants, payments, users } from "../db/schema.ts";
 import {
@@ -28,10 +28,7 @@ export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 const PSP_REQUEST_LEASE_MS = 30_000;
 const PSP_BUSY_RETRY_SECONDS = 2;
 export const PAYMENT_VERIFY_LEASE_MS = 30_000;
-const VERIFY_BACKOFF_BASE_MS = 5_000;
-const VERIFY_BACKOFF_MAX_MS = 5 * 60_000;
-const SETTLE_WINDOW_MS = 72 * 3_600_000;
-const SETTLE_MAX = 3;
+const VERIFY_BACKOFF_MS = 5_000;
 
 function requestedCode(code: string | undefined): string | null {
   const normalized = code?.trim().toUpperCase();
@@ -76,7 +73,7 @@ async function existingAttemptResult(
       "This payment attempt was already used with different checkout details.",
     );
   }
-  if (payment.amountToman <= 0 && payment.appliedAt) {
+  if (payment.appliedAt) {
     return {
       free: true,
       paymentId: payment.id,
@@ -111,7 +108,6 @@ export async function applyPaid(
         kind: "paid";
         code: 100;
         refNumber?: string;
-        cardNumber?: string;
       },
   t: Date,
   authority = payment.authority,
@@ -156,10 +152,7 @@ export async function applyPaid(
         status: "paid",
         authority,
         refNumber: verified.refNumber ?? payment.refNumber,
-        cardNumber: verified.cardNumber ?? payment.cardNumber,
         pspResult: verified.code,
-        paidAt: payment.paidAt ?? t,
-        verifiedAt: t,
         verifyStartedAt: null,
         nextVerifyAt: null,
         appliedAt: t,
@@ -253,10 +246,7 @@ export async function checkoutPayment(
           amountToman: quoted.finalToman,
           amountRial: quoted.finalRial,
           discountCode: quoted.discountCode,
-          discountPercent: quoted.discountPercent,
-          offerPercent: quoted.offerPercent,
           platform: body.platform ?? "web",
-          checkoutProvider: psp.name,
           attemptId: body.attemptId,
           status: quoted.finalToman <= 0 ? "pending" : "requesting",
           requestStartedAt: quoted.finalToman <= 0 ? null : t,
@@ -287,41 +277,7 @@ export async function checkoutPayment(
       .where(and(eq(payments.userId, user.id), eq(payments.attemptId, body.attemptId)))
       .limit(1);
     if (raced) return existingAttemptResult(db, psp, raced, body, t);
-    const logicalConditions = [
-      eq(payments.userId, user.id),
-      eq(payments.planId, priced.planId),
-      eq(payments.amountToman, priced.finalToman),
-      priced.discountCode === null
-        ? isNull(payments.discountCode)
-        : eq(payments.discountCode, priced.discountCode),
-      eq(payments.platform, body.platform ?? "web"),
-      eq(payments.checkoutProvider, psp.name),
-      isNull(payments.appliedAt),
-      inArray(payments.status, [
-        "pending",
-        "requesting",
-        "redirected",
-        "provider_unknown",
-        "verifying",
-      ]),
-    ];
-    const [logical] = await db
-      .select()
-      .from(payments)
-      .where(and(...logicalConditions))
-      .limit(1);
-    if (!logical) throw new Error("failed to create payment");
-    const resumesLogicalDirectGrant =
-      logical.amountToman <= 0 && logical.status === "pending" && !logical.appliedAt;
-    if (
-      !resumesLogicalDirectGrant &&
-      !(logical.status === "requesting" && logical.requestStartedAt === null)
-    ) {
-      return existingAttemptResult(db, psp, logical, body, t);
-    }
-    // The browser may have reloaded after provider_busy or a failed direct
-    // grant and lost its in-memory attemptId. Resume the same logical row.
-    payment = logical;
+    throw new Error("failed to create payment attempt");
   }
 
   if (priced.finalToman <= 0) {
@@ -464,18 +420,13 @@ async function verifyAndApplyPayment(
   }
 
   const staleBefore = new Date(t.getTime() - PAYMENT_VERIFY_LEASE_MS);
-  const cooldownMs = Math.min(
-    VERIFY_BACKOFF_MAX_MS,
-    VERIFY_BACKOFF_BASE_MS * 2 ** Math.min(payment.verifyAttempts, 6),
-  );
-  const cooldownUntil = new Date(t.getTime() + cooldownMs);
+  const cooldownUntil = new Date(t.getTime() + VERIFY_BACKOFF_MS);
   const [claimed] = await db
     .update(payments)
     .set({
       status: "verifying",
       verifyStartedAt: t,
       nextVerifyAt: cooldownUntil,
-      verifyAttempts: sql`${payments.verifyAttempts} + 1`,
       updatedAt: t,
     })
     .where(
@@ -588,9 +539,14 @@ export async function handlePaymentCallback(
   const payment = await readPayment(db, paymentId);
   if (!payment || (payment.authority && payment.authority !== authority)) return neutral;
   if (payment.appliedAt) return { outcome: "paid", payment };
-  // Status is only a browser hint. NOK never grants and never makes a recoverable
-  // stored authority terminal; a later authenticated poll may still verify it.
-  if (status !== "OK") return { outcome: "canceled", payment };
+  if (status !== "OK") {
+    const [canceled] = await db
+      .update(payments)
+      .set({ status: "canceled", pspResult: null, updatedAt: t })
+      .where(and(eq(payments.id, payment.id), isNull(payments.appliedAt)))
+      .returning();
+    return { outcome: "canceled", payment: canceled ?? payment };
+  }
 
   const result = await verifyAndApplyPayment(db, psp, payment, t, authority, maxConcurrent);
   // With no persisted authority, app polling cannot recover this payment yet.
@@ -626,47 +582,6 @@ export async function settleOne(
   return (await verifyAndApplyPayment(db, psp, payment, t, undefined, maxConcurrent)).changed;
 }
 
-/** Bounded app-open recovery after provider truth was already established.
- *
- * A fresh `redirected` row only proves that an Authority was issued. Generic
- * sync/subscription traffic must not Verify it: that request can race the payer
- * while they are still in the bank flow. Callback `Status=OK` moves the row to
- * `verifying`; the authoritative unVerified feed prepares its own candidate.
- */
-export async function settleOpenPayments(
-  db: Database,
-  psp: PspProvider,
-  userId: string,
-  t: Date,
-  maxConcurrent = 64,
-): Promise<number> {
-  const since = new Date(t.getTime() - SETTLE_WINDOW_MS);
-  let healed = 0;
-  try {
-    const staleBefore = new Date(t.getTime() - PAYMENT_VERIFY_LEASE_MS);
-    const open = await db
-      .select()
-      .from(payments)
-      .where(
-        and(
-          eq(payments.userId, userId),
-          isNull(payments.appliedAt),
-          inArray(payments.status, ["verifying", "paid"]),
-          or(isNull(payments.verifyStartedAt), lt(payments.verifyStartedAt, staleBefore)),
-          or(isNull(payments.nextVerifyAt), lte(payments.nextVerifyAt, t)),
-          gt(payments.createdAt, since),
-        ),
-      )
-      .limit(SETTLE_MAX);
-    for (const payment of open) {
-      if (await settleOne(db, psp, payment, t, maxConcurrent)) healed += 1;
-    }
-  } catch (err) {
-    console.error("settleOpenPayments failed", { userId, err });
-  }
-  return healed;
-}
-
 export interface PollResult {
   payment: {
     id: string;
@@ -684,11 +599,9 @@ export interface PollResult {
 
 export async function pollPayment(
   db: Database,
-  psp: PspProvider,
   userId: string,
   id: string,
   t: Date,
-  maxConcurrent = 64,
 ): Promise<PollResult> {
   if (!UUID_RE.test(id)) throw badRequest("bad_id", "Malformed payment id");
   const [owned] = await db
@@ -698,16 +611,7 @@ export async function pollPayment(
     .where(eq(users.id, userId))
     .limit(1);
   if (!owned) throw unauthorized("unknown_user", "User no longer exists");
-  let payment = owned.payment;
-  if (!payment) throw notFound("unknown_payment", "No such payment");
-  // Polling is an observation, not provider evidence. Only continue a Verify
-  // that a trusted callback already started, or repair a verified paid row
-  // whose atomic entitlement application did not finish.
-  if (["verifying", "paid"].includes(payment.status)) {
-    await settleOne(db, psp, payment, t, maxConcurrent);
-  }
-  const [refreshed] = await db.select().from(payments).where(eq(payments.id, id)).limit(1);
-  payment = refreshed ?? null;
+  const payment = owned.payment;
   if (!payment) throw notFound("unknown_payment", "No such payment");
   return {
     payment: {
@@ -718,7 +622,7 @@ export async function pollPayment(
       amountToman: payment.amountToman,
       discountCode: payment.discountCode,
       refNumber: payment.refNumber,
-      paidAt: payment.paidAt,
+      paidAt: payment.appliedAt,
       createdAt: payment.createdAt,
     },
     entitlement: await readEntitlement(db, userId, t),

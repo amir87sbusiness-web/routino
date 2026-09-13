@@ -12,7 +12,6 @@ import type { FastifyPluginAsync } from "fastify";
 import { z } from "zod";
 import { requireUser } from "../plugins/auth.js";
 import { readEntitlement } from "../services/entitlement.js";
-import { settleOpenPayments } from "../services/payment-flow.js";
 import { touchUserActivity } from "../services/user-activity.js";
 import {
   MAX_PUSH_RECORDS,
@@ -57,7 +56,7 @@ const exchangeBody = pushBody
   });
 
 export const syncRoutes: FastifyPluginAsync = async (app) => {
-  const { db, env, psp } = app.deps;
+  const { db } = app.deps;
   const now = () => new Date(app.deps.now());
 
   app.post("/sync/exchange", { preHandler: app.authenticate }, async (req) => {
@@ -74,7 +73,6 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
       input.fullResyncGcSeq,
     );
     if (!input.includeAccountState || page.hasMore || page.reset) return page;
-    await settleOpenPayments(db, psp, user.id, t, env.PSP_PROVIDER_MAX_CONCURRENCY);
     return { ...page, entitlement: await readEntitlement(db, user.id, t) };
   });
 
@@ -103,11 +101,6 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
    * Only on the last page: a first sync of a year of history is several pages,
    * and the answer is identical on each.
    *
-   * The same last page is also where a stranded payment gets finished —
-   * `settleOpenPayments`, before the entitlement is read, so a user whose
-   * gateway callback never arrived is simply subscribed by the time the app
-   * paints. On the normal path that is one indexed SELECT returning nothing.
-   *
    * Legacy clients still use pull/push instead of exchange. Count activity here
    * only on the final pull page so those clients are covered without adding any
    * extra client request or repeating the activity statement for pagination.
@@ -119,7 +112,6 @@ export const syncRoutes: FastifyPluginAsync = async (app) => {
     const page = await pullRecords(db, user.id, cursor, limit);
     if (page.hasMore) return page;
     await touchUserActivity(db, user.id, t);
-    await settleOpenPayments(db, psp, user.id, t, env.PSP_PROVIDER_MAX_CONCURRENCY);
     return { ...page, entitlement: await readEntitlement(db, user.id, t) };
   });
 };

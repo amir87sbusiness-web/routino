@@ -7,7 +7,20 @@
  * for a year. The client may now only name a plan and a code; every number comes
  * from here.
  */
-import { and, asc, count, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  countDistinct,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { Database, DatabaseExecutor } from "../db/client.ts";
 import { discounts, payments, plans, redemptions } from "../db/schema.ts";
 import { badRequest, notFound } from "../lib/http-errors.ts";
@@ -48,7 +61,7 @@ async function slotsTaken(
     .from(redemptions)
     .where(eq(redemptions.code, code));
   const [inFlight] = await db
-    .select({ n: count() })
+    .select({ n: countDistinct(payments.userId) })
     .from(payments)
     .where(
       and(

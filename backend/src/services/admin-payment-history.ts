@@ -21,7 +21,7 @@ export async function adminListPaymentsIncludingDeleted(
            p.platform,
            p.ref_number,
            p.created_at,
-           p.paid_at
+           p.applied_at as paid_at
       from payments p
       left join users u on u.id = p.user_id
      where ${status === null} or p.status = ${status}

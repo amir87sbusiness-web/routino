@@ -69,10 +69,10 @@ describe("admin permanent account deletion", () => {
 
       insert into payments
         (id, user_id, plan_id, months, amount_toman, amount_rial, discount_code,
-         discount_percent, status, attempt_id, applied_at)
+         status, attempt_id, applied_at)
       values
-        ('${paymentId}', '${user.id}', 'm1', 1, 59000, 590000, 'PRIVATE10', 10, 'paid', '${randomUUID()}', now()),
-        ('${otherPaymentId}', '${other.id}', 'm1', 1, 59000, 590000, 'PRIVATE10', 10, 'paid', '${randomUUID()}', now());
+        ('${paymentId}', '${user.id}', 'm1', 1, 59000, 590000, 'PRIVATE10', 'paid', '${randomUUID()}', now()),
+        ('${otherPaymentId}', '${other.id}', 'm1', 1, 59000, 590000, 'PRIVATE10', 'paid', '${randomUUID()}', now());
 
       insert into redemptions (code, user_id, payment_id)
       values

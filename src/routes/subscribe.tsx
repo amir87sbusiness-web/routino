@@ -8,6 +8,7 @@
  * display only; the server re-computes the final amount at checkout.
  */
 import { Capacitor } from "@capacitor/core";
+import { Browser } from "@capacitor/browser";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { BadgeCheck, LogIn, ShieldAlert, WifiOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -218,7 +219,11 @@ function SubscribePage() {
 
       if (res.paymentUrl) {
         // Off to the gateway. The callback brings the user back to /pay/result.
-        window.location.href = res.paymentUrl;
+        if (Capacitor.isNativePlatform()) {
+          await Browser.open({ url: res.paymentUrl });
+        } else {
+          window.location.href = res.paymentUrl;
+        }
         return;
       }
       paymentAttempt.current = null;

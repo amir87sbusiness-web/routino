@@ -13,10 +13,15 @@ const payments = vi.hoisted(() => ({
 }));
 const navigate = vi.hoisted(() => vi.fn());
 const app = vi.hoisted(() => ({ db: null as Db | null, applyEntitlement: vi.fn() }));
+const native = vi.hoisted(() => ({ platform: "web", open: vi.fn() }));
 
 vi.mock("@capacitor/core", () => ({
-  Capacitor: { getPlatform: () => "web" },
+  Capacitor: {
+    getPlatform: () => native.platform,
+    isNativePlatform: () => native.platform !== "web",
+  },
 }));
+vi.mock("@capacitor/browser", () => ({ Browser: { open: native.open } }));
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (options: unknown) => options,
   useNavigate: () => navigate,
@@ -58,6 +63,8 @@ describe("SubscribePage payment attempts", () => {
   let root: Root;
 
   beforeEach(async () => {
+    native.platform = "web";
+    native.open.mockReset();
     app.db = defaultDb([]);
     app.applyEntitlement.mockReset();
     navigate.mockReset();
@@ -281,5 +288,20 @@ describe("SubscribePage payment attempts", () => {
       payments.checkoutWithProviderBusyRetry.mock.calls[0]?.[3],
     );
     expect(host.textContent).not.toContain("safe");
+  });
+
+  it("opens the bank in a native browser on Android", async () => {
+    native.platform = "android";
+    payments.checkoutWithProviderBusyRetry.mockResolvedValue({
+      free: false,
+      paymentId: "payment-native",
+      paymentUrl: "https://payment.zarinpal.com/pg/StartPay/A1",
+    });
+
+    await click(paymentButton(host));
+
+    expect(native.open).toHaveBeenCalledWith({
+      url: "https://payment.zarinpal.com/pg/StartPay/A1",
+    });
   });
 });

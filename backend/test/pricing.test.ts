@@ -98,6 +98,21 @@ describe("checkDiscount", () => {
     expect((await checkDiscount(h.db, "ONCE", USER, PHONE, NOW)).reason).toBe("exhausted");
   });
 
+  it("counts multiple open attempts from one customer as one reserved discount slot", async () => {
+    await h.raw(`insert into discounts (code, percent, max_uses) values ('TWO', 50, 2)`);
+    const other = "77777777-7777-4777-8777-777777777777";
+    await h.raw(`insert into users (id, phone) values ('${other}', '989350005566')`);
+    await h.raw(`
+      insert into payments
+        (user_id, plan_id, months, amount_toman, amount_rial, discount_code, status)
+      values
+        ('${other}', 'm1', 1, 29500, 295000, 'TWO', 'redirected'),
+        ('${other}', 'm1', 1, 29500, 295000, 'TWO', 'redirected')
+    `);
+
+    expect((await checkDiscount(h.db, "TWO", USER, PHONE, NOW)).valid).toBe(true);
+  });
+
   it("does not let a user's own pending checkout block their retry", async () => {
     await h.raw(`insert into discounts (code, percent, max_uses) values ('MINE', 50, 1)`);
     await h.raw(

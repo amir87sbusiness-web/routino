@@ -37,10 +37,10 @@ describe("GET /v1/subscriptions/me", () => {
     const res = await h.call("GET", "/v1/subscriptions/me", { headers: auth(access) });
     const { entitlement } = await res.json();
     expect(entitlement.status).not.toBe("active");
-    const [stored] = await h.query<{ status: string; verify_attempts: number }>(
-      `select status, verify_attempts from payments where id='${payment.paymentId}'`,
+    const [stored] = await h.query<{ status: string }>(
+      `select status from payments where id='${payment.paymentId}'`,
     );
-    expect(stored).toMatchObject({ status: "redirected", verify_attempts: 0 });
+    expect(stored).toMatchObject({ status: "redirected" });
   });
 });
 

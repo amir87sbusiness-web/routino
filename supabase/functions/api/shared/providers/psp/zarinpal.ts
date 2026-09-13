@@ -2,6 +2,7 @@
 import {
   ZARINPAL_MIN_AMOUNT_RIAL,
   type PspProvider,
+  type PspInquiryResult,
   type PspRequestInput,
   type PspRequestResult,
   type PspVerifyResult,
@@ -20,6 +21,7 @@ export interface ZarinpalTransportConfig {
 type ProviderBody = {
   data?: unknown;
   errors?: unknown;
+  status?: unknown;
 };
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -48,6 +50,7 @@ async function post(
   proxySecret: string | undefined,
   path: string,
   payload: unknown,
+  timeoutMs = PSP_TIMEOUT_MS,
 ): Promise<ProviderBody | undefined> {
   try {
     const headers: Record<string, string> = {
@@ -60,7 +63,7 @@ async function post(
       method: "POST",
       headers,
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(PSP_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
 
     const body = (await res.json()) as unknown;
@@ -124,10 +127,8 @@ export function zarinpalPsp(
 
       const data = record(body.data);
       const ref = data?.ref_id;
-      const card = data?.card_pan;
       const successDetails = {
         refNumber: typeof ref === "number" || typeof ref === "string" ? String(ref) : undefined,
-        cardNumber: typeof card === "string" ? card : undefined,
       };
       if (code === 100) return { kind: "paid", code: 100, ...successDetails };
       if (code === 101) return { kind: "already_verified", code: 101, ...successDetails };
@@ -138,6 +139,54 @@ export function zarinpalPsp(
       if (code === -51 || code === -55 || code === -12) return { kind: "pending", code };
       if (code === -52) return { kind: "unknown", code };
       return { kind: "failed", code };
+    },
+
+    async inquire(authority: string): Promise<PspInquiryResult> {
+      const body = await post(
+        apiBase,
+        proxySecret,
+        "inquiry",
+        { merchant_id: merchant, authority },
+        6_000,
+      );
+      if (!body) return { kind: "unknown" };
+      const code = providerCode(body);
+      const status = record(body.data)?.status ?? body.status;
+      const kinds = {
+        PAID: "paid",
+        VERIFIED: "verified",
+        IN_BANK: "in_bank",
+        FAILED: "failed",
+        REVERSED: "reversed",
+      } as const;
+      return typeof status === "string" && status in kinds
+        ? { kind: kinds[status as keyof typeof kinds], code }
+        : { kind: "unknown", code };
+    },
+
+    async listUnverified() {
+      const body = await post(apiBase, proxySecret, "unVerified", { merchant_id: merchant }, 6_000);
+      if (!body) return { kind: "unknown" as const };
+      const code = providerCode(body);
+      const authorities = record(body.data)?.authorities;
+      if (code !== 100 || !Array.isArray(authorities)) {
+        return { kind: "unknown" as const, code };
+      }
+      const items = authorities.flatMap((raw) => {
+        const item = record(raw);
+        const authority = typeof item?.authority === "string" ? item.authority.trim() : "";
+        const rawAmount = item?.amount;
+        const amountRial =
+          typeof rawAmount === "number"
+            ? rawAmount
+            : typeof rawAmount === "string" && /^\d+$/.test(rawAmount)
+              ? Number(rawAmount)
+              : Number.NaN;
+        return authority && Number.isSafeInteger(amountRial) && amountRial > 0
+          ? [{ authority, amountRial }]
+          : [];
+      });
+      return { kind: "ok" as const, items };
     },
 
     startUrl(authority: string): string {

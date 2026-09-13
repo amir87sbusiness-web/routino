@@ -10,7 +10,7 @@ import { eq } from "drizzle-orm";
 import { Hono } from "hono";
 import { z } from "zod";
 import { html, makeAuthenticate, readJson, requireUser, type AppEnv, type Deps } from "../deps.ts";
-import { payments, users } from "../shared/db/schema.ts";
+import { users } from "../shared/db/schema.ts";
 import { badRequest, unauthorized } from "../shared/lib/http-errors.ts";
 import { renderResultPage } from "../shared/lib/pay-result-page.ts";
 import {
@@ -19,7 +19,6 @@ import {
   pollPayment,
   UUID_RE,
 } from "../shared/services/payment-flow.ts";
-import { readEntitlement } from "../shared/services/entitlement.ts";
 import { quoteWithDiscount } from "../shared/services/pricing.ts";
 
 const quoteBody = z.object({
@@ -63,26 +62,7 @@ export function paymentRoutes(deps: Deps) {
     const user = await paymentUser(authenticated.id);
     const body = checkoutBody.parse(await readJson(c));
     const t = now();
-    const result = await checkoutPayment(db, env, psp, user, body, t);
-
-    // A replay of an already-applied checkout is complete. Never return its old
-    // StartPay URL. appliedAt is the authoritative local proof that entitlement
-    // was granted; status text alone is not sufficient.
-    if (!result.free) {
-      const [payment] = await db
-        .select({ appliedAt: payments.appliedAt })
-        .from(payments)
-        .where(eq(payments.id, result.paymentId))
-        .limit(1);
-      if (payment?.appliedAt) {
-        return c.json({
-          free: true,
-          paymentId: result.paymentId,
-          entitlement: await readEntitlement(db, user.id, t),
-        });
-      }
-    }
-    return c.json(result);
+    return c.json(await checkoutPayment(db, env, psp, user, body, t));
   });
 
   /** The PSP redirects the user's browser here after the gateway. Public. */
@@ -111,7 +91,7 @@ export function paymentRoutes(deps: Deps) {
     if (typeof id !== "string" || !UUID_RE.test(id)) {
       throw badRequest("bad_id", "Malformed payment id");
     }
-    return c.json(await pollPayment(db, psp, user.id, id, now(), env.PSP_PROVIDER_MAX_CONCURRENCY));
+    return c.json(await pollPayment(db, user.id, id, now()));
   });
 
   return r;

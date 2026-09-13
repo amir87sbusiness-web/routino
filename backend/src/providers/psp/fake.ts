@@ -65,8 +65,23 @@ export function fakePsp(publicApiUrl: string) {
         kind: "paid",
         code: 100,
         refNumber: `FAKE-${authority}`,
-        cardNumber: "621986******1234",
       };
+    },
+    async inquire(authority) {
+      const txn = txns.get(authority);
+      if (!txn) return { kind: "unknown" };
+      if (txn.verifiedOnce) return { kind: "verified", code: 100 };
+      if (txn.outcome === "paid") return { kind: "paid", code: 100 };
+      if (txn.outcome === "pending") return { kind: "in_bank", code: 100 };
+      return { kind: "failed", code: 100 };
+    },
+    async listUnverified() {
+      return {
+        kind: "ok",
+        items: [...txns.values()]
+          .filter((txn) => txn.outcome === "paid" && !txn.verifiedOnce)
+          .map((txn) => ({ authority: txn.authority, amountRial: txn.amountRial })),
+      } as const;
     },
     startUrl(authority) {
       return `${publicApiUrl}/v1/dev/gateway?Authority=${encodeURIComponent(authority)}`;

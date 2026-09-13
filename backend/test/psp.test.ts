@@ -131,7 +131,6 @@ describe("ZarinPal adapter", () => {
       kind: "paid",
       code: 100,
       refNumber: "998877",
-      cardNumber: "603799******1234",
     });
     expect(capture.url).toBe("https://payment.zarinpal.com/pg/v4/payment/verify.json");
     expect(capture.body).toEqual({
@@ -147,7 +146,6 @@ describe("ZarinPal adapter", () => {
       kind: "already_verified",
       code: 101,
       refNumber: "998877",
-      cardNumber: undefined,
     });
   });
 
@@ -177,6 +175,38 @@ describe("ZarinPal adapter", () => {
     await expect(zarinpalPsp("m").verify("A000", 590_000)).resolves.toEqual({
       kind: "unknown",
     });
+  });
+
+  it("normalizes the authoritative unverified list", async () => {
+    const capture: FetchCapture = {};
+    mockFetch(
+      response({
+        data: {
+          code: 100,
+          authorities: [{ authority: "A0001", amount: "590000" }],
+        },
+        errors: [],
+      }),
+      capture,
+    );
+
+    await expect(zarinpalPsp("m").listUnverified!()).resolves.toEqual({
+      kind: "ok",
+      items: [{ authority: "A0001", amountRial: 590_000 }],
+    });
+    expect(capture.url).toBe("https://payment.zarinpal.com/pg/v4/payment/unVerified.json");
+    expect(capture.body).toEqual({ merchant_id: "m" });
+  });
+
+  it.each([
+    ["PAID", "paid"],
+    ["VERIFIED", "verified"],
+    ["IN_BANK", "in_bank"],
+    ["FAILED", "failed"],
+    ["REVERSED", "reversed"],
+  ] as const)("normalizes inquiry status %s", async (status, kind) => {
+    mockFetch(response({ data: { code: 100, status }, errors: [] }));
+    await expect(zarinpalPsp("m").inquire!("A0001")).resolves.toEqual({ kind, code: 100 });
   });
 
   it("builds the production StartPay URL", () => {

@@ -1386,33 +1386,31 @@ create table if not exists payments (
   amount_toman integer not null,
   amount_rial bigint not null,
   discount_code text,
-  discount_percent integer,
-  offer_percent integer,
   status text not null default 'pending',
   platform text,
-  checkout_provider text not null default 'zarinpal',
   attempt_id uuid not null default gen_random_uuid(),
   authority text unique,
   ref_number text,
-  card_number text,
   psp_result integer,
   request_started_at timestamptz,
   verify_started_at timestamptz,
   next_verify_at timestamptz,
-  verify_attempts integer not null default 0
-    constraint payments_verify_attempts_nonnegative check (verify_attempts >= 0),
-  paid_at timestamptz,
-  verified_at timestamptz,
   applied_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 alter table payments add column if not exists attempt_id uuid;
-alter table payments add column if not exists checkout_provider text not null default 'zarinpal';
 alter table payments add column if not exists request_started_at timestamptz;
 alter table payments add column if not exists verify_started_at timestamptz;
 alter table payments add column if not exists next_verify_at timestamptz;
-alter table payments add column if not exists verify_attempts integer not null default 0;
+alter table payments drop constraint if exists payments_verify_attempts_nonnegative;
+alter table payments drop column if exists discount_percent;
+alter table payments drop column if exists offer_percent;
+alter table payments drop column if exists card_number;
+alter table payments drop column if exists verify_attempts;
+alter table payments drop column if exists paid_at;
+alter table payments drop column if exists verified_at;
+alter table payments drop column if exists checkout_provider;
 update payments set attempt_id = gen_random_uuid() where attempt_id is null;
 alter table payments alter column attempt_id set default gen_random_uuid();
 alter table payments alter column attempt_id set not null;
@@ -1459,33 +1457,7 @@ create index if not exists payments_user on payments (user_id);
 create index if not exists payments_status on payments (status, created_at);
 create unique index if not exists payments_user_attempt_unique
   on payments (user_id, attempt_id);
--- Never guess which ambiguous checkout is authoritative. If history already
--- contains two live logical purchases, startup/migration aborts without
--- deleting, merging or terminalising either money row.
-do $$
-begin
-  if exists (
-    select 1
-      from payments
-     where user_id is not null
-       and applied_at is null
-       and status in ('pending', 'requesting', 'redirected', 'provider_unknown', 'verifying')
-     group by user_id, plan_id, amount_toman, coalesce(discount_code, ''),
-              coalesce(platform, 'web'), checkout_provider
-    having count(*) > 1
-  ) then
-    raise exception 'duplicate nonterminal logical payments require review before enabling checkout uniqueness';
-  end if;
-end
-$$;
-create unique index if not exists payments_nonterminal_checkout_unique
-  on payments (
-    user_id, plan_id, amount_toman, coalesce(discount_code, ''),
-    coalesce(platform, 'web'), checkout_provider
-  )
-  where user_id is not null
-    and applied_at is null
-    and status in ('pending', 'requesting', 'redirected', 'provider_unknown', 'verifying');
+drop index if exists payments_nonterminal_checkout_unique;
 -- A limited discount code counts the checkouts currently in flight against it
 -- (slotsTaken in services/pricing.ts), on the checkout path. Partial, because
 -- most payments carry no code at all.
@@ -1521,10 +1493,7 @@ end
 $$;
 create unique index if not exists grants_payment_id_unique
   on grants (payment_id) where payment_id is not null;
--- settleOpenPayments asks "which paid payments have no grant behind them" on the
--- boot path, which is a NOT EXISTS against this column. Partial: admin gifts and
--- trials carry no payment_id and would only bloat it.
-create index if not exists grants_payment on grants (payment_id) where payment_id is not null;
+drop index if exists grants_payment;
 
 create table if not exists entitlements (
   user_id uuid primary key references users(id) on delete cascade,
