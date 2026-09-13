@@ -36,6 +36,7 @@ import {
 } from "../shared/services/provider-capacity.ts";
 import {
   adminCreateDiscount,
+  adminDeleteDiscount,
   adminGrant,
   adminListDiscounts,
   adminListPlans,
@@ -77,7 +78,13 @@ const discountCreateBody = z.object({
     .min(3)
     .max(32)
     .regex(/^[A-Za-z0-9_-]+$/, "letters/digits/dash only"),
-  percent: z.number().int().min(1).max(100),
+  percent: z.number().int().min(1).max(100).optional(),
+  planRules: z.record(
+    z.discriminatedUnion("kind", [
+      z.object({ kind: z.literal("percent"), value: z.number().int().min(1).max(100) }),
+      z.object({ kind: z.literal("fixed"), value: z.number().int().min(1).max(1_000_000_000) }),
+    ]),
+  ).optional(),
   maxUses: z.number().int().min(1).max(1_000_000).nullable().optional(),
   expiresAt: z.number().int().positive().nullable().optional(), // epoch ms
   phone: z.string().max(20).nullable().optional(),
@@ -134,7 +141,7 @@ export function adminRoutes(deps: Deps) {
 
   const requireAdmin = async (c: Context<AppEnv>, next: Next) => {
     await requireSession(c);
-    if (c.req.method === "POST") {
+    if (c.req.method !== "GET") {
       const csrf = readCookie(c.req.header("cookie"), ADMIN_CSRF_COOKIE);
       if (!adminCsrfMatches(csrf, c.req.header("x-admin-csrf"))) {
         throw forbidden("bad_admin_csrf", "Admin CSRF token is invalid");
@@ -304,6 +311,10 @@ export function adminRoutes(deps: Deps) {
         discountUpdateBody.parse(await readJson(c)),
       ),
     ),
+  );
+
+  r.delete("/admin/discounts/:code", async (c) =>
+    c.json(await adminDeleteDiscount(db, c.req.param("code"))),
   );
 
   return r;
