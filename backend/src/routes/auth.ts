@@ -235,6 +235,24 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
+  /**
+   * Silent renewal for an already-authenticated device.
+   *
+   * The client calls this only after 45 days (or once to migrate an old 30-day
+   * token). There is deliberately no refresh-token/session table: one bounded
+   * entitlement read every renewal is enough to re-check account existence and
+   * preserve the cleanup deadline before minting a fresh 90-day JWT.
+   */
+  app.post("/auth/refresh", { preHandler: app.authenticate }, async (req) => {
+    const u = requireUser(req);
+    const t = now();
+    const entitlement = await readEntitlement(db, u.id, t);
+    const tokens = await issueAccessToken(env, u.id, t, {
+      notAfter: entitlement.deletionAt ? new Date(entitlement.deletionAt) : null,
+    });
+    return { access: tokens.access, entitlement };
+  });
+
   /** The current account's credential state, for the settings screen. */
   app.get("/auth/account", { preHandler: app.authenticate }, async (req) => {
     const u = requireUser(req);

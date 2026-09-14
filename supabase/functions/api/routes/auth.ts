@@ -230,6 +230,22 @@ export function authRoutes(deps: Deps) {
     });
   });
 
+  /**
+   * Silent renewal for an already-authenticated device. The client calls this
+   * only after 45 days (or once to migrate an old 30-day token). There is no
+   * refresh-token/session table: one entitlement read re-checks account existence
+   * and preserves the cleanup deadline before minting a fresh 90-day JWT.
+   */
+  r.post("/auth/refresh", auth, async (c) => {
+    const u = requireUser(c);
+    const t = now();
+    const entitlement = await readEntitlement(db, u.id, t);
+    const tokens = await issueAccessToken(env, u.id, t, {
+      notAfter: entitlement.deletionAt ? new Date(entitlement.deletionAt) : null,
+    });
+    return c.json({ access: tokens.access, entitlement });
+  });
+
   /** The current account's credential state, for the settings screen. */
   r.get("/auth/account", auth, async (c) => {
     const u = requireUser(c);

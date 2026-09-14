@@ -7,11 +7,16 @@
  * random sign-outs.
  *
  * The app gates on `db.auth`, which is device-local and set at sign-in. The
- * signed access token is the complete server session and expires after 30 days.
+ * signed access token is the complete server session and expires after 90 days.
+ * A device that is online after day 45 silently renews it on the first normal
+ * authenticated request; there is no daily refresh timer or refresh-token row.
  */
 import { apiRequest, ApiError } from "./client";
 
 const TOKEN_KEY = "routino:auth:v1";
+const SESSION_REFRESH_AFTER_MS = 45 * 24 * 60 * 60_000;
+const LEGACY_ACCESS_TTL_MAX_MS = 31 * 24 * 60 * 60_000;
+const TRANSIENT_REFRESH_BACKOFF_MS = 6 * 60 * 60_000;
 
 export interface Tokens {
   access: string;
@@ -36,13 +41,15 @@ export interface ServerEntitlement {
 
 const FALLBACK_ACCESS_TTL_MS = 60 * 60_000;
 
-function accessPayload(access: string): { exp?: unknown; sub?: unknown } | null {
+type AccessPayload = { exp?: unknown; iat?: unknown; sub?: unknown };
+
+function accessPayload(access: string): AccessPayload | null {
   try {
     const segment = access.split(".")[1];
     if (!segment) return null;
     const base64 = segment.replaceAll("-", "+").replaceAll("_", "/");
     const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
-    return JSON.parse(atob(padded)) as { exp?: unknown; sub?: unknown };
+    return JSON.parse(atob(padded)) as AccessPayload;
   } catch {
     return null;
   }
@@ -61,6 +68,11 @@ export function accessExpiryAt(access: string, now = Date.now()): number {
   if (typeof payload?.exp === "number" && Number.isFinite(payload.exp)) return payload.exp * 1000;
   // Old/corrupt tokens get one bounded server attempt; a 401 clears storage.
   return now + FALLBACK_ACCESS_TTL_MS;
+}
+
+export function accessIssuedAt(access: string): number | null {
+  const issuedAt = accessPayload(access)?.iat;
+  return typeof issuedAt === "number" && Number.isFinite(issuedAt) ? issuedAt * 1000 : null;
 }
 
 export function accessSubject(access: string): string | null {
@@ -144,6 +156,85 @@ export function markEntitlementChecked(entitlement?: ServerEntitlement, now = Da
 
 export function accountDeletionAt(): number | null {
   return loadTokens()?.accountDeletionAt ?? null;
+}
+
+/**
+ * True only when a silent renewal is useful.
+ *
+ * Normal 90-day sessions renew after 45 days. Existing 30-day sessions from the
+ * previous release renew once immediately so the rollout does not make current
+ * users wait until an already-expired token. A token explicitly capped to an
+ * account-deletion deadline is never mistaken for a legacy 30-day session.
+ */
+export function accessRefreshDue(tokens: Tokens, now = Date.now()): boolean {
+  const issuedAt = accessIssuedAt(tokens.access);
+  if (issuedAt === null || now >= tokens.accessExpiresAt) return false;
+  if (now - issuedAt >= SESSION_REFRESH_AFTER_MS) return true;
+
+  const signedLifetime = tokens.accessExpiresAt - issuedAt;
+  const deletionCapped =
+    tokens.accountDeletionAt !== undefined &&
+    Math.abs(tokens.accessExpiresAt - tokens.accountDeletionAt) <= 2_000;
+  return !deletionCapped && signedLifetime <= LEGACY_ACCESS_TTL_MAX_MS;
+}
+
+interface RefreshResult {
+  access: string;
+  entitlement: ServerEntitlement;
+}
+
+let refreshInFlight: Promise<void> | null = null;
+let refreshBlockedUntil = 0;
+
+async function refreshAccessIfDue(expectedUserId?: string): Promise<void> {
+  const initial = loadTokens();
+  if (!initial || !accessRefreshDue(initial) || Date.now() < refreshBlockedUntil) return;
+
+  const owner = accessSubject(initial.access);
+  if (!owner || (expectedUserId && owner !== expectedUserId)) {
+    throw new ApiError(401, "session_changed", "The active account changed during this request");
+  }
+
+  if (refreshInFlight) return refreshInFlight;
+
+  const sourceAccess = initial.access;
+  refreshInFlight = (async () => {
+    try {
+      const result = await apiRequest<RefreshResult>("/auth/refresh", {
+        method: "POST",
+        token: sourceAccess,
+      });
+
+      if (accessSubject(result.access) !== owner) {
+        throw new ApiError(
+          401,
+          "session_changed",
+          "The renewed session belongs to another account",
+        );
+      }
+
+      // A logout/account switch while the request was in flight wins. Never put
+      // an old account's token back into storage after the user changed account.
+      const current = loadTokens();
+      if (!current || current.access !== sourceAccess) return;
+
+      saveTokens(withExpiry(result, current, Date.now(), result.entitlement));
+      refreshBlockedUntil = 0;
+    } catch (err) {
+      // Offline gets no backoff: the app's existing `online`/sync path will make
+      // another authenticated request as soon as connectivity really returns.
+      // Server/transient failures get a small in-memory backoff so one outage
+      // cannot turn every sync call into an extra refresh request.
+      if (!(err instanceof ApiError && err.offline)) {
+        refreshBlockedUntil = Date.now() + TRANSIENT_REFRESH_BACKOFF_MS;
+      }
+      throw err;
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+
+  return refreshInFlight;
 }
 
 /* ---------------- endpoints ---------------- */
@@ -260,7 +351,12 @@ export async function logout(): Promise<void> {
 }
 
 /* ---------------- authed requests ---------------- */
-/** A request that carries the stored access token exactly once. */
+/**
+ * A request that carries the stored access token exactly once. After day 45 the
+ * first normal authenticated request silently renews the 90-day token first.
+ * There is no timer: if the device is offline, nothing is sent until an actual
+ * online request occurs.
+ */
 export async function authedRequest<T>(
   path: string,
   opts: {
@@ -272,7 +368,7 @@ export async function authedRequest<T>(
   } = {},
 ): Promise<T> {
   const { expectedUserId, ...requestOptions } = opts;
-  const tokens = loadTokens();
+  let tokens = loadTokens();
   if (!tokens) throw new ApiError(401, "not_signed_in", "No session on this device");
 
   const assertExpectedOwner = (access: string) => {
@@ -285,6 +381,31 @@ export async function authedRequest<T>(
   if (Date.now() >= tokens.accessExpiresAt) {
     clearTokens();
     throw new ApiError(401, "not_signed_in", "The access token expired");
+  }
+
+  if (accessRefreshDue(tokens)) {
+    try {
+      await refreshAccessIfDue(expectedUserId);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        if (err.code !== "session_changed") clearTokens();
+        throw err;
+      }
+      // A known offline failure means the original API call would only repeat
+      // the same doomed network attempt. Preserve the durable outbox and retry
+      // naturally on the app's existing `online` event.
+      if (err instanceof ApiError && err.offline) throw err;
+      // A transient refresh-only failure must not break a still-valid session.
+      // Continue with the old token; the in-memory backoff prevents request spam.
+    }
+
+    tokens = loadTokens();
+    if (!tokens) throw new ApiError(401, "not_signed_in", "No session on this device");
+    assertExpectedOwner(tokens.access);
+    if (Date.now() >= tokens.accessExpiresAt) {
+      clearTokens();
+      throw new ApiError(401, "not_signed_in", "The access token expired");
+    }
   }
 
   try {

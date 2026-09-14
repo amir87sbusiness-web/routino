@@ -92,8 +92,8 @@ describe("production env guards", () => {
     expect(() => loadEnv(prod)).not.toThrow();
   });
 
-  it("defaults stateless access tokens to exactly 30 days", () => {
-    expect(loadEnv({ NODE_ENV: "test" }).ACCESS_TTL_SECONDS).toBe(2_592_000);
+  it("defaults stateless access tokens to exactly 90 days", () => {
+    expect(loadEnv({ NODE_ENV: "test" }).ACCESS_TTL_SECONDS).toBe(7_776_000);
   });
 
   it("refuses to start with console SMS", () => {
