@@ -7,6 +7,11 @@ export interface AccessClaims {
   sub: string;
 }
 
+/** Session lifetime is product policy, not a deployment knob. Keeping it here
+ * prevents a stale production secret from silently leaving users on the old
+ * 30-day lifetime after the client starts renewing on a 45-day cadence. */
+const ACCESS_TTL_SECONDS = 90 * 24 * 60 * 60;
+
 const secretOf = (env: Env) => new TextEncoder().encode(env.JWT_SECRET);
 
 export async function signAccessToken(
@@ -15,7 +20,7 @@ export async function signAccessToken(
   now: Date,
   options: { notAfter?: Date | null } = {},
 ): Promise<string> {
-  const normalExpiry = Math.floor(now.getTime() / 1000) + env.ACCESS_TTL_SECONDS;
+  const normalExpiry = Math.floor(now.getTime() / 1000) + ACCESS_TTL_SECONDS;
   const cappedExpiry = options.notAfter
     ? Math.min(normalExpiry, Math.floor(options.notAfter.getTime() / 1000))
     : normalExpiry;
