@@ -32,7 +32,9 @@ describe("POST /v1/auth/refresh", () => {
     expect(body.entitlement.status).toBe("none");
     expect(body.entitlement).toHaveProperty("deletionAt");
     expect(
-      await h.query(`select table_name from information_schema.tables where table_name = 'sessions'`),
+      await h.query(
+        `select table_name from information_schema.tables where table_name = 'sessions'`,
+      ),
     ).toHaveLength(0);
   });
 });

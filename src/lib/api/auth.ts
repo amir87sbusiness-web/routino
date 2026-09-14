@@ -206,7 +206,11 @@ async function refreshAccessIfDue(expectedUserId?: string): Promise<void> {
       });
 
       if (accessSubject(result.access) !== owner) {
-        throw new ApiError(401, "session_changed", "The renewed session belongs to another account");
+        throw new ApiError(
+          401,
+          "session_changed",
+          "The renewed session belongs to another account",
+        );
       }
 
       // A logout/account switch while the request was in flight wins. Never put
