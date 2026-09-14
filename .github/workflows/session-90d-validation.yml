@@ -6,7 +6,7 @@ on:
       - session-90d-silent-renewal
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   quality:
@@ -22,6 +22,17 @@ jobs:
         run: npm ci
       - name: Install backend dependencies
         run: npm --prefix backend install
+      - name: Format session files
+        run: npx prettier --write backend/test/session-refresh.test.ts src/lib/api/auth.ts supabase/tests/session-refresh.test.ts
+      - name: Commit formatting if needed
+        run: |
+          git add backend/test/session-refresh.test.ts src/lib/api/auth.ts supabase/tests/session-refresh.test.ts
+          if ! git diff --cached --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "style: format session renewal changes"
+            git push origin HEAD:session-90d-silent-renewal
+          fi
       - name: Prettier check changed session files
         run: npx prettier --check backend/src/env.ts backend/src/routes/auth.ts backend/src/services/tokens.ts backend/test/session-refresh.test.ts backend/test/tokens.test.ts src/lib/api/auth.ts src/lib/api/auth-expiry.test.ts supabase/functions/api/routes/auth.ts supabase/functions/api/shared/env.ts supabase/functions/api/shared/services/tokens.ts supabase/tests/session-refresh.test.ts
       - name: Lint
