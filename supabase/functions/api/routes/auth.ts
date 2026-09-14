@@ -67,11 +67,6 @@ export function authRoutes(deps: Deps) {
   const auth = makeAuthenticate(deps);
   const r = new Hono<AppEnv>();
 
-  /**
-   * Send an OTP. Always responds the same way whether or not the number has an
-   * account — a differing response would turn this into a "does this person use
-   * Routino?" oracle.
-   */
   r.post("/auth/otp/request", async (c) => {
     const { phone: raw } = requestBody.parse(await readJson(c));
     const phone = normalizePhone(raw);
@@ -86,21 +81,12 @@ export function authRoutes(deps: Deps) {
       now(),
       30_000,
     );
-    if (!providerLease) {
-      throw tooMany("Too many code requests. Try again later.", 1);
-    }
+    if (!providerLease) throw tooMany("Too many code requests. Try again later.", 1);
 
     try {
-      // The slot and the code are claimed together, in ONE statement — see
-      // `claimSendSlot`. `checkSendRate` still runs, but only to explain WHICH
-      // limit was hit; it no longer enforces them, because a check followed by a
-      // separate insert let simultaneous requests for one phone each count zero
-      // rows and each send a message. Every one of those is real money.
       const slot = await claimSendSlot(db, env, phone, ip, t);
       if (!slot) {
         const verdict = await checkSendRate(db, phone, ip, t);
-        // Last 4 digits only — these logs land in a third-party pipeline with its
-        // own retention rules, and a subscriber list does not belong there.
         console.warn("otp rate limited", {
           reason: verdict.reason,
           phone: `***${phone.slice(-4)}`,
@@ -111,7 +97,6 @@ export function authRoutes(deps: Deps) {
       try {
         await sms.sendOtp(phone, slot.code);
       } catch (err) {
-        // Give the slot back only when the provider is CERTAIN nothing was sent.
         if (err instanceof SmsNotSentError) await releaseSendSlot(db, slot.slotId);
         console.error("sms send failed", { err });
         return c.json({ error: "sms_failed", message: "Could not send the code. Try again." }, 502);
@@ -123,10 +108,6 @@ export function authRoutes(deps: Deps) {
     }
   });
 
-  /**
-   * Verify an OTP and sign in. Creates the account on first use.
-   * Account creation authenticates only. Entitlement is activated separately.
-   */
   r.post("/auth/otp/verify", async (c) => {
     const { phone: raw, code, intent, newPassword } = verifyBody.parse(await readJson(c));
     const phone = normalizePhone(raw);
@@ -174,13 +155,6 @@ export function authRoutes(deps: Deps) {
     });
   });
 
-  /**
-   * Sign in with a password, using a phone number OR a username. No SMS. Mirrors
-   * backend/src/routes/auth.ts: a username starts with a letter and a phone is
-   * all digits, so `normalizePhone` succeeding is an unambiguous "this is a
-   * phone"; the error is identical for missing/no-password/wrong-password and a
-   * missing account still pays a hash-verify cost, so it cannot enumerate users.
-   */
   r.post("/auth/password/login", async (c) => {
     const { identifier, password } = passwordLoginBody.parse(await readJson(c));
     const t = now();
@@ -202,9 +176,6 @@ export function authRoutes(deps: Deps) {
     const ok = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
     if (!user || !user.passwordHash || !ok) {
       await recordLoginFailure(db, env, ip, key, t, { trackIdentifier: !!user });
-      // Past the soft limit a WRONG password becomes "too many attempts" — but a
-      // correct one still gets through below, so an attacker who knows someone's
-      // phone number cannot lock them out of their own account.
       if (verdict.verifyOnly)
         throw tooMany("Too many attempts. Try again later.", verdict.retryAfter);
       throw unauthorized("bad_credentials", "Wrong phone/username or password");
@@ -230,7 +201,19 @@ export function authRoutes(deps: Deps) {
     });
   });
 
-  /** The current account's credential state, for the settings screen. */
+  /** Silent renewal: called by the client only after 45 days (plus one legacy
+   * 30-day-token migration). One entitlement read preserves account cleanup
+   * semantics; no refresh-token/session table is created. */
+  r.post("/auth/refresh", auth, async (c) => {
+    const u = requireUser(c);
+    const t = now();
+    const entitlement = await readEntitlement(db, u.id, t);
+    const tokens = await issueAccessToken(env, u.id, t, {
+      notAfter: entitlement.deletionAt ? new Date(entitlement.deletionAt) : null,
+    });
+    return c.json({ access: tokens.access, entitlement });
+  });
+
   r.get("/auth/account", auth, async (c) => {
     const u = requireUser(c);
     const [row] = await db.select().from(users).where(eq(users.id, u.id)).limit(1);
@@ -242,7 +225,6 @@ export function authRoutes(deps: Deps) {
     });
   });
 
-  /** Sets or changes the account's username (lowercased, validated, unique). */
   r.post("/auth/username", auth, async (c) => {
     const u = requireUser(c);
     const { username } = setUsernameBody.parse(await readJson(c));
@@ -274,8 +256,6 @@ export function authRoutes(deps: Deps) {
     return c.json({ ok: true, username: v.value });
   });
 
-  /** Sets or changes the account's password. Changing an existing one requires
-   * the current password; setting the first one does not. */
   r.post("/auth/password", auth, async (c) => {
     const u = requireUser(c);
     const { newPassword, currentPassword } = setPasswordBody.parse(await readJson(c));
