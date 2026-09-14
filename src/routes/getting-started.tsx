@@ -60,13 +60,14 @@ function GettingStartedPage() {
   }, [ctx, navigate, pendingCompletion]);
 
   if (!ctx?.db || !draft || !ready) return null;
+  const db = ctx.db;
 
   const complete = async (completedDraft: OnboardingDraft) => {
     if (completingRef.current) return;
     completingRef.current = true;
     saveOnboardingDraft(completedDraft);
 
-    if (subscriptionActive(ctx.db)) {
+    if (subscriptionActive(db)) {
       setPendingCompletion(completedDraft);
       return;
     }
