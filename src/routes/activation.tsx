@@ -6,6 +6,7 @@ import { Button, Logo } from "@/components/ui";
 import { entitlementToSubscription, startTrial } from "@/lib/api/auth";
 import { fetchPlans, type ServerPlan } from "@/lib/api/payments";
 import { faNum } from "@/lib/dates";
+import { loadOnboardingDraft } from "@/lib/onboarding";
 import { useAppMaybe } from "@/state/app";
 
 export const Route = createFileRoute("/activation")({
@@ -25,7 +26,7 @@ function ActivationPage() {
   const plansInFlight = useRef(false);
 
   if (!ctx?.db) return null;
-  const { applyEntitlement, t, lang } = ctx;
+  const { db, applyEntitlement, t, lang } = ctx;
 
   const loadPlans = async () => {
     if (plansState === "ready" || plansInFlight.current) return;
@@ -61,7 +62,12 @@ function ActivationPage() {
       }
 
       applyEntitlement(subscription);
-      navigate({ to: "/" });
+      const userId = db.auth?.userId;
+      if (userId && loadOnboardingDraft(userId)) {
+        navigate({ to: "/getting-started" });
+      } else {
+        navigate({ to: "/" });
+      }
     } catch {
       setError(t("فعلاً شروع نشد؛ دوباره تلاش کن.", "Could not start yet. Please try again."));
       toast.error(t("شروع دوره انجام نشد.", "The trial could not be started."));

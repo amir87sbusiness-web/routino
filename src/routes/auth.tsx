@@ -4,6 +4,7 @@ import { Button, Input, Logo } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
 import { passwordLogin, requestOtp, verifyOtp, type ServerEntitlement } from "@/lib/api/auth";
 import { faNum } from "@/lib/dates";
+import { defaultOnboardingDraft, loadOnboardingDraft, saveOnboardingDraft } from "@/lib/onboarding";
 import { normalizePhone, toAsciiDigits, toLocalPhone } from "@/lib/phone";
 import { useAppMaybe } from "@/state/app";
 
@@ -100,8 +101,18 @@ function AuthPage() {
   const completeLogin = async (
     user: { id: string; phone: string },
     serverEntitlement: ServerEntitlement,
+    isNew: boolean,
   ) => {
     await switchAccount(user, serverEntitlement);
+    let pendingOnboarding = loadOnboardingDraft(user.id);
+    if (isNew) {
+      pendingOnboarding = defaultOnboardingDraft(user.id);
+      saveOnboardingDraft(pendingOnboarding);
+    }
+    if (pendingOnboarding) {
+      navigate({ to: "/getting-started" });
+      return;
+    }
     navigate({ to: "/" });
   };
 
@@ -116,7 +127,7 @@ function AuthPage() {
     setBusy(true);
     try {
       const res = await passwordLogin(identifier.trim(), password);
-      await completeLogin(res.user, res.entitlement);
+      await completeLogin(res.user, res.entitlement, res.isNew);
     } catch (err) {
       setError(explain(err));
     } finally {
@@ -161,7 +172,7 @@ function AuthPage() {
     setBusy(true);
     try {
       const res = await verifyOtp(canonical, code, { intent: otpIntent, newPassword });
-      await completeLogin(res.user, res.entitlement);
+      await completeLogin(res.user, res.entitlement, res.isNew);
     } catch (err) {
       setError(explain(err));
     } finally {
