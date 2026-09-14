@@ -52,6 +52,10 @@ const SYNC_GC_FIX_MIGRATION_PATH = resolve(
   root,
   "supabase/migrations/20260905150000_sync_gc_admission_and_maintenance_bounds.sql",
 );
+const CRON_MAINTENANCE_MIGRATION_SQL = readFileSync(
+  resolve(root, "supabase/migrations/20260914120000_optimize_cron_maintenance.sql"),
+  "utf8",
+);
 const ELASTIC_CHECKOUT_MIGRATION_SQL = readFileSync(
   resolve(root, "supabase/migrations/20260905170000_elastic_checkout_identity.sql"),
   "utf8",
@@ -909,7 +913,7 @@ describe("launch schema repairs", () => {
     expect(sql).not.toContain("delete from devices");
   });
 
-  it("keeps retention RPC private and generates one small daily cleanup schedule", async () => {
+  it("keeps retention RPC private and preserves the small daily cleanup schedule", async () => {
     const publicExecute = await h.query<{ routine_name: string }>(`
       select routine_name
         from information_schema.routine_privileges
@@ -927,19 +931,20 @@ describe("launch schema repairs", () => {
     execFileSync(process.execPath, ["scripts/gen-setup-sql.mjs"], { cwd: root, stdio: "pipe" });
     const sql = readFileSync(resolve(root, "supabase/setup.sql"), "utf8");
     expect(sql.match(/'routino-trial-account-cleanup'/g)).toHaveLength(2);
+    expect(sql).toContain("'routino-trial-account-cleanup',\n  '37 3 * * *',");
     expect(sql).toContain("routino_cleanup_trial_accounts(50, clock_timestamp())");
     expect(sql).toContain("set local statement_timeout = '5000ms'");
     expect(sql).toContain("set local lock_timeout = '250ms'");
   });
 
-  it("generates frequent bounded compaction and tombstone schedules", () => {
+  it("generates lifecycle-aware bounded compaction and tombstone schedules", () => {
     execFileSync(process.execPath, ["scripts/gen-setup-sql.mjs"], { cwd: root, stdio: "pipe" });
     const sql = readFileSync(resolve(root, "supabase/setup.sql"), "utf8");
     const unschedule =
       "select cron.unschedule(jobid) from cron.job where jobname = 'routino-task-month-compaction';";
     const compactionSchedule = `select cron.schedule(
   'routino-task-month-compaction',
-  '* * * * *',
+  '17 * * * *',
   $$begin;
 set local statement_timeout = '45000ms';
 set local lock_timeout = '1000ms';
@@ -948,7 +953,7 @@ commit;$$
 );`;
     const tombstoneSchedule = `select cron.schedule(
   'routino-tombstone-purge',
-  '*/5 * * * *',
+  '43 */6 * * *',
   $$begin;
 set local statement_timeout = '45000ms';
 set local lock_timeout = '1000ms';
@@ -965,6 +970,64 @@ commit;$$
     expect(sql.indexOf(unschedule)).toBeLessThan(sql.indexOf(compactionSchedule));
     expect(sql.match(/'routino-task-month-compaction'/g)).toHaveLength(2);
     expect(sql.match(/'routino-tombstone-purge'/g)).toHaveLength(2);
+  });
+
+  it("installs idempotent status-aware cron maintenance consistent with setup", async () => {
+    await h.raw(`
+      drop schema if exists cron cascade;
+      create schema cron;
+      create table cron.job (
+        jobid bigint generated always as identity primary key,
+        jobname text not null,
+        schedule text not null,
+        command text not null
+      );
+      create function cron.unschedule(p_jobid bigint)
+      returns boolean language plpgsql as $$
+      begin
+        delete from cron.job where jobid = p_jobid;
+        return found;
+      end $$;
+      create function cron.schedule(p_jobname text, p_schedule text, p_command text)
+      returns bigint language plpgsql as $$
+      declare v_jobid bigint;
+      begin
+        insert into cron.job (jobname, schedule, command)
+        values (p_jobname, p_schedule, p_command)
+        returning jobid into v_jobid;
+        return v_jobid;
+      end $$;
+      insert into cron.job (jobname, schedule, command) values
+        ('legacy-history-cleanup', '0 0 * * *',
+         E'delete\nfrom cron.job_run_details where end_time < now() - interval ''14 days'''),
+        ('routino-payment-recovery', '* * * * *', 'select 1');
+    `);
+
+    await h.raw(CRON_MAINTENANCE_MIGRATION_SQL);
+    await h.raw(CRON_MAINTENANCE_MIGRATION_SQL);
+
+    const jobs = await h.query<{ jobname: string; schedule: string; command: string }>(`
+      select jobname, schedule, command from cron.job order by jobname
+    `);
+    expect(jobs.map(({ jobname, schedule }) => ({ jobname, schedule }))).toEqual([
+      { jobname: "routino-cron-history-purge", schedule: "19 4 * * *" },
+      { jobname: "routino-payment-recovery", schedule: "* * * * *" },
+      { jobname: "routino-task-month-compaction", schedule: "17 * * * *" },
+      { jobname: "routino-tombstone-purge", schedule: "43 */6 * * *" },
+      { jobname: "routino-trial-account-cleanup", schedule: "37 3 * * *" },
+    ]);
+    expect(jobs.find((job) => job.jobname === "routino-cron-history-purge")?.command).toContain(
+      "status = 'succeeded' and end_time < now() - interval '48 hours'",
+    );
+    expect(jobs.find((job) => job.jobname === "routino-cron-history-purge")?.command).toContain(
+      "status is distinct from 'succeeded' and end_time < now() - interval '14 days'",
+    );
+
+    execFileSync(process.execPath, ["scripts/gen-setup-sql.mjs"], { cwd: root, stdio: "pipe" });
+    const setup = readFileSync(resolve(root, "supabase/setup.sql"), "utf8");
+    for (const job of jobs.filter((candidate) => candidate.jobname !== "routino-payment-recovery")) {
+      expect(setup).toContain(`'${job.jobname}',\n  '${job.schedule}',`);
+    }
   });
 
   it("executes every bounded maintenance cron body with PostgreSQL-valid transaction syntax", async () => {

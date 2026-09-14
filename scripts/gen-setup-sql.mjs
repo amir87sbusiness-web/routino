@@ -62,7 +62,7 @@ select cron.schedule('routino-auth-rate-limit-purge', '30 * * * *',
 select cron.unschedule(jobid) from cron.job where jobname = 'routino-task-month-compaction';
 select cron.schedule(
   'routino-task-month-compaction',
-  '* * * * *',
+  '17 * * * *',
   $$begin;
 set local statement_timeout = '45000ms';
 set local lock_timeout = '1000ms';
@@ -85,7 +85,7 @@ select * from routino_cleanup_trial_accounts(50, clock_timestamp());
 commit;$$
 );
 
--- Tombstones, in frequent bounded batches. A deleted habit or log leaves a row behind on purpose: a
+-- Tombstones, in six-hourly bounded batches. A deleted habit or log leaves a row behind on purpose: a
 -- delete has to be able to TRAVEL to the user's other devices, and an absence
 -- cannot. But it only has to travel once, so a user who tidies up their habits
 -- every month should not keep carrying every tombstone forever.
@@ -103,12 +103,27 @@ commit;$$
 select cron.unschedule(jobid) from cron.job where jobname = 'routino-tombstone-purge';
 select cron.schedule(
   'routino-tombstone-purge',
-  '*/5 * * * *',
+  '43 */6 * * *',
   $$begin;
 set local statement_timeout = '45000ms';
 set local lock_timeout = '1000ms';
 select * from routino_purge_tombstones(now(), 2000);
 commit;$$
+);
+
+-- Keep enough failed-run history for diagnosis without retaining routine
+-- successes for the same long window. Completed rows only: an active run has
+-- no end_time and must never be removed.
+select cron.unschedule(jobid)
+  from cron.job
+ where jobname = 'routino-cron-history-purge'
+    or (command ilike '%delete%' and command ilike '%cron.job_run_details%');
+select cron.schedule(
+  'routino-cron-history-purge',
+  '19 4 * * *',
+  $$delete from cron.job_run_details
+     where (status = 'succeeded' and end_time < now() - interval '48 hours')
+        or (status is distinct from 'succeeded' and end_time < now() - interval '14 days')$$
 );
 `;
 
