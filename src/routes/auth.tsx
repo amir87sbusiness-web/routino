@@ -110,7 +110,7 @@ function AuthPage() {
       saveOnboardingDraft(pendingOnboarding);
     }
     if (pendingOnboarding) {
-      navigate({ to: serverEntitlement.status === "active" ? "/getting-started" : "/activation" });
+      navigate({ to: "/getting-started" });
       return;
     }
     navigate({ to: "/" });
