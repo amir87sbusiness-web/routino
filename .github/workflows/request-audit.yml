@@ -1,0 +1,31 @@
+name: Request audit
+
+on:
+  push:
+    branches:
+      - chatgpt/request-audit
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Client network call sites
+        run: |
+          echo '=== NETWORK ==='
+          grep -RInE --exclude-dir=node_modules --exclude-dir=dist --exclude='*.test.*' --exclude='*.spec.*' '(apiRequest\(|authedRequest\(|fetch\(|syncExchange\(|fetchPlans\(|fetchQuote\(|fetchPayment\(|startTrial\(|requestOtp\(|verifyOtp\()' src || true
+      - name: Client timers and lifecycle triggers
+        run: |
+          echo '=== TIMERS ==='
+          grep -RInE --exclude-dir=node_modules --exclude-dir=dist --exclude='*.test.*' --exclude='*.spec.*' '(setInterval\(|setTimeout\(|visibilitychange|appStateChange|addEventListener\("online"|beforeunload)' src || true
+      - name: Server cron schedules
+        run: |
+          echo '=== CRON ==='
+          grep -RInE --include='*.sql' '(cron\.schedule|cron\.alter_job|schedule =>|\*/[0-9]+ \* \* \* \*|\* \* \* \* \*)' supabase/migrations || true
+      - name: Retry and cadence constants
+        run: |
+          echo '=== CADENCE CONSTANTS ==='
+          grep -RInE --exclude-dir=node_modules --exclude-dir=dist '(DELAY_MS|INTERVAL_MS|COOLDOWN_MS|BACKOFF_MS|TIMEOUT_MS|MAX_RETRIES|POLL_|RETRY_|60_000|60 \* 60|24 \* 60)' src backend supabase/functions || true
