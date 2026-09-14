@@ -38,7 +38,10 @@ import {
 
 type T = (fa: string, en: string) => string;
 
-const GOAL_ICONS: Record<NonNullable<OnboardingDraft["goalId"]>, ComponentType<{ className?: string }>> = {
+const GOAL_ICONS: Record<
+  NonNullable<OnboardingDraft["goalId"]>,
+  ComponentType<{ className?: string }>
+> = {
   sport: Dumbbell,
   study: BookOpen,
   health: HeartPulse,
@@ -78,7 +81,9 @@ function ProgressHeader({
       <div className="flex-1">
         <div className="mb-2 flex items-center justify-between text-[11px] font-bold text-muted-foreground">
           <span>{t("ساخت روتین تو", "Build your routine")}</span>
-          <span>{t(`${faNum(step + 1, lang)} از ${faNum(total, lang)}`, `${step + 1} of ${total}`)}</span>
+          <span>
+            {t(`${faNum(step + 1, lang)} از ${faNum(total, lang)}`, `${step + 1} of ${total}`)}
+          </span>
         </div>
         <div className="h-1.5 overflow-hidden rounded-full bg-secondary" aria-hidden="true">
           <div
@@ -149,7 +154,9 @@ function Choice({
       )}
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-black">{title}</span>
-        {body && <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{body}</span>}
+        {body && (
+          <span className="mt-0.5 block text-xs leading-5 text-muted-foreground">{body}</span>
+        )}
       </span>
       <span
         className={`grid h-6 w-6 shrink-0 place-items-center rounded-full border ${
@@ -200,7 +207,10 @@ export function PersonalizationFlow({
   const [step, setStep] = useState(Math.min(Math.max(initialStep, 0), 7));
   const [draft, setDraft] = useState(initialDraft);
   const maxHabits = maxStarterHabits(draft.pace);
-  const focuses = useMemo(() => (draft.goalId ? getOnboardingFocuses(draft.goalId) : []), [draft.goalId]);
+  const focuses = useMemo(
+    () => (draft.goalId ? getOnboardingFocuses(draft.goalId) : []),
+    [draft.goalId],
+  );
   const suggestions = useMemo(
     () => (draft.goalId ? getOnboardingSuggestions(draft.goalId, draft.focusId) : []),
     [draft.goalId, draft.focusId],
@@ -221,7 +231,11 @@ export function PersonalizationFlow({
     (step === 5 && draft.weekdays.length > 0);
 
   const continueButton = (
-    <Button className="min-h-13 w-full rounded-2xl font-black" disabled={!canContinue} onClick={next}>
+    <Button
+      className="min-h-13 w-full rounded-2xl font-black"
+      disabled={!canContinue}
+      onClick={next}
+    >
       {t("ادامه", "Continue")}
       {lang === "fa" ? <ArrowLeft className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
     </Button>
@@ -241,7 +255,10 @@ export function PersonalizationFlow({
         <StepFrame action={continueButton}>
           <StepHeading
             icon={Target}
-            title={t("الان بیشتر می‌خوای کدوم بخش زندگیت بهتر بشه؟", "What do you want to improve first?")}
+            title={t(
+              "الان بیشتر می‌خوای کدوم بخش زندگیت بهتر بشه؟",
+              "What do you want to improve first?",
+            )}
             body={t(
               "فقط یک مسیر رو برای شروع انتخاب کن. قرار نیست همه‌چیز رو یک‌جا درست کنیم.",
               "Pick one direction to start. You do not need to fix everything at once.",
@@ -305,10 +322,38 @@ export function PersonalizationFlow({
           <div className="space-y-2.5">
             {(
               [
-                ["starting", Rocket, "شروع کردن", "می‌دونم چی می‌خوام، ولی شروعش می‌مونه", "Getting started", "I know what to do, but starting is hard"],
-                ["remembering", Bell, "یادم می‌ره", "وسط روز از ذهنم می‌ره", "Remembering", "It slips my mind during the day"],
-                ["focus", Brain, "تمرکز", "زود حواسم پرت می‌شه", "Focus", "I get distracted quickly"],
-                ["consistency", Flame, "پیوستگی", "چند روز خوبم و بعد رها می‌کنم", "Consistency", "I do well for a few days, then stop"],
+                [
+                  "starting",
+                  Rocket,
+                  "شروع کردن",
+                  "می‌دونم چی می‌خوام، ولی شروعش می‌مونه",
+                  "Getting started",
+                  "I know what to do, but starting is hard",
+                ],
+                [
+                  "remembering",
+                  Bell,
+                  "یادم می‌ره",
+                  "وسط روز از ذهنم می‌ره",
+                  "Remembering",
+                  "It slips my mind during the day",
+                ],
+                [
+                  "focus",
+                  Brain,
+                  "تمرکز",
+                  "زود حواسم پرت می‌شه",
+                  "Focus",
+                  "I get distracted quickly",
+                ],
+                [
+                  "consistency",
+                  Flame,
+                  "پیوستگی",
+                  "چند روز خوبم و بعد رها می‌کنم",
+                  "Consistency",
+                  "I do well for a few days, then stop",
+                ],
               ] as const
             ).map(([value, Icon, fa, faBody, en, enBody]) => (
               <Choice
@@ -337,9 +382,30 @@ export function PersonalizationFlow({
           <div className="space-y-2.5">
             {(
               [
-                ["gentle", Footprints, "خیلی سبک", "۲ عادت؛ برای شروع بدون فشار", "Very light", "2 habits; low pressure"],
-                ["balanced", Target, "متعادل", "۳ عادت؛ پیشنهاد روتینو", "Balanced", "3 habits; recommended"],
-                ["ambitious", Flame, "پرانرژی", "تا ۴ عادت؛ اگر از قبل روتین داری", "Ambitious", "Up to 4 habits; if you already have a routine"],
+                [
+                  "gentle",
+                  Footprints,
+                  "خیلی سبک",
+                  "۲ عادت؛ برای شروع بدون فشار",
+                  "Very light",
+                  "2 habits; low pressure",
+                ],
+                [
+                  "balanced",
+                  Target,
+                  "متعادل",
+                  "۳ عادت؛ پیشنهاد روتینو",
+                  "Balanced",
+                  "3 habits; recommended",
+                ],
+                [
+                  "ambitious",
+                  Flame,
+                  "پرانرژی",
+                  "تا ۴ عادت؛ اگر از قبل روتین داری",
+                  "Ambitious",
+                  "Up to 4 habits; if you already have a routine",
+                ],
               ] as const
             ).map(([value, Icon, fa, faBody, en, enBody]) => (
               <Choice
@@ -350,7 +416,10 @@ export function PersonalizationFlow({
                 body={t(faBody, enBody)}
                 onClick={() => {
                   const pace = value as OnboardingPace;
-                  patch({ pace, selectedHabitIds: draft.selectedHabitIds.slice(0, maxStarterHabits(pace)) });
+                  patch({
+                    pace,
+                    selectedHabitIds: draft.selectedHabitIds.slice(0, maxStarterHabits(pace)),
+                  });
                 }}
               />
             ))}
@@ -407,20 +476,13 @@ export function PersonalizationFlow({
               onClick={() => patch({ weekdays: [0, 1, 2, 3, 4, 5, 6] })}
             />
             <Choice
-              active={
-                draft.weekdays.join(",") ===
-                (lang === "fa" ? "0,1,2,3,6" : "1,2,3,4,5")
-              }
+              active={draft.weekdays.join(",") === (lang === "fa" ? "0,1,2,3,6" : "1,2,3,4,5")}
               title={t("۵ روز در هفته", "5 days a week")}
               body={t("ریتم منظم با دو روز استراحت", "A steady rhythm with two lighter days")}
-              onClick={() =>
-                patch({ weekdays: lang === "fa" ? [6, 0, 1, 2, 3] : [1, 2, 3, 4, 5] })
-              }
+              onClick={() => patch({ weekdays: lang === "fa" ? [6, 0, 1, 2, 3] : [1, 2, 3, 4, 5] })}
             />
             <Choice
-              active={
-                draft.weekdays.join(",") === (lang === "fa" ? "1,3,6" : "1,3,5")
-              }
+              active={draft.weekdays.join(",") === (lang === "fa" ? "1,3,6" : "1,3,5")}
               title={t("۳ روز در هفته", "3 days a week")}
               body={t("شروع سبک و قابل‌کنترل", "A light, manageable start")}
               onClick={() => patch({ weekdays: lang === "fa" ? [6, 1, 3] : [1, 3, 5] })}
@@ -438,7 +500,11 @@ export function PersonalizationFlow({
               onClick={next}
             >
               {t("ادامه", "Continue")}
-              {lang === "fa" ? <ArrowLeft className="h-4 w-4" /> : <ArrowRight className="h-4 w-4" />}
+              {lang === "fa" ? (
+                <ArrowLeft className="h-4 w-4" />
+              ) : (
+                <ArrowRight className="h-4 w-4" />
+              )}
             </Button>
           }
           footer={
@@ -508,7 +574,10 @@ export function PersonalizationFlow({
               const suggestion = suggestions.find((item) => item.id === id);
               if (!suggestion) return null;
               return (
-                <div key={id} className="flex items-center gap-3 border-b border-border px-4 py-3.5 last:border-b-0">
+                <div
+                  key={id}
+                  className="flex items-center gap-3 border-b border-border px-4 py-3.5 last:border-b-0"
+                >
                   <span className="grid h-8 w-8 place-items-center rounded-full bg-primary-soft text-xs font-black text-primary">
                     {faNum(index + 1, lang)}
                   </span>

@@ -8,310 +8,310 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root'
-import { Route as TimerRouteImport } from './routes/timer'
-import { Route as TasksRouteImport } from './routes/tasks'
-import { Route as SubscribeRouteImport } from './routes/subscribe'
-import { Route as SettingsRouteImport } from './routes/settings'
-import { Route as OnboardingRouteImport } from './routes/onboarding'
-import { Route as JournalRouteImport } from './routes/journal'
-import { Route as HabitsRouteImport } from './routes/habits'
-import { Route as GettingStartedRouteImport } from './routes/getting-started'
-import { Route as AuthRouteImport } from './routes/auth'
-import { Route as AnalyticsRouteImport } from './routes/analytics'
-import { Route as ActivationRouteImport } from './routes/activation'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as PayResultRouteImport } from './routes/pay.result'
-import { Route as HabitHabitIdRouteImport } from './routes/habit.$habitId'
+import { Route as rootRouteImport } from "./routes/__root";
+import { Route as TimerRouteImport } from "./routes/timer";
+import { Route as TasksRouteImport } from "./routes/tasks";
+import { Route as SubscribeRouteImport } from "./routes/subscribe";
+import { Route as SettingsRouteImport } from "./routes/settings";
+import { Route as OnboardingRouteImport } from "./routes/onboarding";
+import { Route as JournalRouteImport } from "./routes/journal";
+import { Route as HabitsRouteImport } from "./routes/habits";
+import { Route as GettingStartedRouteImport } from "./routes/getting-started";
+import { Route as AuthRouteImport } from "./routes/auth";
+import { Route as AnalyticsRouteImport } from "./routes/analytics";
+import { Route as ActivationRouteImport } from "./routes/activation";
+import { Route as IndexRouteImport } from "./routes/index";
+import { Route as PayResultRouteImport } from "./routes/pay.result";
+import { Route as HabitHabitIdRouteImport } from "./routes/habit.$habitId";
 
 const TimerRoute = TimerRouteImport.update({
-  id: '/timer',
-  path: '/timer',
+  id: "/timer",
+  path: "/timer",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const TasksRoute = TasksRouteImport.update({
-  id: '/tasks',
-  path: '/tasks',
+  id: "/tasks",
+  path: "/tasks",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const SubscribeRoute = SubscribeRouteImport.update({
-  id: '/subscribe',
-  path: '/subscribe',
+  id: "/subscribe",
+  path: "/subscribe",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const SettingsRoute = SettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
+  id: "/settings",
+  path: "/settings",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const OnboardingRoute = OnboardingRouteImport.update({
-  id: '/onboarding',
-  path: '/onboarding',
+  id: "/onboarding",
+  path: "/onboarding",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const JournalRoute = JournalRouteImport.update({
-  id: '/journal',
-  path: '/journal',
+  id: "/journal",
+  path: "/journal",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const HabitsRoute = HabitsRouteImport.update({
-  id: '/habits',
-  path: '/habits',
+  id: "/habits",
+  path: "/habits",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const GettingStartedRoute = GettingStartedRouteImport.update({
-  id: '/getting-started',
-  path: '/getting-started',
+  id: "/getting-started",
+  path: "/getting-started",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const AuthRoute = AuthRouteImport.update({
-  id: '/auth',
-  path: '/auth',
+  id: "/auth",
+  path: "/auth",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const AnalyticsRoute = AnalyticsRouteImport.update({
-  id: '/analytics',
-  path: '/analytics',
+  id: "/analytics",
+  path: "/analytics",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ActivationRoute = ActivationRouteImport.update({
-  id: '/activation',
-  path: '/activation',
+  id: "/activation",
+  path: "/activation",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+  id: "/",
+  path: "/",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const PayResultRoute = PayResultRouteImport.update({
-  id: '/pay/result',
-  path: '/pay/result',
+  id: "/pay/result",
+  path: "/pay/result",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const HabitHabitIdRoute = HabitHabitIdRouteImport.update({
-  id: '/habit/$habitId',
-  path: '/habit/$habitId',
+  id: "/habit/$habitId",
+  path: "/habit/$habitId",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/activation': typeof ActivationRoute
-  '/analytics': typeof AnalyticsRoute
-  '/auth': typeof AuthRoute
-  '/getting-started': typeof GettingStartedRoute
-  '/habits': typeof HabitsRoute
-  '/journal': typeof JournalRoute
-  '/onboarding': typeof OnboardingRoute
-  '/settings': typeof SettingsRoute
-  '/subscribe': typeof SubscribeRoute
-  '/tasks': typeof TasksRoute
-  '/timer': typeof TimerRoute
-  '/habit/$habitId': typeof HabitHabitIdRoute
-  '/pay/result': typeof PayResultRoute
+  "/": typeof IndexRoute;
+  "/activation": typeof ActivationRoute;
+  "/analytics": typeof AnalyticsRoute;
+  "/auth": typeof AuthRoute;
+  "/getting-started": typeof GettingStartedRoute;
+  "/habits": typeof HabitsRoute;
+  "/journal": typeof JournalRoute;
+  "/onboarding": typeof OnboardingRoute;
+  "/settings": typeof SettingsRoute;
+  "/subscribe": typeof SubscribeRoute;
+  "/tasks": typeof TasksRoute;
+  "/timer": typeof TimerRoute;
+  "/habit/$habitId": typeof HabitHabitIdRoute;
+  "/pay/result": typeof PayResultRoute;
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/activation': typeof ActivationRoute
-  '/analytics': typeof AnalyticsRoute
-  '/auth': typeof AuthRoute
-  '/getting-started': typeof GettingStartedRoute
-  '/habits': typeof HabitsRoute
-  '/journal': typeof JournalRoute
-  '/onboarding': typeof OnboardingRoute
-  '/settings': typeof SettingsRoute
-  '/subscribe': typeof SubscribeRoute
-  '/tasks': typeof TasksRoute
-  '/timer': typeof TimerRoute
-  '/habit/$habitId': typeof HabitHabitIdRoute
-  '/pay/result': typeof PayResultRoute
+  "/": typeof IndexRoute;
+  "/activation": typeof ActivationRoute;
+  "/analytics": typeof AnalyticsRoute;
+  "/auth": typeof AuthRoute;
+  "/getting-started": typeof GettingStartedRoute;
+  "/habits": typeof HabitsRoute;
+  "/journal": typeof JournalRoute;
+  "/onboarding": typeof OnboardingRoute;
+  "/settings": typeof SettingsRoute;
+  "/subscribe": typeof SubscribeRoute;
+  "/tasks": typeof TasksRoute;
+  "/timer": typeof TimerRoute;
+  "/habit/$habitId": typeof HabitHabitIdRoute;
+  "/pay/result": typeof PayResultRoute;
 }
 export interface FileRoutesById {
-  __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/activation': typeof ActivationRoute
-  '/analytics': typeof AnalyticsRoute
-  '/auth': typeof AuthRoute
-  '/getting-started': typeof GettingStartedRoute
-  '/habits': typeof HabitsRoute
-  '/journal': typeof JournalRoute
-  '/onboarding': typeof OnboardingRoute
-  '/settings': typeof SettingsRoute
-  '/subscribe': typeof SubscribeRoute
-  '/tasks': typeof TasksRoute
-  '/timer': typeof TimerRoute
-  '/habit/$habitId': typeof HabitHabitIdRoute
-  '/pay/result': typeof PayResultRoute
+  __root__: typeof rootRouteImport;
+  "/": typeof IndexRoute;
+  "/activation": typeof ActivationRoute;
+  "/analytics": typeof AnalyticsRoute;
+  "/auth": typeof AuthRoute;
+  "/getting-started": typeof GettingStartedRoute;
+  "/habits": typeof HabitsRoute;
+  "/journal": typeof JournalRoute;
+  "/onboarding": typeof OnboardingRoute;
+  "/settings": typeof SettingsRoute;
+  "/subscribe": typeof SubscribeRoute;
+  "/tasks": typeof TasksRoute;
+  "/timer": typeof TimerRoute;
+  "/habit/$habitId": typeof HabitHabitIdRoute;
+  "/pay/result": typeof PayResultRoute;
 }
 export interface FileRouteTypes {
-  fileRoutesByFullPath: FileRoutesByFullPath
+  fileRoutesByFullPath: FileRoutesByFullPath;
   fullPaths:
-    | '/'
-    | '/activation'
-    | '/analytics'
-    | '/auth'
-    | '/getting-started'
-    | '/habits'
-    | '/journal'
-    | '/onboarding'
-    | '/settings'
-    | '/subscribe'
-    | '/tasks'
-    | '/timer'
-    | '/habit/$habitId'
-    | '/pay/result'
-  fileRoutesByTo: FileRoutesByTo
+    | "/"
+    | "/activation"
+    | "/analytics"
+    | "/auth"
+    | "/getting-started"
+    | "/habits"
+    | "/journal"
+    | "/onboarding"
+    | "/settings"
+    | "/subscribe"
+    | "/tasks"
+    | "/timer"
+    | "/habit/$habitId"
+    | "/pay/result";
+  fileRoutesByTo: FileRoutesByTo;
   to:
-    | '/'
-    | '/activation'
-    | '/analytics'
-    | '/auth'
-    | '/getting-started'
-    | '/habits'
-    | '/journal'
-    | '/onboarding'
-    | '/settings'
-    | '/subscribe'
-    | '/tasks'
-    | '/timer'
-    | '/habit/$habitId'
-    | '/pay/result'
+    | "/"
+    | "/activation"
+    | "/analytics"
+    | "/auth"
+    | "/getting-started"
+    | "/habits"
+    | "/journal"
+    | "/onboarding"
+    | "/settings"
+    | "/subscribe"
+    | "/tasks"
+    | "/timer"
+    | "/habit/$habitId"
+    | "/pay/result";
   id:
-    | '__root__'
-    | '/'
-    | '/activation'
-    | '/analytics'
-    | '/auth'
-    | '/getting-started'
-    | '/habits'
-    | '/journal'
-    | '/onboarding'
-    | '/settings'
-    | '/subscribe'
-    | '/tasks'
-    | '/timer'
-    | '/habit/$habitId'
-    | '/pay/result'
-  fileRoutesById: FileRoutesById
+    | "__root__"
+    | "/"
+    | "/activation"
+    | "/analytics"
+    | "/auth"
+    | "/getting-started"
+    | "/habits"
+    | "/journal"
+    | "/onboarding"
+    | "/settings"
+    | "/subscribe"
+    | "/tasks"
+    | "/timer"
+    | "/habit/$habitId"
+    | "/pay/result";
+  fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  ActivationRoute: typeof ActivationRoute
-  AnalyticsRoute: typeof AnalyticsRoute
-  AuthRoute: typeof AuthRoute
-  GettingStartedRoute: typeof GettingStartedRoute
-  HabitsRoute: typeof HabitsRoute
-  JournalRoute: typeof JournalRoute
-  OnboardingRoute: typeof OnboardingRoute
-  SettingsRoute: typeof SettingsRoute
-  SubscribeRoute: typeof SubscribeRoute
-  TasksRoute: typeof TasksRoute
-  TimerRoute: typeof TimerRoute
-  HabitHabitIdRoute: typeof HabitHabitIdRoute
-  PayResultRoute: typeof PayResultRoute
+  IndexRoute: typeof IndexRoute;
+  ActivationRoute: typeof ActivationRoute;
+  AnalyticsRoute: typeof AnalyticsRoute;
+  AuthRoute: typeof AuthRoute;
+  GettingStartedRoute: typeof GettingStartedRoute;
+  HabitsRoute: typeof HabitsRoute;
+  JournalRoute: typeof JournalRoute;
+  OnboardingRoute: typeof OnboardingRoute;
+  SettingsRoute: typeof SettingsRoute;
+  SubscribeRoute: typeof SubscribeRoute;
+  TasksRoute: typeof TasksRoute;
+  TimerRoute: typeof TimerRoute;
+  HabitHabitIdRoute: typeof HabitHabitIdRoute;
+  PayResultRoute: typeof PayResultRoute;
 }
 
-declare module '@tanstack/react-router' {
+declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
-    '/timer': {
-      id: '/timer'
-      path: '/timer'
-      fullPath: '/timer'
-      preLoaderRoute: typeof TimerRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/tasks': {
-      id: '/tasks'
-      path: '/tasks'
-      fullPath: '/tasks'
-      preLoaderRoute: typeof TasksRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/subscribe': {
-      id: '/subscribe'
-      path: '/subscribe'
-      fullPath: '/subscribe'
-      preLoaderRoute: typeof SubscribeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/settings': {
-      id: '/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof SettingsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/onboarding': {
-      id: '/onboarding'
-      path: '/onboarding'
-      fullPath: '/onboarding'
-      preLoaderRoute: typeof OnboardingRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/journal': {
-      id: '/journal'
-      path: '/journal'
-      fullPath: '/journal'
-      preLoaderRoute: typeof JournalRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/habits': {
-      id: '/habits'
-      path: '/habits'
-      fullPath: '/habits'
-      preLoaderRoute: typeof HabitsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/getting-started': {
-      id: '/getting-started'
-      path: '/getting-started'
-      fullPath: '/getting-started'
-      preLoaderRoute: typeof GettingStartedRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/auth': {
-      id: '/auth'
-      path: '/auth'
-      fullPath: '/auth'
-      preLoaderRoute: typeof AuthRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/analytics': {
-      id: '/analytics'
-      path: '/analytics'
-      fullPath: '/analytics'
-      preLoaderRoute: typeof AnalyticsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/activation': {
-      id: '/activation'
-      path: '/activation'
-      fullPath: '/activation'
-      preLoaderRoute: typeof ActivationRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/pay/result': {
-      id: '/pay/result'
-      path: '/pay/result'
-      fullPath: '/pay/result'
-      preLoaderRoute: typeof PayResultRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/habit/$habitId': {
-      id: '/habit/$habitId'
-      path: '/habit/$habitId'
-      fullPath: '/habit/$habitId'
-      preLoaderRoute: typeof HabitHabitIdRouteImport
-      parentRoute: typeof rootRouteImport
-    }
+    "/timer": {
+      id: "/timer";
+      path: "/timer";
+      fullPath: "/timer";
+      preLoaderRoute: typeof TimerRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/tasks": {
+      id: "/tasks";
+      path: "/tasks";
+      fullPath: "/tasks";
+      preLoaderRoute: typeof TasksRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/subscribe": {
+      id: "/subscribe";
+      path: "/subscribe";
+      fullPath: "/subscribe";
+      preLoaderRoute: typeof SubscribeRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/settings": {
+      id: "/settings";
+      path: "/settings";
+      fullPath: "/settings";
+      preLoaderRoute: typeof SettingsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/onboarding": {
+      id: "/onboarding";
+      path: "/onboarding";
+      fullPath: "/onboarding";
+      preLoaderRoute: typeof OnboardingRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/journal": {
+      id: "/journal";
+      path: "/journal";
+      fullPath: "/journal";
+      preLoaderRoute: typeof JournalRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/habits": {
+      id: "/habits";
+      path: "/habits";
+      fullPath: "/habits";
+      preLoaderRoute: typeof HabitsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/getting-started": {
+      id: "/getting-started";
+      path: "/getting-started";
+      fullPath: "/getting-started";
+      preLoaderRoute: typeof GettingStartedRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/auth": {
+      id: "/auth";
+      path: "/auth";
+      fullPath: "/auth";
+      preLoaderRoute: typeof AuthRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/analytics": {
+      id: "/analytics";
+      path: "/analytics";
+      fullPath: "/analytics";
+      preLoaderRoute: typeof AnalyticsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/activation": {
+      id: "/activation";
+      path: "/activation";
+      fullPath: "/activation";
+      preLoaderRoute: typeof ActivationRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/": {
+      id: "/";
+      path: "/";
+      fullPath: "/";
+      preLoaderRoute: typeof IndexRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/pay/result": {
+      id: "/pay/result";
+      path: "/pay/result";
+      fullPath: "/pay/result";
+      preLoaderRoute: typeof PayResultRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/habit/$habitId": {
+      id: "/habit/$habitId";
+      path: "/habit/$habitId";
+      fullPath: "/habit/$habitId";
+      preLoaderRoute: typeof HabitHabitIdRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
   }
 }
 
@@ -330,7 +330,7 @@ const rootRouteChildren: RootRouteChildren = {
   TimerRoute: TimerRoute,
   HabitHabitIdRoute: HabitHabitIdRoute,
   PayResultRoute: PayResultRoute,
-}
+};
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
-  ._addFileTypes<FileRouteTypes>()
+  ._addFileTypes<FileRouteTypes>();

@@ -25,12 +25,7 @@ function GettingStartedPage() {
   const [pendingCompletion, setPendingCompletion] = useState<OnboardingDraft | null>(null);
   const completingRef = useRef(false);
 
-  const ready =
-    !!ctx?.db &&
-    !!ctx.db.auth &&
-    !!userId &&
-    !!draft &&
-    draft.ownerUserId === userId;
+  const ready = !!ctx?.db && !!ctx.db.auth && !!userId && !!draft && draft.ownerUserId === userId;
 
   useEffect(() => {
     if (!ctx?.db || ready) return;
