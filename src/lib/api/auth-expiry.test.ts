@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { accessExpiryAt, loadTokens } from "./auth";
+import { accessExpiryAt, accessRefreshDue, loadTokens, type Tokens } from "./auth";
 
 const TOKEN_KEY = "routino:auth:v1";
+const DAY = 24 * 60 * 60_000;
 
 function tokenWith(payload: object): string {
   const encoded = btoa(JSON.stringify(payload))
@@ -9,6 +10,19 @@ function tokenWith(payload: object): string {
     .replaceAll("/", "_")
     .replace(/=+$/, "");
   return `header.${encoded}.signature`;
+}
+
+function session(issuedAtMs: number, lifetimeDays: number, accountDeletionAt?: number): Tokens {
+  const accessExpiresAt = issuedAtMs + lifetimeDays * DAY;
+  return {
+    access: tokenWith({
+      sub: "user-a",
+      iat: issuedAtMs / 1000,
+      exp: accessExpiresAt / 1000,
+    }),
+    accessExpiresAt,
+    ...(accountDeletionAt === undefined ? {} : { accountDeletionAt }),
+  };
 }
 
 describe("access token expiry", () => {
@@ -20,6 +34,34 @@ describe("access token expiry", () => {
 
   it("uses a conservative fallback for malformed legacy tokens", () => {
     expect(accessExpiryAt("invalid", 5_000)).toBe(5_000 + 60 * 60_000);
+  });
+
+  it("renews a normal 90-day session only after 45 days", () => {
+    const issuedAt = 1_700_000_000_000;
+    const tokens = session(issuedAt, 90);
+
+    expect(accessRefreshDue(tokens, issuedAt + 44 * DAY)).toBe(false);
+    expect(accessRefreshDue(tokens, issuedAt + 45 * DAY)).toBe(true);
+  });
+
+  it("upgrades an old 30-day session on its first request after the release", () => {
+    const issuedAt = 1_700_000_000_000;
+    expect(accessRefreshDue(session(issuedAt, 30), issuedAt + DAY)).toBe(true);
+  });
+
+  it("does not mistake an account-deletion-capped token for a legacy session", () => {
+    const issuedAt = 1_700_000_000_000;
+    const deletionAt = issuedAt + 30 * DAY;
+    const tokens = session(issuedAt, 30, deletionAt);
+
+    expect(accessRefreshDue(tokens, issuedAt + DAY)).toBe(false);
+  });
+
+  it("never attempts renewal after the token has already expired", () => {
+    const issuedAt = 1_700_000_000_000;
+    const tokens = session(issuedAt, 90);
+
+    expect(accessRefreshDue(tokens, issuedAt + 90 * DAY)).toBe(false);
   });
 
   it("migrates legacy refresh and device fields out of storage", () => {
