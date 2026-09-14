@@ -2,6 +2,8 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { CalendarDays, Globe, Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui";
+import { subscriptionActive } from "@/lib/logic";
+import { loadOnboardingDraft } from "@/lib/onboarding";
 import { useAppMaybe } from "@/state/app";
 
 export const Route = createFileRoute("/onboarding")({
@@ -25,11 +27,26 @@ function OnboardingPage() {
    * moment a person concludes they have lost everything.
    */
   const onboarded = ctx?.db?.settings.onboarded ?? false;
+  const userId = ctx?.db?.auth?.userId;
+  const pendingPersonalization = userId ? loadOnboardingDraft(userId) : null;
   useEffect(() => {
-    if (onboarded) navigate({ to: "/" });
-  }, [onboarded, navigate]);
+    if (!ctx?.db) return;
+    if (onboarded) {
+      navigate({ to: "/" });
+      return;
+    }
+    // New accounts now personalize after phone sign-up. This route only remains
+    // as the existing recovery path for older authenticated accounts.
+    if (!ctx.db.auth) {
+      navigate({ to: "/auth" });
+      return;
+    }
+    if (pendingPersonalization) {
+      navigate({ to: subscriptionActive(ctx.db) ? "/getting-started" : "/activation" });
+    }
+  }, [ctx?.db, navigate, onboarded, pendingPersonalization]);
 
-  if (!ctx?.db) return null;
+  if (!ctx?.db || !ctx.db.auth || pendingPersonalization) return null;
   const { db, updatePreferences, t } = ctx;
 
   const slides = [
