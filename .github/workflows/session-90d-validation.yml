@@ -21,7 +21,7 @@ jobs:
       - name: Install root dependencies
         run: npm ci
       - name: Install backend dependencies
-        run: npm --prefix backend ci
+        run: npm --prefix backend install --package-lock=false
       - name: Prettier check changed session files
         run: npx prettier --check backend/src/env.ts backend/src/routes/auth.ts backend/src/services/tokens.ts backend/test/session-refresh.test.ts backend/test/tokens.test.ts src/lib/api/auth.ts src/lib/api/auth-expiry.test.ts supabase/functions/api/routes/auth.ts supabase/functions/api/shared/env.ts supabase/functions/api/shared/services/tokens.ts supabase/tests/session-refresh.test.ts
       - name: Lint
