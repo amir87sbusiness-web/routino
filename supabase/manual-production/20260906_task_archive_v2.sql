@@ -103,10 +103,12 @@ begin
       from records source
      where source.kind = 'tasks'
        and source.deleted = false
-       and source.data->>'done' = 'true'
-       and routino_task_archive_candidate_valid(source.id, source.data)
+       and routino_decode_record_data(source.kind, source.id, source.data)->>'done' = 'true'
+       and routino_task_archive_candidate_valid(
+             source.id, routino_decode_record_data(source.kind, source.id, source.data)
+           )
        and source.updated_at between 0 and 9007199254740991
-       and left(source.data->>'dateKey', 7) < to_char(
+       and left(routino_decode_record_data(source.kind, source.id, source.data)->>'dateKey', 7) < to_char(
          (p_now - interval '7 days') at time zone 'UTC', 'YYYY-MM'
        )
        and source.updated_at <= floor(
@@ -136,13 +138,13 @@ begin
   locked as (
     select source.user_id,
            source.id as task_id,
-           source.data as task_data,
+           routino_decode_record_data(source.kind, source.id, source.data) as task_data,
            source.updated_at,
-           left(source.data->>'dateKey', 7) as month_key,
+           left(routino_decode_record_data(source.kind, source.id, source.data)->>'dateKey', 7) as month_key,
            octet_length(jsonb_build_object(
              'kind', 'tasks',
              'id', source.id,
-             'data', source.data,
+             'data', routino_decode_record_data(source.kind, source.id, source.data),
              'updatedAt', source.updated_at,
              'deleted', false
            )::text)::integer as envelope_bytes
@@ -150,10 +152,12 @@ begin
       join locked_owners owner on owner.id = source.user_id
      where source.kind = 'tasks'
        and source.deleted = false
-       and source.data->>'done' = 'true'
-       and routino_task_archive_candidate_valid(source.id, source.data)
+       and routino_decode_record_data(source.kind, source.id, source.data)->>'done' = 'true'
+       and routino_task_archive_candidate_valid(
+             source.id, routino_decode_record_data(source.kind, source.id, source.data)
+           )
        and source.updated_at between 0 and 9007199254740991
-       and left(source.data->>'dateKey', 7) < to_char(
+       and left(routino_decode_record_data(source.kind, source.id, source.data)->>'dateKey', 7) < to_char(
          (p_now - interval '7 days') at time zone 'UTC', 'YYYY-MM'
        )
        and source.updated_at <= floor(
@@ -170,7 +174,9 @@ begin
             and archive.kind = 'taskMonths'
             and item->>0 = source.id
        )
-     order by source.user_id, left(source.data->>'dateKey', 7), source.id collate "C"
+     order by source.user_id,
+              left(routino_decode_record_data(source.kind, source.id, source.data)->>'dateKey', 7),
+              source.id collate "C"
      limit v_limit
      for update of source skip locked
   )
@@ -357,7 +363,7 @@ begin
        and source.kind = 'tasks'
        and source.id = selected.task_id
        and source.updated_at = selected.updated_at
-       and source.data = selected.task_data
+       and routino_decode_record_data(source.kind, source.id, source.data) = selected.task_data
        and source.deleted = false;
     get diagnostics v_deleted = row_count;
     if v_deleted <> v_archived_tasks then

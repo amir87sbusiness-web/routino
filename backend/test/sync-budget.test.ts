@@ -1,6 +1,8 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
 import { pushRecords, type PushRecord } from "../src/services/sync.js";
+import { encodeRecordForStorage } from "../src/services/record-storage-codec.js";
+import type { StoredSyncKind } from "../src/db/schema.js";
 
 let h: Harness;
 
@@ -28,8 +30,11 @@ const habit = (id: string, name: string, updatedAt = 1_000): PushRecord => ({
   deleted: false,
 });
 
-async function jsonBytes(data: unknown): Promise<number> {
-  const encoded = JSON.stringify(data).replaceAll("'", "''");
+async function storageBytes(record: PushRecord): Promise<number> {
+  const stored = record.deleted
+    ? null
+    : encodeRecordForStorage(record.kind as StoredSyncKind, record.id, record.data);
+  const encoded = JSON.stringify(stored).replaceAll("'", "''");
   const [row] = await h.query<{ bytes: number }>(
     `select octet_length('${encoded}'::jsonb::text)::integer as bytes`,
   );
@@ -169,7 +174,7 @@ describe("per-account sync storage budget", () => {
 
   it("enforces the exact annual positive-growth quota per record", async () => {
     const exact = habit("exact", "مرز دقیق");
-    const exactBytes = await jsonBytes(exact.data);
+    const exactBytes = await storageBytes(exact);
     await h.raw(`
       update users
          set sync_growth_period_started_at = '${PERIOD_START.toISOString()}',
@@ -181,7 +186,7 @@ describe("per-account sync storage budget", () => {
     expect(exactlyTenMiB.applied).toBe(1);
 
     const beyond = habit("beyond", "یک بایت بیشتر");
-    const beyondBytes = await jsonBytes(beyond.data);
+    const beyondBytes = await storageBytes(beyond);
     await h.raw(`
       update users set sync_growth_bytes = ${MAX_ANNUAL_GROWTH_BYTES - beyondBytes + 1}
        where id = '${USER_ID}'
@@ -271,15 +276,15 @@ describe("per-account sync storage budget", () => {
     `);
     expect(new Date(period!.started_at).getTime()).toBe(Date.parse("2027-09-01T00:00:00.000Z"));
     expect(Number(period!.sync_growth_bytes)).toBe(
-      (await jsonBytes(next.data)) + (await jsonBytes(another.data)),
+      (await storageBytes(next)) + (await storageBytes(another)),
     );
   });
 
   it("serializes concurrent final-byte reservations without overspending", async () => {
     const a = habit("race-a", "x");
     const b = habit("race-b", "y");
-    const aBytes = await jsonBytes(a.data);
-    const bBytes = await jsonBytes(b.data);
+    const aBytes = await storageBytes(a);
+    const bBytes = await storageBytes(b);
     expect(aBytes).toBe(bBytes);
     await h.raw(`
       update users
@@ -305,7 +310,7 @@ describe("per-account sync storage budget", () => {
   it("accepts the fitting prefix, rejects only over-budget records, and skips stale replay", async () => {
     const first = habit("partial-a", "x", 2_000);
     const second = habit("partial-b", "y", 2_000);
-    const firstBytes = await jsonBytes(first.data);
+    const firstBytes = await storageBytes(first);
     await h.raw(`
       update users
          set sync_growth_period_started_at = '${PERIOD_START.toISOString()}',
@@ -431,8 +436,8 @@ describe("per-account sync storage budget", () => {
   it("accepts a later smaller growth after an earlier record does not fit", async () => {
     const large = habit("greedy-large", "x".repeat(100), 2_000);
     const small = habit("greedy-small", "x", 2_000);
-    const smallBytes = await jsonBytes(small.data);
-    expect(await jsonBytes(large.data)).toBeGreaterThan(smallBytes);
+    const smallBytes = await storageBytes(small);
+    expect(await storageBytes(large)).toBeGreaterThan(smallBytes);
     await h.raw(`
       update users
          set sync_growth_period_started_at = '${PERIOD_START.toISOString()}',

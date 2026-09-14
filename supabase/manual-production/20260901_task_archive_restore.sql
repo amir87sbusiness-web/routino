@@ -95,7 +95,9 @@ begin
   ) on commit drop;
   insert into pg_temp.routino_restore_archives
     (archive_id, archive_data, archive_updated_at, archive_deleted, archive_seq)
-  select archive.id, archive.data, archive.updated_at, archive.deleted, archive.seq
+  select archive.id,
+         routino_decode_record_data(archive.kind, archive.id, archive.data),
+         archive.updated_at, archive.deleted, archive.seq
     from records archive
    where archive.user_id = v_owner_id and archive.kind = 'taskMonths'
    order by archive.id;
@@ -299,7 +301,9 @@ begin
        and ordinary.kind = 'tasks'
        and ordinary.deleted = false
        and not coalesce(
-         routino_task_archive_candidate_valid(ordinary.id, ordinary.data),
+         routino_task_archive_candidate_valid(
+           ordinary.id, routino_decode_record_data(ordinary.kind, ordinary.id, ordinary.data)
+         ),
          false
        )
   ) then
@@ -313,7 +317,8 @@ begin
        and ordinary.kind = 'tasks'
        and ordinary.updated_at = archived.task_updated_at
        and ordinary.deleted = false
-       and ordinary.data is distinct from archived.task_data
+       and routino_decode_record_data(ordinary.kind, ordinary.id, ordinary.data)
+             is distinct from archived.task_data
   ) then
     raise exception 'task archive restore refused: ambiguous equal-version collision';
   end if;
@@ -345,7 +350,7 @@ begin
       select ordinary.id,
              ordinary.updated_at,
              ordinary.deleted,
-             ordinary.data,
+             routino_decode_record_data(ordinary.kind, ordinary.id, ordinary.data),
              'ordinary',
              1
         from records ordinary
@@ -427,7 +432,7 @@ begin
   select v_owner_id,
          'tasks',
          apply.task_id,
-         apply.task_data,
+         routino_encode_record_data('tasks', apply.task_id, apply.task_data),
          apply.task_updated_at,
          false,
          apply.assigned_seq
@@ -454,7 +459,8 @@ begin
      where ordinary.id is null
         or ordinary.updated_at is distinct from expected.task_updated_at
         or ordinary.deleted is distinct from expected.task_deleted
-        or ordinary.data is distinct from expected.task_data
+        or routino_decode_record_data(ordinary.kind, ordinary.id, ordinary.data)
+             is distinct from expected.task_data
   ) then
     raise exception 'task archive restore refused: reconstructed tuple verification failed';
   end if;
@@ -476,7 +482,8 @@ begin
    where archive.user_id = v_owner_id
      and archive.kind = 'taskMonths'
      and archive.id = expected.archive_id
-     and archive.data is not distinct from expected.archive_data
+     and routino_decode_record_data(archive.kind, archive.id, archive.data)
+           is not distinct from expected.archive_data
      and archive.updated_at = expected.archive_updated_at
      and archive.deleted = expected.archive_deleted
      and archive.seq = expected.archive_seq;
@@ -511,7 +518,8 @@ begin
      where ordinary.id is null
         or ordinary.updated_at is distinct from expected.task_updated_at
         or ordinary.deleted is distinct from expected.task_deleted
-        or ordinary.data is distinct from expected.task_data
+        or routino_decode_record_data(ordinary.kind, ordinary.id, ordinary.data)
+             is distinct from expected.task_data
   ) then
     raise exception 'task archive restore refused: post-delete tuple verification failed';
   end if;

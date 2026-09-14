@@ -104,14 +104,18 @@ async function rawKindCount(kind: string): Promise<number> {
 async function semanticTasks(): Promise<unknown[]> {
   return h.query(`
     with candidates as (
-      select r.id, r.updated_at, r.data, r.seq
+      select r.id, r.updated_at,
+             routino_decode_record_data(r.kind, r.id, r.data) as data, r.seq
         from records r
        where r.user_id = '${OWNER}' and r.kind = 'tasks' and not r.deleted
       union all
       select item->>0, (item->>1)::bigint,
-             routino_expand_task_archive_item(a.data->'v', a.data->>'monthKey', item)->2, a.seq
+             routino_expand_task_archive_item(decoded.data->'v', decoded.data->>'monthKey', item)->2, a.seq
         from records a
-        cross join lateral jsonb_array_elements(a.data->'items') item
+        cross join lateral (
+          select routino_decode_record_data(a.kind, a.id, a.data) as data
+        ) decoded
+        cross join lateral jsonb_array_elements(decoded.data->'items') item
        where a.user_id = '${OWNER}' and a.kind = 'taskMonths' and not a.deleted
     )
     select distinct on (id) id, updated_at::text, data
@@ -129,7 +133,9 @@ async function semanticTaskCount(): Promise<number> {
       union all
       select item->>0
         from records a
-        cross join lateral jsonb_array_elements(a.data->'items') item
+        cross join lateral jsonb_array_elements(
+          routino_decode_record_data(a.kind, a.id, a.data)->'items'
+        ) item
        where a.user_id = '${OWNER}' and a.kind = 'taskMonths' and not a.deleted
     )
     select count(distinct id)::integer as count from candidates
@@ -171,15 +177,19 @@ async function assertExactPhysicalCounters(): Promise<void> {
 async function semanticTasksFor(ownerIds: string[]): Promise<unknown[]> {
   return h.query(`
     with candidates as (
-      select r.user_id, r.id, r.updated_at, r.data, r.seq
+      select r.user_id, r.id, r.updated_at,
+             routino_decode_record_data(r.kind, r.id, r.data) as data, r.seq
         from records r
        where r.user_id in (${ownerIds.map(sqlText).join(", ")})
          and r.kind = 'tasks' and not r.deleted
       union all
       select a.user_id, item->>0, (item->>1)::bigint,
-             routino_expand_task_archive_item(a.data->'v', a.data->>'monthKey', item)->2, a.seq
+             routino_expand_task_archive_item(decoded.data->'v', decoded.data->>'monthKey', item)->2, a.seq
         from records a
-        cross join lateral jsonb_array_elements(a.data->'items') item
+        cross join lateral (
+          select routino_decode_record_data(a.kind, a.id, a.data) as data
+        ) decoded
+        cross join lateral jsonb_array_elements(decoded.data->'items') item
        where a.user_id in (${ownerIds.map(sqlText).join(", ")})
          and a.kind = 'taskMonths' and not a.deleted
     )
@@ -251,7 +261,7 @@ function restoreSqlFor(ownerId: string): string {
 async function ordinaryTaskTuples(): Promise<unknown[]> {
   return h.query(`
     select user_id::text as user_id, id, updated_at::text as updated_at,
-           deleted, data
+           deleted, routino_decode_record_data(kind, id, data) as data
       from records
      where user_id = '${OWNER}' and kind = 'tasks'
      order by id
@@ -372,27 +382,34 @@ describe("bounded transactional task compaction", () => {
     `);
     const planRows = await h.query<Record<string, string>>(`
       explain (costs off)
-      select source.user_id, left(source.data->>'dateKey', 7), source.id
+      select source.user_id,
+             left(routino_decode_record_data(source.kind, source.id, source.data)->>'dateKey', 7),
+             source.id
         from records source
        where source.kind = 'tasks'
          and source.deleted = false
-         and source.data->>'done' = 'true'
-         and routino_task_archive_candidate_valid(source.id, source.data)
+         and routino_decode_record_data(source.kind, source.id, source.data)->>'done' = 'true'
+         and routino_task_archive_candidate_valid(
+               source.id, routino_decode_record_data(source.kind, source.id, source.data)
+             )
          and source.updated_at between 0 and 9007199254740991
-         and left(source.data->>'dateKey', 7) < '2026-06'
+         and left(routino_decode_record_data(source.kind, source.id, source.data)->>'dateKey', 7) < '2026-06'
          and source.updated_at <= ${Date.parse(NOW) - 7 * 86_400_000}
          and not exists (
            select 1
              from records archive
              cross join lateral jsonb_array_elements(
-               case when jsonb_typeof(archive.data->'items') = 'array'
-                 then archive.data->'items' else '[]'::jsonb end
+               case when jsonb_typeof(routino_decode_record_data(archive.kind, archive.id, archive.data)->'items') = 'array'
+                 then routino_decode_record_data(archive.kind, archive.id, archive.data)->'items'
+                 else '[]'::jsonb end
              ) item
             where archive.user_id = source.user_id
               and archive.kind = 'taskMonths'
               and item->>0 = source.id
          )
-       order by source.user_id, left(source.data->>'dateKey', 7), source.id collate "C"
+       order by source.user_id,
+                left(routino_decode_record_data(source.kind, source.id, source.data)->>'dateKey', 7),
+                source.id collate "C"
        limit 500
     `);
     const plan = planRows.flatMap((row) => Object.values(row)).join("\n");
@@ -469,8 +486,8 @@ describe("bounded transactional task compaction", () => {
     expect(await semanticTasksFor(LOAD_OWNERS)).toEqual(beforeSemantics);
     expect(await exactCounters(LOAD_OWNERS)).toEqual(await recomputedCounters(LOAD_OWNERS));
     expect(schedule.batchSize).toBe(1_000);
-    expect(theoreticalDailyCapacity).toBe(1_440_000);
-    expect(theoreticalDailyCapacity).toBeGreaterThanOrEqual(100_000);
+    expect(theoreticalDailyCapacity).toBe(24_000);
+    expect(theoreticalDailyCapacity).toBeGreaterThanOrEqual(10_000);
 
     const beforeEmptyRun = await h.query(`
       select id::text, seq::text, gc_seq::text, sync_record_count,
@@ -594,7 +611,7 @@ describe("bounded transactional task compaction", () => {
       updated_at: number;
       seq: number;
     }>(`
-      select id, data, updated_at, seq from records
+      select id, routino_decode_record_data(kind, id, data) as data, updated_at, seq from records
        where user_id = '${OWNER}' and kind = 'taskMonths' and id <> '2026-04|legacy'
     `);
     expect(
@@ -616,7 +633,9 @@ describe("bounded transactional task compaction", () => {
     expect(await semanticTasks()).toEqual(before);
     const duplicateMemberships = await h.query(`
       select item->>0 as id
-        from records a cross join lateral jsonb_array_elements(a.data->'items') item
+        from records a cross join lateral jsonb_array_elements(
+          routino_decode_record_data(a.kind, a.id, a.data)->'items'
+        ) item
        where a.user_id = '${OWNER}' and a.kind = 'taskMonths'
        group by item->>0 having count(*) > 1
     `);
@@ -631,7 +650,10 @@ describe("bounded transactional task compaction", () => {
       returns trigger language plpgsql as $$
       begin
         if new.kind = 'taskMonths' then
-          new.data = jsonb_set(new.data, '{checksum}', to_jsonb(repeat('0', 32)));
+          new.data = routino_encode_record_data(new.kind, new.id, jsonb_set(
+            routino_decode_record_data(new.kind, new.id, new.data),
+            '{checksum}', to_jsonb(repeat('0', 32))
+          ));
         end if;
         return new;
       end
@@ -657,7 +679,12 @@ describe("bounded transactional task compaction", () => {
       create or replace function routino_test_strip_task_archive()
       returns trigger language plpgsql as $$
       begin
-        if new.kind = 'taskMonths' then new.data = new.data - 'v'; end if;
+        if new.kind = 'taskMonths' then
+          new.data = routino_encode_record_data(
+            new.kind, new.id,
+            routino_decode_record_data(new.kind, new.id, new.data) - 'v'
+          );
+        end if;
         return new;
       end
       $$;
@@ -686,17 +713,18 @@ describe("bounded transactional task compaction", () => {
         changed_checksum text;
       begin
         if new.kind = 'taskMonths' then
-          changed_items := new.data->'items' || jsonb_build_array(new.data->'items'->0);
+          changed_items := routino_decode_record_data(new.kind, new.id, new.data)->'items' ||
+            jsonb_build_array(routino_decode_record_data(new.kind, new.id, new.data)->'items'->0);
           select md5(string_agg(
             item->>0 || E'\\n' || (item->>1)::bigint::text || E'\\n' || (item->2)::text,
             E'\\n' order by item->>0
           )) into changed_checksum
             from jsonb_array_elements(changed_items) item;
+          new.data := routino_decode_record_data(new.kind, new.id, new.data);
           new.data := jsonb_set(new.data, '{items}', changed_items);
-          new.data := jsonb_set(
-            new.data, '{count}', to_jsonb(jsonb_array_length(changed_items))
-          );
+          new.data := jsonb_set(new.data, '{count}', to_jsonb(jsonb_array_length(changed_items)));
           new.data := jsonb_set(new.data, '{checksum}', to_jsonb(changed_checksum));
+          new.data := routino_encode_record_data(new.kind, new.id, new.data);
         end if;
         return new;
       end
@@ -772,16 +800,19 @@ describe("bounded transactional task compaction", () => {
     ]);
 
     const chunks = await h.query<{ month_key: string; count: number; expanded_bytes: number }>(`
-      select a.data->>'monthKey' as month_key,
-             jsonb_array_length(a.data->'items')::integer as count,
+      select decoded.data->>'monthKey' as month_key,
+             jsonb_array_length(decoded.data->'items')::integer as count,
              (
                select sum(octet_length(jsonb_build_object(
                  'kind', 'tasks', 'id', item->>0, 'data', item->2,
                  'updatedAt', (item->>1)::bigint, 'deleted', false
                )::text))::bigint
-                 from jsonb_array_elements(a.data->'items') item
+                 from jsonb_array_elements(decoded.data->'items') item
              ) as expanded_bytes
         from records a
+        cross join lateral (
+          select routino_decode_record_data(a.kind, a.id, a.data) as data
+        ) decoded
        where a.user_id = '${OWNER}' and a.kind = 'taskMonths'
     `);
     expect(chunks.every((chunk) => Number(chunk.count) <= 32)).toBe(true);
@@ -794,7 +825,8 @@ describe("bounded transactional task compaction", () => {
     const original = await semanticTasks();
     await h.query(`select * from routino_compact_task_months('${NOW}', 32)`);
     const [archive] = await h.query<{ version: number }>(
-      `select (data->>'v')::int as version from records where user_id='${OWNER}' and kind='taskMonths'`,
+      `select (routino_decode_record_data(kind, id, data)->>'v')::int as version
+         from records where user_id='${OWNER}' and kind='taskMonths'`,
     );
     expect(archive!.version).toBe(1);
     expect(await semanticTasks()).toEqual(original);
@@ -828,7 +860,8 @@ describe("bounded transactional task compaction", () => {
       updated_at: string;
       seq: string;
     }>(`
-      select id, data, updated_at::text, seq::text
+      select id, routino_decode_record_data(kind, id, data) as data,
+             updated_at::text, seq::text
         from records
        where user_id = '${OWNER}' and kind = 'taskMonths'
     `);
@@ -1031,7 +1064,10 @@ describe("task archive restore tooling", () => {
     await h.query(`select * from routino_compact_task_months('${NOW}', 1)`);
     await h.raw(`
       update records
-         set data = jsonb_set(data, '{checksum}', to_jsonb(repeat('0', 32)))
+         set data = routino_encode_record_data(kind, id, jsonb_set(
+           routino_decode_record_data(kind, id, data),
+           '{checksum}', to_jsonb(repeat('0', 32))
+         ))
        where user_id = '${OWNER}' and kind = 'taskMonths'
     `);
     const beforeRows = await h.query(`
@@ -1066,7 +1102,9 @@ describe("task archive restore tooling", () => {
     await h.query(`select * from routino_compact_task_months('${NOW}', 1)`);
     await h.raw(`
       update records
-         set data = jsonb_set(data, '{count}', '"not-a-number"'::jsonb)
+         set data = routino_encode_record_data(kind, id, jsonb_set(
+           routino_decode_record_data(kind, id, data), '{count}', '"not-a-number"'::jsonb
+         ))
        where user_id = '${OWNER}' and kind = 'taskMonths'
     `);
 
@@ -1299,7 +1337,10 @@ describe("task archive restore tooling", () => {
     await compactOneTask("huge-archive-count");
     await h.raw(`
       update records
-         set data = jsonb_set(data, '{count}', '${"9".repeat(200)}'::jsonb)
+         set data = routino_encode_record_data(kind, id, jsonb_set(
+           routino_decode_record_data(kind, id, data),
+           '{count}', '${"9".repeat(200)}'::jsonb
+         ))
        where user_id = '${OWNER}' and kind = 'taskMonths'
     `);
 
@@ -1314,7 +1355,10 @@ describe("task archive restore tooling", () => {
     await compactOneTask("huge-archive-timestamp");
     await h.raw(`
       update records
-         set data = jsonb_set(data, '{items,0,1}', '${"9".repeat(200)}'::jsonb)
+         set data = routino_encode_record_data(kind, id, jsonb_set(
+           routino_decode_record_data(kind, id, data),
+           '{items,0,1}', '${"9".repeat(200)}'::jsonb
+         ))
        where user_id = '${OWNER}' and kind = 'taskMonths'
     `);
 

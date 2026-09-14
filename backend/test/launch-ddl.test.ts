@@ -1075,7 +1075,8 @@ commit;$$
       "records_task_compaction_owner_month",
       "records_tombstone_purge",
     ]);
-    expect(indexes[0]!.indexdef).toMatch(/"?left"?\(\(data ->> 'dateKey'::text\), 7\)/);
+    expect(indexes[0]!.indexdef).toContain("routino_decode_record_data(kind, id, data)");
+    expect(indexes[0]!.indexdef).toMatch(/"?left"?\(.*'dateKey'::text\), 7\)/);
     expect(indexes[0]!.indexdef).toContain("updated_at");
     expect(indexes[0]!.indexdef).toContain("(deleted = false)");
     expect(indexes[1]!.indexdef).toContain("(updated_at, seq)");

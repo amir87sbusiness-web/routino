@@ -125,7 +125,9 @@ with archives as (
      )
 ), task_candidates as (
   select ordinary.user_id, ordinary.id, ordinary.updated_at, ordinary.deleted,
-         ordinary.data, ordinary.seq, 1 as ordinary_priority
+         case when ordinary.data is null then null::jsonb
+              else routino_decode_record_data(ordinary.kind, ordinary.id, ordinary.data) end as data,
+         ordinary.seq, 1 as ordinary_priority
     from records ordinary
    where ordinary.kind = 'tasks'
   union all

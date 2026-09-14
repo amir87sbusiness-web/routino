@@ -48,6 +48,7 @@ export const SHARED_FILES = [
   "services/login-throttle.ts",
   "services/owner-bootstrap.ts",
   "services/sync-record-validation.ts",
+  "services/record-storage-codec.ts",
   "services/task-month-archive.ts",
   "services/sync.ts",
   "services/user-activity.ts",

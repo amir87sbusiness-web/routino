@@ -50,12 +50,204 @@ delete from records where kind = 'settings';
 alter table records drop constraint if exists records_kind_valid;
 alter table records add constraint records_kind_valid check (kind in
   ('categories','habits','habitMonths','tasks','timerSessions','journal','taskMonths'));
+
+-- Storage-only codec. Legacy objects remain valid; compact arrays are decoded
+-- before business logic or wire serialization. Identity fields are derived
+-- from the record key and are therefore omitted from compact JSONB.
+create or replace function routino_encode_record_data(p_kind text, p_id text, p_data jsonb)
+returns jsonb
+language plpgsql
+immutable
+strict
+set search_path = public, pg_temp
+as $function$
+declare
+  v_extras jsonb;
+  v_cells jsonb;
+begin
+  if p_kind = 'taskMonths' then return p_data; end if;
+  if jsonb_typeof(p_data) = 'null' then return p_data; end if;
+  if jsonb_typeof(p_data) = 'array' then return p_data; end if;
+  if jsonb_typeof(p_data) <> 'object' then
+    raise exception 'invalid record storage for %/%', p_kind, p_id;
+  end if;
+
+  case p_kind
+    when 'categories' then
+      return jsonb_build_array(p_data->'nameFa', p_data->'nameEn', p_data->'color',
+        p_data->'icon', p_data->'isDefault') ||
+        case when p_data ? 'isLimit' then jsonb_build_array(p_data->'isLimit') else '[]'::jsonb end;
+    when 'habits' then
+      v_extras := '{}'::jsonb ||
+        case when p_data ? 'unit' then jsonb_build_object('unit', p_data->'unit') else '{}'::jsonb end ||
+        case when p_data ? 'unitKind' then jsonb_build_object('unitKind', p_data->'unitKind') else '{}'::jsonb end ||
+        case when p_data ? 'archived' then jsonb_build_object('archived', p_data->'archived') else '{}'::jsonb end;
+      return jsonb_build_array(
+        p_data->'name', p_data->'categoryId', p_data->'type', p_data->'target',
+        jsonb_build_array(p_data->'schedule'->'kind') ||
+          case when (p_data->'schedule') ? 'weekdays'
+            then jsonb_build_array(p_data->'schedule'->'weekdays') else '[]'::jsonb end,
+        p_data->'monthlyGoal', p_data->'reminderTime', p_data->'createdAt'
+      ) || case when v_extras = '{}'::jsonb then '[]'::jsonb else jsonb_build_array(v_extras) end;
+    when 'habitMonths' then
+      select coalesce(jsonb_object_agg(cell.key,
+        case when cell.value->>'deleted' = 'true'
+          then jsonb_build_array(cell.value->'updatedAt')
+          else jsonb_build_array(cell.value->'updatedAt', cell.value->'value', cell.value->'done') ||
+            case when cell.value ? 'note' or cell.value ? 'mood'
+              then jsonb_build_array(coalesce(cell.value->'note', 'null'::jsonb)) else '[]'::jsonb end ||
+            case when cell.value ? 'mood'
+              then jsonb_build_array(cell.value->'mood') else '[]'::jsonb end
+        end), '{}'::jsonb)
+        into v_cells
+        from jsonb_each(p_data->'cells') cell;
+      return jsonb_build_array(v_cells);
+    when 'tasks' then
+      v_extras := '{}'::jsonb ||
+        case when p_data ? 'note' then jsonb_build_object('note', p_data->'note') else '{}'::jsonb end ||
+        case when p_data ? 'unitKind' then jsonb_build_object('unitKind', p_data->'unitKind') else '{}'::jsonb end ||
+        case when p_data ? 'reminderAt' then jsonb_build_object('reminderAt', p_data->'reminderAt') else '{}'::jsonb end ||
+        case when p_data ? 'color' then jsonb_build_object('color', p_data->'color') else '{}'::jsonb end ||
+        case when p_data ? 'icon' then jsonb_build_object('icon', p_data->'icon') else '{}'::jsonb end;
+      return jsonb_build_array(p_data->'dateKey', p_data->'title', p_data->'type',
+        p_data->'target', p_data->'value', p_data->'done') ||
+        case when v_extras = '{}'::jsonb then '[]'::jsonb else jsonb_build_array(v_extras) end;
+    when 'timerSessions' then
+      v_extras := '{}'::jsonb ||
+        case when p_data ? 'linkedKind' then jsonb_build_object('linkedKind', p_data->'linkedKind') else '{}'::jsonb end ||
+        case when p_data ? 'linkedId' then jsonb_build_object('linkedId', p_data->'linkedId') else '{}'::jsonb end ||
+        case when p_data ? 'linkedLabel' then jsonb_build_object('linkedLabel', p_data->'linkedLabel') else '{}'::jsonb end;
+      return jsonb_build_array(p_data->'mode', p_data->'focusSeconds', p_data->'startedAt',
+        p_data->'endedAt') ||
+        case when v_extras = '{}'::jsonb then '[]'::jsonb else jsonb_build_array(v_extras) end;
+    when 'journal' then
+      return jsonb_build_array(p_data->'text', p_data->'score', p_data->'mood', p_data->'updatedAt');
+    when 'taskMonths' then
+      return p_data;
+    else
+      raise exception 'unknown record kind %', p_kind;
+  end case;
+end
+$function$;
+
+revoke execute on function routino_encode_record_data(text, text, jsonb) from public;
+
+create or replace function routino_decode_record_data(p_kind text, p_id text, p_data jsonb)
+returns jsonb
+language plpgsql
+immutable
+strict
+set search_path = public, pg_temp
+as $function$
+declare
+  v_length integer;
+  v_cells jsonb;
+begin
+  if p_kind = 'taskMonths' then return p_data; end if;
+  if jsonb_typeof(p_data) = 'null' then return p_data; end if;
+  if jsonb_typeof(p_data) = 'object' then return p_data; end if;
+  if jsonb_typeof(p_data) <> 'array' then
+    raise exception 'invalid record storage for %/%', p_kind, p_id;
+  end if;
+  v_length := jsonb_array_length(p_data);
+
+  case p_kind
+    when 'categories' then
+      if v_length not between 5 and 6 then raise exception 'invalid compact category'; end if;
+      return jsonb_build_object('id', p_id, 'nameFa', p_data->0, 'nameEn', p_data->1,
+        'color', p_data->2, 'icon', p_data->3, 'isDefault', p_data->4) ||
+        case when v_length = 6 then jsonb_build_object('isLimit', p_data->5) else '{}'::jsonb end;
+    when 'habits' then
+      if v_length not between 8 and 9 or jsonb_typeof(p_data->4) <> 'array'
+         or jsonb_array_length(p_data->4) not between 1 and 2 then
+        raise exception 'invalid compact habit';
+      end if;
+      return jsonb_build_object('id', p_id, 'name', p_data->0, 'categoryId', p_data->1,
+        'type', p_data->2, 'target', p_data->3,
+        'schedule', jsonb_build_object('kind', p_data->4->0) ||
+          case when jsonb_array_length(p_data->4) = 2
+            then jsonb_build_object('weekdays', p_data->4->1) else '{}'::jsonb end,
+        'monthlyGoal', p_data->5, 'reminderTime', p_data->6, 'createdAt', p_data->7) ||
+        case when v_length = 9 then p_data->8 else '{}'::jsonb end;
+    when 'habitMonths' then
+      if v_length <> 1 or jsonb_typeof(p_data->0) <> 'object' or right(p_id, 8) !~ '^\|[0-9]{4}-[0-9]{2}$' then
+        raise exception 'invalid compact habit month';
+      end if;
+      select coalesce(jsonb_object_agg(cell.key,
+        case
+          when jsonb_typeof(cell.value) <> 'array' or jsonb_array_length(cell.value) not between 1 and 5
+            then null
+          when jsonb_array_length(cell.value) = 1
+            then jsonb_build_object('updatedAt', cell.value->0, 'deleted', true)
+          when jsonb_array_length(cell.value) < 3 then null
+          else jsonb_build_object('updatedAt', cell.value->0, 'deleted', false,
+                 'value', cell.value->1, 'done', cell.value->2) ||
+               case when jsonb_array_length(cell.value) >= 4 and cell.value->3 <> 'null'::jsonb
+                 then jsonb_build_object('note', cell.value->3) else '{}'::jsonb end ||
+               case when jsonb_array_length(cell.value) >= 5
+                 then jsonb_build_object('mood', cell.value->4) else '{}'::jsonb end
+        end), '{}'::jsonb)
+        into v_cells from jsonb_each(p_data->0) cell;
+      if exists (select 1 from jsonb_each(v_cells) cell where cell.value = 'null'::jsonb) then
+        raise exception 'invalid compact habit month cell';
+      end if;
+      return jsonb_build_object('habitId', left(p_id, length(p_id) - 8),
+        'monthKey', right(p_id, 7), 'cells', v_cells);
+    when 'tasks' then
+      if v_length not between 6 and 7 then raise exception 'invalid compact task'; end if;
+      return jsonb_build_object('id', p_id, 'dateKey', p_data->0, 'title', p_data->1,
+        'type', p_data->2, 'target', p_data->3, 'value', p_data->4, 'done', p_data->5) ||
+        case when v_length = 7 then p_data->6 else '{}'::jsonb end;
+    when 'timerSessions' then
+      if v_length not between 4 and 5 then raise exception 'invalid compact timer session'; end if;
+      return jsonb_build_object('id', p_id, 'mode', p_data->0, 'focusSeconds', p_data->1,
+        'startedAt', p_data->2, 'endedAt', p_data->3) ||
+        case when v_length = 5 then p_data->4 else '{}'::jsonb end;
+    when 'journal' then
+      if v_length <> 4 then raise exception 'invalid compact journal'; end if;
+      return jsonb_build_object('dateKey', p_id, 'text', p_data->0, 'score', p_data->1,
+        'mood', p_data->2, 'updatedAt', p_data->3);
+    when 'taskMonths' then
+      raise exception 'invalid compact task month';
+    else
+      raise exception 'unknown record kind %', p_kind;
+  end case;
+end
+$function$;
+
+revoke execute on function routino_decode_record_data(text, text, jsonb) from public;
+
+create or replace function routino_compact_record_data_if_lossless(
+  p_kind text, p_id text, p_data jsonb
+)
+returns jsonb
+language plpgsql
+immutable
+strict
+set search_path = public, pg_temp
+as $function$
+declare
+  v_compact jsonb;
+begin
+  v_compact := routino_encode_record_data(p_kind, p_id, p_data);
+  if routino_decode_record_data(p_kind, p_id, v_compact) = p_data then
+    return v_compact;
+  end if;
+  return null;
+exception when others then
+  return null;
+end
+$function$;
+
+revoke execute on function routino_compact_record_data_if_lossless(text, text, jsonb) from public;
+
 create index if not exists records_pull on records (user_id, seq);
 drop index if exists records_task_compaction_eligible;
 create index if not exists records_task_compaction_owner_month
-  on records (user_id, (left(data->>'dateKey', 7)), (id collate "C"))
+  on records (user_id, (left(routino_decode_record_data(kind, id, data)->>'dateKey', 7)), (id collate "C"))
   include (updated_at)
-  where kind = 'tasks' and deleted = false and data->>'done' = 'true';
+  where kind = 'tasks' and deleted = false
+    and routino_decode_record_data(kind, id, data)->>'done' = 'true';
 create index if not exists records_tombstone_purge
   on records (updated_at, seq)
   where deleted = true;
@@ -203,6 +395,102 @@ begin
 end
 $$;
 
+-- Deliberately bounded and re-runnable. Rows that are already arrays, deleted,
+-- or fail an encode/decode equality check are untouched. The normal records
+-- usage trigger adjusts sync_data_bytes by the exact storage delta.
+create or replace function routino_backfill_compact_records(p_limit integer default 500)
+returns table (
+  updated_rows integer,
+  before_bytes bigint,
+  after_bytes bigint,
+  remaining_rows bigint,
+  skipped_rows bigint
+)
+language plpgsql
+volatile
+security invoker
+set search_path = public, pg_temp
+as $function$
+begin
+  with targets as materialized (
+    select r.user_id, r.kind, r.id, r.data,
+           routino_compact_record_data_if_lossless(r.kind, r.id, r.data) as compact_data
+      from records r
+     where not r.deleted
+       and r.kind <> 'taskMonths'
+       and jsonb_typeof(r.data) = 'object'
+       and routino_compact_record_data_if_lossless(r.kind, r.id, r.data) is not null
+     order by r.user_id, r.kind, r.id collate "C"
+     limit greatest(1, least(coalesce(p_limit, 500), 1000))
+     for update of r skip locked
+  ), changed as (
+    update records r
+       set data = targets.compact_data
+      from targets
+     where r.user_id = targets.user_id and r.kind = targets.kind and r.id = targets.id
+     returning targets.data as old_data, r.data as new_data
+  )
+  select count(*)::integer,
+         coalesce(sum(octet_length(old_data::text)), 0)::bigint,
+         coalesce(sum(octet_length(new_data::text)), 0)::bigint
+    into updated_rows, before_bytes, after_bytes
+    from changed;
+
+  select count(*) filter (
+           where routino_compact_record_data_if_lossless(r.kind, r.id, r.data) is not null
+         )::bigint,
+         count(*) filter (
+           where routino_compact_record_data_if_lossless(r.kind, r.id, r.data) is null
+         )::bigint
+    into remaining_rows, skipped_rows
+    from records r
+   where not r.deleted and r.kind <> 'taskMonths' and jsonb_typeof(r.data) = 'object';
+  return next;
+end
+$function$;
+
+revoke execute on function routino_backfill_compact_records(integer) from public;
+
+-- Repair aid for rollout verification. It processes a stable, bounded user-id
+-- page and recomputes only the two counters derived from records.
+create or replace function routino_reconcile_record_storage_counters(
+  p_after_user_id uuid default null,
+  p_limit integer default 500
+)
+returns table (user_id uuid, record_count integer, data_bytes bigint)
+language sql
+volatile
+security invoker
+set search_path = public, pg_temp
+as $function$
+  with owners as materialized (
+    select u.id
+      from users u
+     where p_after_user_id is null or u.id > p_after_user_id
+     order by u.id
+     limit greatest(1, least(coalesce(p_limit, 500), 1000))
+     for update
+  ), actual as (
+    select owners.id,
+           count(r.*)::integer as record_count,
+           coalesce(sum(octet_length(r.data::text)), 0)::bigint as data_bytes
+      from owners
+      left join records r on r.user_id = owners.id
+     group by owners.id
+  ), fixed as (
+    update users u
+       set sync_record_count = actual.record_count,
+           sync_data_bytes = actual.data_bytes
+      from actual
+     where u.id = actual.id
+     returning u.id, u.sync_record_count, u.sync_data_bytes
+  )
+  select fixed.id, fixed.sync_record_count, fixed.sync_data_bytes
+    from fixed order by fixed.id
+$function$;
+
+revoke execute on function routino_reconcile_record_storage_counters(uuid, integer) from public;
+
 -- One client round trip, two server commands: the first command acquires the
 -- per-owner lock; the volatile function's RETURN QUERY then reads a fresh
 -- READ COMMITTED snapshot. This avoids the stale statement-snapshot race that
@@ -297,7 +585,9 @@ begin
            (existing.user_id is null) as is_insert,
            decision.will_apply,
            greatest(
-             coalesce(octet_length(final.final_data::text), 0) -
+             coalesce(octet_length(
+               routino_encode_record_data(d.kind, d.id, final.final_data)::text
+             ), 0) -
              coalesce(octet_length(existing.data::text), 0),
              0
            )::bigint as positive_growth
@@ -307,6 +597,11 @@ begin
        and existing.kind = d.kind
        and existing.id = d.id
       cross join lateral (
+        select case when existing.data is null then null::jsonb
+                    else routino_decode_record_data(existing.kind, existing.id, existing.data)
+               end as data
+      ) existing_state
+      cross join lateral (
         select case
                  when d.kind = 'habitMonths'
                   and d.deleted = false
@@ -315,11 +610,11 @@ begin
                  then jsonb_build_object(
                    'habitId', d.data->'habitId',
                    'monthKey', d.data->'monthKey',
-                   'cells', coalesce(existing.data->'cells', '{}'::jsonb) || coalesce((
+                   'cells', coalesce(existing_state.data->'cells', '{}'::jsonb) || coalesce((
                      select jsonb_object_agg(incoming_cell.key, incoming_cell.value)
                        from jsonb_each(d.data->'cells') incoming_cell
                       where coalesce(
-                        (existing.data->'cells'->incoming_cell.key->>'updatedAt')::bigint,
+                        (existing_state.data->'cells'->incoming_cell.key->>'updatedAt')::bigint,
                         -1
                       ) < (incoming_cell.value->>'updatedAt')::bigint
                    ), '{}'::jsonb)
@@ -353,7 +648,7 @@ begin
                      select 1
                        from jsonb_each(d.data->'cells') incoming_cell
                       where coalesce(
-                        (existing.data->'cells'->incoming_cell.key->>'updatedAt')::bigint,
+                        (existing_state.data->'cells'->incoming_cell.key->>'updatedAt')::bigint,
                         -1
                       ) < (incoming_cell.value->>'updatedAt')::bigint
                    )
@@ -456,59 +751,17 @@ begin
   ),
   upserted as (
     insert into records (user_id, kind, id, data, updated_at, deleted, seq)
-    select p_user_id, accepted.kind, accepted.id, accepted.data,
+    select p_user_id, accepted.kind, accepted.id,
+           case when accepted.data is null then null::jsonb
+                else routino_encode_record_data(accepted.kind, accepted.id, accepted.data) end,
            accepted.updated_at, accepted.deleted,
            bump.seq - sized.total + accepted.position
       from accepted cross join sized cross join bump
     on conflict (user_id, kind, id) do update
-      set data = case
-            when excluded.kind = 'habitMonths'
-             and excluded.deleted = false
-             and records.deleted = false
-            then jsonb_build_object(
-              'habitId', excluded.data->'habitId',
-              'monthKey', excluded.data->'monthKey',
-              'cells', coalesce(records.data->'cells', '{}'::jsonb) || coalesce((
-                select jsonb_object_agg(incoming_cell.key, incoming_cell.value)
-                  from jsonb_each(excluded.data->'cells') incoming_cell
-                 where coalesce(
-                   (records.data->'cells'->incoming_cell.key->>'updatedAt')::bigint,
-                   -1
-                 ) < (incoming_cell.value->>'updatedAt')::bigint
-              ), '{}'::jsonb)
-            )
-            else excluded.data
-          end,
-          updated_at = case
-            when excluded.kind = 'habitMonths'
-             and excluded.deleted = false
-             and records.deleted = false
-            then greatest(records.updated_at, excluded.updated_at)
-            else excluded.updated_at
-          end,
-          deleted = case
-            when excluded.kind = 'habitMonths'
-             and excluded.deleted = false
-             and records.deleted = false
-            then false
-            else excluded.deleted
-          end,
+      set data = excluded.data,
+          updated_at = excluded.updated_at,
+          deleted = excluded.deleted,
           seq = excluded.seq
-      where case
-        when excluded.kind = 'habitMonths' then case
-          when excluded.deleted = true or records.deleted = true
-            then records.updated_at < excluded.updated_at
-          else exists (
-            select 1
-              from jsonb_each(excluded.data->'cells') incoming_cell
-             where coalesce(
-               (records.data->'cells'->incoming_cell.key->>'updatedAt')::bigint,
-               -1
-             ) < (incoming_cell.value->>'updatedAt')::bigint
-          )
-        end
-        else records.updated_at < excluded.updated_at
-      end
     returning 1
   )
   select bump.seq,
@@ -725,15 +978,18 @@ security invoker
 set search_path = public, pg_temp
 as $function$
   with eligible as materialized (
-    select source.user_id, left(source.data->>'dateKey', 7) as month_key,
+    select source.user_id,
+           left(routino_decode_record_data(source.kind, source.id, source.data)->>'dateKey', 7) as month_key,
            source.updated_at
       from records source
      where source.kind = 'tasks'
        and source.deleted = false
-       and source.data->>'done' = 'true'
-       and routino_task_archive_candidate_valid(source.id, source.data)
+       and routino_decode_record_data(source.kind, source.id, source.data)->>'done' = 'true'
+       and routino_task_archive_candidate_valid(
+             source.id, routino_decode_record_data(source.kind, source.id, source.data)
+           )
        and source.updated_at between 0 and 9007199254740991
-       and left(source.data->>'dateKey', 7) < to_char(
+       and left(routino_decode_record_data(source.kind, source.id, source.data)->>'dateKey', 7) < to_char(
          (p_now - interval '7 days') at time zone 'UTC', 'YYYY-MM'
        )
        and source.updated_at <= floor(
@@ -744,7 +1000,8 @@ as $function$
            from records archive
            cross join lateral jsonb_array_elements(
              case when jsonb_typeof(archive.data->'items') = 'array'
-               then archive.data->'items' else '[]'::jsonb end
+               then archive.data->'items'
+               else '[]'::jsonb end
            ) item
           where archive.user_id = source.user_id
             and archive.kind = 'taskMonths'
@@ -859,10 +1116,12 @@ begin
       from records source
      where source.kind = 'tasks'
        and source.deleted = false
-       and source.data->>'done' = 'true'
-       and routino_task_archive_candidate_valid(source.id, source.data)
+       and routino_decode_record_data(source.kind, source.id, source.data)->>'done' = 'true'
+       and routino_task_archive_candidate_valid(
+             source.id, routino_decode_record_data(source.kind, source.id, source.data)
+           )
        and source.updated_at between 0 and 9007199254740991
-       and left(source.data->>'dateKey', 7) < to_char(
+       and left(routino_decode_record_data(source.kind, source.id, source.data)->>'dateKey', 7) < to_char(
          (p_now - interval '7 days') at time zone 'UTC', 'YYYY-MM'
        )
        and source.updated_at <= floor(
@@ -872,7 +1131,8 @@ begin
          select 1 from records archive
          cross join lateral jsonb_array_elements(
            case when jsonb_typeof(archive.data->'items') = 'array'
-             then archive.data->'items' else '[]'::jsonb end
+             then archive.data->'items'
+             else '[]'::jsonb end
          ) item
           where archive.user_id = source.user_id
             and archive.kind = 'taskMonths'
@@ -892,13 +1152,13 @@ begin
   locked as (
     select source.user_id,
            source.id as task_id,
-           source.data as task_data,
+           routino_decode_record_data(source.kind, source.id, source.data) as task_data,
            source.updated_at,
-           left(source.data->>'dateKey', 7) as month_key,
+           left(routino_decode_record_data(source.kind, source.id, source.data)->>'dateKey', 7) as month_key,
            octet_length(jsonb_build_object(
              'kind', 'tasks',
              'id', source.id,
-             'data', source.data,
+             'data', routino_decode_record_data(source.kind, source.id, source.data),
              'updatedAt', source.updated_at,
              'deleted', false
            )::text)::integer as envelope_bytes
@@ -906,10 +1166,12 @@ begin
       join locked_owners owner on owner.id = source.user_id
      where source.kind = 'tasks'
        and source.deleted = false
-       and source.data->>'done' = 'true'
-       and routino_task_archive_candidate_valid(source.id, source.data)
+       and routino_decode_record_data(source.kind, source.id, source.data)->>'done' = 'true'
+       and routino_task_archive_candidate_valid(
+             source.id, routino_decode_record_data(source.kind, source.id, source.data)
+           )
        and source.updated_at between 0 and 9007199254740991
-       and left(source.data->>'dateKey', 7) < to_char(
+       and left(routino_decode_record_data(source.kind, source.id, source.data)->>'dateKey', 7) < to_char(
          (p_now - interval '7 days') at time zone 'UTC', 'YYYY-MM'
        )
        and source.updated_at <= floor(
@@ -920,13 +1182,16 @@ begin
            from records archive
            cross join lateral jsonb_array_elements(
              case when jsonb_typeof(archive.data->'items') = 'array'
-               then archive.data->'items' else '[]'::jsonb end
+               then archive.data->'items'
+               else '[]'::jsonb end
            ) item
           where archive.user_id = source.user_id
             and archive.kind = 'taskMonths'
             and item->>0 = source.id
        )
-     order by source.user_id, left(source.data->>'dateKey', 7), source.id collate "C"
+     order by source.user_id,
+              left(routino_decode_record_data(source.kind, source.id, source.data)->>'dateKey', 7),
+              source.id collate "C"
      limit v_limit
      for update of source skip locked
   )
@@ -996,7 +1261,10 @@ begin
     select v_group.user_id,
            'taskMonths',
            v_group.month_key || '|' || md5(string_agg(items.task_id, E'\n' order by items.task_id collate "C")),
-           routino_task_archive_storage(jsonb_build_object(
+           routino_encode_record_data(
+             'taskMonths',
+             v_group.month_key || '|' || md5(string_agg(items.task_id, E'\n' order by items.task_id collate "C")),
+             routino_task_archive_storage(jsonb_build_object(
              'v', 2,
              'monthKey', v_group.month_key,
              'count', count(*)::integer,
@@ -1012,7 +1280,8 @@ begin
                    items.task_data - array['id','dateKey','title','type','target','value','done']))
                order by items.task_id collate "C"
              )
-           )),
+             ))
+           ),
            max(items.updated_at),
            false,
            v_end_seq - v_archive_rows + items.chunk_no
@@ -1113,7 +1382,7 @@ begin
        and source.kind = 'tasks'
        and source.id = selected.task_id
        and source.updated_at = selected.updated_at
-       and source.data = selected.task_data
+       and routino_decode_record_data(source.kind, source.id, source.data) = selected.task_data
        and source.deleted = false;
     get diagnostics v_deleted = row_count;
     if v_deleted <> v_archived_tasks then
@@ -1167,10 +1436,12 @@ begin
       from records source
      where source.kind = 'tasks'
        and source.deleted = false
-       and source.data->>'done' = 'true'
-       and routino_task_archive_candidate_valid(source.id, source.data)
+       and routino_decode_record_data(source.kind, source.id, source.data)->>'done' = 'true'
+       and routino_task_archive_candidate_valid(
+             source.id, routino_decode_record_data(source.kind, source.id, source.data)
+           )
        and source.updated_at between 0 and 9007199254740991
-       and left(source.data->>'dateKey', 7) < to_char(
+       and left(routino_decode_record_data(source.kind, source.id, source.data)->>'dateKey', 7) < to_char(
          (p_now - interval '7 days') at time zone 'UTC', 'YYYY-MM'
        )
        and source.updated_at <= floor(
@@ -1181,7 +1452,8 @@ begin
            from records archive
            cross join lateral jsonb_array_elements(
              case when jsonb_typeof(archive.data->'items') = 'array'
-               then archive.data->'items' else '[]'::jsonb end
+               then archive.data->'items'
+               else '[]'::jsonb end
            ) item
           where archive.user_id = source.user_id
             and archive.kind = 'taskMonths'

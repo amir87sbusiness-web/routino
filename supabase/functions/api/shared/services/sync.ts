@@ -25,7 +25,7 @@
  */
 import { eq, sql } from "drizzle-orm";
 import { rowsOf, type Database } from "../db/client.ts";
-import { users } from "../db/schema.ts";
+import { users, type StoredSyncKind } from "../db/schema.ts";
 import { badRequest, unauthorized } from "../lib/http-errors.ts";
 import { userActivityUpdate } from "./user-activity.ts";
 import {
@@ -38,6 +38,7 @@ import {
   type PushRecord,
   type RejectedSyncRecord,
 } from "./sync-record-validation.ts";
+import { decodeRecordFromStorage } from "./record-storage-codec.ts";
 
 export type { PushRecord, RejectedSyncRecord } from "./sync-record-validation.ts";
 
@@ -783,7 +784,9 @@ export async function pullRecords(
     .map((row): PullRecord => ({
       kind: row.kind!,
       id: row.id!,
-      data: row.data,
+      data: row.deleted
+        ? null
+        : decodeRecordFromStorage(row.kind! as StoredSyncKind, row.id!, row.data),
       updatedAt: Number(row.updated_at!),
       deleted: Boolean(row.deleted),
       seq: Number(row.seq!),

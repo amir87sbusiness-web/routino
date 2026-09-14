@@ -168,7 +168,9 @@ select
     join records ordinary
       on ordinary.user_id = archived.user_id and ordinary.kind = 'tasks' and ordinary.id = archived.task_id
    where ordinary.updated_at < archived.task_updated_at
-      or (ordinary.updated_at = archived.task_updated_at and ordinary.deleted = false and ordinary.data is distinct from archived.task_data)) as ordinary_not_newer_archive_relationships,
+      or (ordinary.updated_at = archived.task_updated_at and ordinary.deleted = false
+          and routino_decode_record_data(ordinary.kind, ordinary.id, ordinary.data)
+                is distinct from archived.task_data)) as ordinary_not_newer_archive_relationships,
   (select count(*) from users owner join actual_usage actual on actual.user_id = owner.id
    where owner.sync_record_count is distinct from actual.record_count) as lifetime_record_counter_mismatches,
   (select count(*) from users owner join actual_usage actual on actual.user_id = owner.id

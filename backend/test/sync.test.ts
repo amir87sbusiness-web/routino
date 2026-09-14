@@ -189,6 +189,50 @@ async function seedTaskArchive(
 }
 
 describe("sync", () => {
+  it("decodes mixed legacy objects and compact arrays without changing the wire shape", async () => {
+    const { access, user } = await signIn("09120000038");
+    await h.raw(`
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq) values
+        ('${user.id}', 'categories', 'c1',
+         '{"id":"c1","nameFa":"سلامتی","nameEn":"Health","color":"#0f0","icon":"heart","isDefault":true}'::jsonb,
+         1, false, 1),
+        ('${user.id}', 'journal', '2026-01-02',
+         '["یادداشت", 4, "خوب", 2]'::jsonb,
+         2, false, 2),
+        ('${user.id}', 'tasks', 't1', null, 3, true, 3);
+      update users set seq = 3 where id = '${user.id}';
+    `);
+
+    const response = await pull(access);
+    expect(response.statusCode).toBe(200);
+    expect(response.json().records).toEqual([
+      {
+        kind: "categories",
+        id: "c1",
+        data: {
+          id: "c1",
+          nameFa: "سلامتی",
+          nameEn: "Health",
+          color: "#0f0",
+          icon: "heart",
+          isDefault: true,
+        },
+        updatedAt: 1,
+        deleted: false,
+        seq: 1,
+      },
+      {
+        kind: "journal",
+        id: "2026-01-02",
+        data: { dateKey: "2026-01-02", text: "یادداشت", score: 4, mood: "خوب", updatedAt: 2 },
+        updatedAt: 2,
+        deleted: false,
+        seq: 2,
+      },
+      { kind: "tasks", id: "t1", data: null, updatedAt: 3, deleted: true, seq: 3 },
+    ]);
+  });
+
   it("fetches a byte-bounded prefix plus lookahead for near-96 KiB archives in one query", async () => {
     const { user } = await signIn("09120000035");
     await allowTaskMonthArchives();
@@ -639,7 +683,11 @@ describe("sync", () => {
   it("propagates deletes as tombstones", async () => {
     const { access } = await signIn("09120000005");
     await push(access, [habit("h1", "ورزش", 1000)]);
-    await push(access, [{ kind: "habits", id: "h1", data: null, updatedAt: 2000, deleted: true }]);
+    const deleted = await push(access, [
+      { kind: "habits", id: "h1", data: null, updatedAt: 2000, deleted: true },
+    ]);
+    expect(deleted.statusCode, deleted.body).toBe(200);
+    expect((deleted.json() as { applied: number }).applied).toBe(1);
 
     const body = (await pull(access, 0)).json() as { records: { id: string; deleted: boolean }[] };
     const row = body.records.find((r) => r.id === "h1")!;
@@ -684,8 +732,14 @@ describe("sync", () => {
   });
 
   it("merges different days independently even when the later packet has an older envelope", async () => {
-    const { access } = await signIn("09120000022");
-    await push(access, [month("h1", [{ dateKey: "2026-08-01", updatedAt: 5000 }])]);
+    const { access, user } = await signIn("09120000022");
+    const legacy = month("h1", [{ dateKey: "2026-08-01", updatedAt: 5000 }]);
+    await h.raw(`
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq)
+      values ('${user.id}', 'habitMonths', '${legacy.id}',
+              '${JSON.stringify(legacy.data)}'::jsonb, 5000, false, 1);
+      update users set seq = 1 where id = '${user.id}';
+    `);
 
     const second = await push(access, [month("h1", [{ dateKey: "2026-08-02", updatedAt: 1000 }])]);
     expect(second.statusCode).toBe(200);
@@ -696,6 +750,11 @@ describe("sync", () => {
     };
     const stored = body.records.find((record) => record.kind === "habitMonths")!;
     expect(Object.keys(stored.data.cells).sort()).toEqual(["01", "02"]);
+    const [physical] = await h.query<{ storage_type: string }>(`
+      select jsonb_typeof(data) as storage_type from records
+       where user_id = '${user.id}' and kind = 'habitMonths' and id = '${legacy.id}'
+    `);
+    expect(physical!.storage_type).toBe("array");
   });
 
   it("uses per-day LWW and does not churn the stored row on an idempotent replay", async () => {
