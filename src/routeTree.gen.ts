@@ -16,6 +16,7 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as JournalRouteImport } from './routes/journal'
 import { Route as HabitsRouteImport } from './routes/habits'
+import { Route as GettingStartedRouteImport } from './routes/getting-started'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AnalyticsRouteImport } from './routes/analytics'
 import { Route as ActivationRouteImport } from './routes/activation'
@@ -58,6 +59,11 @@ const HabitsRoute = HabitsRouteImport.update({
   path: '/habits',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GettingStartedRoute = GettingStartedRouteImport.update({
+  id: '/getting-started',
+  path: '/getting-started',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthRoute = AuthRouteImport.update({
   id: '/auth',
   path: '/auth',
@@ -94,6 +100,7 @@ export interface FileRoutesByFullPath {
   '/activation': typeof ActivationRoute
   '/analytics': typeof AnalyticsRoute
   '/auth': typeof AuthRoute
+  '/getting-started': typeof GettingStartedRoute
   '/habits': typeof HabitsRoute
   '/journal': typeof JournalRoute
   '/onboarding': typeof OnboardingRoute
@@ -109,6 +116,7 @@ export interface FileRoutesByTo {
   '/activation': typeof ActivationRoute
   '/analytics': typeof AnalyticsRoute
   '/auth': typeof AuthRoute
+  '/getting-started': typeof GettingStartedRoute
   '/habits': typeof HabitsRoute
   '/journal': typeof JournalRoute
   '/onboarding': typeof OnboardingRoute
@@ -125,6 +133,7 @@ export interface FileRoutesById {
   '/activation': typeof ActivationRoute
   '/analytics': typeof AnalyticsRoute
   '/auth': typeof AuthRoute
+  '/getting-started': typeof GettingStartedRoute
   '/habits': typeof HabitsRoute
   '/journal': typeof JournalRoute
   '/onboarding': typeof OnboardingRoute
@@ -142,6 +151,7 @@ export interface FileRouteTypes {
     | '/activation'
     | '/analytics'
     | '/auth'
+    | '/getting-started'
     | '/habits'
     | '/journal'
     | '/onboarding'
@@ -157,6 +167,7 @@ export interface FileRouteTypes {
     | '/activation'
     | '/analytics'
     | '/auth'
+    | '/getting-started'
     | '/habits'
     | '/journal'
     | '/onboarding'
@@ -172,6 +183,7 @@ export interface FileRouteTypes {
     | '/activation'
     | '/analytics'
     | '/auth'
+    | '/getting-started'
     | '/habits'
     | '/journal'
     | '/onboarding'
@@ -188,6 +200,7 @@ export interface RootRouteChildren {
   ActivationRoute: typeof ActivationRoute
   AnalyticsRoute: typeof AnalyticsRoute
   AuthRoute: typeof AuthRoute
+  GettingStartedRoute: typeof GettingStartedRoute
   HabitsRoute: typeof HabitsRoute
   JournalRoute: typeof JournalRoute
   OnboardingRoute: typeof OnboardingRoute
@@ -250,6 +263,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HabitsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/getting-started': {
+      id: '/getting-started'
+      path: '/getting-started'
+      fullPath: '/getting-started'
+      preLoaderRoute: typeof GettingStartedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth': {
       id: '/auth'
       path: '/auth'
@@ -300,6 +320,7 @@ const rootRouteChildren: RootRouteChildren = {
   ActivationRoute: ActivationRoute,
   AnalyticsRoute: AnalyticsRoute,
   AuthRoute: AuthRoute,
+  GettingStartedRoute: GettingStartedRoute,
   HabitsRoute: HabitsRoute,
   JournalRoute: JournalRoute,
   OnboardingRoute: OnboardingRoute,
