@@ -47,8 +47,10 @@ const schema = z.object({
   ADMIN_SESSION_SECRET: z.string().min(32).default("dev-only-admin-session-secret-change-me-32+"),
 
   JWT_SECRET: z.string().min(32).default("dev-only-secret-change-me-in-production-32+"),
-  // Stateless access tokens expire after exactly 30 days and cannot be revoked early.
-  ACCESS_TTL_SECONDS: z.coerce.number().default(2_592_000),
+  /** Legacy compatibility input. User-session lifetime is fixed at 90 days in
+   * services/tokens.ts so a stale production secret cannot silently restore the
+   * old 30-day policy. Kept here only so older deployment env files still parse. */
+  ACCESS_TTL_SECONDS: z.coerce.number().default(7_776_000),
 
   /** Mixed into the OTP hash so a DB leak alone can't reverse 4-digit codes. */
   OTP_PEPPER: z.string().min(16).default("dev-only-otp-pepper-change-me"),
