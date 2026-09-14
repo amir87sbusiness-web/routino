@@ -2,7 +2,6 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { CalendarDays, Globe, Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui";
-import { subscriptionActive } from "@/lib/logic";
 import { loadOnboardingDraft } from "@/lib/onboarding";
 import { useAppMaybe } from "@/state/app";
 
@@ -42,7 +41,7 @@ function OnboardingPage() {
       return;
     }
     if (pendingPersonalization) {
-      navigate({ to: subscriptionActive(ctx.db) ? "/getting-started" : "/activation" });
+      navigate({ to: "/getting-started" });
     }
   }, [ctx?.db, navigate, onboarded, pendingPersonalization]);
 
@@ -75,7 +74,7 @@ function OnboardingPage() {
 
   const finish = () => {
     updatePreferences({ onboarded: true });
-    navigate({ to: "/auth" });
+    navigate({ to: "/" });
   };
 
   return (
