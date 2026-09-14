@@ -26,7 +26,7 @@ function ActivationPage() {
   const plansInFlight = useRef(false);
 
   if (!ctx?.db) return null;
-  const { applyEntitlement, t, lang } = ctx;
+  const { db, applyEntitlement, t, lang } = ctx;
 
   const loadPlans = async () => {
     if (plansState === "ready" || plansInFlight.current) return;
@@ -62,7 +62,7 @@ function ActivationPage() {
       }
 
       applyEntitlement(subscription);
-      const userId = ctx.db.auth?.userId;
+      const userId = db.auth?.userId;
       if (userId && loadOnboardingDraft(userId)) {
         navigate({ to: "/getting-started" });
       } else {
