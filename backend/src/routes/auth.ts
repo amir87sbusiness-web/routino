@@ -78,9 +78,17 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     }
 
     try {
+      // The slot and the code are claimed together, in ONE statement — see
+      // `claimSendSlot`. `checkSendRate` still runs, but only to explain WHICH
+      // limit was hit; it no longer enforces them, because a check followed by a
+      // separate insert let simultaneous requests for one phone each count zero
+      // rows and each send a message. Every one of those is real money.
       const slot = await claimSendSlot(db, env, phone, clientIp(req), t);
       if (!slot) {
         const verdict = await checkSendRate(db, phone, clientIp(req), t);
+        // Last 4 digits only. These logs land in a third-party pipeline with its
+        // own retention and access rules; a full subscriber list does not belong
+        // there just to explain a rate-limit hit.
         req.log.warn(
           { reason: verdict.reason, phone: `***${phone.slice(-4)}` },
           "otp rate limited",
@@ -91,7 +99,17 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       try {
         await sms.sendOtp(phone, slot.code);
       } catch (err) {
+        // Give the slot back only when the provider is CERTAIN nothing was sent
+        // (bad template, empty account, rejected receptor). That send cost
+        // nothing, so charging the user's per-hour allowance for it would lock
+        // them out for an hour over our misconfiguration — and from their side it
+        // is indistinguishable from "the SMS just doesn't arrive sometimes".
+        // A timeout or a 5xx is deliberately NOT refunded: the message may
+        // genuinely have gone out, and refunding an ambiguous failure is how the
+        // rate limit stops protecting the bill.
         if (err instanceof SmsNotSentError) await releaseSendSlot(db, slot.slotId);
+        // The code row stays — it counts against the rate limit either way, so a
+        // provider outage can't be used to bypass throttling.
         req.log.error({ err }, "sms send failed");
         return reply
           .status(502)
@@ -104,7 +122,12 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     }
   });
 
-  /** Verify an OTP and sign in. Creates the account on first use. */
+  /**
+   * Verify an OTP and sign in. Creates the account on first use.
+   *
+   * Account creation authenticates only. Access starts later through the
+   * explicit, server-authoritative trial activation endpoint.
+   */
   app.post("/auth/otp/verify", async (req) => {
     const { phone: raw, code, intent, newPassword } = verifyBody.parse(req.body);
     const phone = normalizePhone(raw);
@@ -152,7 +175,17 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     };
   });
 
-  /** Sign in with a password, using a phone number OR a username. */
+  /**
+   * Sign in with a password, using a phone number OR a username as the
+   * identifier. No SMS — this is the everyday path once a password is set.
+   *
+   * A username always starts with a letter and a phone is all digits, so
+   * `normalizePhone` succeeding is an unambiguous "this is a phone". The error is
+   * identical for "no such account", "no password set" and "wrong password", and
+   * a missing account still pays the cost of a hash verify (DUMMY_HASH) — none of
+   * the three is distinguishable, so the endpoint can't be used to discover who
+   * has an account.
+   */
   app.post("/auth/password/login", async (req) => {
     const { identifier, password } = passwordLoginBody.parse(req.body);
     const t = now();
@@ -174,6 +207,9 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const ok = await verifyPassword(password, user?.passwordHash ?? DUMMY_HASH);
     if (!user || !user.passwordHash || !ok) {
       await recordLoginFailure(db, env, ip, key, t, { trackIdentifier: !!user });
+      // Past the soft limit the answer becomes "too many attempts" instead of
+      // "wrong password" — but only for a wrong one. A correct password still
+      // gets through below, so an attacker cannot lock the real owner out.
       if (verdict.verifyOnly)
         throw tooMany("Too many attempts. Try again later.", verdict.retryAfter);
       throw unauthorized("bad_credentials", "Wrong phone/username or password");
@@ -225,6 +261,8 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     return { phone: row.phone, username: row.username ?? null, hasPassword: !!row.passwordHash };
   });
 
+  /** Sets or changes the account's username. Lowercased and validated; the
+   * unique index is the real guard against a race between two callers. */
   app.post("/auth/username", { preHandler: app.authenticate }, async (req) => {
     const u = requireUser(req);
     const { username } = setUsernameBody.parse(req.body);
@@ -250,12 +288,16 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
         .where(eq(users.id, u.id))
         .returning();
     } catch {
+      // Unique-index violation from a concurrent claim of the same name.
       throw badRequest("username_taken", "That username is already taken");
     }
     if (!updated.length) throw unauthorized("unknown_user", "User no longer exists");
     return { ok: true, username: v.value };
   });
 
+  /** Sets or changes the account's password. Changing an existing one requires
+   * the current password; setting the first one does not (the bearer token is
+   * proof enough). */
   app.post("/auth/password", { preHandler: app.authenticate }, async (req) => {
     const u = requireUser(req);
     const { newPassword, currentPassword } = setPasswordBody.parse(req.body);
