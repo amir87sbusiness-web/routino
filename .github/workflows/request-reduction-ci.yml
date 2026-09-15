@@ -31,7 +31,6 @@ jobs:
           backend/src/routes/payments.ts
           backend/test/payment-quote-batch.test.ts
           supabase/functions/api/routes/payments.ts
-          supabase/migrations/20260915010000_reduce_background_request_cadence.sql
       - name: Lint
         run: npm run lint
       - name: Root typecheck
