@@ -31,7 +31,7 @@ const LEGACY_STATE_KEY = "routino:sync:v1";
 /** Server caps a push at 200 records; the app caps a request body at 64 KB.
  * Whichever is hit first ends the chunk, so a page of long journal entries
  * chunks by size and a page of habits chunks by count. */
-const MAX_CHUNK_RECORDS = 100;
+const MAX_CHUNK_RECORDS = 180;
 const MAX_CHUNK_BYTES = 48 * 1024;
 
 type SyncState = Omit<SyncMetaRow, "key">;

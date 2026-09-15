@@ -65,7 +65,8 @@ function isPlansResponse(value: unknown): value is PlansResponse {
 
 function cacheExpiry(value: PlansResponse, now: number): number {
   const normalExpiry = now + PLANS_CACHE_TTL_MS;
-  if (!value.offer || value.offer.until <= now) return normalExpiry;
+  if (!value.offer) return normalExpiry;
+  if (value.offer.until <= now) return now;
   return Math.min(normalExpiry, value.offer.until);
 }
 
