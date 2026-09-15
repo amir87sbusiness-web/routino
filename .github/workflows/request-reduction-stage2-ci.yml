@@ -25,6 +25,7 @@ jobs:
       - name: Install backend dependencies
         working-directory: backend
         run: |
+          npm install --global npm@11.6.0
           rm -rf node_modules
           rm -f package-lock.json
           npm install --no-package-lock
