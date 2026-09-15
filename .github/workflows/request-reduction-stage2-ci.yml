@@ -23,7 +23,11 @@ jobs:
       - name: Install root dependencies
         run: npm ci
       - name: Install backend dependencies
-        run: npm --prefix backend install --no-package-lock
+        working-directory: backend
+        run: |
+          rm -rf node_modules
+          rm -f package-lock.json
+          npm install --no-package-lock
       - name: Prettier check
         run: npx prettier --check src/lib/sync/scheduler.ts src/lib/sync/scheduler.test.ts src/state/app-sync.test.tsx src/lib/api/payments.ts supabase/migrations/20260915190000_reduce_background_request_cadence_stage2.sql
       - name: Lint
@@ -51,7 +55,8 @@ jobs:
       - name: Production dependency audit (root)
         run: npm audit --omit=dev --audit-level=high
       - name: Production dependency audit (backend)
-        run: npm --prefix backend audit --omit=dev --audit-level=high
+        working-directory: backend
+        run: npm audit --omit=dev --audit-level=high --package-lock=false
       - name: Mobile Capacitor sync
         run: npm run cap:sync
       - name: Android debug compile
