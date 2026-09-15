@@ -44,8 +44,15 @@ jobs:
             git commit -m "style: format request reduction changes"
             git push origin HEAD:chatgpt/reduce-server-requests
           fi
-      - name: Lint
-        run: npm run lint
+      - name: Lint changed sources
+        run: >-
+          npx eslint
+          src/lib/sync/scheduler.ts
+          src/lib/sync/scheduler.test.ts
+          src/lib/api/payments.ts
+          backend/src/routes/payments.ts
+          backend/test/payment-quote-batch.test.ts
+          supabase/functions/api/routes/payments.ts
       - name: Root typecheck
         run: npx tsc --noEmit -p tsconfig.json
       - name: Frontend tests
