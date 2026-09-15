@@ -1,0 +1,52 @@
+name: Request reduction validation
+
+on:
+  push:
+    branches:
+      - chatgpt/reduce-server-requests
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          cache: npm
+      - name: Install root dependencies
+        run: npm ci
+      - name: Install backend dependencies
+        run: npm --prefix backend ci
+      - name: Prettier check
+        run: >-
+          npx prettier --check
+          src/lib/sync/scheduler.ts
+          src/lib/sync/scheduler.test.ts
+          src/lib/api/payments.ts
+          backend/src/routes/payments.ts
+          backend/test/payment-quote-batch.test.ts
+          supabase/functions/api/routes/payments.ts
+          supabase/migrations/20260915010000_reduce_background_request_cadence.sql
+      - name: Lint
+        run: npm run lint
+      - name: Root typecheck
+        run: npx tsc --noEmit -p tsconfig.json
+      - name: Frontend tests
+        run: npm test
+      - name: Frontend and landing build
+        run: npm run build
+      - name: Backend typecheck
+        run: npm --prefix backend run typecheck
+      - name: Backend tests
+        run: npm --prefix backend test -- --maxWorkers=1
+      - name: Sync canonical backend into Edge
+        run: npm run sync:edge
+      - name: Assert generated Edge shared parity
+        run: git diff --exit-code -- supabase/functions/api/shared
+      - name: Edge tests
+        run: npm run test:edge
