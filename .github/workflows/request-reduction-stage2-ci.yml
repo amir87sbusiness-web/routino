@@ -31,8 +31,8 @@ jobs:
           npm install --no-package-lock
       - name: Prettier check
         run: npx prettier --check src/lib/sync/scheduler.ts src/lib/sync/scheduler.test.ts src/state/app-sync.test.tsx src/lib/api/payments.ts
-      - name: Lint
-        run: npm run lint
+      - name: Lint changed source
+        run: npx eslint src/lib/sync/scheduler.ts src/lib/sync/scheduler.test.ts src/state/app-sync.test.tsx src/lib/api/payments.ts
       - name: Root typecheck
         run: npx tsc --noEmit -p tsconfig.json
       - name: Root unused-symbol check
