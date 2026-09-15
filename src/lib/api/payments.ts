@@ -33,10 +33,7 @@ interface PlansCacheEntry {
 
 let plansMemoryCache: PlansCacheEntry | null = null;
 let batchEndpointUnavailable = false;
-const quoteBatchCache = new Map<
-  string,
-  { expiresAt: number; byPlan: Map<string, QuoteResult> }
->();
+const quoteBatchCache = new Map<string, { expiresAt: number; byPlan: Map<string, QuoteResult> }>();
 
 function isPlansResponse(value: unknown): value is PlansResponse {
   if (!value || typeof value !== "object") return false;
