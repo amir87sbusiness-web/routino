@@ -2,8 +2,8 @@
  * Payment + plan endpoints.
  *
  * The server owns every number. The client only ever names a plan and a code;
- * prices come back from `/payments/quote` and the final amount is whatever the
- * server puts on the payment row. Anything else re-opens the pay-1-Toman bug.
+ * prices come back from the server and the final amount is whatever the server
+ * puts on the payment row. Anything else re-opens the pay-1-Toman bug.
  */
 import { ApiError, apiRequest } from "./client";
 import { authedRequest, type ServerEntitlement } from "./auth";
@@ -17,13 +17,106 @@ export interface ServerPlan {
   originalPrice: number | null;
 }
 
-export async function fetchPlans(): Promise<{
+export interface PlansResponse {
   plans: ServerPlan[];
   offer: null | { label: string; percent: number; until: number };
-}> {
-  // Prices are live money data. Do not allow a browser HTTP-cache entry from an
-  // older deployment to satisfy this request before the server is contacted.
-  return apiRequest("/plans", { cache: "no-store" });
+}
+
+const PLANS_CACHE_KEY = "routino:plans:v1";
+export const PLANS_CACHE_TTL_MS = 6 * 60 * 60_000;
+const QUOTE_BATCH_CACHE_TTL_MS = 30_000;
+
+interface PlansCacheEntry {
+  value: PlansResponse;
+  expiresAt: number;
+}
+
+let plansMemoryCache: PlansCacheEntry | null = null;
+let batchEndpointUnavailable = false;
+const quoteBatchCache = new Map<
+  string,
+  { expiresAt: number; byPlan: Map<string, QuoteResult> }
+>();
+
+function isPlansResponse(value: unknown): value is PlansResponse {
+  if (!value || typeof value !== "object") return false;
+  const candidate = value as Partial<PlansResponse>;
+  if (!Array.isArray(candidate.plans)) return false;
+  if (
+    !candidate.plans.every(
+      (plan) =>
+        !!plan &&
+        typeof plan.id === "string" &&
+        typeof plan.nameFa === "string" &&
+        typeof plan.nameEn === "string" &&
+        Number.isFinite(plan.months) &&
+        Number.isFinite(plan.price) &&
+        (plan.originalPrice === null || Number.isFinite(plan.originalPrice)),
+    )
+  ) {
+    return false;
+  }
+  const offer = candidate.offer;
+  return (
+    offer === null ||
+    (!!offer &&
+      typeof offer.label === "string" &&
+      Number.isFinite(offer.percent) &&
+      Number.isFinite(offer.until))
+  );
+}
+
+function cacheExpiry(value: PlansResponse, now: number): number {
+  const normalExpiry = now + PLANS_CACHE_TTL_MS;
+  if (!value.offer || value.offer.until <= now) return normalExpiry;
+  return Math.min(normalExpiry, value.offer.until);
+}
+
+function readPlansCache(now = Date.now()): PlansResponse | null {
+  if (plansMemoryCache && plansMemoryCache.expiresAt > now) return plansMemoryCache.value;
+  plansMemoryCache = null;
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(PLANS_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { value?: unknown; expiresAt?: unknown };
+    if (
+      typeof parsed.expiresAt !== "number" ||
+      parsed.expiresAt <= now ||
+      !isPlansResponse(parsed.value)
+    ) {
+      window.localStorage.removeItem(PLANS_CACHE_KEY);
+      return null;
+    }
+    plansMemoryCache = { value: parsed.value, expiresAt: parsed.expiresAt };
+    return parsed.value;
+  } catch {
+    return null;
+  }
+}
+
+function writePlansCache(value: PlansResponse, now = Date.now()) {
+  const entry: PlansCacheEntry = { value, expiresAt: cacheExpiry(value, now) };
+  plansMemoryCache = entry;
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(PLANS_CACHE_KEY, JSON.stringify(entry));
+  } catch {
+    // Private mode/storage pressure: the in-memory cache still saves repeats in
+    // the current tab, and checkout remains fully server-authoritative.
+  }
+}
+
+export async function fetchPlans(): Promise<PlansResponse> {
+  const cached = readPlansCache();
+  if (cached) return cached;
+
+  // The application cache above is deliberately bounded. The actual network
+  // request still bypasses the browser HTTP cache so an old service-worker or
+  // intermediary response cannot extend that six-hour window by itself.
+  const value = await apiRequest<PlansResponse>("/plans", { cache: "no-store" });
+  if (isPlansResponse(value) && value.plans.length) writePlansCache(value);
+  return value;
 }
 
 export interface QuoteResult {
@@ -52,11 +145,61 @@ export interface QuoteResult {
   };
 }
 
-export async function fetchQuote(planId: string, code?: string): Promise<QuoteResult> {
+async function fetchSingleQuote(planId: string, code?: string): Promise<QuoteResult> {
   return authedRequest("/payments/quote", {
     method: "POST",
     body: { planId, code: code || undefined },
   });
+}
+
+export async function fetchQuoteBatch(planIds: string[], code?: string): Promise<QuoteResult[]> {
+  const uniquePlanIds = [...new Set(planIds.filter(Boolean))];
+  if (!uniquePlanIds.length) return [];
+  const response = await authedRequest<{ quotes: QuoteResult[] }>("/payments/quote-batch", {
+    method: "POST",
+    body: { planIds: uniquePlanIds, code: code || undefined },
+  });
+  return response.quotes;
+}
+
+export async function fetchQuote(planId: string, code?: string): Promise<QuoteResult> {
+  const normalizedCode = code?.trim().toUpperCase();
+  const cachedPlans = readPlansCache();
+  const planIds = cachedPlans?.plans.map((plan) => plan.id) ?? [];
+
+  // Subscribe currently asks for each plan sequentially. When a code is being
+  // checked, collapse those per-plan calls into one authenticated Edge request
+  // and serve the remaining loop iterations from this short in-memory cache.
+  if (normalizedCode && !batchEndpointUnavailable && planIds.length > 1) {
+    const key = `${normalizedCode}|${planIds.join(",")}`;
+    const now = Date.now();
+    const cached = quoteBatchCache.get(key);
+    if (cached && cached.expiresAt > now) {
+      const hit = cached.byPlan.get(planId);
+      if (hit) return hit;
+    } else if (cached) {
+      quoteBatchCache.delete(key);
+    }
+
+    try {
+      const quotes = await fetchQuoteBatch(planIds, normalizedCode);
+      const byPlan = new Map(quotes.map((quote) => [quote.quote.planId, quote]));
+      quoteBatchCache.set(key, { expiresAt: now + QUOTE_BATCH_CACHE_TTL_MS, byPlan });
+      const hit = byPlan.get(planId);
+      if (hit) return hit;
+    } catch (error) {
+      // Safe rolling deploy: an already-published client may briefly reach an
+      // older API version. Fall back only when the endpoint itself is absent;
+      // auth/offline/provider errors keep their original semantics.
+      if (error instanceof ApiError && (error.status === 404 || error.status === 405)) {
+        batchEndpointUnavailable = true;
+      } else {
+        throw error;
+      }
+    }
+  }
+
+  return fetchSingleQuote(planId, normalizedCode);
 }
 
 export interface CheckoutResult {
