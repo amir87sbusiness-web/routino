@@ -24,23 +24,12 @@ jobs:
         run: npm --prefix backend install --no-audit --no-fund
       - name: Format changed sources
         run: |
-          npx prettier --write \
-            src/lib/sync/scheduler.ts \
-            src/lib/sync/scheduler.test.ts \
-            src/lib/api/payments.ts \
-            backend/src/routes/payments.ts \
-            backend/test/payment-quote-batch.test.ts \
-            supabase/functions/api/routes/payments.ts
-          if ! git diff --quiet; then
+          FILES="src/lib/sync/scheduler.ts src/lib/sync/scheduler.test.ts src/lib/api/payments.ts backend/src/routes/payments.ts backend/test/payment-quote-batch.test.ts supabase/functions/api/routes/payments.ts"
+          npx prettier --write $FILES
+          if ! git diff --quiet -- $FILES; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add \
-              src/lib/sync/scheduler.ts \
-              src/lib/sync/scheduler.test.ts \
-              src/lib/api/payments.ts \
-              backend/src/routes/payments.ts \
-              backend/test/payment-quote-batch.test.ts \
-              supabase/functions/api/routes/payments.ts
+            git add $FILES
             git commit -m "style: format request reduction changes"
             git push origin HEAD:chatgpt/reduce-server-requests
           fi
