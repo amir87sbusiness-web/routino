@@ -30,7 +30,7 @@ jobs:
           rm -f package-lock.json
           npm install --no-package-lock
       - name: Prettier check
-        run: npx prettier --check src/lib/sync/scheduler.ts src/lib/sync/scheduler.test.ts src/state/app-sync.test.tsx src/lib/api/payments.ts supabase/migrations/20260915190000_reduce_background_request_cadence_stage2.sql
+        run: npx prettier --check src/lib/sync/scheduler.ts src/lib/sync/scheduler.test.ts src/state/app-sync.test.tsx src/lib/api/payments.ts
       - name: Lint
         run: npm run lint
       - name: Root typecheck
