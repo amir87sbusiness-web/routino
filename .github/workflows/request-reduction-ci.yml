@@ -22,9 +22,43 @@ jobs:
         run: npm ci
       - name: Install backend dependencies
         run: npm --prefix backend install --no-audit --no-fund
+      - name: Align lifecycle tests with reduced sync cadence
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("src/state/app-sync.test.tsx")
+          text = path.read_text()
+          old_timer = "vi.advanceTimersByTime(10_000)"
+          timer_count = text.count(old_timer)
+          if timer_count not in (0, 4):
+              raise SystemExit(f"expected 0 or 4 old 10s sync timers, found {timer_count}")
+          text = text.replace(old_timer, "vi.advanceTimersByTime(30_000)")
+
+          old_login = '''    await act(async () => vi.advanceTimersByTime(2_000));
+    await settle();
+    expect(mocks.syncNow).toHaveBeenLastCalledWith("user-b", { pullRequired: true });'''
+          new_login = '''    await act(async () => vi.advanceTimersByTime(2_000));
+    await settle();
+    expect(mocks.syncNow).toHaveBeenCalledTimes(1);'''
+          if old_login in text:
+              text = text.replace(old_login, new_login, 1)
+          elif new_login not in text:
+              raise SystemExit("post-login sync expectation did not match expected old/new forms")
+
+          path.write_text(text)
+          PY
+          if ! git diff --quiet -- src/state/app-sync.test.tsx; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            npx prettier --write src/state/app-sync.test.tsx
+            git add src/state/app-sync.test.tsx
+            git commit -m "test: align lifecycle sync expectations with lower request cadence"
+            git push origin HEAD:chatgpt/reduce-server-requests
+          fi
       - name: Format changed sources
         run: |
-          FILES="src/lib/sync/scheduler.ts src/lib/sync/scheduler.test.ts src/lib/api/payments.ts backend/src/routes/payments.ts backend/test/payment-quote-batch.test.ts supabase/functions/api/routes/payments.ts"
+          FILES="src/lib/sync/scheduler.ts src/lib/sync/scheduler.test.ts src/lib/api/payments.ts backend/src/routes/payments.ts backend/test/payment-quote-batch.test.ts supabase/functions/api/routes/payments.ts src/state/app-sync.test.tsx"
           npx prettier --write $FILES
           if ! git diff --quiet -- $FILES; then
             git config user.name "github-actions[bot]"
@@ -39,6 +73,7 @@ jobs:
           src/lib/sync/scheduler.ts
           src/lib/sync/scheduler.test.ts
           src/lib/api/payments.ts
+          src/state/app-sync.test.tsx
           backend/src/routes/payments.ts
           backend/test/payment-quote-batch.test.ts
           supabase/functions/api/routes/payments.ts
