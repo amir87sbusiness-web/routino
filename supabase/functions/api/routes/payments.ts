@@ -21,8 +21,13 @@ import {
 } from "../shared/services/payment-flow.ts";
 import { quoteWithDiscount } from "../shared/services/pricing.ts";
 
+const planId = z.string().min(1).max(32);
 const quoteBody = z.object({
-  planId: z.string().min(1).max(32),
+  planId,
+  code: z.string().max(64).optional(),
+});
+const quoteBatchBody = z.object({
+  planIds: z.array(planId).min(1).max(6),
   code: z.string().max(64).optional(),
 });
 
@@ -55,6 +60,32 @@ export function paymentRoutes(deps: Deps) {
     return c.json(
       await quoteWithDiscount(db, body.planId, body.code ?? null, user.id, user.phone, t, 0, true),
     );
+  });
+
+  /** Authenticate once for all visible plan previews while keeping the actual
+   * pricing checks sequential so DB peak load does not rise. */
+  r.post("/payments/quote-batch", auth, async (c) => {
+    const authenticated = requireUser(c);
+    const user = await paymentUser(authenticated.id);
+    const body = quoteBatchBody.parse(await readJson(c));
+    const t = now();
+    const uniquePlanIds = [...new Set(body.planIds)];
+    const quotes = [];
+    for (const currentPlanId of uniquePlanIds) {
+      quotes.push(
+        await quoteWithDiscount(
+          db,
+          currentPlanId,
+          body.code ?? null,
+          user.id,
+          user.phone,
+          t,
+          0,
+          true,
+        ),
+      );
+    }
+    return c.json({ quotes });
   });
 
   r.post("/payments/checkout", auth, async (c) => {
