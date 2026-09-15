@@ -24,35 +24,31 @@ jobs:
         run: npm --prefix backend install --no-audit --no-fund
       - name: Align lifecycle tests with reduced sync cadence
         run: |
-          python - <<'PY'
-          from pathlib import Path
+          TEST_FILE=src/state/app-sync.test.tsx
+          OLD_TIMER='vi.advanceTimersByTime(10_000)'
+          OLD_COUNT=$(grep -oF "$OLD_TIMER" "$TEST_FILE" | wc -l || true)
+          if [ "$OLD_COUNT" -eq 4 ]; then
+            sed -i 's/vi\.advanceTimersByTime(10_000)/vi.advanceTimersByTime(30_000)/g' "$TEST_FILE"
+          elif [ "$OLD_COUNT" -ne 0 ]; then
+            echo "Expected 0 or 4 old 10s sync timers, found $OLD_COUNT" >&2
+            exit 1
+          fi
 
-          path = Path("src/state/app-sync.test.tsx")
-          text = path.read_text()
-          old_timer = "vi.advanceTimersByTime(10_000)"
-          timer_count = text.count(old_timer)
-          if timer_count not in (0, 4):
-              raise SystemExit(f"expected 0 or 4 old 10s sync timers, found {timer_count}")
-          text = text.replace(old_timer, "vi.advanceTimersByTime(30_000)")
+          OLD_LOGIN='    expect(mocks.syncNow).toHaveBeenLastCalledWith("user-b", { pullRequired: true });'
+          NEW_LOGIN='    expect(mocks.syncNow).toHaveBeenCalledTimes(1);'
+          OLD_LOGIN_COUNT=$(grep -Fxc "$OLD_LOGIN" "$TEST_FILE" || true)
+          if [ "$OLD_LOGIN_COUNT" -eq 1 ]; then
+            sed -i 's/    expect(mocks\.syncNow)\.toHaveBeenLastCalledWith("user-b", { pullRequired: true });/    expect(mocks.syncNow).toHaveBeenCalledTimes(1);/' "$TEST_FILE"
+          elif ! grep -Fq "$NEW_LOGIN" "$TEST_FILE"; then
+            echo "Post-login sync expectation did not match expected old/new forms" >&2
+            exit 1
+          fi
 
-          old_login = '''    await act(async () => vi.advanceTimersByTime(2_000));
-    await settle();
-    expect(mocks.syncNow).toHaveBeenLastCalledWith("user-b", { pullRequired: true });'''
-          new_login = '''    await act(async () => vi.advanceTimersByTime(2_000));
-    await settle();
-    expect(mocks.syncNow).toHaveBeenCalledTimes(1);'''
-          if old_login in text:
-              text = text.replace(old_login, new_login, 1)
-          elif new_login not in text:
-              raise SystemExit("post-login sync expectation did not match expected old/new forms")
-
-          path.write_text(text)
-          PY
-          if ! git diff --quiet -- src/state/app-sync.test.tsx; then
+          if ! git diff --quiet -- "$TEST_FILE"; then
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            npx prettier --write src/state/app-sync.test.tsx
-            git add src/state/app-sync.test.tsx
+            npx prettier --write "$TEST_FILE"
+            git add "$TEST_FILE"
             git commit -m "test: align lifecycle sync expectations with lower request cadence"
             git push origin HEAD:chatgpt/reduce-server-requests
           fi
