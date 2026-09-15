@@ -197,14 +197,14 @@ describe("Routino brand asset generator", () => {
     assert.ok(statSync(join(sandbox, "public", "favicon.ico")).size <= 24 * 1024);
   });
 
-  it("uses one launcher icon and a fresh Android package version", () => {
+  it("uses one launcher icon and the current Android package version", () => {
     const gradle = readFileSync(join(ROOT, "android", "app", "build.gradle"), "utf8");
     const manifest = readFileSync(
       join(ROOT, "android", "app", "src", "main", "AndroidManifest.xml"),
       "utf8",
     );
-    assert.match(gradle, /versionCode 11\b/);
-    assert.match(gradle, /versionName "1\.0"/);
+    assert.match(gradle, /versionCode 12\b/);
+    assert.match(gradle, /versionName "1\.0\.1"/);
     assert.doesNotMatch(manifest, /android:roundIcon=/);
   });
 });
