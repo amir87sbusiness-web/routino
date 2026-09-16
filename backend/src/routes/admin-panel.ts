@@ -7,8 +7,11 @@ import type { FastifyPluginAsync } from "fastify";
 import { ADMIN_PAGE } from "../lib/admin-page.js";
 import { withAdminUserDeleteUi } from "../lib/admin-user-delete-ui.js";
 import { withAdminUserListUi } from "../lib/admin-user-list-ui.js";
+import { withAdminDashboardUi } from "./admin-dashboard-ui.js";
 
-const ADMIN_PAGE_WITH_ADMIN_UI = withAdminUserListUi(withAdminUserDeleteUi(ADMIN_PAGE));
+const ADMIN_PAGE_WITH_ADMIN_UI = withAdminDashboardUi(
+  withAdminUserListUi(withAdminUserDeleteUi(ADMIN_PAGE)),
+);
 
 export const adminPanelRoutes: FastifyPluginAsync = async (app) => {
   app.get("/admin", async (_req, reply) =>
