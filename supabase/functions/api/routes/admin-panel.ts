@@ -5,8 +5,11 @@ import { html, type AppEnv, type Deps } from "../deps.ts";
 import { ADMIN_PAGE } from "../shared/lib/admin-page.ts";
 import { withAdminUserDeleteUi } from "../shared/lib/admin-user-delete-ui.ts";
 import { withAdminUserListUi } from "../shared/lib/admin-user-list-ui.ts";
+import { withAdminDashboardUi } from "./admin-dashboard-ui.ts";
 
-const ADMIN_PAGE_WITH_ADMIN_UI = withAdminUserListUi(withAdminUserDeleteUi(ADMIN_PAGE));
+const ADMIN_PAGE_WITH_ADMIN_UI = withAdminDashboardUi(
+  withAdminUserListUi(withAdminUserDeleteUi(ADMIN_PAGE)),
+);
 
 export function adminPanelRoutes(_deps: Deps) {
   const r = new Hono<AppEnv>();
