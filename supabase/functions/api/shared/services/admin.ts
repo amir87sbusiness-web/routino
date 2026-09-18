@@ -37,6 +37,8 @@ export async function adminOverview(db: Database, now: Date) {
     total_users: number | string | bigint;
     new_users: number | string | bigint;
     active_subscriptions: number | string | bigint;
+    active_trials: number | string | bigint;
+    expired_users: number | string | bigint;
     trial_starts: number | string | bigint;
     paid_total: number | string | bigint;
     revenue_toman: number | string | bigint;
@@ -63,7 +65,14 @@ export async function adminOverview(db: Database, now: Date) {
             where ${grants.userId} = ${entitlements.userId}
               and ${grants.source} <> ${"trial"}
           )
-      ) as active_subscriptions
+      ) as active_subscriptions,
+      count(*) filter (
+        where ${entitlements.planId} = ${"trial"}
+          and ${entitlements.expiresAt} > ${now.toISOString()}::timestamptz
+      ) as active_trials,
+      count(*) filter (
+        where ${entitlements.expiresAt} <= ${now.toISOString()}::timestamptz
+      ) as expired_users
       from ${entitlements}
     ), counter_stats as (
       select coalesce(max(${anonymousCounters.value}) filter (
@@ -102,6 +111,8 @@ export async function adminOverview(db: Database, now: Date) {
     users: { total: metric(row?.total_users), last24h: metric(row?.new_users) },
     trialStarts: metric(row?.trial_starts),
     activeSubscriptions: metric(row?.active_subscriptions),
+    activeTrials: metric(row?.active_trials),
+    expiredUsers: metric(row?.expired_users),
     payments: {
       paidTotal: metric(row?.paid_total),
       revenueToman: metric(row?.revenue_toman),

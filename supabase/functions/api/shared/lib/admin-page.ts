@@ -122,6 +122,7 @@ function safeOverview(value) {
   if (!value || !value.users || !value.payments || !value.alerts) return null;
   const metrics = [
     value.users.total, value.users.last24h, value.trialStarts, value.activeSubscriptions,
+    value.activeTrials, value.expiredUsers,
     value.payments.paidTotal, value.payments.revenueToman, value.payments.paidLast24h,
     value.payments.revenueTomanLast24h, value.payments.pending,
     value.alerts.verifyFailed, value.otpSentLast24h,
@@ -131,6 +132,8 @@ function safeOverview(value) {
     users: { total: value.users.total, last24h: value.users.last24h },
     trialStarts: value.trialStarts,
     activeSubscriptions: value.activeSubscriptions,
+    activeTrials: value.activeTrials,
+    expiredUsers: value.expiredUsers,
     payments: {
       paidTotal: value.payments.paidTotal,
       revenueToman: value.payments.revenueToman,
@@ -300,6 +303,7 @@ function renderOverview(o) {
     ]) +
     group("کسب‌وکار", [
       ["کل کاربران", fa(o.users.total)], ["اشتراک فعال", fa(o.activeSubscriptions)],
+      ["تریال فعال", fa(o.activeTrials)], ["منقضی‌شده", fa(o.expiredUsers)],
       ["دفعات شروع تریال", fa(o.trialStarts)],
       ["کل پرداخت موفق", fa(o.payments.paidTotal)], ["کل درآمد (تومان)", fa(o.payments.revenueToman)],
     ]) +

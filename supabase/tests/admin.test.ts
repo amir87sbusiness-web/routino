@@ -52,6 +52,8 @@ describe("overview + users", () => {
 
     const ov = await (await h.call("GET", "/v1/admin/overview", { headers: admin })).json();
     expect(ov.users.total).toBe(2);
+    expect(ov.activeTrials).toBe(0);
+    expect(ov.expiredUsers).toBe(0);
     // Money-safety + ops fields the panel surfaces.
     expect(ov.alerts.verifyFailed).toBe(0);
     expect(ov.payments.pending).toBe(0);
@@ -73,6 +75,11 @@ describe("overview + users", () => {
       headers: auth(access),
     });
     expect((await started.json()).started).toBe(true);
+    const trialOverview = await (
+      await h.call("GET", "/v1/admin/overview", { headers: admin })
+    ).json();
+    expect(trialOverview.activeTrials).toBe(1);
+    expect(trialOverview.expiredUsers).toBe(0);
 
     const list = await (
       await h.call("GET", "/v1/admin/users?q=09124445566", { headers: admin })

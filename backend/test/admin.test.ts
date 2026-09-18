@@ -87,6 +87,8 @@ describe("admin endpoints", () => {
     });
     expect(overview.json().trialStarts).toBe(2);
     expect(overview.json().activeSubscriptions).toBe(0);
+    expect(overview.json().activeTrials).toBe(1);
+    expect(overview.json().expiredUsers).toBe(1);
 
     const list = await h.app.inject({
       method: "GET",
