@@ -1,6 +1,6 @@
 import { loadSyncState, type SyncOptions } from "./engine";
 
-export const EDIT_SYNC_DELAY_MS = 45_000;
+export const EDIT_SYNC_DELAY_MS = 60_000;
 export const FOREGROUND_SYNC_COOLDOWN_MS = 5 * 60_000;
 export const FOREGROUND_MIN_BACKGROUND_MS = 2 * 60_000;
 export const BOOT_SYNC_STALE_MS = 3 * 60_000;
