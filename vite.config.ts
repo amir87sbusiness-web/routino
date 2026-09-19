@@ -8,6 +8,7 @@ import tailwindcss from "@tailwindcss/vite";
 import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 import { VitePWA } from "vite-plugin-pwa";
 import { fileURLToPath, URL } from "url";
+import { flattenCascadeLayers } from "./scripts/flatten-mobile-css.ts";
 
 // BUILD_TARGET=mobile npm run build → خروجی در www/ (برای Capacitor)
 // در غیر این صورت (وب/دسکتاپ) → خروجی در dist/
@@ -24,6 +25,30 @@ const isMobile = process.env.BUILD_TARGET === "mobile";
 const outDir = isMobile ? "www" : "dist/app";
 const base = isMobile ? "/" : "/app/";
 
+/** Older Android WebViews discard an unknown `@layer` block with all of its
+ * contents. Tailwind 4 emits every utility in such blocks, so unwrap them in
+ * the native bundle only. Modern web builds retain normal cascade layers. */
+function mobileWebViewCssFallback() {
+  return {
+    name: "routino-mobile-webview-css-fallback",
+    apply: "build",
+    generateBundle(
+      _: unknown,
+      bundle: Record<string, { type: string; fileName: string; source?: string | Uint8Array }>,
+    ) {
+      for (const output of Object.values(bundle)) {
+        if (
+          output.type !== "asset" ||
+          !output.fileName.endsWith(".css") ||
+          typeof output.source !== "string"
+        )
+          continue;
+        output.source = flattenCascadeLayers(output.source);
+      }
+    },
+  };
+}
+
 export default defineConfig({
   base,
   plugins: [
@@ -33,6 +58,7 @@ export default defineConfig({
     TanStackRouterVite({ autoCodeSplitting: true }),
     react(),
     tailwindcss(),
+    ...(isMobile ? [mobileWebViewCssFallback()] : []),
     VitePWA({
       // ---------------------------------------------------------------------
       // خاموش روی بیلد موبایل — این غیرقابل مذاکره است.
@@ -102,6 +128,10 @@ export default defineConfig({
   build: {
     outDir,
     emptyOutDir: true,
+    // Capacitor itself supports older WebViews than Vite's current default.
+    // Native ESM and dynamic import still require a modern-enough provider,
+    // but this avoids emitting Chrome-111-only JavaScript for the APK.
+    target: isMobile ? "chrome64" : undefined,
   },
   server: {
     // در توسعه‌ی وب، API را same-origin پروکسی می‌کنیم تا CORS اصلاً درگیر نشود.

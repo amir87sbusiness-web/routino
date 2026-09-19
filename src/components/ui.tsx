@@ -181,7 +181,7 @@ export function Modal({
       <button aria-label="close" className="absolute inset-0" onClick={onClose} />
       <div
         className={cn(
-          "animate-pop-in relative max-h-[90vh] w-full overflow-y-auto rounded-t-3xl bg-card px-5 pt-5 pb-modal-safe shadow-2xl sm:rounded-3xl",
+          "animate-pop-in relative max-h-[90vh] max-h-[90dvh] w-full overflow-y-auto rounded-t-3xl bg-card px-5 pt-5 pb-modal-safe shadow-2xl sm:rounded-3xl",
           wide ? "sm:max-w-2xl" : "sm:max-w-md",
         )}
       >

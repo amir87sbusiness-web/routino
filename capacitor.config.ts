@@ -10,6 +10,12 @@ const config: CapacitorConfig = {
   server: {
     androidScheme: "https",
   },
+  android: {
+    // targetSdk 35 makes edge-to-edge mandatory on Android 15. Capacitor owns
+    // the WebView margins here, so CSS safe-area rules remain zero on Android
+    // and cannot double-pad app content.
+    adjustMarginsForEdgeToEdge: "force",
+  },
   plugins: {
     LocalNotifications: {
       smallIcon: "ic_stat_routino",
