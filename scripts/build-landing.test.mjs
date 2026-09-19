@@ -100,7 +100,7 @@ describe("landing build script", () => {
       assert.equal(existsSync(join(sandbox, "dist", "favicon.ico")), true);
       assert.deepEqual(
         JSON.parse(readFileSync(join(sandbox, "dist", "app", "android-update.json"), "utf8")),
-        { versionCode: 12 },
+        { versionCode: 13 },
       );
 
       writeFileSync(
