@@ -28,9 +28,9 @@ import { SYNCABLE_TABLES, mergeRemote, type SyncableTable } from "./merge";
  * records that no longer exist locally. Starting from zero costs one full pull. */
 const LEGACY_STATE_KEY = "routino:sync:v1";
 
-/** Server caps a push at 200 records; the app caps a request body at 64 KB.
- * Whichever is hit first ends the chunk, so a page of long journal entries
- * chunks by size and a page of habits chunks by count. */
+/** Server caps a push at 200 records. Keep the payload budget at 48 KiB so
+ * background fetch keepalive stays comfortably below its ~64 KiB body ceiling.
+ * Whichever cap is hit first ends the chunk. */
 const MAX_CHUNK_RECORDS = 200;
 const MAX_CHUNK_BYTES = 48 * 1024;
 
