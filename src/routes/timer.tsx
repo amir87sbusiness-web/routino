@@ -1,16 +1,31 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Coffee, Pause, Play, RotateCcw, Square, Timer as TimerIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
-import { applyLog, CelebrationModal, useCelebration } from "@/components/habits";
+import { CelebrationModal, useCelebration } from "@/components/habits";
 import { Button, Card, Chip, DurationPicker, formatDuration } from "@/components/ui";
 import {
   shouldTriggerCompletionFeedback,
   triggerCompletionFeedback,
 } from "@/lib/completion-feedback";
-import { faNum, todayKey } from "@/lib/dates";
+import { dateKey, faNum, todayKey } from "@/lib/dates";
+import { isAndroidNativeTimer, syncAndroidTimer } from "@/lib/android-timer-notification";
 import { dueHabitsOn, getLog, isCompleted } from "@/lib/logic";
-import { uid, type TimerMode } from "@/lib/store";
+import { requestNativePermission } from "@/lib/native-notifications";
+import { recordTimerCompletion } from "@/lib/timer-credit";
+import {
+  advanceTimer,
+  createTimer,
+  loadTimer,
+  pauseTimer,
+  resumeTimer,
+  saveTimer,
+  type TimerCompletion,
+  type TimerLink,
+  type TimerState,
+} from "@/lib/timer-runtime";
+import type { TimerMode } from "@/lib/store";
 import { useAppMaybe } from "@/state/app";
 
 export const Route = createFileRoute("/timer")({
@@ -30,60 +45,23 @@ const FREE_PRESETS = [5, 10, 15, 20, 25, 30, 45, 60];
 /** چند دور از همان تنظیمِ انتخاب‌شده پشت سر هم اجرا شود. */
 const CYCLE_CHOICES = [1, 2, 3, 4, 6, 8, 10];
 
-type Linked = { kind: "habit" | "task"; id: string; label: string } | null;
-
 function TimerPage() {
   const ctx = useAppMaybe();
-
-  const [mode, setMode] = useState<TimerMode>("pomodoro");
-
-  // Pomodoro state
-  const [pomoFocusMin, setPomoFocusMin] = useState(25);
-  const [pomoBreakMin, setPomoBreakMin] = useState(5);
-  const [onBreak, setOnBreak] = useState(false);
-  /**
-   * چند دورِ «تمرکز + استراحت» پشت سر هم. مثلاً ۴ دورِ ۲۵/۵.
-   *
-   * بعد از آخرین تمرکز استراحتی نمی‌آید — استراحتِ بعد از دورِ آخر یعنی نشستن
-   * جلوی تایمری که هیچ کاری با آن نداری.
-   */
-  const [pomoCycles, setPomoCycles] = useState(4);
-  /** دورِ فعلی، از ۱ شروع می‌شود. */
-  const [pomoRound, setPomoRound] = useState(1);
-
-  // Free timer state
-  const [freeMinutes, setFreeMinutes] = useState(25);
-
-  // shared running state
-  const [remaining, setRemaining] = useState(25 * 60); // seconds, for pomodoro/free
-  const [stopwatchElapsed, setStopwatchElapsed] = useState(0); // seconds, for stopwatch
-  const [running, setRunning] = useState(false);
-  const [finished, setFinished] = useState(false);
-
-  // accumulated focus seconds for the CURRENT session (excludes breaks)
-  const focusAccumRef = useRef(0);
-  const sessionStartRef = useRef<number | null>(null);
-
-  const [linked, setLinked] = useState<Linked>(null);
+  const owner = ctx?.db?.auth?.userId ?? ctx?.db?.auth?.phone ?? null;
+  const [timer, setTimer] = useState<TimerState>(createTimer);
+  const timerRef = useRef(timer);
+  const ownerRef = useRef<string | null>(null);
+  const { mode, running, finished, linked, onBreak } = timer;
+  const pomoFocusMin = timer.focusMinutes;
+  const pomoBreakMin = timer.breakMinutes;
+  const pomoCycles = timer.cycles;
+  const pomoRound = timer.round;
+  const freeMinutes = timer.freeMinutes;
+  const remaining = Math.max(0, Math.ceil(timer.remainingMs / 1000));
+  const stopwatchElapsed = Math.floor(timer.elapsedMs / 1000);
   const { celebration, clear: clearCelebration } = useCelebration(ctx?.db);
-
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const ctxRef = useRef(ctx);
   ctxRef.current = ctx;
-  const linkedRef = useRef(linked);
-  linkedRef.current = linked;
-  const modeRef = useRef(mode);
-  modeRef.current = mode;
-  const onBreakRef = useRef(onBreak);
-  onBreakRef.current = onBreak;
-  const remainingRef = useRef(remaining);
-  remainingRef.current = remaining;
-  // تیکِ تایمر داخل یک setInterval بسته‌شده اجرا می‌شود و state تازه را نمی‌بیند،
-  // پس دور و تعداد دورها هم مثل بقیه باید ref داشته باشند.
-  const pomoCyclesRef = useRef(pomoCycles);
-  pomoCyclesRef.current = pomoCycles;
-  const pomoRoundRef = useRef(pomoRound);
-  pomoRoundRef.current = pomoRound;
 
   const notify = (body: string) => {
     if (typeof Notification !== "undefined" && Notification.permission === "granted") {
@@ -95,220 +73,137 @@ function TimerPage() {
     }
   };
 
-  /** Commit accumulated focus minutes (rounded) to the linked habit/task. */
-  const commitFocusToLinked = (focusSeconds: number, feedbackEligible = false) => {
+  /** History and linked credit are one idempotent app update. */
+  const applyCompletion = (item: TimerCompletion, feedbackEligible = false): boolean => {
     const c = ctxRef.current;
-    const link = linkedRef.current;
-    if (!c?.db || !link || focusSeconds <= 0) return;
-    const minutes = focusSeconds / 60;
-    const dk = todayKey();
-    if (link.kind === "task") {
-      const task = c.db.tasks.find((x) => x.id === link.id);
-      if (!task) return;
-      const nextValue =
-        task.type === "binary"
-          ? task.target
-          : task.unitKind === "time"
-            ? Math.round((task.value + minutes) * 100) / 100
-            : task.value + Math.round(minutes);
-      const afterCompleted = task.type === "binary" || task.done || nextValue >= task.target;
-      const mutationAccepted = c.update((d) => ({
-        ...d,
-        tasks: d.tasks.map((x) => {
-          if (x.id !== link.id) return x;
-          if (x.type === "binary") return { ...x, done: true, value: x.target };
-          const value =
-            x.unitKind === "time"
-              ? Math.round((x.value + minutes) * 100) / 100
-              : x.value + Math.round(minutes);
-          return { ...x, value, done: value >= x.target || x.done };
-        }),
-      }));
-      if (
-        feedbackEligible &&
-        shouldTriggerCompletionFeedback({
-          source: "user",
-          mutationAccepted,
-          beforeCompleted: task.done,
-          afterCompleted,
-        })
-      ) {
-        triggerCompletionFeedback(c.db.settings);
-      }
-      return;
-    }
-
-    const habit = c.db.habits.find((x) => x.id === link.id);
-    if (!habit) return;
-    const beforeCompleted = isCompleted(habit, getLog(c.db, habit.id, dk));
-    const previousValue = getLog(c.db, habit.id, dk)?.value ?? 0;
-    const nextValue =
-      habit.type === "binary"
-        ? 1
-        : habit.unitKind === "time"
-          ? Math.round((previousValue + minutes) * 100) / 100
-          : previousValue + Math.round(minutes);
-    const afterCompleted = habit.type === "binary" || beforeCompleted || nextValue >= habit.target;
-    const mutationAccepted = c.update((d) => {
-      const currentHabit = d.habits.find((x) => x.id === link.id);
-      if (!currentHabit) return d;
-      const prevVal = getLog(d, currentHabit.id, dk)?.value ?? 0;
-      const patch =
-        currentHabit.type === "binary"
-          ? { done: true, value: 1 }
-          : {
-              value:
-                currentHabit.unitKind === "time"
-                  ? Math.round((prevVal + minutes) * 100) / 100
-                  : prevVal + Math.round(minutes),
-              done:
-                currentHabit.unitKind === "time"
-                  ? Math.round((prevVal + minutes) * 100) / 100 >= currentHabit.target
-                  : prevVal + Math.round(minutes) >= currentHabit.target,
-            };
-      return applyLog(d, currentHabit, c.cal, patch, dk).db;
-    });
+    if (!c?.db) return false;
+    const link = item.linked;
+    const minutes = item.focusSeconds / 60;
+    const dk = dateKey(new Date(item.endedAt));
+    const task = link?.kind === "task" ? c.db.tasks.find((x) => x.id === link.id) : null;
+    const habit = link?.kind === "habit" ? c.db.habits.find((x) => x.id === link.id) : null;
+    const beforeCompleted =
+      task?.done ?? (habit ? isCompleted(habit, getLog(c.db, habit.id, dk)) : false);
+    const nextValue = task
+      ? task.value + (task.unitKind === "time" ? minutes : Math.round(minutes))
+      : habit
+        ? (getLog(c.db, habit.id, dk)?.value ?? 0) +
+          (habit.unitKind === "time" ? minutes : Math.round(minutes))
+        : 0;
+    const target = task?.target ?? habit?.target;
+    const afterCompleted = Boolean(
+      beforeCompleted || (target !== undefined && nextValue >= target),
+    );
+    const accepted = c.update((d) => recordTimerCompletion(d, item, c.cal));
     if (
       feedbackEligible &&
       shouldTriggerCompletionFeedback({
         source: "user",
-        mutationAccepted,
+        mutationAccepted: accepted,
         beforeCompleted,
         afterCompleted,
       })
-    ) {
+    )
       triggerCompletionFeedback(c.db.settings);
+    return accepted;
+  };
+
+  const publish = (next: TimerState, persist = true) => {
+    timerRef.current = next;
+    setTimer(next);
+    if (persist && ownerRef.current) {
+      saveTimer(ownerRef.current, next);
+      // While backgrounded, the foreground service owns phase changes. Android
+      // may reject attempts to start/update a foreground service from the background.
+      if (document.visibilityState === "visible") {
+        void syncAndroidTimer(next).catch(() => {
+          if (next.running) toast.warning("تایمر اجرا می‌شود، اما اعلان بالای گوشی فعال نشد.");
+        });
+      }
     }
   };
 
-  const logSession = (focusSeconds: number, m: TimerMode) => {
-    const c = ctxRef.current;
-    const link = linkedRef.current;
-    if (!c?.db || focusSeconds < 1) return;
-    const startedAt = sessionStartRef.current ?? Date.now() - focusSeconds * 1000;
-    c.update((d) => ({
-      ...d,
-      // Sort before trimming rather than relying on the array already being
-      // newest-first: the trim decides which sessions are DELETED, and once sync
-      // merges two devices' histories it must reach the same 200 on both.
-      timerSessions: [
-        {
-          id: uid(),
-          mode: m,
-          focusSeconds: Math.round(focusSeconds),
-          startedAt,
-          endedAt: Date.now(),
-          linkedKind: link?.kind,
-          linkedId: link?.id,
-          linkedLabel: link?.label,
-        },
-        ...d.timerSessions,
-      ]
-        .sort((a, b) => b.endedAt - a.endedAt)
-        .slice(0, 200),
-    }));
+  const flushPending = () => {
+    const current = timerRef.current;
+    if (!current.pending.length) return;
+    const kept = current.pending.filter((item) => !applyCompletion(item));
+    if (kept.length !== current.pending.length) publish({ ...current, pending: kept });
   };
 
-  /** Stop everything, optionally saving progress made so far. */
+  const settle = (now = Date.now(), announce = true) => {
+    const before = timerRef.current;
+    const { state, transitions } = advanceTimer(before, now);
+    if (state !== before) {
+      const clockMovedBack =
+        state.anchorAt !== null && before.anchorAt !== null && state.anchorAt < before.anchorAt;
+      publish(state, transitions.length > 0 || clockMovedBack);
+    }
+    flushPending();
+    if (announce && document.visibilityState === "visible" && transitions.length === 1) {
+      const transition = transitions[0];
+      notify(
+        transition === "finished"
+          ? state.mode === "pomodoro"
+            ? "🎉 همه‌ی دورها تموم شد! آفرین."
+            : "⏰ تایمر تمام شد!"
+          : transition === "focus-ended"
+            ? "⏰ زمان تمرکز تموم شد! وقت استراحته."
+            : "☕️ استراحت تموم شد! برگرد سر تمرکز.",
+      );
+    }
+    return timerRef.current;
+  };
+
   const finalizeSession = (save: boolean, feedbackEligible = false) => {
-    setRunning(false);
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    const focusSeconds = focusAccumRef.current;
-    if (save && focusSeconds > 0) {
-      commitFocusToLinked(focusSeconds, feedbackEligible);
-      logSession(focusSeconds, modeRef.current);
+    const current = settle(Date.now(), false);
+    let next = { ...current, running: false, anchorAt: null };
+    if (save && !current.onBreak && current.focusMs >= 1000) {
+      const item: TimerCompletion = {
+        id: `${current.runId}:partial:${current.round}`,
+        mode: current.mode,
+        focusSeconds: Math.round(current.focusMs / 1000),
+        startedAt: current.sessionStartedAt ?? Date.now() - current.focusMs,
+        endedAt: Date.now(),
+        linked: current.linked,
+      };
+      if (!applyCompletion(item, feedbackEligible))
+        next = { ...next, pending: [...next.pending, item] };
     }
-    focusAccumRef.current = 0;
-    sessionStartRef.current = null;
+    next = { ...next, focusMs: 0, sessionStartedAt: null };
+    publish(next);
   };
 
   useEffect(() => {
-    if (!running) return;
-    if (sessionStartRef.current === null) sessionStartRef.current = Date.now();
-
-    // The tick drives off `remainingRef` and assigns a plain value rather than
-    // running this logic inside a `setRemaining` updater. Updaters must be pure:
-    // React invokes them during render and double-invokes them under StrictMode,
-    // which would fire these commits/notifications twice per tick.
-    intervalRef.current = setInterval(() => {
-      if (modeRef.current === "stopwatch") {
-        setStopwatchElapsed((s) => s + 1);
-        focusAccumRef.current += 1;
-        return;
+    if (!owner) return;
+    ownerRef.current = owner;
+    publish(loadTimer(owner), false);
+    settle(Date.now(), false);
+    void syncAndroidTimer(timerRef.current).catch(() => {
+      if (timerRef.current.running)
+        toast.warning("تایمر اجرا می‌شود، اما اعلان بالای گوشی فعال نشد.");
+    });
+    const onVisible = () => settle(Date.now(), false);
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === `routino:active-timer:v1:${owner}`) {
+        publish(loadTimer(owner), false);
+        settle(Date.now(), false);
       }
-
-      // pomodoro / free
-      const r = remainingRef.current;
-      const setRemainingTo = (next: number) => {
-        remainingRef.current = next;
-        setRemaining(next);
-      };
-
-      if (r > 1) {
-        if (modeRef.current === "free" || (modeRef.current === "pomodoro" && !onBreakRef.current)) {
-          focusAccumRef.current += 1;
-        }
-        setRemainingTo(r - 1);
-        return;
-      }
-
-      if (modeRef.current === "pomodoro") {
-        if (!onBreakRef.current) {
-          // focus interval just finished -> commit accumulated focus
-          focusAccumRef.current += 1;
-          const focusSeconds = focusAccumRef.current;
-          commitFocusToLinked(focusSeconds);
-          logSession(focusSeconds, "pomodoro");
-          focusAccumRef.current = 0;
-          sessionStartRef.current = null;
-
-          // دورِ آخر بود؟ کلِ ست تمام است: نه استراحتی، نه دورِ بعدی.
-          if (pomoRoundRef.current >= pomoCyclesRef.current) {
-            notify("🎉 همه‌ی دورها تموم شد! آفرین.");
-            setRunning(false);
-            setFinished(true);
-            setPomoRound(1);
-            pomoRoundRef.current = 1;
-            setOnBreak(false);
-            onBreakRef.current = false;
-            setRemainingTo(pomoFocusMin * 60);
-            return;
-          }
-
-          notify("⏰ زمان تمرکز تموم شد! وقت استراحته.");
-          setOnBreak(true);
-          onBreakRef.current = true;
-          setRemainingTo(pomoBreakMin * 60);
-          return;
-        }
-        // break just finished -> next round of focus, don't count as focus time
-        const next = pomoRoundRef.current + 1;
-        setPomoRound(next);
-        pomoRoundRef.current = next;
-        notify("☕️ استراحت تموم شد! برگرد سر تمرکز.");
-        setOnBreak(false);
-        onBreakRef.current = false;
-        setRemainingTo(pomoFocusMin * 60);
-        return;
-      }
-
-      // free timer finished
-      focusAccumRef.current += 1;
-      const focusSeconds = focusAccumRef.current;
-      commitFocusToLinked(focusSeconds);
-      logSession(focusSeconds, "free");
-      focusAccumRef.current = 0;
-      sessionStartRef.current = null;
-      setRunning(false);
-      setFinished(true);
-      notify("⏰ تایمر تمام شد!");
-      setRemainingTo(0);
-    }, 1000);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
     };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    window.addEventListener("storage", onStorage);
+    const interval = window.setInterval(() => settle(), 1000);
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+      window.removeEventListener("storage", onStorage);
+      saveTimer(owner, timerRef.current);
+      ownerRef.current = null;
+    };
+    // Timer callbacks read the latest context through refs; only account changes rebind storage.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running]);
+  }, [owner]);
 
   if (!ctx?.db) return null;
   const { db, t, lang, cal } = ctx;
@@ -323,7 +218,7 @@ function TimerPage() {
   );
 
   /** Remaining minutes toward this linked item's time goal (target - already logged). */
-  const remainingMinutesFor = (link: Linked): number | null => {
+  const remainingMinutesFor = (link: TimerLink): number | null => {
     if (!link) return null;
     if (link.kind === "task") {
       const task = db.tasks.find((x) => x.id === link.id);
@@ -339,17 +234,24 @@ function TimerPage() {
   /** Pick a linked habit/task. Works with the current mode (Pomodoro or Free) —
    * only real focus time is credited to the item. In Free mode it also preloads
    * the item's remaining duration for convenience. */
-  const selectLink = (link: Linked) => {
-    setLinked(link);
-    if (!link) return;
-    finalizeSession(false);
-    setFinished(false);
-    setOnBreak(false);
-    if (mode === "free") {
-      const minutes = remainingMinutesFor(link) ?? 25;
-      setFreeMinutes(minutes);
-      setRemaining(minutes * 60);
+  const selectLink = (link: TimerLink) => {
+    if (!link) {
+      publish({ ...settle(), linked: null });
+      return;
     }
+    finalizeSession(false);
+    const current = timerRef.current;
+    const minutes = mode === "free" ? (remainingMinutesFor(link) ?? 25) : current.freeMinutes;
+    publish({
+      ...current,
+      runId: createTimer().runId,
+      linked: link,
+      freeMinutes: minutes,
+      remainingMs: (mode === "free" ? minutes : current.focusMinutes) * 60_000,
+      onBreak: false,
+      round: 1,
+      finished: false,
+    });
   };
 
   const displaySeconds = mode === "stopwatch" ? stopwatchElapsed : remaining;
@@ -362,49 +264,74 @@ function TimerPage() {
 
   const switchMode = (m: TimerMode) => {
     finalizeSession(true); // save any in-progress focus time before switching
-    setMode(m);
-    setFinished(false);
-    setOnBreak(false);
-    setPomoRound(1);
-    pomoRoundRef.current = 1;
-    if (m !== "free" && linked) setLinked(null); // duration-sync only applies to the Free timer
-    if (m === "pomodoro") setRemaining(pomoFocusMin * 60);
-    else if (m === "free") setRemaining(freeMinutes * 60);
-    else setStopwatchElapsed(0);
+    const current = timerRef.current;
+    publish({
+      ...createTimer(m, m === "pomodoro" ? current.focusMinutes : current.freeMinutes, {
+        breakMinutes: current.breakMinutes,
+        cycles: current.cycles,
+        freeMinutes: current.freeMinutes,
+        linked: m === "free" ? current.linked : null,
+      }),
+      pending: current.pending,
+    });
   };
 
   const reset = () => {
     finalizeSession(false); // discard current progress on manual reset
-    setFinished(false);
-    setOnBreak(false);
-    setPomoRound(1);
-    pomoRoundRef.current = 1;
-    if (mode === "pomodoro") setRemaining(pomoFocusMin * 60);
-    else if (mode === "free") setRemaining(freeMinutes * 60);
-    else setStopwatchElapsed(0);
+    const current = timerRef.current;
+    publish({
+      ...createTimer(mode, mode === "pomodoro" ? current.focusMinutes : current.freeMinutes, {
+        breakMinutes: current.breakMinutes,
+        cycles: current.cycles,
+        linked: current.linked,
+      }),
+      pending: current.pending,
+    });
   };
 
   const stopAndSave = () => {
     finalizeSession(true, true);
-    setFinished(true);
-    setPomoRound(1);
-    pomoRoundRef.current = 1;
-    if (mode === "pomodoro") setRemaining(pomoFocusMin * 60);
-    else if (mode === "free") setRemaining(freeMinutes * 60);
-    setOnBreak(false);
+    const current = timerRef.current;
+    publish({
+      ...createTimer(mode, mode === "pomodoro" ? current.focusMinutes : current.freeMinutes, {
+        breakMinutes: current.breakMinutes,
+        cycles: current.cycles,
+        linked: current.linked,
+      }),
+      pending: current.pending,
+      finished: true,
+    });
   };
 
-  const toggleRunning = () => {
-    if (!running && !ctxRef.current?.requestProductWrite()) return;
-    if (!running) setFinished(false);
-    setRunning((r) => !r);
+  const toggleRunning = async () => {
+    if (!timerRef.current.running && !ctxRef.current?.requestProductWrite()) return;
+    if (!timerRef.current.running && isAndroidNativeTimer()) {
+      try {
+        if (!(await requestNativePermission()))
+          toast.warning("برای نمایش تایمر در نوار اعلان، اجازهٔ اعلان‌های روتینو را فعال کنید.");
+      } catch {
+        toast.warning("اجازهٔ اعلان بررسی نشد؛ تایمر همچنان داخل برنامه کار می‌کند.");
+      }
+    }
+    publish(
+      timerRef.current.running
+        ? pauseTimer(timerRef.current, Date.now())
+        : resumeTimer(timerRef.current, Date.now()),
+    );
+    flushPending();
   };
 
   const applyFreePreset = (m: number) => {
     finalizeSession(false);
-    setFreeMinutes(m);
-    setRemaining(m * 60);
-    setFinished(false);
+    const current = timerRef.current;
+    publish({
+      ...createTimer("free", m, {
+        breakMinutes: current.breakMinutes,
+        cycles: current.cycles,
+        linked: current.linked,
+      }),
+      pending: current.pending,
+    });
   };
 
   /**
@@ -414,23 +341,26 @@ function TimerPage() {
    * وگرنه «دور ۵ از ۳» نشان داده می‌شود و ست هیچ‌وقت تمام نمی‌شود.
    */
   const setCycles = (n: number) => {
-    setPomoCycles(n);
-    pomoCyclesRef.current = n;
-    if (pomoRound > n) {
-      setPomoRound(n);
-      pomoRoundRef.current = n;
-    }
+    const current = settle();
+    publish({
+      ...current,
+      cycles: n,
+      round: Math.min(current.round, n),
+      runId: current.round > n ? createTimer().runId : current.runId,
+    });
   };
 
   const applyPomoPreset = (focus: number, brk: number) => {
     finalizeSession(false);
-    setPomoRound(1);
-    pomoRoundRef.current = 1;
-    setPomoFocusMin(focus);
-    setPomoBreakMin(brk);
-    setOnBreak(false);
-    setRemaining(focus * 60);
-    setFinished(false);
+    const current = timerRef.current;
+    publish({
+      ...createTimer("pomodoro", focus, {
+        breakMinutes: brk,
+        cycles: current.cycles,
+        linked: current.linked,
+      }),
+      pending: current.pending,
+    });
   };
 
   return (

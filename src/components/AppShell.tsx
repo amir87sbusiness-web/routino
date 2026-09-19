@@ -19,6 +19,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { FeedbackModal } from "@/components/FeedbackModal";
 import { AndroidUpdateBanner } from "@/components/AndroidUpdateBanner";
+import { ActiveTimerBar } from "@/components/ActiveTimerBar";
 import { InstallBanner } from "@/components/pwa";
 import { Button, Logo, Modal } from "@/components/ui";
 import { faNum } from "@/lib/dates";
@@ -171,6 +172,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   if (!writeActive && gate !== "expired") return <Splash />;
 
   const { t, lang } = ctx;
+  const timerOwner = db.auth?.userId ?? db.auth?.phone ?? null;
   const unread = db.notifications.filter((n) => !n.read).length;
 
   return (
@@ -287,6 +289,16 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <AndroidUpdateBanner />
         <InstallBanner />
+        {pathname !== "/timer" && timerOwner && (
+          <ActiveTimerBar
+            key={timerOwner}
+            owner={timerOwner}
+            lang={lang}
+            t={t}
+            onOpen={() => navigate({ to: "/timer" })}
+            requestResume={() => ctx.requestProductWrite()}
+          />
+        )}
         <main className="px-4 py-4">{children}</main>
       </div>
 
