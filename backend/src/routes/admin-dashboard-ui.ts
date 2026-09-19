@@ -9,6 +9,7 @@ const DASHBOARD_CSS = `
   nav button.on{background:var(--surface);color:var(--brand);box-shadow:0 1px 4px rgba(62,47,33,.09)}
   .overview-shell{display:grid;gap:14px}
   .overview-groups{gap:12px!important}
+  .overview-groups .metric-group:not(:first-child):not(.attention) .metric-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
   .metric-group{box-shadow:none}
   .metric-group-head{min-height:39px;padding:8px 13px;background:#faf9f6}
   .metric{min-height:94px;padding:13px}
@@ -49,6 +50,8 @@ const DASHBOARD_CSS = `
     nav{margin-inline:0;padding:3px;border-radius:12px}nav button{min-height:36px;padding-inline:11px;font-size:12px}
     .trend-head{display:grid;gap:10px;padding:14px 13px 6px}.trend-range{width:max-content}
     .trend-body{min-height:230px;padding-inline:3px}.sales-chart{min-height:210px}
+    .overview-groups .metric-group:not(:first-child):not(.attention) .metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .overview-groups .metric-group:not(:first-child):not(.attention) .metric-grid .metric:last-child:nth-child(odd){grid-column:1/-1}
   }
 `;
 
