@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { AnimatedCompletionList } from "@/components/AnimatedCompletionList";
 import { AppShell } from "@/components/AppShell";
 import { CelebrationModal, HabitRow, useCelebration } from "@/components/habits";
-import { TodayTodosCard } from "@/components/tasks";
+import { enableTaskReminderNotifications, TodayTodosCard } from "@/components/tasks";
 import { EmptyState, SectionTitle } from "@/components/ui";
 import { WeekStrip } from "@/components/WeekStrip";
 import { faNum, formatDate, todayKey } from "@/lib/dates";
@@ -33,7 +33,7 @@ function TodayPage() {
     return () => cancelAnimationFrame(id);
   }, [score]);
   if (!ctx?.db) return null;
-  const { db, update, t, lang, cal } = ctx;
+  const { db, update, updatePreferences, t, lang, cal } = ctx;
 
   const isToday = dk === todayKey();
   const due = dueHabitsOn(db, dk, cal);
@@ -120,9 +120,11 @@ function TodayPage() {
         <TodayTodosCard
           db={db}
           dateKey={dk}
+          cal={cal}
           lang={lang}
           t={t}
           onUpdate={update}
+          onReminderRequested={() => enableTaskReminderNotifications({ updatePreferences, t })}
           defaultOpen={false}
         />
       </section>

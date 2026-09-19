@@ -1,8 +1,19 @@
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { TaskRow } from "./tasks";
+import {
+  addQuickTask,
+  draftToTask,
+  emptyTaskDraft,
+  nextQuickTaskColor,
+  TaskFormModal,
+  TaskRow,
+  taskToDraft,
+  TodayTodosCard,
+} from "./tasks";
 import type { Task } from "@/lib/store";
+import { defaultDb } from "@/lib/store";
+import { CATEGORY_COLOR_CHOICES } from "@/lib/presets";
 import {
   archiveExpandedOneYearTasks,
   oneYearTaskFixture,
@@ -29,6 +40,75 @@ describe("Task history representation", () => {
     expect(after.filter((item) => item.title.includes("مطالعه"))).toEqual(
       before.filter((item) => item.title.includes("مطالعه")),
     );
+  });
+});
+
+describe("task draft compatibility", () => {
+  it("loads a legacy binary task without requiring new fields", () => {
+    expect(taskToDraft(task)).toMatchObject({
+      id: task.id,
+      dateKey: task.dateKey,
+      title: task.title,
+      type: "binary",
+      target: 1,
+      unitKind: "count",
+      reminderOn: false,
+    });
+  });
+
+  it("creates a count task with its numeric target", () => {
+    const draft = {
+      ...emptyTaskDraft("2026-09-19"),
+      title: "مطالعه",
+      type: "quantity" as const,
+      unitKind: "count" as const,
+      target: 12,
+    };
+
+    expect(draftToTask(draft)).toMatchObject({
+      dateKey: "2026-09-19",
+      title: "مطالعه",
+      type: "quantity",
+      unitKind: "count",
+      target: 12,
+      value: 0,
+      done: false,
+    });
+  });
+
+  it("stores a time task in minutes and preserves identity while editing", () => {
+    const existing: Task = {
+      ...task,
+      type: "quantity",
+      unitKind: "time",
+      target: 25,
+      value: 10,
+    };
+    const draft = { ...taskToDraft(existing), dateKey: "2026-09-20", target: 45 };
+
+    expect(draftToTask(draft, existing)).toMatchObject({
+      id: existing.id,
+      dateKey: "2026-09-20",
+      type: "quantity",
+      unitKind: "time",
+      target: 45,
+      value: 10,
+      done: false,
+    });
+  });
+});
+
+describe("quick task colors", () => {
+  it("assigns different palette colors to consecutive quick tasks on the same day", () => {
+    const dateKey = "2026-09-19";
+    const firstColor = nextQuickTaskColor([], dateKey);
+    const first = addQuickTask(defaultDb([]), dateKey, "اول").task;
+    const second = addQuickTask({ ...defaultDb([]), tasks: [first] }, dateKey, "دوم").task;
+
+    expect(firstColor).toBe(CATEGORY_COLOR_CHOICES[0]);
+    expect(first.color).toBe(firstColor);
+    expect(second.color).toBe(CATEGORY_COLOR_CHOICES[1]);
+    expect(second.color).not.toBe(first.color);
   });
 });
 
@@ -82,5 +162,120 @@ describe("TaskRow completion transitions", () => {
 
     expect(onCompletionChange).toHaveBeenCalledTimes(1);
     expect(onCompletionChange).toHaveBeenCalledWith(true);
+  });
+
+  it("opens editing without toggling completion", () => {
+    const onUpdate = vi.fn(() => true);
+    const onEdit = vi.fn();
+    act(() => {
+      root.render(
+        <TaskRow
+          task={task}
+          settings={{ completionSoundEnabled: false, hapticsEnabled: false }}
+          lang="en"
+          t={(_fa, en) => en}
+          onUpdate={onUpdate}
+          onDelete={() => undefined}
+          onEdit={onEdit}
+        />,
+      );
+    });
+
+    act(() => host.querySelector<HTMLButtonElement>('button[aria-label="Edit task"]')!.click());
+
+    expect(onEdit).toHaveBeenCalledTimes(1);
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe("TaskFormModal measurement controls", () => {
+  let host: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    host.remove();
+  });
+
+  it("offers binary, count, and time task choices", () => {
+    function Harness() {
+      const [draft, setDraft] = useState(() => emptyTaskDraft("2026-09-19"));
+      return (
+        <TaskFormModal
+          open
+          draft={draft}
+          setDraft={setDraft}
+          onClose={() => undefined}
+          onSave={() => undefined}
+          cal="gregorian"
+          lang="en"
+          t={(_fa, en) => en}
+        />
+      );
+    }
+    act(() => {
+      root.render(<Harness />);
+    });
+
+    expect(document.body.textContent).toContain("Done / not done");
+    expect(document.body.textContent).toContain("Quantity");
+
+    const quantityButton = Array.from(document.body.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Quantity",
+    );
+    act(() => quantityButton!.click());
+
+    expect(document.body.textContent).toContain("Count (number)");
+    expect(document.body.textContent).toContain("Time (hr/min/sec)");
+  });
+});
+
+describe("TodayTodosCard editing", () => {
+  let host: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    host.remove();
+  });
+
+  it("keeps quick add and opens an existing task in the edit form", () => {
+    function Harness() {
+      const [db, setDb] = useState(() => ({ ...defaultDb([]), tasks: [task] }));
+      return (
+        <TodayTodosCard
+          db={db}
+          dateKey={task.dateKey}
+          cal="gregorian"
+          lang="en"
+          t={(_fa, en) => en}
+          onUpdate={(update) => {
+            setDb((current) => update(current));
+            return true;
+          }}
+        />
+      );
+    }
+    act(() => root.render(<Harness />));
+
+    expect(host.querySelector('input[placeholder="+ Add Todo"]')).not.toBeNull();
+    act(() => host.querySelector<HTMLButtonElement>('button[aria-label="Edit task"]')!.click());
+
+    expect(document.body.textContent).toContain("Edit task");
+    expect(
+      document.body.querySelector<HTMLInputElement>('input[value="Test task"]'),
+    ).not.toBeNull();
   });
 });
