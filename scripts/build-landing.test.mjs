@@ -43,7 +43,7 @@ describe("landing build script", () => {
       writeFileSync(
         `${apk}.json`,
         JSON.stringify({
-          versionCode: 12,
+          versionCode: 13,
           bytes: statSync(apk).size,
           sha256: createHash("sha256").update(readFileSync(apk)).digest("hex"),
         }),

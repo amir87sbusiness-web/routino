@@ -1025,7 +1025,9 @@ commit;$$
 
     execFileSync(process.execPath, ["scripts/gen-setup-sql.mjs"], { cwd: root, stdio: "pipe" });
     const setup = readFileSync(resolve(root, "supabase/setup.sql"), "utf8");
-    for (const job of jobs.filter((candidate) => candidate.jobname !== "routino-payment-recovery")) {
+    for (
+      const job of jobs.filter((candidate) => candidate.jobname !== "routino-payment-recovery")
+    ) {
       expect(setup).toContain(`'${job.jobname}',\n  '${job.schedule}',`);
     }
   });
