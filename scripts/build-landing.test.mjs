@@ -106,7 +106,7 @@ describe("landing build script", () => {
       writeFileSync(
         join(sandbox, "android", "app", "build.gradle"),
         readFileSync(join(sandbox, "android", "app", "build.gradle"), "utf8").replace(
-          "versionCode 13",
+          "versionCode 14",
           "versionCode 14",
         ),
       );
