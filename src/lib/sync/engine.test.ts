@@ -248,6 +248,24 @@ describe("sync engine, two devices on one account", () => {
     });
   });
 
+  it("uses the server's full 200-record push cap for small records", async () => {
+    await idb.table("categories").bulkPut(
+      Array.from({ length: 200 }, (_, index) => ({
+        key: `cost-cap-${index}`,
+        data: { id: `cost-cap-${index}`, name: "x" },
+        updatedAt: 1_000 + index,
+        deleted: 0,
+        dirty: 1,
+        seq: index + 1,
+      })),
+    );
+
+    await syncNow(OWNER, { pullRequired: false });
+
+    expect(server.exchanges).toHaveLength(1);
+    expect(server.exchanges[0]!.records).toHaveLength(200);
+  });
+
   it("packs dirty daily logs into one month record and settles their exact local versions", async () => {
     await localDirtyLog("h1", "2026-08-01", 100);
     await localDirtyLog("h1", "2026-08-02", 200);

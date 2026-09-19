@@ -21,7 +21,7 @@ describe("lifecycle sync scheduler", () => {
     lastSyncedAt.mockClear().mockResolvedValue(0);
   });
 
-  it("uses a trailing forty-five-second edit window", async () => {
+  it("uses the configured trailing edit window", async () => {
     const scheduler = makeScheduler();
     scheduler.markDirty("u1");
     await vi.advanceTimersByTimeAsync(EDIT_SYNC_DELAY_MS - 1);
@@ -113,7 +113,7 @@ describe("lifecycle sync scheduler", () => {
     expect(flush).toHaveBeenCalledWith("u1", { pullRequired: true });
   });
 
-  it("coalesces redundant clean foreground pulls for five minutes", async () => {
+  it("coalesces redundant clean foreground pulls for ten minutes", async () => {
     hasPending.mockResolvedValue(false);
     const scheduler = makeScheduler();
 
@@ -142,7 +142,7 @@ describe("lifecycle sync scheduler", () => {
     expect(flush).not.toHaveBeenCalled();
   });
 
-  it("skips a clean boot pull when the shared cursor was synced within three minutes", async () => {
+  it("skips a clean boot pull when the shared cursor was synced within ten minutes", async () => {
     hasPending.mockResolvedValue(false);
     lastSyncedAt.mockResolvedValue(Date.now() - BOOT_SYNC_STALE_MS + 1);
     const scheduler = makeScheduler();
