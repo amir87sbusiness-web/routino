@@ -7,6 +7,8 @@ const overview = {
   users: { total: 42, last24h: 0 },
   trialStarts: 17,
   activeSubscriptions: 0,
+  activeTrials: 0,
+  expiredUsers: 0,
   payments: {
     paidTotal: 0,
     revenueToman: 0,
