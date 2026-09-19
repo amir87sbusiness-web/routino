@@ -295,7 +295,7 @@ describe("AppProvider sync lifecycle", () => {
     );
     write.resolve();
     await settle();
-    await act(async () => vi.advanceTimersByTime(45_000));
+    await act(async () => vi.advanceTimersByTime(60_000));
     await settle();
 
     expect(mocks.syncNow).toHaveBeenCalledWith("user-1", { pullRequired: false });
@@ -354,7 +354,7 @@ describe("AppProvider sync lifecycle", () => {
     await settle();
     expect(mocks.syncNow).not.toHaveBeenCalled();
 
-    await act(async () => vi.advanceTimersByTime(45_000));
+    await act(async () => vi.advanceTimersByTime(60_000));
     await settle();
     expect(mocks.syncNow).toHaveBeenCalledTimes(1);
     expect(mocks.syncNow).toHaveBeenCalledWith("user-1", { pullRequired: false });
@@ -372,7 +372,7 @@ describe("AppProvider sync lifecycle", () => {
 
     expect(app!.db?.habits).toEqual([expect.objectContaining({ id: "first-habit" })]);
     expect(mocks.applyChanges).toHaveBeenCalledTimes(1);
-    await act(async () => vi.advanceTimersByTime(45_000));
+    await act(async () => vi.advanceTimersByTime(60_000));
     await settle();
     expect(mocks.syncNow).toHaveBeenCalledWith("user-1", { pullRequired: false });
   });
@@ -770,7 +770,7 @@ describe("AppProvider sync lifecycle", () => {
       await Promise.resolve();
     });
     await settle();
-    await act(async () => vi.advanceTimersByTime(45_000));
+    await act(async () => vi.advanceTimersByTime(60_000));
     await settle();
     expect(mocks.syncNow).toHaveBeenCalledTimes(1);
 
