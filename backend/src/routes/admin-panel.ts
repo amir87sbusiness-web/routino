@@ -8,11 +8,7 @@ import { ADMIN_PAGE } from "../lib/admin-page.js";
 import { withAdminUserDeleteUi } from "../lib/admin-user-delete-ui.js";
 import { withAdminUserListUi } from "../lib/admin-user-list-ui.js";
 import { unauthorized } from "../plugins/errors.js";
-import {
-  ADMIN_SESSION_COOKIE,
-  readCookie,
-  verifyAdminSession,
-} from "../services/admin-auth.js";
+import { ADMIN_SESSION_COOKIE, readCookie, verifyAdminSession } from "../services/admin-auth.js";
 import { withAdminDashboardUi } from "./admin-dashboard-ui.js";
 import { adminSalesTrend } from "./admin-sales-trend.js";
 

@@ -85,7 +85,7 @@ const DASHBOARD_SCRIPT = `<script>
   var loadedOnce = false;
 
   function faNumber(value){ return Number(value || 0).toLocaleString("fa-IR"); }
-  function safeText(value){ return String(value == null ? "" : value).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/\"/g,"&quot;"); }
+  function safeText(value){ return String(value == null ? "" : value).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
   function dateLabel(day){
     try { return new Date(day + "T12:00:00Z").toLocaleDateString("fa-IR", { month:"numeric", day:"numeric" }); }
     catch (_) { return day.slice(5).replace("-","/"); }
