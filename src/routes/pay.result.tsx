@@ -32,7 +32,7 @@ export const Route = createFileRoute("/pay/result")({
 /** Start responsive, then back off with the server's verify cooldown instead of
  * hammering the Edge Function every 2.5 seconds for a full minute. The first
  * poll is still immediate; these are only the waits between pending attempts. */
-const POLL_DELAYS_MS = [2_500, 5_000, 10_000, 20_000, 30_000] as const;
+const POLL_DELAYS_MS = [3_000, 7_000, 15_000, 30_000] as const;
 
 function PayResultPage() {
   const ctx = useAppMaybe();
