@@ -106,8 +106,8 @@ describe("landing build script", () => {
       writeFileSync(
         join(sandbox, "android", "app", "build.gradle"),
         readFileSync(join(sandbox, "android", "app", "build.gradle"), "utf8").replace(
-          "versionCode 12",
           "versionCode 13",
+          "versionCode 14",
         ),
       );
       const mismatchedRelease = spawnSync(process.execPath, ["scripts/build-landing.mjs"], {
