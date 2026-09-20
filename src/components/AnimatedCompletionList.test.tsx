@@ -213,4 +213,25 @@ describe("AnimatedCompletionList", () => {
 
     expect(onReorder).not.toHaveBeenCalled();
   });
+
+  it("blocks native touch scrolling only after a long press activates dragging", () => {
+    act(() => root.render(
+      <AnimatedCompletionList
+        items={[{ id: "a", completed: false }, { id: "b", completed: false }]}
+        isCompleted={(item) => item.completed}
+        onReorder={() => undefined}
+        renderItem={(item) => <span>{item.id}</span>}
+      />,
+    ));
+    const row = host.querySelector<HTMLElement>("[data-completion-id=a]")!;
+    act(() => pointer(row, "pointerdown", 10));
+    const before = new Event("touchmove", { bubbles: true, cancelable: true });
+    act(() => row.dispatchEvent(before));
+    expect(before.defaultPrevented).toBe(false);
+
+    act(() => vi.advanceTimersByTime(350));
+    const during = new Event("touchmove", { bubbles: true, cancelable: true });
+    act(() => row.dispatchEvent(during));
+    expect(during.defaultPrevented).toBe(true);
+  });
 });
