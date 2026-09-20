@@ -102,7 +102,7 @@ function SubscribePage() {
 
   // Display clock only. It never talks to the server.
   useEffect(() => {
-    const timer = window.setInterval(() => setClock(Date.now()), 60_000);
+    const timer = window.setInterval(() => setClock(Date.now()), 1_000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -118,8 +118,16 @@ function SubscribePage() {
       : offerElapsed >= 3 * 86_400_000 && offerElapsed < 7 * 86_400_000
         ? 2
         : null;
-  const offerUntil =
-    offerStage && trialStart ? trialStart + (offerStage === 1 ? 3 : 7) * 86_400_000 : null;
+  const offerUntil = offerStage && trialStart ? trialStart + 7 * 86_400_000 : null;
+  const offerSecondsLeft = offerUntil ? Math.max(0, Math.ceil((offerUntil - clock) / 1_000)) : 0;
+  const offerDaysLeft = Math.floor(offerSecondsLeft / 86_400);
+  const offerTimeLeft = [
+    Math.floor((offerSecondsLeft % 86_400) / 3_600),
+    Math.floor((offerSecondsLeft % 3_600) / 60),
+    offerSecondsLeft % 60,
+  ]
+    .map((part) => faNum(String(part).padStart(2, "0"), lang))
+    .join(":");
   const offerPrice = (plan: ServerPlan): number | null => {
     if (!offerStage || !plan.offer) return null;
     const rule = offerStage === 1 ? plan.offer.first : plan.offer.second;
@@ -374,11 +382,13 @@ function SubscribePage() {
               (offerStage === 1 ? plan.offer.first.value : plan.offer.second.value) > 0,
           ) && (
             <p className="text-center text-xs font-medium text-primary">
-              {t("پیشنهاد خرید اول · مرحله ", "First purchase offer · stage ")}
-              {faNum(offerStage!, lang)}
+              {t("خرید اول", "First purchase")}
               {" · "}
               {t("زمان باقی‌مانده: ", "Time left: ")}
-              {faNum(Math.ceil((offerUntil - clock) / 3_600_000), lang)} {t("ساعت", "hours")}
+              {faNum(offerDaysLeft, lang)} {t("روز و ", "days and ")}
+              <span dir="ltr" className="inline-block tabular-nums">
+                {offerTimeLeft}
+              </span>
             </p>
           )}
         {PLAN_PRESENTATION.map((presentation) => {

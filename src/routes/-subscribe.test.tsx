@@ -188,7 +188,9 @@ describe("SubscribePage payment attempts", () => {
       root.render(<SubscribePage />);
       await Promise.resolve();
     });
-    expect(host.textContent).toContain("پیشنهاد خرید اول");
+    expect(host.textContent).toContain("خرید اول");
+    expect(host.textContent).not.toContain("مرحله");
+    expect(host.textContent).toMatch(/زمان باقی‌مانده: ۶ روز و ۲۳:۵۹:۰۰/);
     expect(host.textContent).toContain("۴۳۹,۲۰۰");
     expect(host.textContent).toContain("تخفیف:");
     expect(payments.fetchQuote).not.toHaveBeenCalled();
