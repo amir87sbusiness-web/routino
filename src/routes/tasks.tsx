@@ -16,6 +16,7 @@ import { Chip, DatePickerCalendar, EmptyState } from "@/components/ui";
 import { WeekStrip } from "@/components/WeekStrip";
 import { addDays, faNum, formatDate, todayKey } from "@/lib/dates";
 import { useAppMaybe } from "@/state/app";
+import { triggerCompletionFeedback } from "@/lib/completion-feedback";
 
 export const Route = createFileRoute("/tasks")({
   component: () => (
@@ -33,7 +34,7 @@ function TasksPage() {
   const [draft, setDraft] = useState<TaskDraft>(() => emptyTaskDraft(todayKey()));
 
   if (!ctx?.db) return null;
-  const { db, update, updatePreferences, t, lang, cal } = ctx;
+  const { db, update, reorderLocal, updatePreferences, t, lang, cal } = ctx;
 
   const todayK = todayKey();
   const tomorrowK = addDays(todayK, 1);
@@ -163,6 +164,13 @@ function TasksPage() {
               key={selectedDay}
               items={dayTasks}
               isCompleted={(task) => task.done}
+              onReorder={(ids) => reorderLocal("tasks", ids)}
+              onReorderStart={() =>
+                triggerCompletionFeedback({
+                  completionSoundEnabled: false,
+                  hapticsEnabled: db.settings.hapticsEnabled,
+                })
+              }
               className="flex flex-col gap-2"
               renderItem={(task, onCompletionChange) => (
                 <TaskRow

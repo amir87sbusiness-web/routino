@@ -709,6 +709,8 @@ export function TodayTodosCard({
   lang,
   t,
   onUpdate,
+  onReorder,
+  onReorderStart,
   onReminderRequested,
   defaultOpen = true,
 }: {
@@ -718,6 +720,8 @@ export function TodayTodosCard({
   lang: Lang;
   t: (fa: string, en: string) => string;
   onUpdate: (fn: (d: Db) => Db) => boolean;
+  onReorder?: (orderedIds: string[]) => void;
+  onReorderStart?: () => void;
   onReminderRequested?: () => void;
   defaultOpen?: boolean;
 }) {
@@ -795,6 +799,8 @@ export function TodayTodosCard({
               key={dateKey}
               items={dayTasks}
               isCompleted={(task) => task.done}
+              onReorder={onReorder}
+              onReorderStart={onReorderStart}
               className="flex flex-col gap-2"
               renderItem={(task, onCompletionChange) => (
                 <TaskRow

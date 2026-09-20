@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   markEntitlementChecked: vi.fn(),
   reconcileNativeReminders: vi.fn(),
   requestNativePermission: vi.fn(),
+  reorderLocalRows: vi.fn(),
   saveLocal: vi.fn(),
   sessionUserId: vi.fn(() => "user-1" as string | null),
   switchOwnerVault: vi.fn(),
@@ -45,7 +46,10 @@ vi.mock("@/lib/api/auth", () => ({
   sessionUserId: mocks.sessionUserId,
 }));
 vi.mock("@/lib/db/hydrate", () => ({ hydrate: mocks.hydrate }));
-vi.mock("@/lib/db/persist", () => ({ applyChanges: mocks.applyChanges }));
+vi.mock("@/lib/db/persist", () => ({
+  applyChanges: mocks.applyChanges,
+  reorderLocalRows: mocks.reorderLocalRows,
+}));
 vi.mock("@/lib/db/local", () => ({
   loadLocal: vi.fn(() => ({})),
   localChanged: vi.fn(() => false),
@@ -132,6 +136,7 @@ describe("AppProvider sync lifecycle", () => {
       .mockReset()
       .mockResolvedValue({ status: "scheduled", scheduled: 0 });
     mocks.requestNativePermission.mockReset().mockResolvedValue(true);
+    mocks.reorderLocalRows.mockReset().mockResolvedValue(undefined);
     mocks.saveLocal.mockReset();
     mocks.sessionUserId.mockReset().mockReturnValue("user-1");
     mocks.switchOwnerVault.mockReset().mockResolvedValue({
@@ -172,6 +177,24 @@ describe("AppProvider sync lifecycle", () => {
       includeAccountState: true,
       pullRequired: true,
     });
+  });
+
+  it("reorders a visible habit subset locally without scheduling a synced change", async () => {
+    await act(async () => {
+      app!.update((db) => ({
+        ...db,
+        habits: [habit("a"), habit("hidden"), habit("b")],
+      }));
+    });
+    await settle();
+    mocks.applyChanges.mockClear();
+
+    await act(async () => app!.reorderLocal("habits", ["b", "a"]));
+    await settle();
+
+    expect(app!.db?.habits.map((item) => item.id)).toEqual(["b", "hidden", "a"]);
+    expect(mocks.reorderLocalRows).toHaveBeenCalledWith("habits", ["b", "hidden", "a"]);
+    expect(mocks.applyChanges).not.toHaveBeenCalled();
   });
 
   it("reconciles native reminders on boot without requesting OS permission", () => {

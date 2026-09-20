@@ -9,6 +9,7 @@ import { EmptyState, SectionTitle } from "@/components/ui";
 import { WeekStrip } from "@/components/WeekStrip";
 import { faNum, formatDate, todayKey } from "@/lib/dates";
 import { dayScore, dueHabitsOn, getLog, isCompleted } from "@/lib/logic";
+import { triggerCompletionFeedback } from "@/lib/completion-feedback";
 import { useAppMaybe } from "@/state/app";
 
 export const Route = createFileRoute("/")({
@@ -33,7 +34,12 @@ function TodayPage() {
     return () => cancelAnimationFrame(id);
   }, [score]);
   if (!ctx?.db) return null;
-  const { db, update, updatePreferences, t, lang, cal } = ctx;
+  const { db, update, reorderLocal, updatePreferences, t, lang, cal } = ctx;
+  const triggerReorderHaptic = () =>
+    triggerCompletionFeedback({
+      completionSoundEnabled: false,
+      hapticsEnabled: db.settings.hapticsEnabled,
+    });
 
   const isToday = dk === todayKey();
   const due = dueHabitsOn(db, dk, cal);
@@ -124,6 +130,8 @@ function TodayPage() {
           lang={lang}
           t={t}
           onUpdate={update}
+          onReorder={(ids) => reorderLocal("tasks", ids)}
+          onReorderStart={triggerReorderHaptic}
           onReminderRequested={() => enableTaskReminderNotifications({ updatePreferences, t })}
           defaultOpen={false}
         />
@@ -166,6 +174,8 @@ function TodayPage() {
             key={dk}
             items={due}
             isCompleted={(habit) => isCompleted(habit, getLog(db, habit.id, dk))}
+            onReorder={(ids) => reorderLocal("habits", ids)}
+            onReorderStart={triggerReorderHaptic}
             className="flex flex-col gap-2"
             renderItem={(habit, onCompletionChange) => (
               <HabitRow

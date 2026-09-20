@@ -3,6 +3,7 @@ import { Check, ChevronLeft, Pencil, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
+import { AnimatedCompletionList } from "@/components/AnimatedCompletionList";
 import {
   draftToHabit,
   emptyDraft,
@@ -33,6 +34,7 @@ import {
 import { CATEGORY_COLOR_CHOICES, DEFAULT_CATEGORIES, PRESET_HABITS } from "@/lib/presets";
 import { uid, type Habit } from "@/lib/store";
 import { useAppMaybe } from "@/state/app";
+import { triggerCompletionFeedback } from "@/lib/completion-feedback";
 
 export const Route = createFileRoute("/habits")({
   component: () => (
@@ -56,7 +58,7 @@ function HabitsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Habit | null>(null);
 
   if (!ctx?.db) return null;
-  const { db, update, updatePreferences, t, lang, cal } = ctx;
+  const { db, update, reorderLocal, updatePreferences, t, lang, cal } = ctx;
 
   // فیلترهای ویژه علاوه بر دسته‌ها: انجام‌شده / انجام‌نشدهٔ امروز.
   const TODAY = todayKey();
@@ -199,16 +201,25 @@ function HabitsPage() {
                       {lang === "fa" ? cat.nameFa : cat.nameEn}
                     </p>
                   </div>
-                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                    {catHabits.map((h) => {
+                  <AnimatedCompletionList
+                    items={catHabits}
+                    isCompleted={doneToday}
+                    onReorder={(ids) => reorderLocal("habits", ids)}
+                    onReorderStart={() =>
+                      triggerCompletionFeedback({
+                        completionSoundEnabled: false,
+                        hapticsEnabled: db.settings.hapticsEnabled,
+                      })
+                    }
+                    className="grid grid-cols-1 gap-2.5 sm:grid-cols-2"
+                    renderItem={(h) => {
                       const mp = monthProgress(db, h, cal);
                       const st = streak(db, h, cal);
                       // hitting the monthly goal recolors the whole card green
                       const reached = mp.percent >= 100;
                       return (
                         <div
-                          key={h.id}
-                          className={`card-surface p-3 ${reached ? "border-success/60 bg-success/10" : ""}`}
+                          className={`card-surface h-full p-3 ${reached ? "border-success/60 bg-success/10" : ""}`}
                         >
                           <div className="flex items-center gap-2.5">
                             <span
@@ -264,8 +275,8 @@ function HabitsPage() {
                           </div>
                         </div>
                       );
-                    })}
-                  </div>
+                    }}
+                  />
                 </section>
               );
             })}

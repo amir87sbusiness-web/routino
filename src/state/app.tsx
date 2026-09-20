@@ -33,7 +33,7 @@ import { todayKey, type Calendar, type Lang } from "@/lib/dates";
 import { diffDb } from "@/lib/db/diff";
 import { hydrate } from "@/lib/db/hydrate";
 import { loadLocal, localChanged, saveLocal, toLocalState } from "@/lib/db/local";
-import { applyChanges } from "@/lib/db/persist";
+import { applyChanges, reorderLocalRows, type LocallyOrderableTable } from "@/lib/db/persist";
 import { switchOwnerVault } from "@/lib/db/vault";
 import { resolveServerEntitlement } from "@/lib/entitlement-migration";
 import { DEFAULT_CATEGORIES } from "@/lib/presets";
@@ -53,6 +53,7 @@ import { loginAs, wipeContent } from "@/lib/wipe";
 import { subscriptionReminderEvents } from "@/lib/subscription-reminders";
 import { hasPendingChanges, syncNow, type SyncOptions } from "@/lib/sync/engine";
 import { createSyncScheduler, type SyncScheduler } from "@/lib/sync/scheduler";
+import { mergeSubsetOrder } from "@/lib/local-order";
 
 type Updater = (fn: (db: Db) => Db) => boolean;
 type PreferencePatch = Partial<
@@ -72,6 +73,7 @@ type PreferencePatch = Partial<
 interface AppCtx {
   db: Db | null;
   update: Updater;
+  reorderLocal: (table: LocallyOrderableTable, orderedIds: readonly string[]) => void;
   requestProductWrite: () => boolean;
   updatePreferences: (patch: PreferencePatch) => void;
   applyEntitlement: (subscription: Subscription) => void;
@@ -180,6 +182,41 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setWriteBlocked(true);
     return false;
   }, [sessionGate]);
+
+  const reorderLocal = useCallback(
+    (table: LocallyOrderableTable, orderedIds: readonly string[]) => {
+      const current = dbRef.current;
+      if (!current) return;
+      const collection = current[table];
+      const mergedIds = mergeSubsetOrder(
+        collection.map((item) => item.id),
+        orderedIds,
+      );
+      const byId = new Map(collection.map((item) => [item.id, item]));
+      const reordered = mergedIds.map((id) => byId.get(id)).filter(Boolean) as typeof collection;
+      if (reordered.every((item, index) => item === collection[index])) return;
+
+      const next = { ...current, [table]: reordered };
+      mutationRevision.current += 1;
+      dbRef.current = next;
+      setDb(next);
+
+      const write = persistQueue.current.then(() => reorderLocalRows(table, mergedIds));
+      persistQueue.current = write.catch(() => undefined);
+      void write.catch((error) => {
+        console.error("failed to persist local order", error);
+        if (persistFailed.current) return;
+        persistFailed.current = true;
+        toast.error(
+          current.settings.lang === "fa"
+            ? "ترتیب جدید روی این دستگاه ذخیره نشد. فضای ذخیره‌سازی مرورگر را بررسی کن."
+            : "The new order could not be saved on this device. Check browser storage.",
+          { duration: 15_000 },
+        );
+      });
+    },
+    [],
+  );
 
   const update: Updater = useCallback(
     (fn) => {
@@ -883,6 +920,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     () => ({
       db,
       update,
+      reorderLocal,
       requestProductWrite,
       updatePreferences,
       applyEntitlement,
@@ -904,6 +942,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [
       db,
       update,
+      reorderLocal,
       requestProductWrite,
       updatePreferences,
       applyEntitlement,

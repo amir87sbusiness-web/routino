@@ -4,7 +4,7 @@ import { defaultDb, type Db, type Habit, type TimerSession } from "../store";
 import { db as idb } from "./dexie";
 import { diffDb } from "./diff";
 import { hydrate } from "./hydrate";
-import { applyChanges, pendingChanges } from "./persist";
+import { applyChanges, pendingChanges, reorderLocalRows } from "./persist";
 
 function habit(id: string, name = id): Habit {
   return {
@@ -67,6 +67,38 @@ describe("applyChanges", () => {
 
     const out = (await hydrate()).db;
     expect(out.habits.map((h) => h.id)).toEqual(["a", "b"]);
+  });
+
+  it("rewrites habit order locally without changing sync metadata or outbox state", async () => {
+    const base = defaultDb(DEFAULT_CATEGORIES);
+    const v1: Db = { ...base, habits: [habit("a"), habit("b"), habit("c")] };
+    await applyChanges(diffDb(null, v1), 12_345);
+    await idb.habits.toCollection().modify({ dirty: 0 });
+    await idb.categories.toCollection().modify({ dirty: 0 });
+    const before = await idb.habits.toArray();
+
+    await reorderLocalRows("habits", ["c", "a", "b"]);
+
+    expect((await hydrate()).db.habits.map((item) => item.id)).toEqual(["c", "a", "b"]);
+    const after = await idb.habits.toArray();
+    expect(
+      after.map(({ key, data, updatedAt, dirty, deleted }) => ({
+        key,
+        data,
+        updatedAt,
+        dirty,
+        deleted,
+      })),
+    ).toEqual(
+      before.map(({ key, data, updatedAt, dirty, deleted }) => ({
+        key,
+        data,
+        updatedAt,
+        dirty,
+        deleted,
+      })),
+    );
+    expect(await pendingChanges()).toEqual({});
   });
 
   it("hides deleted records but keeps the tombstone row", async () => {

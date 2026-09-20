@@ -46,6 +46,37 @@ export async function applyChanges(changes: Change[], now = Date.now()): Promise
   });
 }
 
+export type LocallyOrderableTable = "habits" | "tasks";
+
+/**
+ * Rewrites presentation order only. The row payload and all sync metadata stay
+ * byte-for-byte equivalent, so this operation can never enter the outbox.
+ */
+export async function reorderLocalRows(
+  tableName: LocallyOrderableTable,
+  orderedIds: readonly string[],
+): Promise<void> {
+  const table = tableOf(tableName);
+  await idb.transaction("rw", table, async () => {
+    const rows = await table.toArray();
+    const liveById = new Map(rows.filter((item) => !item.deleted).map((item) => [item.key, item]));
+    const seen = new Set<string>();
+    const ordered = orderedIds
+      .map((id) => liveById.get(id))
+      .filter((item): item is RecordRow<unknown> => {
+        if (!item || seen.has(item.key)) return false;
+        seen.add(item.key);
+        return true;
+      });
+    const remaining = rows
+      .filter((item) => !item.deleted && !seen.has(item.key))
+      .sort((a, b) => a.seq - b.seq);
+    await table.bulkPut(
+      [...ordered, ...remaining].map((item, index) => ({ ...item, seq: index + 1 })),
+    );
+  });
+}
+
 /**
  * Rows awaiting push, by table.
  *
