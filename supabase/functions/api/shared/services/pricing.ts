@@ -21,7 +21,7 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import type { Database, DatabaseExecutor } from "../db/client.ts";
+import { rowsOf, type Database, type DatabaseExecutor } from "../db/client.ts";
 import { discounts, payments, plans, redemptions } from "../db/schema.ts";
 import { badRequest, notFound } from "../lib/http-errors.ts";
 
@@ -86,6 +86,9 @@ export interface Quote {
   months: number;
   basePriceToman: number;
   offerPercent: number;
+  offerAmountToman: number;
+  offerStage: 1 | 2 | null;
+  offerUntil: number | null;
   discountPercent: number;
   discountAmountToman: number;
   discountCode: string | null;
@@ -114,6 +117,44 @@ export interface DiscountCheck {
 }
 
 type DiscountRule = { kind: "percent" | "fixed"; value: number };
+
+function ruleSaving(price: number, kind: string, value: number): number {
+  return Math.min(
+    price,
+    kind === "fixed" ? value : price - Math.round((price * (100 - value)) / 100),
+  );
+}
+
+/** One indexed lookup for first real use and successful payment history. */
+async function firstPurchaseOffer(
+  db: DatabaseExecutor,
+  userId: string,
+  now: Date,
+  plan: typeof plans.$inferSelect,
+) {
+  if (!plan.offerEnabled) return null;
+  const [history] = rowsOf<{ started_at: Date | null; has_paid: boolean }>(
+    await db.execute(sql`
+    select (select min(created_at) from grants where user_id = ${userId} and source = 'trial') as started_at,
+           (exists(select 1 from payments where user_id = ${userId} and status = 'paid')
+            or exists(select 1 from grants where user_id = ${userId} and source = 'payment')) as has_paid
+  `),
+  );
+  if (!history?.started_at || history.has_paid) return null;
+  const started = new Date(history.started_at).getTime();
+  const elapsed = now.getTime() - started;
+  if (elapsed < 0 || elapsed >= 7 * 86_400_000) return null;
+  const stage = elapsed < 3 * 86_400_000 ? 1 : 2;
+  const kind = stage === 1 ? plan.offerFirstKind : plan.offerSecondKind;
+  const value = stage === 1 ? plan.offerFirstValue : plan.offerSecondValue;
+  return {
+    stage: stage as 1 | 2,
+    until: started + (stage === 1 ? 3 : 7) * 86_400_000,
+    saving: ruleSaving(plan.priceToman, kind, value),
+    kind,
+    value,
+  };
+}
 
 function planRule(rules: Record<string, unknown>, planId: string | undefined): DiscountRule | null {
   if (!planId || !Object.keys(rules).length) return null;
@@ -183,7 +224,8 @@ export async function quoteWithDiscount(
   userId: string,
   userPhone: string,
   now: Date,
-  offerPercent = 0,
+  /** Legacy internal argument: offers now come only from server data. */
+  _legacyOfferPercent = 0,
   allowFree = false,
 ): Promise<{ quote: Quote; discount: DiscountCheck }> {
   const [plan] = await db
@@ -195,12 +237,18 @@ export async function quoteWithDiscount(
 
   const discount = await checkDiscount(db, rawCode, userId, userPhone, now, plan.id);
 
-  // Offer and discount stack multiplicatively — same order the client UI has
-  // always shown, so the displayed price matches what gets charged.
-  let price = plan.priceToman;
-  if (offerPercent > 0) price = Math.round((price * (100 - offerPercent)) / 100);
-  if (discount.valid && discount.amountToman > 0) price -= discount.amountToman;
-  else if (discount.valid) price = Math.round((price * (100 - discount.percent)) / 100);
+  const offer = await firstPurchaseOffer(db, userId, now, plan);
+  const codeSaving = discount.valid
+    ? ruleSaving(
+        plan.priceToman,
+        discount.amountToman > 0 ? "fixed" : "percent",
+        discount.amountToman > 0 ? discount.amountToman : discount.percent,
+      )
+    : 0;
+  // One winner only. A valid code may lose to the offer and is then not redeemed.
+  const useCode = discount.valid && codeSaving >= (offer?.saving ?? 0);
+  const offerSaving = useCode ? 0 : (offer?.saving ?? 0);
+  let price = plan.priceToman - Math.max(codeSaving, offerSaving);
 
   // ZarinPal has a minimum charge; a 100% discount would also
   // mean "free", which should never reach a payment gateway at all.
@@ -213,10 +261,13 @@ export async function quoteWithDiscount(
       planId: plan.id,
       months: plan.months,
       basePriceToman: plan.priceToman,
-      offerPercent,
-      discountPercent: discount.valid ? discount.percent : 0,
-      discountAmountToman: discount.valid ? discount.amountToman : 0,
-      discountCode: discount.code,
+      offerPercent: offerSaving && offer?.kind === "percent" ? offer.value : 0,
+      offerAmountToman: offerSaving,
+      offerStage: offerSaving ? offer!.stage : null,
+      offerUntil: offerSaving ? offer!.until : null,
+      discountPercent: useCode ? discount.percent : 0,
+      discountAmountToman: useCode ? discount.amountToman : 0,
+      discountCode: useCode ? discount.code : null,
       finalToman: price,
       finalRial: tomanToRial(price),
     },

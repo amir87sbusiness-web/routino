@@ -1618,7 +1618,14 @@ create table if not exists plans (
   months integer not null,
   price_toman integer not null,
   compare_at_price_toman integer,
+  offer_enabled boolean not null default false,
+  offer_first_kind text not null default 'percent',
+  offer_first_value integer not null default 0,
+  offer_second_kind text not null default 'percent',
+  offer_second_value integer not null default 0,
   active boolean not null default true,
+  constraint plans_offer_first_rule check ((offer_first_kind = 'percent' and offer_first_value between 0 and 100) or (offer_first_kind = 'fixed' and offer_first_value between 0 and 1000000000)),
+  constraint plans_offer_second_rule check ((offer_second_kind = 'percent' and offer_second_value between 0 and 100) or (offer_second_kind = 'fixed' and offer_second_value between 0 and 1000000000)),
   constraint plans_compare_at_price_above_sale
     check (compare_at_price_toman is null or compare_at_price_toman > price_toman)
 );
@@ -1969,6 +1976,19 @@ revoke execute on function routino_cleanup_trial_accounts(integer, timestamptz, 
 -- table if not exists" silently skips existing tables, so new columns must be
 -- added explicitly here.
 alter table plans add column if not exists compare_at_price_toman integer;
+alter table plans add column if not exists offer_enabled boolean not null default false;
+alter table plans add column if not exists offer_first_kind text not null default 'percent';
+alter table plans add column if not exists offer_first_value integer not null default 0;
+alter table plans add column if not exists offer_second_kind text not null default 'percent';
+alter table plans add column if not exists offer_second_value integer not null default 0;
+do $$ begin
+  if not exists (select 1 from pg_constraint where conrelid = 'plans'::regclass and conname = 'plans_offer_first_rule') then
+    alter table plans add constraint plans_offer_first_rule check ((offer_first_kind = 'percent' and offer_first_value between 0 and 100) or (offer_first_kind = 'fixed' and offer_first_value between 0 and 1000000000));
+  end if;
+  if not exists (select 1 from pg_constraint where conrelid = 'plans'::regclass and conname = 'plans_offer_second_rule') then
+    alter table plans add constraint plans_offer_second_rule check ((offer_second_kind = 'percent' and offer_second_value between 0 and 100) or (offer_second_kind = 'fixed' and offer_second_value between 0 and 1000000000));
+  end if;
+end $$;
 do $$
 begin
   if not exists (

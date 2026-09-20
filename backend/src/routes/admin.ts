@@ -39,7 +39,9 @@ import {
   adminListPlans,
   adminOverview,
   adminSetPassword,
+  adminSetOfferEnabled,
   adminUpdateDiscount,
+  adminUpdatePlanOffer,
   adminUpdatePlanPrice,
   adminUserDetail,
 } from "../services/admin.js";
@@ -109,6 +111,11 @@ const planPriceBody = z.object({
   priceToman: z.number().int().min(1_000).max(1_000_000_000),
   compareAtPriceToman: z.number().int().min(1_000).max(1_000_000_000).nullable(),
 });
+const offerRuleBody = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("percent"), value: z.number().int().min(0).max(100) }),
+  z.object({ kind: z.literal("fixed"), value: z.number().int().min(0).max(1_000_000_000) }),
+]);
+const planOfferBody = z.object({ first: offerRuleBody, second: offerRuleBody });
 
 const queryNumber = (value: string | undefined): number | undefined => {
   if (value == null || value.trim() === "") return undefined;
@@ -287,6 +294,16 @@ export const adminRoutes: FastifyPluginAsync = async (app) => {
   });
 
   app.get("/admin/plans", opts, async () => ({ plans: await adminListPlans(db) }));
+
+  app.post("/admin/offer", opts, async (req) =>
+    adminSetOfferEnabled(db, z.object({ enabled: z.boolean() }).parse(req.body).enabled),
+  );
+
+  app.post("/admin/plans/:id/offer", opts, async (req) => {
+    const { id } = req.params as { id: string };
+    const body = planOfferBody.parse(req.body);
+    return adminUpdatePlanOffer(db, id, body.first, body.second);
+  });
 
   app.post("/admin/plans/:id", opts, async (req) => {
     const { id } = req.params as { id: string };

@@ -41,7 +41,8 @@ function attemptInputsMatch(
   return (
     payment.planId === body.planId &&
     payment.platform === (body.platform ?? "web") &&
-    payment.discountCode === requestedCode(body.code)
+    (payment.discountCode === requestedCode(body.code) ||
+      (payment.discountCode === null && !!requestedCode(body.code)))
   );
 }
 

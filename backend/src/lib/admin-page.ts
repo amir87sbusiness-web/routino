@@ -462,7 +462,13 @@ function renderPlans(plans) {
   const summary = (sale, original) => original != null && original > sale
     ? "از " + fa(original) + " به " + fa(sale) + " تومان · " + fa(Math.round((original - sale) * 100 / original)) + "٪ تخفیف"
     : "قیمت فروش: " + fa(sale) + " تومان";
-  $("#plansResults").innerHTML = '<div class="plans-grid">' + plans.map((plan) => '<article class="plan-card" data-plan-id="' + esc(plan.id) + '"><div class="plan-card-head"><div><h3>' + esc(plan.nameFa) + '</h3><p class="muted">' + fa(plan.months) + ' ماه · ' + esc(plan.nameEn) + '</p></div><span class="pill ok">فعال</span></div><div class="plan-price-fields"><label class="plan-price-field"><span>قیمت قبل از تخفیف</span><input class="plan-original-price" type="number" min="1000" max="1000000000" step="1000" value="' + esc(plan.compareAtPriceToman ?? "") + '" placeholder="بدون تخفیف" aria-label="قیمت قبلی ' + esc(plan.nameFa) + ' به تومان"></label><label class="plan-price-field"><span>قیمت فروش</span><input class="plan-sale-price" type="number" min="1000" max="1000000000" step="1000" value="' + esc(plan.priceToman) + '" aria-label="قیمت فروش ' + esc(plan.nameFa) + ' به تومان"></label></div><button class="btn mini plan-save" type="button" disabled>ذخیره قیمت‌ها</button><div class="plan-result" aria-live="polite">' + summary(plan.priceToman, plan.compareAtPriceToman) + '</div></article>').join("") + '</div>';
+  const offerField = (stage, kind, value) => '<label class="plan-price-field"><span>روزهای ' + (stage === 1 ? '۱ تا ۳' : '۴ تا ۷') + '</span><select class="offer-kind-' + stage + '"><option value="percent"' + (kind === 'percent' ? ' selected' : '') + '>درصدی</option><option value="fixed"' + (kind === 'fixed' ? ' selected' : '') + '>مبلغ ثابت تومانی</option></select><input class="offer-value-' + stage + '" type="number" min="0" step="1" value="' + esc(value) + '"></label>';
+  $("#plansResults").innerHTML = '<div><label><input id="offerEnabled" type="checkbox"' + (plans[0]?.offerEnabled ? ' checked' : '') + '> فعال بودن پیشنهاد خرید اول</label> <span id="offerStatus" class="muted"></span></div><div class="plans-grid">' + plans.map((plan) => '<article class="plan-card" data-plan-id="' + esc(plan.id) + '"><div class="plan-card-head"><div><h3>' + esc(plan.nameFa) + '</h3><p class="muted">' + fa(plan.months) + ' ماه · ' + esc(plan.nameEn) + '</p></div><span class="pill ok">فعال</span></div><div class="plan-price-fields"><label class="plan-price-field"><span>قیمت قبل از تخفیف</span><input class="plan-original-price" type="number" min="1000" max="1000000000" step="1000" value="' + esc(plan.compareAtPriceToman ?? "") + '" placeholder="بدون تخفیف" aria-label="قیمت قبلی ' + esc(plan.nameFa) + ' به تومان"></label><label class="plan-price-field"><span>قیمت فروش</span><input class="plan-sale-price" type="number" min="1000" max="1000000000" step="1000" value="' + esc(plan.priceToman) + '" aria-label="قیمت فروش ' + esc(plan.nameFa) + ' به تومان"></label></div><button class="btn mini plan-save" type="button" disabled>ذخیره قیمت‌ها</button><div class="plan-result" aria-live="polite">' + summary(plan.priceToman, plan.compareAtPriceToman) + '</div><div class="plan-price-fields">' + offerField(1, plan.offerFirstKind, plan.offerFirstValue) + offerField(2, plan.offerSecondKind, plan.offerSecondValue) + '</div><button class="btn mini offer-save" type="button">ذخیره پیشنهاد این پلن</button><div class="offer-result" aria-live="polite"></div></article>').join("") + '</div>';
+  $("#offerEnabled").onchange = async (event) => {
+    const enabled = event.target.checked;
+    try { await api("/offer", { method: "POST", body: { enabled } }); plansData = plans.map((p) => ({ ...p, offerEnabled: enabled })); $("#offerStatus").textContent = "ذخیره شد"; }
+    catch (error) { event.target.checked = !enabled; $("#offerStatus").textContent = error.message || "ذخیره نشد"; }
+  };
   $("#plansResults").querySelectorAll(".plan-card").forEach((card) => {
     const plan = plans.find((item) => item.id === card.dataset.planId);
     const saleInput = card.querySelector(".plan-sale-price"), originalInput = card.querySelector(".plan-original-price"), button = card.querySelector(".plan-save"), result = card.querySelector(".plan-result");
@@ -487,9 +493,20 @@ function renderPlans(plans) {
       button.disabled = true; result.textContent = "در حال ذخیره…";
       try {
         const response = await api("/plans/" + encodeURIComponent(plan.id), { method: "POST", body: { priceToman: sale, compareAtPriceToman: original } });
-        plansData = plans.map((item) => item.id === response.plan.id ? response.plan : item);
+        plansData = plansData.map((item) => item.id === response.plan.id ? response.plan : item);
         renderPlans(plansData);
       } catch (error) { result.textContent = error.message || "ذخیره قیمت انجام نشد"; button.disabled = false; }
+    };
+    card.querySelector(".offer-save").onclick = async () => {
+      const rule = (stage) => ({ kind: card.querySelector(".offer-kind-" + stage).value, value: Number(card.querySelector(".offer-value-" + stage).value) });
+      const first = rule(1), second = rule(2), status = card.querySelector(".offer-result");
+      const valid = [first, second].every((r) => Number.isInteger(r.value) && r.value >= 0 && r.value <= (r.kind === "percent" ? 100 : 1000000000));
+      if (!valid) { status.textContent = "مقدار تخفیف معتبر نیست."; return; }
+      try {
+        const response = await api("/plans/" + encodeURIComponent(plan.id) + "/offer", { method: "POST", body: { first, second } });
+        plansData = plansData.map((item) => item.id === response.plan.id ? response.plan : item);
+        status.textContent = "ذخیره شد";
+      } catch (error) { status.textContent = error.message || "ذخیره نشد"; }
     };
   });
 }

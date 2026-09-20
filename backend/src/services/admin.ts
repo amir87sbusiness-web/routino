@@ -313,6 +313,32 @@ export async function adminUpdatePlanPrice(
   return { ok: true as const, plan };
 }
 
+export type OfferRule = { kind: "percent" | "fixed"; value: number };
+export async function adminUpdatePlanOffer(
+  db: Database,
+  id: string,
+  first: OfferRule,
+  second: OfferRule,
+) {
+  const [plan] = await db
+    .update(plans)
+    .set({
+      offerFirstKind: first.kind,
+      offerFirstValue: first.value,
+      offerSecondKind: second.kind,
+      offerSecondValue: second.value,
+    })
+    .where(eq(plans.id, id))
+    .returning();
+  if (!plan) throw notFound("unknown_plan", "No such plan");
+  return { ok: true as const, plan };
+}
+
+export async function adminSetOfferEnabled(db: Database, enabled: boolean) {
+  await db.update(plans).set({ offerEnabled: enabled });
+  return { ok: true as const, enabled };
+}
+
 export async function adminListDiscounts(db: Database) {
   return db.select().from(discounts).orderBy(discounts.code);
 }

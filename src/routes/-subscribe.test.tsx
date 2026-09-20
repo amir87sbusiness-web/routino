@@ -158,6 +158,42 @@ describe("SubscribePage payment attempts", () => {
     expect(host.textContent).not.toContain("تومان به‌صرفه‌تر");
   });
 
+  it("shows a first-use offer and discount from cached plan data without a quote request", async () => {
+    app.db!.subscription = {
+      planId: "trial",
+      startedAt: Date.now() - 60_000,
+      expiresAt: Date.now() + 2 * 86_400_000,
+      trial: true,
+    };
+    payments.fetchPlans.mockResolvedValueOnce({
+      plans: [
+        {
+          id: "m3",
+          nameFa: "سه‌ماهه",
+          nameEn: "3 Months",
+          months: 3,
+          price: 549_000,
+          originalPrice: null,
+          offer: {
+            first: { kind: "percent", value: 20 },
+            second: { kind: "fixed", value: 50_000 },
+          },
+        },
+      ],
+      offer: null,
+    });
+    await act(async () => {
+      root.unmount();
+      root = createRoot(host);
+      root.render(<SubscribePage />);
+      await Promise.resolve();
+    });
+    expect(host.textContent).toContain("پیشنهاد خرید اول");
+    expect(host.textContent).toContain("۴۳۹,۲۰۰");
+    expect(host.textContent).toContain("تخفیف:");
+    expect(payments.fetchQuote).not.toHaveBeenCalled();
+  });
+
   it("applies one code to every eligible plan and keeps ineligible plans unchanged", async () => {
     payments.fetchQuote.mockImplementation(async (planId: string) => {
       const quotes = {

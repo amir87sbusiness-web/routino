@@ -14,6 +14,12 @@ export const planRoutes: FastifyPluginAsync = async (app) => {
         months: p.months,
         price: p.priceToman, // Toman, matching the existing client `Plan` shape
         originalPrice: p.compareAtPriceToman,
+        offer: p.offerEnabled
+          ? {
+              first: { kind: p.offerFirstKind, value: p.offerFirstValue },
+              second: { kind: p.offerSecondKind, value: p.offerSecondValue },
+            }
+          : null,
       })),
       offer: null as null | { label: string; percent: number; until: number },
     };

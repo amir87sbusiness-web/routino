@@ -42,7 +42,9 @@ import {
   adminListPlans,
   adminOverview,
   adminSetPassword,
+  adminSetOfferEnabled,
   adminUpdateDiscount,
+  adminUpdatePlanOffer,
   adminUpdatePlanPrice,
   adminUserDetail,
 } from "../shared/services/admin.ts";
@@ -102,6 +104,11 @@ const planPriceBody = z.object({
   priceToman: z.number().int().min(1_000).max(1_000_000_000),
   compareAtPriceToman: z.number().int().min(1_000).max(1_000_000_000).nullable(),
 });
+const offerRuleBody = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("percent"), value: z.number().int().min(0).max(100) }),
+  z.object({ kind: z.literal("fixed"), value: z.number().int().min(0).max(1_000_000_000) }),
+]);
+const planOfferBody = z.object({ first: offerRuleBody, second: offerRuleBody });
 
 const queryNumber = (value: string | undefined): number | undefined => {
   if (value == null || value.trim() === "") return undefined;
@@ -291,6 +298,20 @@ export function adminRoutes(deps: Deps) {
   });
 
   r.get("/admin/plans", async (c) => c.json({ plans: await adminListPlans(db) }));
+
+  r.post("/admin/offer", async (c) =>
+    c.json(
+      await adminSetOfferEnabled(
+        db,
+        z.object({ enabled: z.boolean() }).parse(await readJson(c)).enabled,
+      ),
+    ),
+  );
+
+  r.post("/admin/plans/:id/offer", async (c) => {
+    const body = planOfferBody.parse(await readJson(c));
+    return c.json(await adminUpdatePlanOffer(db, c.req.param("id"), body.first, body.second));
+  });
 
   r.post("/admin/plans/:id", async (c) => {
     const body = planPriceBody.parse(await readJson(c));

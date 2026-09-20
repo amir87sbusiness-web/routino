@@ -174,6 +174,11 @@ export const plans = pgTable(
     /** Optional crossed-out reference price for a simple, untimed sale display.
      * Checkout always charges priceToman; this value is presentation metadata. */
     compareAtPriceToman: integer("compare_at_price_toman"),
+    offerEnabled: boolean("offer_enabled").notNull().default(false),
+    offerFirstKind: text("offer_first_kind").notNull().default("percent"),
+    offerFirstValue: integer("offer_first_value").notNull().default(0),
+    offerSecondKind: text("offer_second_kind").notNull().default("percent"),
+    offerSecondValue: integer("offer_second_value").notNull().default(0),
     active: boolean("active").notNull().default(true),
   },
   (t) => [

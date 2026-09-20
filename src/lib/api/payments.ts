@@ -15,6 +15,10 @@ export interface ServerPlan {
   months: number;
   price: number; // Toman
   originalPrice: number | null;
+  offer?: null | {
+    first: { kind: "percent" | "fixed"; value: number };
+    second: { kind: "percent" | "fixed"; value: number };
+  };
 }
 
 export interface PlansResponse {
@@ -22,7 +26,7 @@ export interface PlansResponse {
   offer: null | { label: string; percent: number; until: number };
 }
 
-const PLANS_CACHE_KEY = "routino:plans:v1";
+const PLANS_CACHE_KEY = "routino:plans:v2";
 export const PLANS_CACHE_TTL_MS = 12 * 60 * 60_000;
 const QUOTE_BATCH_CACHE_TTL_MS = 60_000;
 
@@ -64,7 +68,8 @@ function isPlansResponse(value: unknown): value is PlansResponse {
 }
 
 function cacheExpiry(value: PlansResponse, now: number): number {
-  const normalExpiry = now + PLANS_CACHE_TTL_MS;
+  const normalExpiry =
+    now + (value.plans.some((plan) => plan.offer) ? 15 * 60_000 : PLANS_CACHE_TTL_MS);
   if (!value.offer) return normalExpiry;
   if (value.offer.until <= now) return now;
   return Math.min(normalExpiry, value.offer.until);

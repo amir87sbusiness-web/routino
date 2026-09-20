@@ -54,6 +54,7 @@ function SubscribePage() {
   const [payError, setPayError] = useState("");
   const [needsLogin, setNeedsLogin] = useState(false);
   const [freeSuccess, setFreeSuccess] = useState(false);
+  const [clock, setClock] = useState(Date.now());
   const codeCheckInFlight = useRef(false);
   const paymentInFlight = useRef(false);
   const paymentAttempt = useRef<{ id: string; key: string } | null>(null);
@@ -99,15 +100,44 @@ function SubscribePage() {
     [],
   );
 
+  // Display clock only. It never talks to the server.
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   if (!ctx?.db) return null;
   const { db, applyEntitlement, t, lang, cal } = ctx;
 
   const active = subscriptionActive(db);
+  const trialStart = db.subscription?.trial ? db.subscription.startedAt : null;
+  const offerElapsed = trialStart == null ? -1 : clock - trialStart;
+  const offerStage =
+    offerElapsed >= 0 && offerElapsed < 3 * 86_400_000
+      ? 1
+      : offerElapsed >= 3 * 86_400_000 && offerElapsed < 7 * 86_400_000
+        ? 2
+        : null;
+  const offerUntil =
+    offerStage && trialStart ? trialStart + (offerStage === 1 ? 3 : 7) * 86_400_000 : null;
+  const offerPrice = (plan: ServerPlan): number | null => {
+    if (!offerStage || !plan.offer) return null;
+    const rule = offerStage === 1 ? plan.offer.first : plan.offer.second;
+    return Math.max(
+      0,
+      rule.kind === "fixed"
+        ? plan.price - rule.value
+        : Math.round((plan.price * (100 - rule.value)) / 100),
+    );
+  };
   /** Display-only. The charged amount is recomputed server-side at checkout. */
   const priceOf = (planId: string) => {
     const plan = plans.find((p) => p.id === planId);
     if (!plan) return 0;
-    return appliedCode?.finalPriceByPlan[planId] ?? plan.price;
+    return Math.min(
+      appliedCode?.finalPriceByPlan[planId] ?? plan.price,
+      offerPrice(plan) ?? plan.price,
+    );
   };
 
   const explainReason = (reason?: string): string => {
@@ -337,13 +367,29 @@ function SubscribePage() {
       </div>
 
       <div className="flex flex-col gap-2.5">
+        {offerUntil &&
+          plans.some(
+            (plan) =>
+              plan.offer &&
+              (offerStage === 1 ? plan.offer.first.value : plan.offer.second.value) > 0,
+          ) && (
+            <p className="text-center text-xs font-medium text-primary">
+              {t("پیشنهاد خرید اول · مرحله ", "First purchase offer · stage ")}
+              {faNum(offerStage!, lang)}
+              {" · "}
+              {t("زمان باقی‌مانده: ", "Time left: ")}
+              {faNum(Math.ceil((offerUntil - clock) / 3_600_000), lang)} {t("ساعت", "hours")}
+            </p>
+          )}
         {PLAN_PRESENTATION.map((presentation) => {
           const plan = plans.find((item) => item.id === presentation.id);
           const final = plan ? priceOf(plan.id) : null;
           const referencePrice = plan
-            ? plan.originalPrice != null && plan.originalPrice > plan.price
-              ? plan.originalPrice
-              : plan.price
+            ? final != null && final < plan.price
+              ? plan.price
+              : plan.originalPrice != null && plan.originalPrice > plan.price
+                ? plan.originalPrice
+                : plan.price
             : null;
           return (
             <button
@@ -384,6 +430,13 @@ function SubscribePage() {
                     {referencePrice != null && final < referencePrice && (
                       <p className="text-[10px] text-muted-foreground line-through">
                         {faNum(referencePrice.toLocaleString("en-US"), lang)}
+                      </p>
+                    )}
+                    {final < plan.price && (
+                      <p className="text-[10px] text-primary">
+                        {t("تخفیف: ", "Discount: ")}
+                        {faNum((plan.price - final).toLocaleString("en-US"), lang)}{" "}
+                        {t("تومان", "Toman")}
                       </p>
                     )}
                     <p className="text-sm font-black text-foreground">

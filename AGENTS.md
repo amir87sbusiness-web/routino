@@ -1,7 +1,9 @@
 # Routino — single project guide
+
 Updated 2026-09-07. Read this, then only relevant source files; do not re-analyze the repo. Explain in plain Persian. This replaces the old project documentation.
 
 ## Rules
+
 - Keep changes narrow; check git status and preserve unrelated edits.
 - Windows worktree cleanup: detach dependency junctions without traversing them before recursive deletion.
 - Production has real users. Never delete/reset their data for tests or print secrets.
@@ -15,6 +17,7 @@ Updated 2026-09-07. Read this, then only relevant source files; do not re-analyz
 - Keep this guide current; do not add more project documentation files.
 
 ## Source map
+
 - UI: src/routes/ (TanStack file routing), src/routes/__root.tsx, src/components/AppShell.tsx; preserve Outlet. No Next.js pages/layout conventions.
 - Local state: AppProvider, src/lib/db/{local,persist,hydrate,diff,migrate,vault}.ts; product logic src/lib/logic.ts.
 - Access/API: src/lib/access-state.ts, src/lib/api/; sync client src/lib/sync/engine.ts.
@@ -31,6 +34,7 @@ Updated 2026-09-07. Read this, then only relevant source files; do not re-analyz
 - Tests: beside frontend sources, backend/test/, supabase/tests/.
 
 ## Commands and deployment
+
 - Dev: npm run dev (:5173), npm --prefix backend run dev (:3000; /admin).
 - Frontend: npm test; npm run build (includes landing).
 - Backend: npm --prefix backend run typecheck; npm --prefix backend test -- --maxWorkers=1.
@@ -48,6 +52,7 @@ Updated 2026-09-07. Read this, then only relevant source files; do not re-analyz
 - Before production SQL: usable backup plus isolated restore/precheck. Never guess migration application from local files.
 
 ## Data contracts
+
 - AppProvider holds one Db. Immutable changes -> diffDb/applyChanges -> Dexie dirty rows/tombstones.
 - Product update(fn) requires active trial/paid; expired remains readable. Server none -> activation.
 - Sticky tampered clears only with authoritative entitlement/payment; default category updatedAt:0 is intentional.
@@ -65,6 +70,7 @@ Updated 2026-09-07. Read this, then only relevant source files; do not re-analyz
 - Backup/export/import UI is temporarily disabled by BACKUP_UI in src/lib/backup.ts; implementations remain for reactivation. Import policy stays active-paid only. Content reset is not account deletion.
 
 ## Auth and payment invariants
+
 - OTP TTL120s, cap5 attempts; consume conditionally with consumed_at IS NULL RETURNING.
 - claimSendSlot locks IP then phone in one transaction; count in a separate SQL statement after locks.
 - Same-statement advisory-lock CTE has stale READ COMMITTED snapshot under concurrency. Do not restore it.
@@ -73,6 +79,8 @@ Updated 2026-09-07. Read this, then only relevant source files; do not re-analyz
 - New passwords use case-insensitive scrypt-ci hashes. Legacy scrypt hashes need one exact-case login (or password reset); successful login conditionally upgrades the hash without overwriting a concurrent password change. Do not roll back to a reader without scrypt-ci support after these hashes exist.
 - 2026-09-07 password/backup release: signed Android versionCode7 (versionName1.0), APK SHA256 29aae285b721e8c71c7778133eb51f78dfe8ae1dcb3646f2ee7707b37d724b0e. Backup UI disabled, shared legal/landing mentions removed. API source delta limited to routes/auth.ts and shared/services/password.ts; no schema migration.
 - Client sends plan/code; server owns amount, entitlement and PSP result. Toman->Rial only in pricing.ts.
+- First-purchase Offer starts at the first trial grant, has 3-day and 4-day stages, and ends after any paid payment. Per-plan rules and global enable flag live on plans; checkout chooses the larger of Offer and code, never stacks them.
+- Paywall derives its countdown from the local trial timestamp and cached /plans data; no countdown network requests. Offer schema is in 20260920064223_first_purchase_offer.sql and must be applied before an API version that reads those columns.
 - Verify exact PSP amount before atomic grant. Preserve ambiguous/nonterminal payments for recovery.
 - Checkout and Verify share PSP_PROVIDER_MAX_CONCURRENCY leases. Release in finally; no DB transaction over network.
 - Callback/poll/recovery obey nextVerifyAt. Known pending callback keeps payment ID for app polling.
@@ -82,6 +90,7 @@ Updated 2026-09-07. Read this, then only relevant source files; do not re-analyz
 - App opening reconciles bounded open payments; it is not an unrestricted recovery sweep.
 
 ## Cost changes and pending archive rollout
+
 - Activity is now in exchange pull CTE, physical write at most once/Tehran day.
 - Local1000-account/6000-exchange fixture:17000->11000 top-level SQL (-35.3%);1000empty exchanges:2000->1000.
 - These are synthetic local SQL counts, not production capacity or billing guarantees.
@@ -95,6 +104,7 @@ Updated 2026-09-07. Read this, then only relevant source files; do not re-analyz
 - After any v2 archive exists, do not roll back to a v1-only reader. Archive migration is separate from launch fixes.
 
 ## Verified release state — recheck next time
+
 - Audit branch codex/reduce-sync-storage-cost, base06d8fec; cost/launch changes uncommitted.
 - 2026-09-07: backend520 tests; Edge117passed/9opt-in skipped; real local PostgreSQL stress8passed, fake providers.
 - Stress:1000sync+50login+20checkout; same OTP accepted once; same-phone slot once; Verifycapacity1 peak1.

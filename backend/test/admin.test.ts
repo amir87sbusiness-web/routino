@@ -228,6 +228,40 @@ describe("admin endpoints", () => {
     expect(stored).toEqual({ price_toman: 199000, compare_at_price_toman: 250000 });
   });
 
+  it("updates each stage's rule and the global Offer switch through Admin", async () => {
+    const changed = await h.app.inject({
+      method: "POST",
+      url: "/v1/admin/plans/m1/offer",
+      headers: admin,
+      payload: { first: { kind: "percent", value: 25 }, second: { kind: "fixed", value: 5000 } },
+    });
+    expect(changed.statusCode).toBe(200);
+    expect(changed.json().plan).toMatchObject({
+      offerFirstKind: "percent",
+      offerFirstValue: 25,
+      offerSecondKind: "fixed",
+      offerSecondValue: 5000,
+    });
+    const enabled = await h.app.inject({
+      method: "POST",
+      url: "/v1/admin/offer",
+      headers: admin,
+      payload: { enabled: true },
+    });
+    expect(enabled.statusCode).toBe(200);
+    const [stored] = await h.query<{ offer_enabled: boolean }>(
+      "select offer_enabled from plans where id = 'm1'",
+    );
+    expect(stored?.offer_enabled).toBe(true);
+    const invalid = await h.app.inject({
+      method: "POST",
+      url: "/v1/admin/plans/m1/offer",
+      headers: admin,
+      payload: { first: { kind: "percent", value: 101 }, second: { kind: "fixed", value: 5000 } },
+    });
+    expect(invalid.statusCode).toBe(400);
+  });
+
   it("does not expose account blocking", async () => {
     const { user, access } = await signIn();
 

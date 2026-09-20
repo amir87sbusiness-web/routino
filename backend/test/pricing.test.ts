@@ -43,11 +43,45 @@ describe("quote", () => {
     expect(q.finalRial).toBe(1192000);
   });
 
-  it("stacks an offer then a discount, matching the UI's order", async () => {
+  it("does not stack an unrelated caller-supplied offer percentage", async () => {
     await h.raw(`insert into discounts (code, percent) values ('ROUTINO20', 20)`);
     const q = await quote(h.db, "m3", "ROUTINO20", USER, PHONE, NOW, 10);
-    // 149000 -> 134100 (offer) -> 107280 (code)
-    expect(q.finalToman).toBe(107280);
+    expect(q.finalToman).toBe(119200);
+  });
+
+  it("starts at the first trial grant, switches stages, and ends after a paid payment", async () => {
+    await h.raw(`update plans set offer_enabled = true, offer_first_kind = 'percent', offer_first_value = 30,
+      offer_second_kind = 'fixed', offer_second_value = 10000 where id = 'm3'`);
+    expect((await quote(h.db, "m3", null, USER, PHONE, NOW)).offerStage).toBeNull();
+    await h.raw(
+      `insert into grants (user_id, source, created_at) values ('${USER}', 'trial', '2026-07-14T00:00:00Z')`,
+    );
+    const first = await quote(h.db, "m3", null, USER, PHONE, NOW);
+    expect(first).toMatchObject({ offerStage: 1, finalToman: 104300, offerAmountToman: 44700 });
+    const second = await quote(h.db, "m3", null, USER, PHONE, new Date("2026-07-18T00:00:00Z"));
+    expect(second).toMatchObject({ offerStage: 2, finalToman: 139000, offerAmountToman: 10000 });
+    await h.raw(`insert into payments (user_id, plan_id, months, amount_toman, amount_rial, status)
+      values ('${USER}', 'm1', 1, 59000, 590000, 'paid')`);
+    expect((await quote(h.db, "m3", null, USER, PHONE, NOW)).offerStage).toBeNull();
+  });
+
+  it("does not restore the Offer when a successful payment survives in the grant ledger", async () => {
+    await h.raw(`update plans set offer_enabled = true, offer_first_value = 30 where id = 'm3'`);
+    await h.raw(`insert into grants (user_id, source, created_at) values
+      ('${USER}', 'trial', '2026-07-14T00:00:00Z'), ('${USER}', 'payment', '2026-07-14T12:00:00Z')`);
+    expect((await quote(h.db, "m3", null, USER, PHONE, NOW)).offerStage).toBeNull();
+  });
+
+  it("chooses the better code or offer without stacking or redeeming a losing code", async () => {
+    await h.raw(`update plans set offer_enabled = true, offer_first_value = 30 where id = 'm3'`);
+    await h.raw(
+      `insert into grants (user_id, source, created_at) values ('${USER}', 'trial', '2026-07-14T00:00:00Z')`,
+    );
+    await h.raw(`insert into discounts (code, percent) values ('LESS20', 20), ('MORE40', 40)`);
+    const offer = await quote(h.db, "m3", "LESS20", USER, PHONE, NOW);
+    expect(offer).toMatchObject({ finalToman: 104300, discountCode: null, offerStage: 1 });
+    const code = await quote(h.db, "m3", "MORE40", USER, PHONE, NOW);
+    expect(code).toMatchObject({ finalToman: 89400, discountCode: "MORE40", offerStage: null });
   });
 
   it("ignores an invalid code rather than failing checkout", async () => {
