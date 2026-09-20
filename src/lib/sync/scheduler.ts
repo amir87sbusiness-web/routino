@@ -1,8 +1,8 @@
 import { loadSyncState, type SyncOptions } from "./engine";
 
-export const EDIT_SYNC_DELAY_MS = 60_000;
-export const FOREGROUND_SYNC_COOLDOWN_MS = 10 * 60_000;
-export const FOREGROUND_MIN_BACKGROUND_MS = 2 * 60_000;
+export const EDIT_SYNC_DELAY_MS = 90_000;
+export const FOREGROUND_SYNC_COOLDOWN_MS = 15 * 60_000;
+export const FOREGROUND_MIN_BACKGROUND_MS = 5 * 60_000;
 export const BOOT_SYNC_STALE_MS = 10 * 60_000;
 
 export interface SyncSchedulerDeps {
@@ -112,7 +112,7 @@ export function createSyncScheduler({
 
       // A brief app/tab switch is common and almost never worth a server
       // invocation. Longer absences can pull, but still respect the shared
-      // ten-minute freshness window below.
+      // fifteen-minute freshness window below.
       if (backgrounded !== undefined && now() - backgrounded < FOREGROUND_MIN_BACKGROUND_MS) {
         return;
       }

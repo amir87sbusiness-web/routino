@@ -43,7 +43,7 @@ describe("landing build script", () => {
       writeFileSync(
         `${apk}.json`,
         JSON.stringify({
-          versionCode: 16,
+          versionCode: 17,
           bytes: statSync(apk).size,
           sha256: createHash("sha256").update(readFileSync(apk)).digest("hex"),
         }),
@@ -100,14 +100,14 @@ describe("landing build script", () => {
       assert.equal(existsSync(join(sandbox, "dist", "favicon.ico")), true);
       assert.deepEqual(
         JSON.parse(readFileSync(join(sandbox, "dist", "app", "android-update.json"), "utf8")),
-        { versionCode: 16 },
+        { versionCode: 17 },
       );
 
       writeFileSync(
         join(sandbox, "android", "app", "build.gradle"),
         readFileSync(join(sandbox, "android", "app", "build.gradle"), "utf8").replace(
-          "versionCode 16",
           "versionCode 17",
+          "versionCode 18",
         ),
       );
       const mismatchedRelease = spawnSync(process.execPath, ["scripts/build-landing.mjs"], {

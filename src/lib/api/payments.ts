@@ -23,7 +23,7 @@ export interface PlansResponse {
 }
 
 const PLANS_CACHE_KEY = "routino:plans:v1";
-export const PLANS_CACHE_TTL_MS = 6 * 60 * 60_000;
+export const PLANS_CACHE_TTL_MS = 12 * 60 * 60_000;
 const QUOTE_BATCH_CACHE_TTL_MS = 60_000;
 
 interface PlansCacheEntry {

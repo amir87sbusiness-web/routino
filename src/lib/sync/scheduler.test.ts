@@ -21,14 +21,14 @@ describe("lifecycle sync scheduler", () => {
     lastSyncedAt.mockClear().mockResolvedValue(0);
   });
 
-  it("uses the configured trailing edit window", async () => {
+  it("uses a trailing ninety-second edit window", async () => {
     const scheduler = makeScheduler();
     scheduler.markDirty("u1");
-    await vi.advanceTimersByTimeAsync(EDIT_SYNC_DELAY_MS - 1);
+    await vi.advanceTimersByTimeAsync(90_000 - 1);
     expect(flush).not.toHaveBeenCalled();
 
     scheduler.markDirty("u1");
-    await vi.advanceTimersByTimeAsync(EDIT_SYNC_DELAY_MS - 1);
+    await vi.advanceTimersByTimeAsync(90_000 - 1);
     expect(flush).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
     expect(flush).toHaveBeenCalledTimes(1);
@@ -95,7 +95,7 @@ describe("lifecycle sync scheduler", () => {
     const scheduler = makeScheduler();
 
     await scheduler.flushNow("u1", { pullRequired: false });
-    await vi.advanceTimersByTimeAsync(FOREGROUND_MIN_BACKGROUND_MS - 1);
+    await vi.advanceTimersByTimeAsync(5 * 60_000 - 1);
     await scheduler.onForeground("u1");
 
     expect(flush).not.toHaveBeenCalled();
@@ -106,14 +106,14 @@ describe("lifecycle sync scheduler", () => {
     const scheduler = makeScheduler();
 
     await scheduler.flushNow("u1", { pullRequired: false });
-    await vi.advanceTimersByTimeAsync(FOREGROUND_MIN_BACKGROUND_MS);
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
     await scheduler.onForeground("u1");
 
     expect(flush).toHaveBeenCalledTimes(1);
     expect(flush).toHaveBeenCalledWith("u1", { pullRequired: true });
   });
 
-  it("coalesces redundant clean foreground pulls for ten minutes", async () => {
+  it("coalesces redundant clean foreground pulls for fifteen minutes", async () => {
     hasPending.mockResolvedValue(false);
     const scheduler = makeScheduler();
 
@@ -121,7 +121,7 @@ describe("lifecycle sync scheduler", () => {
     await scheduler.onForeground("u1");
     expect(flush).toHaveBeenCalledTimes(1);
 
-    await vi.advanceTimersByTimeAsync(FOREGROUND_SYNC_COOLDOWN_MS - 1);
+    await vi.advanceTimersByTimeAsync(15 * 60_000 - 1);
     await scheduler.onForeground("u1");
     expect(flush).toHaveBeenCalledTimes(1);
 

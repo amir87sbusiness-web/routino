@@ -2,18 +2,49 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "./client";
 
 const auth = vi.hoisted(() => ({ authedRequest: vi.fn() }));
+const client = vi.hoisted(() => ({ apiRequest: vi.fn() }));
 
 vi.mock("./auth", () => auth);
+vi.mock("./client", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./client")>()),
+  apiRequest: client.apiRequest,
+}));
 
-import { checkout, checkoutWithProviderBusyRetry } from "./payments";
+import { checkout, checkoutWithProviderBusyRetry, fetchPlans } from "./payments";
 
 describe("payment checkout API", () => {
   beforeEach(() => {
+    localStorage.clear();
+    client.apiRequest.mockReset().mockResolvedValue({
+      plans: [
+        {
+          id: "m3",
+          nameFa: "سه‌ماهه",
+          nameEn: "3 Months",
+          months: 3,
+          price: 100_000,
+          originalPrice: null,
+        },
+      ],
+      offer: null,
+    });
     auth.authedRequest.mockReset().mockResolvedValue({
       free: false,
       paymentId: "payment-1",
       paymentUrl: "https://gateway.test/payment",
     });
+  });
+
+  it("keeps a non-promotional plan response local for twelve hours", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-20T00:00:00Z"));
+
+    await fetchPlans();
+    await vi.advanceTimersByTimeAsync(6 * 60 * 60_000 + 1);
+    await fetchPlans();
+
+    expect(client.apiRequest).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
   });
 
   it("sends the idempotency key but no amount, entitlement, or merchant secret", async () => {
