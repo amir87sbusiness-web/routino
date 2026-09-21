@@ -87,6 +87,14 @@ function RootComponent() {
     };
   }, []);
 
+  useEffect(() => {
+    const preventPresentationContextMenu = (event: MouseEvent) => {
+      if (!allowsNativeSelection(event.target)) event.preventDefault();
+    };
+    document.addEventListener("contextmenu", preventPresentationContextMenu);
+    return () => document.removeEventListener("contextmenu", preventPresentationContextMenu);
+  }, []);
+
   return (
     <AppProvider>
       {/* این Outlet محل قرارگیری صفحات فرزند است */}

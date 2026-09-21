@@ -184,6 +184,35 @@ describe("TaskRow completion transitions", () => {
     expect(onCompletionChange).toHaveBeenCalledWith(true);
   });
 
+  it("keeps a checkbox tap independent from a horizontal row gesture", () => {
+    const onUpdate = vi.fn(() => true);
+    renderRow(onUpdate, vi.fn());
+
+    const checkbox = host.querySelector<HTMLButtonElement>(
+      'button[aria-label="Toggle task completion"]',
+    )!;
+    expect(checkbox.className).toContain("h-11");
+    expect(checkbox.className).toContain("w-11");
+    const pointer = (type: string, clientX: number) => {
+      const event = new Event(type, { bubbles: true, cancelable: true });
+      Object.defineProperties(event, {
+        pointerId: { value: 1 },
+        clientX: { value: clientX },
+        clientY: { value: 0 },
+      });
+      return event;
+    };
+
+    act(() => {
+      checkbox.dispatchEvent(pointer("pointerdown", 0));
+      checkbox.dispatchEvent(pointer("pointermove", 12));
+      checkbox.dispatchEvent(pointer("pointerup", 12));
+      checkbox.click();
+    });
+
+    expect(onUpdate).toHaveBeenCalledWith({ done: true, value: 1 });
+  });
+
   it("opens editing without toggling completion", () => {
     const onUpdate = vi.fn(() => true);
     const onEdit = vi.fn();
@@ -254,6 +283,110 @@ describe("TaskFormModal measurement controls", () => {
     expect(document.body.textContent).toContain("Count (number)");
     expect(document.body.textContent).toContain("Time (hr/min/sec)");
     expect(document.body.textContent).toContain("Deadline");
+  });
+
+  it("closes an open deadline picker when the deadline is removed", () => {
+    function Harness() {
+      const [draft, setDraft] = useState(() => emptyTaskDraft("2026-09-19"));
+      return (
+        <TaskFormModal
+          open
+          draft={draft}
+          setDraft={setDraft}
+          onClose={() => undefined}
+          onSave={() => undefined}
+          cal="gregorian"
+          lang="en"
+          t={(_fa, en) => en}
+        />
+      );
+    }
+    act(() => root.render(<Harness />));
+
+    const deadlineSwitch = document.body.querySelector<HTMLButtonElement>(
+      'button[role="switch"][aria-label="Deadline"]',
+    )!;
+    act(() => deadlineSwitch.click());
+    act(() =>
+      Array.from(document.body.querySelectorAll("button"))
+        .find((button) => button.textContent === "18:00")!
+        .click(),
+    );
+    expect(document.body.textContent).toContain("24-hour format");
+
+    act(() => deadlineSwitch.click());
+    act(() => deadlineSwitch.click());
+
+    expect(document.body.textContent).not.toContain("24-hour format");
+  });
+
+  it("closes an open deadline date picker when the deadline is removed", () => {
+    function Harness() {
+      const [draft, setDraft] = useState(() => emptyTaskDraft("2026-09-19"));
+      return (
+        <TaskFormModal
+          open
+          draft={draft}
+          setDraft={setDraft}
+          onClose={() => undefined}
+          onSave={() => undefined}
+          cal="gregorian"
+          lang="en"
+          t={(_fa, en) => en}
+        />
+      );
+    }
+    act(() => root.render(<Harness />));
+
+    const deadlineSwitch = document.body.querySelector<HTMLButtonElement>(
+      'button[role="switch"][aria-label="Deadline"]',
+    )!;
+    act(() => deadlineSwitch.click());
+    const deadlineDateButton = Array.from(document.body.querySelectorAll("button"))
+      .filter((button) => button.textContent?.includes("September 19"))
+      .at(-1)!;
+    act(() => deadlineDateButton.click());
+    expect(document.body.querySelector('button[aria-label="prev-month"]')).not.toBeNull();
+
+    act(() => deadlineSwitch.click());
+    act(() => deadlineSwitch.click());
+
+    expect(document.body.querySelector('button[aria-label="prev-month"]')).toBeNull();
+  });
+
+  it("keeps the reminder picker closed after a reminder is removed and re-enabled", () => {
+    function Harness() {
+      const [draft, setDraft] = useState(() => emptyTaskDraft("2026-09-19"));
+      return (
+        <TaskFormModal
+          open
+          draft={draft}
+          setDraft={setDraft}
+          onClose={() => undefined}
+          onSave={() => undefined}
+          cal="gregorian"
+          lang="en"
+          t={(_fa, en) => en}
+        />
+      );
+    }
+    act(() => root.render(<Harness />));
+
+    const reminderSwitch = document.body.querySelector<HTMLButtonElement>(
+      'button[role="switch"][aria-label="Reminder"]',
+    )!;
+    act(() => reminderSwitch.click());
+    act(() =>
+      Array.from(document.body.querySelectorAll("button"))
+        .find((button) => button.textContent === "09:00")!
+        .click(),
+    );
+    expect(document.body.textContent).toContain("24-hour format");
+
+    act(() => reminderSwitch.click());
+    act(() => reminderSwitch.click());
+
+    expect(document.body.textContent).not.toContain("24-hour format");
   });
 });
 

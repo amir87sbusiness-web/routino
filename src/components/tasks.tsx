@@ -453,6 +453,10 @@ export function TaskFormModal({
               onClick={() => {
                 const deadlineOn = !draft.deadlineOn;
                 patchDraft({ deadlineOn, deadlineDate: draft.deadlineDate || draft.dateKey });
+                if (!deadlineOn) {
+                  setDeadlineDateOpen(false);
+                  setDeadlineTimeOpen(false);
+                }
               }}
               className={`relative h-6 w-11 rounded-full transition-colors ${draft.deadlineOn ? "bg-primary" : "bg-secondary"}`}
             >
@@ -669,7 +673,9 @@ export function TaskRow({
         <div className="flex items-center gap-3">
           <button
             onClick={() => toggleDone(!task.done)}
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 transition-all active:scale-90 ${
+            onPointerDown={(event) => event.stopPropagation()}
+            aria-label={t("تغییر وضعیت انجام کار", "Toggle task completion")}
+            className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 transition-all active:scale-90 ${
               task.done
                 ? "border-transparent text-white"
                 : "border-border text-transparent hover:border-primary"

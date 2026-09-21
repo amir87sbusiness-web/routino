@@ -10,9 +10,18 @@ import {
   triggerCompletionFeedback,
 } from "@/lib/completion-feedback";
 import { dateKey, faNum, todayKey } from "@/lib/dates";
-import { isAndroidNativeTimer, syncAndroidTimer } from "@/lib/android-timer-notification";
+import {
+  consumeAndroidTimerCommand,
+  isAndroidNativeTimer,
+  openAndroidNotificationSettings,
+  syncAndroidTimer,
+} from "@/lib/android-timer-notification";
 import { dueHabitsOn, getLog, isCompleted } from "@/lib/logic";
-import { requestNativePermission } from "@/lib/native-notifications";
+import {
+  checkNativeNotificationPermission,
+  requestNativePermission,
+  type NativePermissionState,
+} from "@/lib/native-notifications";
 import { recordTimerCompletion } from "@/lib/timer-credit";
 import {
   advanceTimer,
@@ -45,10 +54,13 @@ const FREE_PRESETS = [5, 10, 15, 20, 25, 30, 45, 60];
 /** چند دور از همان تنظیمِ انتخاب‌شده پشت سر هم اجرا شود. */
 const CYCLE_CHOICES = [1, 2, 3, 4, 6, 8, 10];
 
-function TimerPage() {
+export function TimerPage() {
   const ctx = useAppMaybe();
   const owner = ctx?.db?.auth?.userId ?? ctx?.db?.auth?.phone ?? null;
   const [timer, setTimer] = useState<TimerState>(createTimer);
+  const [timerNotificationPermission, setTimerNotificationPermission] = useState<
+    NativePermissionState | "checking"
+  >("checking");
   const timerRef = useRef(timer);
   const ownerRef = useRef<string | null>(null);
   const { mode, running, finished, linked, onBreak } = timer;
@@ -154,16 +166,16 @@ function TimerPage() {
     return timerRef.current;
   };
 
-  const finalizeSession = (save: boolean, feedbackEligible = false) => {
-    const current = settle(Date.now(), false);
+  const finalizeSession = (save: boolean, feedbackEligible = false, now = Date.now()) => {
+    const current = settle(now, false);
     let next = { ...current, running: false, anchorAt: null };
     if (save && !current.onBreak && current.focusMs >= 1000) {
       const item: TimerCompletion = {
         id: `${current.runId}:partial:${current.round}`,
         mode: current.mode,
         focusSeconds: Math.round(current.focusMs / 1000),
-        startedAt: current.sessionStartedAt ?? Date.now() - current.focusMs,
-        endedAt: Date.now(),
+        startedAt: current.sessionStartedAt ?? now - current.focusMs,
+        endedAt: now,
         linked: current.linked,
       };
       if (!applyCompletion(item, feedbackEligible))
@@ -303,22 +315,110 @@ function TimerPage() {
     });
   };
 
+  // The native plugin atomically consumes the command before returning it.
+  // Reconcile on both initial mount and foreground because Android can deliver
+  // an action while the WebView process is paused or already alive.
+  useEffect(() => {
+    if (!owner || !isAndroidNativeTimer()) return;
+    let cancelled = false;
+    const consume = async () => {
+      try {
+        const command = await consumeAndroidTimerCommand();
+        if (cancelled || !command) return;
+        const now = command.actedAt ?? Date.now();
+        if (command.action === "pause") {
+          publish(pauseTimer(settle(now, false), now));
+          return;
+        }
+        if (command.action === "finish") {
+          finalizeSession(true, true, now);
+          return;
+        }
+        finalizeSession(false, false, now);
+        const current = timerRef.current;
+        publish({
+          ...createTimer(mode, mode === "pomodoro" ? current.focusMinutes : current.freeMinutes, {
+            breakMinutes: current.breakMinutes,
+            cycles: current.cycles,
+            linked: current.linked,
+          }),
+          pending: current.pending,
+        });
+      } catch {
+        // The active timer remains safe in local storage if the native bridge is unavailable.
+      }
+    };
+    const onForeground = () => {
+      if (document.visibilityState === "visible") void consume();
+    };
+    void consume();
+    document.addEventListener("visibilitychange", onForeground);
+    window.addEventListener("focus", onForeground);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onForeground);
+      window.removeEventListener("focus", onForeground);
+    };
+  }, [owner, mode]);
+
+  useEffect(() => {
+    if (!isAndroidNativeTimer()) return;
+    let cancelled = false;
+    const refreshPermission = async () => {
+      try {
+        const permission = await checkNativeNotificationPermission();
+        if (!cancelled) setTimerNotificationPermission(permission);
+      } catch {
+        if (!cancelled) setTimerNotificationPermission("denied");
+      }
+    };
+    void refreshPermission();
+    const onForeground = () => {
+      if (document.visibilityState === "visible") void refreshPermission();
+    };
+    document.addEventListener("visibilitychange", onForeground);
+    window.addEventListener("focus", onForeground);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onForeground);
+      window.removeEventListener("focus", onForeground);
+    };
+  }, []);
+
+  const activateTimerNotification = async () => {
+    try {
+      // The displayed state may be stale while Android is returning from a
+      // permission dialog. Re-read it on this explicit tap before deciding
+      // whether to prompt or send the user to Settings.
+      const permissionBeforeAction = await checkNativeNotificationPermission();
+      if (permissionBeforeAction === "prompt") await requestNativePermission();
+      else if (permissionBeforeAction === "denied") await openAndroidNotificationSettings();
+      const permission = await checkNativeNotificationPermission();
+      setTimerNotificationPermission(permission);
+      if (timerRef.current.running) await syncAndroidTimer(timerRef.current);
+    } catch {
+      toast.warning("تنظیمات اعلان باز نشد؛ تایمر همچنان در پس‌زمینه ادامه دارد.");
+    }
+  };
+
   const toggleRunning = async () => {
     if (!timerRef.current.running && !ctxRef.current?.requestProductWrite()) return;
-    if (!timerRef.current.running && isAndroidNativeTimer()) {
-      try {
-        if (!(await requestNativePermission()))
-          toast.warning("برای نمایش تایمر در نوار اعلان، اجازهٔ اعلان‌های روتینو را فعال کنید.");
-      } catch {
-        toast.warning("اجازهٔ اعلان بررسی نشد؛ تایمر همچنان داخل برنامه کار می‌کند.");
-      }
-    }
+    const starting = !timerRef.current.running;
     publish(
       timerRef.current.running
         ? pauseTimer(timerRef.current, Date.now())
         : resumeTimer(timerRef.current, Date.now()),
     );
     flushPending();
+    // Permission is deliberately not requested on Start: the timer and its
+    // background service begin immediately even if the user dismisses it.
+    if (starting && isAndroidNativeTimer()) {
+      try {
+        setTimerNotificationPermission(await checkNativeNotificationPermission());
+      } catch {
+        setTimerNotificationPermission("denied");
+      }
+    }
   };
 
   const applyFreePreset = (m: number) => {
@@ -495,6 +595,20 @@ function TimerPage() {
             <RotateCcw className="h-5 w-5" aria-hidden="true" />
           </Button>
         </div>
+
+        {isAndroidNativeTimer() && running && timerNotificationPermission !== "granted" && (
+          <div className="flex max-w-sm items-center gap-2 rounded-xl bg-secondary px-3 py-2 text-xs text-muted-foreground">
+            <span className="flex-1">
+              {t(
+                "تایمر در پس‌زمینه ادامه دارد؛ برای دیدنش در نوار بالا اعلان را فعال کن.",
+                "The timer continues in the background. Enable notifications to show it in the status bar.",
+              )}
+            </span>
+            <Button variant="secondary" className="shrink-0" onClick={activateTimerNotification}>
+              {t("فعال‌کردن اعلان", "Enable notifications")}
+            </Button>
+          </div>
+        )}
 
         {mode === "pomodoro" && (
           <div className="flex flex-col items-center gap-2">
