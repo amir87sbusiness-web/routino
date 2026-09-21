@@ -16,12 +16,20 @@ const migrationSql = readFileSync(
   ),
   "utf8",
 );
+const deadlineCodecMigrationSql = readFileSync(
+  resolve(
+    fileURLToPath(new URL("../..", import.meta.url)),
+    "supabase/migrations/20260921140525_preserve_deadlines_in_record_codecs.sql",
+  ),
+  "utf8",
+);
 
 let h: Harness;
 
 beforeEach(async () => {
   h ??= await makeHarness();
   await h.truncate();
+  await h.raw(deadlineCodecMigrationSql);
 });
 afterAll(async () => h?.close());
 
@@ -55,6 +63,7 @@ const samples: Array<{ kind: StoredSyncKind; id: string; data: Record<string, un
       schedule: { kind: "weekdays", weekdays: [1, 3, 5] },
       monthlyGoal: 20,
       reminderTime: null,
+      deadlineTime: "19:45",
       createdAt: 10,
       archived: false,
     },
@@ -84,6 +93,7 @@ const samples: Array<{ kind: StoredSyncKind; id: string; data: Record<string, un
       done: true,
       note: "یادداشت",
       reminderAt: null,
+      deadlineAt: "2026-01-05T18:00",
     },
   },
   {

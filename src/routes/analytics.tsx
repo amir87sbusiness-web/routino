@@ -8,6 +8,7 @@ import { buildChartBars } from "@/lib/chart";
 import {
   addMonths,
   analyticsDayKeys,
+  dayOfMonth,
   faNum,
   formatShortDate,
   monthTitle,
@@ -16,6 +17,7 @@ import {
   type Lang,
 } from "@/lib/dates";
 import { avgOf, dayScore, weeklyReview, type WeeklyReview } from "@/lib/logic";
+import { taskMonthAnalytics } from "@/lib/analytics";
 import { useAppMaybe } from "@/state/app";
 
 export const Route = createFileRoute("/analytics")({
@@ -186,6 +188,7 @@ function WeeklyReviewCard({
 
 function AnalyticsPage() {
   const ctx = useAppMaybe();
+  const [tab, setTab] = useState<"habits" | "tasks">("habits");
   const [range, setRange] = useState<(typeof RANGES)[number]>(RANGES[1]);
   const [monthAnchor, setMonthAnchor] = useState(todayKey());
   const dragStartX = useRef<number | null>(null);
@@ -204,214 +207,242 @@ function AnalyticsPage() {
   const { buckets, labels: barLabels, barUnit } = buildChartBars(series, range.id, cal, lang);
   const review = weeklyReview(db, cal, TODAY);
   const habits = db.habits.filter((h) => !h.archived);
-  const completedTasks = db.tasks
-    .filter((x) => x.done)
-    .sort((a, b) => (a.dateKey < b.dateKey ? 1 : -1));
-  const pendingTasks = db.tasks
-    .filter((x) => !x.done)
-    .sort((a, b) => (a.dateKey < b.dateKey ? 1 : -1));
+  const taskAnalytics = taskMonthAnalytics(db.tasks, monthAnchor, cal);
+  const taskLabels = taskAnalytics.series.map(({ dateKey }) => {
+    const day = dayOfMonth(dateKey, cal);
+    return day % 5 === 0 ? faNum(day, lang) : "";
+  });
 
   return (
     <div className="page-stagger flex flex-col gap-5">
-      <WeeklyReviewCard review={review} cal={cal} lang={lang} t={t} />
-
-      {/* overall trend */}
-      <Card>
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <p className="shrink-0 text-sm font-bold text-foreground">
-            {t("عملکرد کلی", "Overall performance")}
-          </p>
-          <div className="scrollbar-none flex gap-1 overflow-x-auto">
-            {RANGES.map((r) => (
-              <Chip key={r.id} active={range.id === r.id} onClick={() => setRange(r)}>
-                {t(r.fa, r.en)}
-              </Chip>
-            ))}
-          </div>
-        </div>
-        <MiniBars data={buckets} labels={barLabels} lang={lang} />
-        <p className="mt-3 text-center text-[11px] text-muted-foreground">
-          {t("میانگین", "Average")}:{" "}
-          <b className="text-foreground">{faNum(avgOf(series), lang)}٪</b>
-          {barUnit === "week" && t(` · هر ستون = ${faNum(7, lang)} روز`, " · each bar = 7 days")}
-          {barUnit === "month" && t(" · هر ستون = ۱ ماه", " · each bar = 1 month")}
-        </p>
-      </Card>
-
-      {/* per-habit summary */}
-      <section>
-        <SectionTitle
-          action={
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setMonthAnchor((m) => addMonths(m, -1, cal))}
-                className="rounded-full p-1.5 text-muted-foreground hover:bg-secondary"
-                aria-label="prev-month"
-              >
-                <ChevronRight className="h-4 w-4 ltr:hidden" />
-                <ChevronLeft className="h-4 w-4 rtl:hidden" />
-              </button>
-              <span className="min-w-16 text-center text-[11px] font-bold text-foreground">
-                {monthTitle(monthAnchor, cal, lang)}
-              </span>
-              <button
-                onClick={() => setMonthAnchor((m) => addMonths(m, 1, cal))}
-                disabled={addMonths(monthAnchor, 1, cal) > todayKey()}
-                className="rounded-full p-1.5 text-muted-foreground hover:bg-secondary disabled:opacity-30"
-                aria-label="next-month"
-              >
-                <ChevronLeft className="h-4 w-4 ltr:hidden" />
-                <ChevronRight className="h-4 w-4 rtl:hidden" />
-              </button>
-            </div>
-          }
+      <div className="grid grid-cols-2 gap-2 rounded-2xl bg-secondary/60 p-1">
+        <button
+          type="button"
+          onClick={() => setTab("habits")}
+          className={`rounded-xl px-3 py-2 text-sm font-bold ${tab === "habits" ? "bg-card text-primary shadow-sm" : "text-muted-foreground"}`}
         >
-          {t("عملکرد هر عادت", "Per-habit performance")}
-        </SectionTitle>
-        {habits.length === 0 ? (
-          <p className="text-xs text-muted-foreground">
-            {t("هنوز عادتی نداری.", "No habits yet.")}
-          </p>
-        ) : (
-          <div
-            onPointerDown={(e: ReactPointerEvent) => {
-              dragStartX.current = e.clientX;
-            }}
-            onPointerMove={(e: ReactPointerEvent) => {
-              if (dragStartX.current === null) return;
-              setDragX(Math.max(-40, Math.min(40, e.clientX - dragStartX.current)));
-            }}
-            onPointerUp={() => {
-              if (dragStartX.current === null) return;
-              if (dragX > 45 || dragX < -45) {
-                // swipe right (positive) = go to previous month, swipe left = next month
-                setMonthAnchor((m) => addMonths(m, dragX > 0 ? -1 : 1, cal));
-              }
-              dragStartX.current = null;
-              setDragX(0);
-            }}
-            onPointerCancel={() => {
-              dragStartX.current = null;
-              setDragX(0);
-            }}
-            className="touch-pan-y grid grid-cols-2 gap-2.5"
-          >
-            {habits.map((h) => {
-              const cat = db.categories.find((c) => c.id === h.categoryId);
-              return (
-                <Link
-                  key={h.id}
-                  to="/habit/$habitId"
-                  params={{ habitId: h.id }}
-                  className="card-surface block p-3"
-                >
-                  {/* ارتفاع ثابتِ دو خط: اسم بلند دوخطی می‌شود ولی اندازهٔ باکس تغییری نمی‌کند. */}
-                  <div className="mb-2 flex h-8 items-center gap-1.5">
-                    <span
-                      className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-white"
-                      style={{ backgroundColor: cat?.color ?? "#999" }}
-                    >
-                      <CatIcon icon={cat?.icon ?? "star"} className="h-3 w-3" />
-                    </span>
-                    <p className="line-clamp-2 min-w-0 flex-1 text-xs font-bold leading-4 text-foreground">
-                      {h.name}
-                    </p>
-                  </div>
-                  <div className="mx-auto max-w-52">
-                    <MonthCalendarGrid
-                      db={db}
-                      habit={h}
-                      cal={cal}
-                      color={cat?.color}
-                      lang={lang}
-                      monthAnchor={monthAnchor}
-                    />
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </section>
+          {t("عادت‌ها", "Habits")}
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab("tasks")}
+          className={`rounded-xl px-3 py-2 text-sm font-bold ${tab === "tasks" ? "bg-card text-primary shadow-sm" : "text-muted-foreground"}`}
+        >
+          {t("کارها", "Tasks")}
+        </button>
+      </div>
 
-      {/* completed vs pending tasks */}
-      <section>
-        <SectionTitle>{t("وضعیت کارها", "Task status")}</SectionTitle>
-        <div className="grid grid-cols-2 gap-2.5">
-          <div>
-            <p className="mb-1.5 text-center text-[11px] font-bold text-success">
-              {t("انجام‌شده", "Done")} ({faNum(completedTasks.length, lang)})
+      {tab === "habits" && (
+        <>
+          <WeeklyReviewCard review={review} cal={cal} lang={lang} t={t} />
+
+          {/* overall trend */}
+          <Card>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <p className="shrink-0 text-sm font-bold text-foreground">
+                {t("عملکرد کلی", "Overall performance")}
+              </p>
+              <div className="scrollbar-none flex gap-1 overflow-x-auto">
+                {RANGES.map((r) => (
+                  <Chip key={r.id} active={range.id === r.id} onClick={() => setRange(r)}>
+                    {t(r.fa, r.en)}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+            <MiniBars data={buckets} labels={barLabels} lang={lang} />
+            <p className="mt-3 text-center text-[11px] text-muted-foreground">
+              {t("میانگین", "Average")}:{" "}
+              <b className="text-foreground">{faNum(avgOf(series), lang)}٪</b>
+              {barUnit === "week" &&
+                t(` · هر ستون = ${faNum(7, lang)} روز`, " · each bar = 7 days")}
+              {barUnit === "month" && t(" · هر ستون = ۱ ماه", " · each bar = 1 month")}
             </p>
-            <div className="flex flex-col gap-1.5">
-              {completedTasks.length === 0 ? (
-                <p className="text-center text-[10px] text-muted-foreground">
-                  {t("هنوز کاری نیست.", "None yet.")}
+          </Card>
+
+          {/* per-habit summary */}
+          <section>
+            <SectionTitle
+              action={
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setMonthAnchor((m) => addMonths(m, -1, cal))}
+                    className="rounded-full p-1.5 text-muted-foreground hover:bg-secondary"
+                    aria-label="prev-month"
+                  >
+                    <ChevronRight className="h-4 w-4 ltr:hidden" />
+                    <ChevronLeft className="h-4 w-4 rtl:hidden" />
+                  </button>
+                  <span className="min-w-16 text-center text-[11px] font-bold text-foreground">
+                    {monthTitle(monthAnchor, cal, lang)}
+                  </span>
+                  <button
+                    onClick={() => setMonthAnchor((m) => addMonths(m, 1, cal))}
+                    disabled={addMonths(monthAnchor, 1, cal) > todayKey()}
+                    className="rounded-full p-1.5 text-muted-foreground hover:bg-secondary disabled:opacity-30"
+                    aria-label="next-month"
+                  >
+                    <ChevronLeft className="h-4 w-4 ltr:hidden" />
+                    <ChevronRight className="h-4 w-4 rtl:hidden" />
+                  </button>
+                </div>
+              }
+            >
+              {t("عملکرد هر عادت", "Per-habit performance")}
+            </SectionTitle>
+            {habits.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                {t("هنوز عادتی نداری.", "No habits yet.")}
+              </p>
+            ) : (
+              <div
+                onPointerDown={(e: ReactPointerEvent) => {
+                  dragStartX.current = e.clientX;
+                }}
+                onPointerMove={(e: ReactPointerEvent) => {
+                  if (dragStartX.current === null) return;
+                  setDragX(Math.max(-40, Math.min(40, e.clientX - dragStartX.current)));
+                }}
+                onPointerUp={() => {
+                  if (dragStartX.current === null) return;
+                  if (dragX > 45 || dragX < -45) {
+                    // swipe right (positive) = go to previous month, swipe left = next month
+                    setMonthAnchor((m) => addMonths(m, dragX > 0 ? -1 : 1, cal));
+                  }
+                  dragStartX.current = null;
+                  setDragX(0);
+                }}
+                onPointerCancel={() => {
+                  dragStartX.current = null;
+                  setDragX(0);
+                }}
+                className="touch-pan-y grid grid-cols-2 gap-2.5"
+              >
+                {habits.map((h) => {
+                  const cat = db.categories.find((c) => c.id === h.categoryId);
+                  return (
+                    <Link
+                      key={h.id}
+                      to="/habit/$habitId"
+                      params={{ habitId: h.id }}
+                      className="card-surface block p-3"
+                    >
+                      {/* ارتفاع ثابتِ دو خط: اسم بلند دوخطی می‌شود ولی اندازهٔ باکس تغییری نمی‌کند. */}
+                      <div className="mb-2 flex h-8 items-center gap-1.5">
+                        <span
+                          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-white"
+                          style={{ backgroundColor: cat?.color ?? "#999" }}
+                        >
+                          <CatIcon icon={cat?.icon ?? "star"} className="h-3 w-3" />
+                        </span>
+                        <p className="line-clamp-2 min-w-0 flex-1 text-xs font-bold leading-4 text-foreground">
+                          {h.name}
+                        </p>
+                      </div>
+                      <div className="mx-auto max-w-52">
+                        <MonthCalendarGrid
+                          db={db}
+                          habit={h}
+                          cal={cal}
+                          color={cat?.color}
+                          lang={lang}
+                          monthAnchor={monthAnchor}
+                        />
+                      </div>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        </>
+      )}
+
+      {tab === "tasks" && (
+        <>
+          <Card>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <p className="text-sm font-bold text-foreground">
+                {t("عملکرد کارها", "Task performance")}
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  aria-label="prev-task-month"
+                  onClick={() => setMonthAnchor((month) => addMonths(month, -1, cal))}
+                  className="rounded-full p-1.5 text-muted-foreground hover:bg-secondary"
+                >
+                  <ChevronRight className="h-4 w-4 ltr:hidden" />
+                  <ChevronLeft className="h-4 w-4 rtl:hidden" />
+                </button>
+                <span className="min-w-20 text-center text-[11px] font-bold text-foreground">
+                  {monthTitle(monthAnchor, cal, lang)}
+                </span>
+                <button
+                  type="button"
+                  aria-label="next-task-month"
+                  disabled={addMonths(monthAnchor, 1, cal) > TODAY}
+                  onClick={() => setMonthAnchor((month) => addMonths(month, 1, cal))}
+                  className="rounded-full p-1.5 text-muted-foreground hover:bg-secondary disabled:opacity-30"
+                >
+                  <ChevronLeft className="h-4 w-4 ltr:hidden" />
+                  <ChevronRight className="h-4 w-4 rtl:hidden" />
+                </button>
+              </div>
+            </div>
+            <MiniBars
+              data={taskAnalytics.series.map((item) => item.percent)}
+              labels={taskLabels}
+              lang={lang}
+            />
+            <p className="mt-3 text-center text-[11px] text-muted-foreground">
+              {t("میانگین", "Average")}:{" "}
+              <b className="text-foreground">{faNum(avgOf(taskAnalytics.series), lang)}٪</b>
+            </p>
+          </Card>
+
+          <section>
+            <SectionTitle>{t("وضعیت کارهای این ماه", "This month's tasks")}</SectionTitle>
+            <div className="flex flex-col gap-2">
+              {taskAnalytics.items.length === 0 ? (
+                <p className="text-center text-xs text-muted-foreground">
+                  {t("در این ماه کاری ثبت نشده.", "No tasks in this month.")}
                 </p>
               ) : (
-                completedTasks.slice(0, 30).map((task) => (
-                  <div key={task.id} className="card-surface flex items-center gap-1.5 p-2">
+                taskAnalytics.items.map(({ task, status }) => (
+                  <div key={task.id} className="card-surface flex items-center gap-2 p-3">
                     <span
-                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-white"
+                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white"
                       style={{ backgroundColor: task.color ?? "var(--primary)" }}
                     >
-                      <CatIcon icon={task.icon ?? "star"} className="h-2.5 w-2.5" />
+                      <CatIcon icon={task.icon ?? "star"} className="h-3.5 w-3.5" />
                     </span>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[11px] font-medium text-foreground">
+                      <p
+                        className={`truncate text-xs font-bold ${status === "done" ? "text-muted-foreground line-through" : "text-foreground"}`}
+                      >
                         {task.title}
                       </p>
                       <p className="text-[9px] text-muted-foreground">
                         {formatShortDate(task.dateKey, cal, lang)}
                       </p>
                     </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-          <div>
-            <p className="mb-1.5 text-center text-[11px] font-bold text-muted-foreground">
-              {t("انجام‌نشده", "Not done")} ({faNum(pendingTasks.length, lang)})
-            </p>
-            <div className="flex flex-col gap-1.5">
-              {pendingTasks.length === 0 ? (
-                <p className="text-center text-[10px] text-muted-foreground">
-                  {t("چیزی باقی نمونده 🎉", "Nothing left 🎉")}
-                </p>
-              ) : (
-                pendingTasks.slice(0, 30).map((task) => (
-                  <div
-                    key={task.id}
-                    className="card-surface flex items-center gap-1.5 p-2 opacity-80"
-                  >
                     <span
-                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-white"
-                      style={{ backgroundColor: task.color ?? "var(--muted-foreground)" }}
+                      className={`rounded-full px-2 py-1 text-[9px] font-bold ${status === "done" ? "bg-success/10 text-success" : status === "overdue" ? "bg-destructive/10 text-destructive" : "bg-secondary text-muted-foreground"}`}
                     >
-                      <CatIcon icon={task.icon ?? "star"} className="h-2.5 w-2.5" />
+                      {status === "done"
+                        ? t("انجام‌شده", "Done")
+                        : status === "overdue"
+                          ? t("به‌تعویق‌افتاده", "Overdue")
+                          : t("انجام‌نشده", "Pending")}
                     </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-[11px] font-medium text-foreground">
-                        {task.title}
-                      </p>
-                      <p className="text-[9px] text-muted-foreground">
-                        {formatShortDate(task.dateKey, cal, lang)}
-                      </p>
-                    </div>
                   </div>
                 ))
               )}
             </div>
-          </div>
-        </div>
-      </section>
-
-      <p className="text-center text-[10px] text-muted-foreground">
-        {t(
-          "کارها در نمودارهای بالا محاسبه نمی‌شوند؛ فقط عادت‌ها.",
-          "Tasks aren't counted in the charts above; only habits.",
-        )}
-      </p>
+          </section>
+        </>
+      )}
     </div>
   );
 }

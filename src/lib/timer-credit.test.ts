@@ -35,4 +35,35 @@ describe("timer completion", () => {
       linkedId: "task-1",
     } satisfies Partial<TimerSession>);
   });
+
+  it("records a session but does not credit a habit after its deadline", () => {
+    const db = defaultDb([]);
+    db.habits = [
+      {
+        id: "habit-1",
+        name: "Study",
+        categoryId: "study",
+        type: "quantity",
+        target: 30,
+        unitKind: "time",
+        schedule: { kind: "daily" },
+        monthlyGoal: null,
+        reminderTime: null,
+        deadlineTime: "18:30",
+        createdAt: 0,
+      },
+    ];
+    const item = {
+      id: "timer-after-deadline",
+      mode: "free" as const,
+      focusSeconds: 60,
+      startedAt: new Date(2026, 8, 20, 18, 30).getTime(),
+      endedAt: new Date(2026, 8, 20, 18, 31).getTime(),
+      linked: { kind: "habit" as const, id: "habit-1", label: "Study" },
+    };
+
+    const next = recordTimerCompletion(db, item, "gregorian");
+    expect(next.logs).toEqual({});
+    expect(next.timerSessions).toHaveLength(1);
+  });
 });

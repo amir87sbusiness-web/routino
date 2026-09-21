@@ -88,7 +88,7 @@ export function encodeRecordForStorage(kind: StoredSyncKind, id: string, value: 
           data.reminderTime,
           data.createdAt,
         ],
-        optionalFields(data, ["unit", "unitKind", "archived"]),
+        optionalFields(data, ["unit", "unitKind", "archived", "deadlineTime"]),
       );
     }
     case "habitMonths":
@@ -96,7 +96,7 @@ export function encodeRecordForStorage(kind: StoredSyncKind, id: string, value: 
     case "tasks":
       return appendExtras(
         [data.dateKey, data.title, data.type, data.target, data.value, data.done],
-        optionalFields(data, ["note", "unitKind", "reminderAt", "color", "icon"]),
+        optionalFields(data, ["note", "unitKind", "reminderAt", "deadlineAt", "color", "icon"]),
       );
     case "timerSessions":
       return appendExtras(

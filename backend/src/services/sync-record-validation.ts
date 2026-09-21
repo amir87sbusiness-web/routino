@@ -35,6 +35,13 @@ function isMonthKey(value: string): boolean {
 
 const monthKey = z.string().refine(isMonthKey);
 
+function isLocalDateTime(value: string): boolean {
+  const match = /^(\d{4}-\d{2}-\d{2})T((?:[01]\d|2[0-3]):[0-5]\d)$/.exec(value);
+  return match !== null && isDateKey(match[1]!);
+}
+
+const localDateTime = z.string().refine(isLocalDateTime);
+
 const categorySchema = z
   .object({
     id: entityId,
@@ -70,6 +77,7 @@ const habitSchema = z
     schedule: scheduleSchema,
     monthlyGoal: z.number().int().min(1).max(31).nullable(),
     reminderTime: z.string().regex(TIME_RE).nullable(),
+    deadlineTime: z.string().regex(TIME_RE).nullable().optional(),
     createdAt: epochMs,
     archived: z.boolean().optional(),
   })
@@ -129,10 +137,14 @@ const taskSchema = z
     note,
     unitKind: z.enum(["count", "time"]).optional(),
     reminderAt: bounded(64).nullable().optional(),
+    deadlineAt: localDateTime.nullable().optional(),
     color: bounded(32).optional(),
     icon: bounded(64).optional(),
   })
-  .strict();
+  .strict()
+  .refine((task) => !task.deadlineAt || task.deadlineAt.slice(0, 10) >= task.dateKey, {
+    message: "deadline cannot precede task start",
+  });
 
 /** Canonical task payload contract, shared with server-only task archives. */
 export function validateTaskPayload(id: string, data: unknown): boolean {

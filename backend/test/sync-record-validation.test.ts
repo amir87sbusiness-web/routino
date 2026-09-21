@@ -35,6 +35,7 @@ const valid = {
     schedule: { kind: "weekdays", weekdays: [0, 2, 4] },
     monthlyGoal: 12,
     reminderTime: "21:30",
+    deadlineTime: "19:45",
     createdAt: 900,
     archived: false,
   }),
@@ -62,6 +63,7 @@ const valid = {
     done: true,
     note: "یادداشت",
     reminderAt: "2026-08-31T21:30",
+    deadlineAt: "2026-09-02T18:00",
     color: "#10b981",
     icon: "phone",
   }),
@@ -148,6 +150,18 @@ describe("validateSyncRecord", () => {
     expect(rejectCode({ ...valid.journal, id: "2026-02-30" })).toBe("bad_id");
     expect(
       rejectCode({ ...valid.habits, data: { ...valid.habits.data, reminderTime: "25:99" } }),
+    ).toBe("invalid_record");
+    expect(
+      rejectCode({ ...valid.habits, data: { ...valid.habits.data, deadlineTime: "24:00" } }),
+    ).toBe("invalid_record");
+    expect(
+      rejectCode({ ...valid.tasks, data: { ...valid.tasks.data, deadlineAt: "2026-02-30T18:00" } }),
+    ).toBe("invalid_record");
+    expect(
+      rejectCode({ ...valid.tasks, data: { ...valid.tasks.data, deadlineAt: "2026-08-31T24:00" } }),
+    ).toBe("invalid_record");
+    expect(
+      rejectCode({ ...valid.tasks, data: { ...valid.tasks.data, deadlineAt: "2026-08-30T18:00" } }),
     ).toBe("invalid_record");
     expect(
       rejectCode({

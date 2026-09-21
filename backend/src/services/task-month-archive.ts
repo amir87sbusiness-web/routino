@@ -235,7 +235,7 @@ function expandCompactTaskData(id: string, monthKey: string, compact: unknown): 
   const [day, title, type, target, value, extras] = compact;
   if (typeof day !== "string" || !/^\d{2}$/.test(day)) return invalidArchive();
   if (!extras || typeof extras !== "object" || Array.isArray(extras)) return invalidArchive();
-  const allowed = ["note", "unitKind", "reminderAt", "color", "icon"];
+  const allowed = ["note", "unitKind", "reminderAt", "deadlineAt", "color", "icon"];
   if (Object.keys(extras).some((key) => !allowed.includes(key))) return invalidArchive();
   return { id, dateKey: `${monthKey}-${day}`, title, type, target, value, done: true, ...extras };
 }

@@ -89,7 +89,8 @@ begin
       v_extras := '{}'::jsonb ||
         case when p_data ? 'unit' then jsonb_build_object('unit', p_data->'unit') else '{}'::jsonb end ||
         case when p_data ? 'unitKind' then jsonb_build_object('unitKind', p_data->'unitKind') else '{}'::jsonb end ||
-        case when p_data ? 'archived' then jsonb_build_object('archived', p_data->'archived') else '{}'::jsonb end;
+        case when p_data ? 'archived' then jsonb_build_object('archived', p_data->'archived') else '{}'::jsonb end ||
+        case when p_data ? 'deadlineTime' then jsonb_build_object('deadlineTime', p_data->'deadlineTime') else '{}'::jsonb end;
       return jsonb_build_array(
         p_data->'name', p_data->'categoryId', p_data->'type', p_data->'target',
         jsonb_build_array(p_data->'schedule'->'kind') ||
@@ -115,6 +116,7 @@ begin
         case when p_data ? 'note' then jsonb_build_object('note', p_data->'note') else '{}'::jsonb end ||
         case when p_data ? 'unitKind' then jsonb_build_object('unitKind', p_data->'unitKind') else '{}'::jsonb end ||
         case when p_data ? 'reminderAt' then jsonb_build_object('reminderAt', p_data->'reminderAt') else '{}'::jsonb end ||
+        case when p_data ? 'deadlineAt' then jsonb_build_object('deadlineAt', p_data->'deadlineAt') else '{}'::jsonb end ||
         case when p_data ? 'color' then jsonb_build_object('color', p_data->'color') else '{}'::jsonb end ||
         case when p_data ? 'icon' then jsonb_build_object('icon', p_data->'icon') else '{}'::jsonb end;
       return jsonb_build_array(p_data->'dateKey', p_data->'title', p_data->'type',
@@ -903,7 +905,7 @@ begin
      or not (p_data ?& array['id','dateKey','title','type','target','value','done'])
      or p_data - array[
        'id','dateKey','title','type','target','value','done',
-       'note','unitKind','reminderAt','color','icon'
+       'note','unitKind','reminderAt','deadlineAt','color','icon'
      ] <> '{}'::jsonb
      or jsonb_typeof(p_data->'id') <> 'string'
      or p_data->>'id' <> p_id
@@ -936,6 +938,15 @@ begin
        and (
          jsonb_typeof(p_data->'reminderAt') <> 'string'
          or routino_js_string_length(p_data->>'reminderAt') > 64
+       )
+     )
+     or (
+       p_data ? 'deadlineAt'
+       and jsonb_typeof(p_data->'deadlineAt') <> 'null'
+       and (
+         jsonb_typeof(p_data->'deadlineAt') <> 'string'
+         or p_data->>'deadlineAt' !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T(?:[01][0-9]|2[0-3]):[0-5][0-9]$'
+         or left(p_data->>'deadlineAt', 10) < p_data->>'dateKey'
        )
      )
      or (
@@ -1046,7 +1057,7 @@ begin
   if jsonb_typeof(p->0) is distinct from 'string'
      or (p->>0) !~ '^[0-9]{2}$'
      or jsonb_typeof(p->5) is distinct from 'object' then return 'null'::jsonb; end if;
-  if (p->5) - array['note','unitKind','reminderAt','color','icon'] <> '{}'::jsonb
+  if (p->5) - array['note','unitKind','reminderAt','deadlineAt','color','icon'] <> '{}'::jsonb
     then return 'null'::jsonb; end if;
   return jsonb_build_array(p_item->0, p_item->1,
     jsonb_build_object('id', p_item->0, 'dateKey', p_month || '-' || (p->>0),

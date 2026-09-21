@@ -4,6 +4,7 @@ import type { Calendar } from "./dates";
 import { getLog } from "./logic";
 import type { Db } from "./store";
 import type { TimerCompletion } from "./timer-runtime";
+import { isHabitDeadlinePassed } from "./deadlines";
 
 export function recordTimerCompletion(db: Db, item: TimerCompletion, cal: Calendar): Db {
   if (db.timerSessions.some((session) => session.id === item.id)) return db;
@@ -27,7 +28,7 @@ export function recordTimerCompletion(db: Db, item: TimerCompletion, cal: Calend
     };
   } else if (link?.kind === "habit") {
     const habit = next.habits.find((candidate) => candidate.id === link.id);
-    if (habit) {
+    if (habit && !isHabitDeadlinePassed(habit, dk, new Date(item.endedAt))) {
       const previous = getLog(next, habit.id, dk)?.value ?? 0;
       const value =
         habit.type === "binary"

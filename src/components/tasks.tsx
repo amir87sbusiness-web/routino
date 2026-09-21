@@ -39,6 +39,7 @@ import {
 } from "@/lib/completion-feedback";
 import { CATEGORY_COLOR_CHOICES } from "@/lib/presets";
 import { uid, type Db, type Settings, type Task } from "@/lib/store";
+import { isTaskOverdue, tasksVisibleOn } from "@/lib/deadlines";
 
 const TASK_DEFAULT_COLOR = CATEGORY_COLOR_CHOICES[0];
 const TASK_DEFAULT_ICON = "star";
@@ -53,6 +54,9 @@ export interface TaskDraft {
   note: string;
   reminderOn: boolean;
   reminderTime: string;
+  deadlineOn: boolean;
+  deadlineDate: string;
+  deadlineTime: string;
   color: string;
   icon: string;
 }
@@ -67,6 +71,9 @@ export function emptyTaskDraft(dateKey: string): TaskDraft {
     note: "",
     reminderOn: false,
     reminderTime: "09:00",
+    deadlineOn: false,
+    deadlineDate: dateKey,
+    deadlineTime: "18:00",
     color: TASK_DEFAULT_COLOR,
     icon: TASK_DEFAULT_ICON,
   };
@@ -74,6 +81,7 @@ export function emptyTaskDraft(dateKey: string): TaskDraft {
 
 export function taskToDraft(task: Task): TaskDraft {
   const reminderTime = task.reminderAt?.match(/T(\d{2}:\d{2})/)?.[1] ?? "09:00";
+  const deadlineMatch = task.deadlineAt?.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})$/);
   return {
     id: task.id,
     dateKey: task.dateKey,
@@ -84,6 +92,9 @@ export function taskToDraft(task: Task): TaskDraft {
     note: task.note ?? "",
     reminderOn: Boolean(task.reminderAt),
     reminderTime,
+    deadlineOn: Boolean(deadlineMatch),
+    deadlineDate: deadlineMatch?.[1] ?? task.dateKey,
+    deadlineTime: deadlineMatch?.[2] ?? "18:00",
     color: task.color ?? TASK_DEFAULT_COLOR,
     icon: task.icon ?? TASK_DEFAULT_ICON,
   };
@@ -108,6 +119,7 @@ export function draftToTask(draft: TaskDraft, existing?: Task): Task {
     note: draft.note.trim() || undefined,
     unitKind: isQuantity ? draft.unitKind : undefined,
     reminderAt: draft.reminderOn ? `${draft.dateKey}T${draft.reminderTime}` : null,
+    deadlineAt: draft.deadlineOn ? `${draft.deadlineDate}T${draft.deadlineTime}` : null,
     color: draft.color,
     icon: draft.icon,
   };
@@ -171,6 +183,8 @@ export function TaskFormModal({
 }) {
   const [dateOpen, setDateOpen] = useState(false);
   const [reminderPickerOpen, setReminderPickerOpen] = useState(false);
+  const [deadlineDateOpen, setDeadlineDateOpen] = useState(false);
+  const [deadlineTimeOpen, setDeadlineTimeOpen] = useState(false);
   const patchDraft = (patch: Partial<TaskDraft>) =>
     setDraft((current) => ({ ...current, ...patch }));
 
@@ -428,9 +442,86 @@ export function TaskFormModal({
           )}
         </div>
 
+        <div>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-medium text-muted-foreground">{t("ددلاین", "Deadline")}</p>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={draft.deadlineOn}
+              aria-label={t("ددلاین", "Deadline")}
+              onClick={() => {
+                const deadlineOn = !draft.deadlineOn;
+                patchDraft({ deadlineOn, deadlineDate: draft.deadlineDate || draft.dateKey });
+              }}
+              className={`relative h-6 w-11 rounded-full transition-colors ${draft.deadlineOn ? "bg-primary" : "bg-secondary"}`}
+            >
+              <span
+                className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${draft.deadlineOn ? "start-5.5" : "start-0.5"}`}
+              />
+            </button>
+          </div>
+          {draft.deadlineOn && (
+            <div className="mt-2 rounded-2xl border border-border p-3">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDeadlineDateOpen((value) => !value)}
+                  className="w-full rounded-xl border border-border px-2 py-2 text-xs font-bold text-foreground"
+                >
+                  {formatDate(draft.deadlineDate, cal, lang)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeadlineTimeOpen((value) => !value)}
+                  className="w-full rounded-xl border border-border px-2 py-2 text-xs font-bold text-foreground"
+                  dir="ltr"
+                >
+                  {draft.deadlineTime}
+                </button>
+              </div>
+              {deadlineDateOpen && (
+                <div className="mt-2">
+                  <DatePickerCalendar
+                    value={draft.deadlineDate}
+                    onChange={(deadlineDate) => {
+                      patchDraft({ deadlineDate });
+                      setDeadlineDateOpen(false);
+                    }}
+                    cal={cal}
+                    lang={lang}
+                  />
+                </div>
+              )}
+              {deadlineTimeOpen && (
+                <div className="mt-2">
+                  <TimePicker24
+                    value={draft.deadlineTime}
+                    onChange={(deadlineTime) => patchDraft({ deadlineTime })}
+                    lang={lang}
+                    t={t}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+          {draft.deadlineOn && draft.deadlineDate < draft.dateKey && (
+            <p className="mt-1 text-[10px] text-destructive">
+              {t(
+                "ددلاین نمی‌تواند قبل از تاریخ شروع باشد.",
+                "Deadline cannot be before the start date.",
+              )}
+            </p>
+          )}
+        </div>
+
         <Button
           onClick={onSave}
-          disabled={!draft.title.trim() || (draft.type === "quantity" && draft.target <= 0)}
+          disabled={
+            !draft.title.trim() ||
+            (draft.type === "quantity" && draft.target <= 0) ||
+            (draft.deadlineOn && draft.deadlineDate < draft.dateKey)
+          }
         >
           {draft.id ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
           {draft.id ? t("ذخیره تغییرات", "Save changes") : t("افزودن کار", "Add task")}
@@ -468,6 +559,7 @@ export function TaskRow({
   const undoHintRef = useRef<HTMLSpanElement>(null);
   const suppressClickUntil = useRef(0);
   const tint = task.color ?? "var(--primary)";
+  const overdue = isTaskOverdue(task);
   const SWIPE_THRESHOLD = 76;
 
   const commit = (patch: Partial<Task>) => {
@@ -603,6 +695,11 @@ export function TaskRow({
             >
               {task.title}
             </p>
+            {overdue && (
+              <span className="inline-flex rounded-full bg-destructive/10 px-1.5 py-0.5 text-[9px] font-bold text-destructive">
+                {t("به‌تعویق‌افتاده", "Overdue")}
+              </span>
+            )}
             <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
               {task.type === "quantity" && (
                 <span dir="ltr" className="shrink-0 font-medium">
@@ -616,6 +713,17 @@ export function TaskRow({
                 <span className="flex items-center gap-0.5">
                   <Bell className="h-2.5 w-2.5" />
                   {new Date(task.reminderAt).toLocaleString(lang === "fa" ? "fa-IR" : "en-US", {
+                    dateStyle: "short",
+                    timeStyle: "short",
+                    hour12: false,
+                  })}
+                </span>
+              )}
+              {task.deadlineAt && (
+                <span className="flex items-center gap-0.5">
+                  <CalendarDays className="h-2.5 w-2.5" />
+                  {t("ددلاین", "Deadline")}:{" "}
+                  {new Date(task.deadlineAt).toLocaleString(lang === "fa" ? "fa-IR" : "en-US", {
                     dateStyle: "short",
                     timeStyle: "short",
                     hour12: false,
@@ -729,7 +837,7 @@ export function TodayTodosCard({
   const [quickTitle, setQuickTitle] = useState("");
   const [editDraft, setEditDraft] = useState<TaskDraft | null>(null);
 
-  const dayTasks = db.tasks.filter((task) => task.dateKey === dateKey);
+  const dayTasks = tasksVisibleOn(db.tasks, dateKey);
   const doneCount = dayTasks.filter((x) => x.done).length;
 
   const submitQuick = () => {

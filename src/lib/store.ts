@@ -66,6 +66,7 @@ export interface Habit {
   schedule: { kind: ScheduleKind; weekdays?: number[] }; // weekdays: JS getDay()
   monthlyGoal: number | null; // days per month; null = all due days
   reminderTime: string | null; // "HH:MM"
+  deadlineTime?: string | null; // local "HH:MM"; absent keeps legacy behavior
   createdAt: number;
   archived?: boolean;
 }
@@ -90,6 +91,7 @@ export interface Task {
   note?: string;
   unitKind?: UnitKind; // "count" | "time" — only meaningful when type === "quantity"
   reminderAt?: string | null; // ISO datetime-local
+  deadlineAt?: string | null; // local ISO datetime-local; absent keeps legacy behavior
   color?: string; // hex, chosen from CATEGORY_COLOR_CHOICES
   icon?: string; // key from CATEGORY_ICONS
 }

@@ -17,6 +17,7 @@ import { WeekStrip } from "@/components/WeekStrip";
 import { addDays, faNum, formatDate, todayKey } from "@/lib/dates";
 import { useAppMaybe } from "@/state/app";
 import { triggerCompletionFeedback } from "@/lib/completion-feedback";
+import { tasksVisibleOn } from "@/lib/deadlines";
 
 export const Route = createFileRoute("/tasks")({
   component: () => (
@@ -39,12 +40,12 @@ function TasksPage() {
   const todayK = todayKey();
   const tomorrowK = addDays(todayK, 1);
   const isCustomDay = selectedDay !== todayK && selectedDay !== tomorrowK;
-  const dayTasks = db.tasks.filter((task) => task.dateKey === selectedDay);
+  const dayTasks = tasksVisibleOn(db.tasks, selectedDay);
   const doneCount = dayTasks.filter((task) => task.done).length;
   const taskCount = (dateKey: string) =>
-    db.tasks.filter((task) => task.dateKey === dateKey && !task.done).length;
+    tasksVisibleOn(db.tasks, dateKey).filter((task) => !task.done).length;
   const taskPercent = (dateKey: string) => {
-    const tasks = db.tasks.filter((task) => task.dateKey === dateKey);
+    const tasks = tasksVisibleOn(db.tasks, dateKey);
     if (tasks.length === 0) return null;
     return Math.round((tasks.filter((task) => task.done).length / tasks.length) * 100);
   };

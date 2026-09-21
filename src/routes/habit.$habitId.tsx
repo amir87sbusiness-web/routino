@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowRight, Flame, Target, TrendingUp } from "lucide-react";
+import { ArrowRight, Clock3, Flame, Sigma, Target, TrendingUp, Trophy } from "lucide-react";
 import { useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { Card, CatIcon, Chip, MiniBars, Progress } from "@/components/ui";
+import { Card, CatIcon, Chip, formatDuration, MiniBars, Progress } from "@/components/ui";
 import { buildChartBars } from "@/lib/chart";
 import { analyticsDayKeys, faNum, formatShortDate, monthTitle, todayKey } from "@/lib/dates";
 import {
@@ -15,6 +15,7 @@ import {
   successRate,
 } from "@/lib/logic";
 import { useAppMaybe } from "@/state/app";
+import { formatCompactValue, habitLifetimeStats } from "@/lib/analytics";
 
 export const Route = createFileRoute("/habit/$habitId")({
   component: () => (
@@ -55,6 +56,7 @@ function HabitDetailPage() {
   const mp = monthProgress(db, habit, cal);
   const st = streak(db, habit, cal);
   const rate = successRate(db, habit, cal, range.days);
+  const lifetime = habitLifetimeStats(db, habit, cal);
 
   // Rolling windows ending today; bucketing + labels shared with Analytics via
   // buildChartBars so every chart in the app behaves identically.
@@ -91,7 +93,7 @@ function HabitDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         <Card className="flex flex-col items-center gap-1 py-3">
           <Flame className="h-5 w-5 text-primary" />
           <p className="text-lg font-black text-foreground">{faNum(st, lang)}</p>
@@ -109,6 +111,34 @@ function HabitDetailPage() {
           </p>
           <p className="text-[10px] text-muted-foreground">{t("این ماه", "This month")}</p>
         </Card>
+        <Card className="flex flex-col items-center gap-1 py-3">
+          <Trophy className="h-5 w-5 text-primary" />
+          <p className="text-lg font-black text-foreground">
+            {faNum(lifetime.longestStreak, lang)}
+          </p>
+          <p className="text-[10px] text-muted-foreground">
+            {t("بیشترین استریک", "Longest streak")}
+          </p>
+        </Card>
+        {habit.type === "quantity" && (
+          <Card className="flex flex-col items-center gap-1 py-3">
+            {habit.unitKind === "time" ? (
+              <Clock3 className="h-5 w-5 text-primary" />
+            ) : (
+              <Sigma className="h-5 w-5 text-primary" />
+            )}
+            <p className="text-lg font-black text-foreground">
+              {habit.unitKind === "time"
+                ? formatDuration(lifetime.totalValue, lang)
+                : `${formatCompactValue(lifetime.totalValue, lang)}${habit.unit ? ` ${habit.unit}` : ""}`}
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              {habit.unitKind === "time"
+                ? t("مجموع زمان", "Total time")
+                : t("مجموع مقدار", "Total amount")}
+            </p>
+          </Card>
+        )}
       </div>
 
       <Card>

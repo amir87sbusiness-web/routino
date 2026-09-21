@@ -53,6 +53,26 @@ describe("task draft compatibility", () => {
       target: 1,
       unitKind: "count",
       reminderOn: false,
+      deadlineOn: false,
+    });
+  });
+
+  it("round-trips an optional task deadline independently from its reminder", () => {
+    const draft = {
+      ...emptyTaskDraft("2026-09-19"),
+      title: "گزارش",
+      deadlineOn: true,
+      deadlineDate: "2026-09-23",
+      deadlineTime: "18:30",
+    };
+
+    const saved = draftToTask(draft);
+    expect(saved.deadlineAt).toBe("2026-09-23T18:30");
+    expect(saved.reminderAt).toBeNull();
+    expect(taskToDraft(saved)).toMatchObject({
+      deadlineOn: true,
+      deadlineDate: "2026-09-23",
+      deadlineTime: "18:30",
     });
   });
 
@@ -233,6 +253,43 @@ describe("TaskFormModal measurement controls", () => {
 
     expect(document.body.textContent).toContain("Count (number)");
     expect(document.body.textContent).toContain("Time (hr/min/sec)");
+    expect(document.body.textContent).toContain("Deadline");
+  });
+});
+
+describe("TaskRow deadline state", () => {
+  let host: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 8, 23, 9));
+    host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    host.remove();
+    vi.useRealTimers();
+  });
+
+  it("labels an unfinished task after its deadline as overdue", () => {
+    act(() => {
+      root.render(
+        <TaskRow
+          task={{ ...task, deadlineAt: "2026-09-22T18:30" }}
+          settings={{ completionSoundEnabled: false, hapticsEnabled: false }}
+          lang="en"
+          t={(_fa, en) => en}
+          onUpdate={() => true}
+          onDelete={() => undefined}
+        />,
+      );
+    });
+
+    expect(host.textContent).toContain("Overdue");
   });
 });
 

@@ -28,6 +28,7 @@ const samples = [
       schedule: { kind: "weekdays", weekdays: [0, 2, 4] },
       monthlyGoal: 12,
       reminderTime: "20:30",
+      deadlineTime: "19:45",
       createdAt: 1_725_000_000_000,
       archived: false,
     },
@@ -64,6 +65,7 @@ const samples = [
       value: 1,
       done: true,
       reminderAt: null,
+      deadlineAt: "2026-09-16T18:00",
       color: "blue",
       icon: "check",
     },
@@ -131,6 +133,7 @@ describe("record storage codec", () => {
       value: 0,
       done: false,
       reminderAt: null,
+      deadlineAt: null,
     };
     const month = {
       habitId: "habit-min",

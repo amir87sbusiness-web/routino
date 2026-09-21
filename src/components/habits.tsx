@@ -36,6 +36,7 @@ import {
   rawPercent,
 } from "@/lib/logic";
 import { MOOD_EMOJIS } from "@/lib/presets";
+import { isHabitDeadlinePassed } from "@/lib/deadlines";
 import {
   shouldTriggerCompletionFeedback,
   triggerCompletionFeedback,
@@ -197,6 +198,7 @@ export function HabitRow({
   const done = isCompleted(habit, log);
   const raw = rawPercent(habit, log);
   const isFuture = dk > todayKey();
+  const deadlinePassed = isHabitDeadlinePassed(habit, dk);
 
   const commit = (patch: Partial<{ value: number; done: boolean; note: string; mood: string }>) => {
     if (isFuture) return false;
@@ -204,6 +206,8 @@ export function HabitRow({
       habit.type === "binary"
         ? (patch.done ?? done)
         : (patch.done ?? (patch.value ?? log?.value ?? 0) >= habit.target);
+    const increasesValue = patch.value !== undefined && patch.value > (log?.value ?? 0);
+    if (deadlinePassed && ((!done && afterCompleted) || increasesValue)) return false;
     const mutationAccepted = onUpdate((d) => applyLog(d, habit, cal, patch, dk).db);
     if (mutationAccepted && done !== afterCompleted) onCompletionChange?.(afterCompleted);
     if (
@@ -221,6 +225,20 @@ export function HabitRow({
 
   const toggleDone = (next: boolean) => {
     if (isFuture) return;
+    if (deadlinePassed && !done && next) return;
+    if (
+      deadlinePassed &&
+      done &&
+      !next &&
+      !window.confirm(
+        t(
+          "اگر تیک را برداری، امروز دیگر نمی‌توانی این عادت را انجام‌شده ثبت کنی.",
+          "If you undo this, you cannot mark this habit complete again today.",
+        ),
+      )
+    ) {
+      return;
+    }
     const accepted =
       habit.type === "binary"
         ? commit({ done: next, value: next ? 1 : 0 })
@@ -358,6 +376,7 @@ export function HabitRow({
                 )}
                 {log?.mood && <span>{log.mood}</span>}
                 {log?.note && <span className="truncate">📝 {log.note}</span>}
+                {habit.deadlineTime && <span dir="ltr">⏱ {habit.deadlineTime}</span>}
               </div>
             </button>
 
@@ -650,6 +669,7 @@ export interface HabitDraft {
   weekdays: number[];
   monthlyGoal: string; // empty = auto
   reminderTime: string; // empty = none
+  deadlineTime: string; // empty = none
 }
 
 /** All seven weekdays (Sunday=0 … Saturday=6), i.e. an every-day habit. */
@@ -669,6 +689,7 @@ export function emptyDraft(categoryId: string): HabitDraft {
     // پیش‌فرض هدف ماهانهٔ هر عادت جدید ۳۰ روز است؛ کاربر می‌تواند در فرم عوضش کند.
     monthlyGoal: "30",
     reminderTime: "",
+    deadlineTime: "",
   };
 }
 
@@ -694,6 +715,7 @@ export function HabitFormModal({
   const weekdayNames = lang === "fa" ? WEEKDAYS_FA : WEEKDAYS_EN;
   const pickerOrder = weekdayOrder(lang === "fa" ? "jalali" : "gregorian");
   const [reminderPickerOpen, setReminderPickerOpen] = useState(false);
+  const [deadlinePickerOpen, setDeadlinePickerOpen] = useState(false);
   return (
     <Modal
       open={open}
@@ -913,6 +935,39 @@ export function HabitFormModal({
           </div>
         )}
 
+        <div>
+          <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+            {t("ددلاین روزانه", "Deadline")}
+          </p>
+          <button
+            type="button"
+            onClick={() => setDeadlinePickerOpen((value) => !value)}
+            className="w-full rounded-xl border border-border px-3 py-2 text-center text-sm font-bold text-foreground hover:bg-secondary"
+            dir="ltr"
+          >
+            {draft.deadlineTime || t("خاموش", "Off")}
+          </button>
+          {deadlinePickerOpen && (
+            <div className="mt-2 rounded-2xl border border-border p-3">
+              <TimePicker24
+                value={draft.deadlineTime || "18:00"}
+                onChange={(deadlineTime) => setDraft({ ...draft, deadlineTime })}
+                lang={lang}
+                t={t}
+              />
+              {draft.deadlineTime && (
+                <button
+                  type="button"
+                  onClick={() => setDraft({ ...draft, deadlineTime: "" })}
+                  className="mt-2 w-full rounded-xl border border-dashed border-border py-1.5 text-xs font-bold text-destructive hover:bg-secondary"
+                >
+                  {t("حذف ددلاین", "Remove deadline")}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+
         <Button disabled={!draft.name.trim() || draft.weekdays.length === 0} onClick={onSave}>
           {draft.id ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
           {draft.id ? t("ذخیره تغییرات", "Save changes") : t("اضافه کردن", "Add habit")}
@@ -939,6 +994,7 @@ export function draftToHabit(draft: HabitDraft, existing?: Habit): Habit {
         : { kind: "weekdays", weekdays: draft.weekdays },
     monthlyGoal: draft.monthlyGoal ? Math.max(1, Number(draft.monthlyGoal)) : null,
     reminderTime: draft.reminderTime || null,
+    deadlineTime: draft.deadlineTime || null,
     createdAt: existing?.createdAt ?? Date.now(),
     archived: existing?.archived,
   };
@@ -961,5 +1017,6 @@ export function habitToDraft(h: Habit): HabitDraft {
         : [...ALL_WEEKDAYS],
     monthlyGoal: h.monthlyGoal ? String(h.monthlyGoal) : "",
     reminderTime: h.reminderTime ?? "",
+    deadlineTime: h.deadlineTime ?? "",
   };
 }
