@@ -13,8 +13,10 @@
  * برمی‌گرداند.
  */
 import { useState } from "react";
+import { Browser } from "@capacitor/browser";
+import { Capacitor } from "@capacitor/core";
 import { Button, Modal } from "@/components/ui";
-import { uid } from "@/lib/store";
+import { LEGAL_INFO } from "@/lib/legal-info";
 import { useApp } from "@/state/app";
 
 export function FeedbackModal({
@@ -25,20 +27,22 @@ export function FeedbackModal({
   /** بعد از ثبت یا رد شدن. `submitted` می‌گوید نظری واقعاً ذخیره شد یا نه. */
   onDone: (submitted: boolean) => void;
 }) {
-  const { t, submitFeedback } = useApp();
+  const { t } = useApp();
   const [rating, setRating] = useState(0);
   const [section, setSection] = useState("");
   const [comment, setComment] = useState("");
 
   const finish = (submitted: boolean) => {
     if (submitted) {
-      submitFeedback({
-        id: uid(),
-        rating,
-        section: rating <= 3 ? section || undefined : undefined,
-        comment: comment.trim() || undefined,
-        at: Date.now(),
-      });
+      const text = [
+        "نظر درباره روتینو",
+        `امتیاز: ${rating} از 5`,
+        ...(rating <= 3 ? [`بخش: ${section || "سایر"}`] : []),
+        ...(comment.trim() ? [`توضیحات: ${comment.trim()}`] : []),
+      ].join("\n");
+      const url = `https://t.me/${LEGAL_INFO.telegram}?text=${encodeURIComponent(text)}`;
+      if (Capacitor.isNativePlatform()) void Browser.open({ url });
+      else window.open(url, "_blank", "noopener,noreferrer");
     }
     setRating(0);
     setSection("");
