@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="origin">
+  <title>انتقال به درگاه پرداخت روتینو</title>
+  <style>
+    html,body{margin:0;min-height:100%;background:#fff;font-family:Tahoma,sans-serif}
+    body{display:grid;place-items:center;min-height:100vh;color:#57534e}
+    p{font-size:14px}
+  </style>
+</head>
+<body>
+  <p id="status">در حال انتقال به درگاه پرداخت…</p>
+  <script>
+    (() => {
+      const authority = new URLSearchParams(window.location.search).get("authority")?.trim() || "";
+      if (!/^[A-Za-z0-9_-]{20,128}$/.test(authority)) {
+        document.getElementById("status").textContent = "شناسه پرداخت نامعتبر است.";
+        return;
+      }
+
+      const target = `https://payment.zarinpal.com/pg/StartPay/${encodeURIComponent(authority)}`;
+      window.location.replace(target);
+    })();
+  </script>
+</body>
+</html>
