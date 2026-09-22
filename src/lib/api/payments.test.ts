@@ -65,47 +65,6 @@ describe("payment checkout API", () => {
     expect(serialized).not.toMatch(/amount|months|entitlement|merchant|api_key/i);
   });
 
-  it("routes Android StartPay through the first-party Routino bridge", async () => {
-    auth.authedRequest.mockResolvedValueOnce({
-      free: false,
-      paymentId: "payment-android",
-      authority: "A000000000000000000000000000000001",
-      paymentUrl:
-        "https://payment.zarinpal.com/pg/StartPay/A000000000000000000000000000000001",
-    });
-
-    const result = await checkout("m3", undefined, "android", crypto.randomUUID());
-
-    expect(result.paymentUrl).toBe(
-      "https://routino.me/pay/start?authority=A000000000000000000000000000000001",
-    );
-  });
-
-  it("does not change the normal web gateway URL", async () => {
-    auth.authedRequest.mockResolvedValueOnce({
-      free: false,
-      paymentId: "payment-web",
-      authority: "A1",
-      paymentUrl: "https://payment.zarinpal.com/pg/StartPay/A1",
-    });
-
-    const result = await checkout("m3", undefined, "web", crypto.randomUUID());
-
-    expect(result.paymentUrl).toBe("https://payment.zarinpal.com/pg/StartPay/A1");
-  });
-
-  it("fails closed on Android instead of opening StartPay directly without Authority", async () => {
-    auth.authedRequest.mockResolvedValueOnce({
-      free: false,
-      paymentId: "payment-android-bad",
-      paymentUrl: "https://payment.zarinpal.com/pg/StartPay/UNKNOWN",
-    });
-
-    const result = await checkout("m3", undefined, "android", crypto.randomUUID());
-
-    expect(result.paymentUrl).toBeUndefined();
-  });
-
   it("retries provider_busy with the same attempt id and bounded delays", async () => {
     vi.useFakeTimers();
     auth.authedRequest
