@@ -37,8 +37,11 @@ export function renderResultPage(
   const target = native ? deepLink : webUrl;
 
   const ok = outcome === "paid";
+  // Native clients should return to the app immediately and let the app poll the
+  // authoritative payment endpoint if verification is still settling. Keeping a
+  // native user on this browser page adds latency and an unnecessary extra step.
   const retrySeconds =
-    outcome === "pending" && input.retryCallbackAfterSeconds
+    !native && outcome === "pending" && input.retryCallbackAfterSeconds
       ? Math.max(5, Math.min(300, Math.ceil(input.retryCallbackAfterSeconds)))
       : 0;
   const title = ok
@@ -92,8 +95,14 @@ export function renderResultPage(
 </div>
 <script>
   ${
-    retrySeconds
+    native
       ? `
+  // Return native checkout to the app immediately. The app verifies the final
+  // state from the server, so query-string status is never trusted for access.
+  window.location.replace(${JSON.stringify(target)});
+  `
+      : retrySeconds
+        ? `
   // Keep the candidate in the original callback URL. Never send it to the app.
   var retryUrl = new URL(window.location.href);
   var attempt = Math.max(0, Number(retryUrl.searchParams.get("verificationRetry")) || 0);
@@ -103,8 +112,8 @@ export function renderResultPage(
     setTimeout(function () { window.location.replace(retryUrl.href); }, ${retrySeconds * 1000});
   }
   `
-      : `
-  // Give the user a beat to read the outcome, then return to the app.
+        : `
+  // Web users can briefly read the outcome before returning to the SPA.
   setTimeout(function () { window.location.href = ${JSON.stringify(target)}; }, ${ok ? 1600 : 4000});
   `
   }
