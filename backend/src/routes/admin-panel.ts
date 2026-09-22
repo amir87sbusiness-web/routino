@@ -26,8 +26,15 @@ export const adminPanelRoutes: FastifyPluginAsync = async (app) => {
     if (!token) throw unauthorized("invalid_admin_session", "Admin session is required");
     await verifyAdminSession(app.deps.env, token, new Date(app.deps.now()));
 
-    const query = req.query as { days?: string };
-    const days = Number(query.days ?? 30);
-    return adminSalesTrend(app.deps.db, new Date(app.deps.now()), days);
+    const query = req.query as {
+      days?: string;
+      range?: string;
+      customStart?: string;
+      customEnd?: string;
+    };
+    const input = query.range
+      ? { range: query.range, customStart: query.customStart, customEnd: query.customEnd }
+      : Number(query.days ?? 30);
+    return adminSalesTrend(app.deps.db, new Date(app.deps.now()), input);
   });
 };
