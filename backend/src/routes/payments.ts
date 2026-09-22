@@ -99,6 +99,18 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
     const t = now();
     const result = await checkoutPayment(db, env, psp, user, body, t);
 
+    // ZarinPal's StartPay rejects the native Android navigation when it is opened
+    // directly from a Custom Tab. Enter through Routino's real web origin first;
+    // pay-start.html immediately forwards to the fixed ZarinPal StartPay URL, so
+    // there is no extra tap and no arbitrary/open redirect surface.
+    if (!result.free && body.platform === "android") {
+      const webBase = env.PUBLIC_WEB_URL.replace(/\/$/, "");
+      return {
+        ...result,
+        paymentUrl: `${webBase}/pay-start.html?authority=${encodeURIComponent(result.authority)}`,
+      };
+    }
+
     return result;
   });
 
