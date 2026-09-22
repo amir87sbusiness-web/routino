@@ -2,7 +2,7 @@ import { Download } from "lucide-react";
 import { useEffect, useState } from "react";
 import {
   checkAndroidUpdateOnBoot,
-  openAndroidUpdatePage,
+  downloadAndroidUpdate,
   type AndroidUpdate,
 } from "@/lib/android-update";
 import { Button } from "@/components/ui";
@@ -39,7 +39,7 @@ export function AndroidUpdateBanner() {
           {t("برای دریافت نسخهٔ جدید، بروزرسانی را بزن.", "Tap update to get the latest version.")}
         </p>
       </div>
-      <Button className="px-3 py-1.5 text-xs" onClick={() => void openAndroidUpdatePage()}>
+      <Button className="px-3 py-1.5 text-xs" onClick={() => void downloadAndroidUpdate()}>
         {t("بروزرسانی", "Update")}
       </Button>
     </div>

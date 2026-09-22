@@ -1,9 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   ANDROID_UPDATE_CHECK_INTERVAL_MS,
+  ANDROID_UPDATE_APK_URL,
   checkAndroidUpdate,
+  downloadAndroidUpdate,
   type AndroidUpdateDriver,
 } from "./android-update";
+
+const nativeDownload = vi.hoisted(() => vi.fn());
+
+vi.mock("@capacitor/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@capacitor/core")>();
+  return {
+    ...actual,
+    registerPlugin: () => ({ download: nativeDownload }),
+  };
+});
 
 function driver(overrides: Partial<AndroidUpdateDriver> = {}): AndroidUpdateDriver {
   return {
@@ -17,6 +29,13 @@ function driver(overrides: Partial<AndroidUpdateDriver> = {}): AndroidUpdateDriv
 }
 
 describe("Android in-app update checks", () => {
+  it("asks the native Android bridge to download Routino's fixed APK URL", async () => {
+    nativeDownload.mockResolvedValue(undefined);
+
+    await downloadAndroidUpdate();
+
+    expect(nativeDownload).toHaveBeenCalledWith({ url: ANDROID_UPDATE_APK_URL });
+  });
   it("returns a newer Android release from Routino's own version endpoint", async () => {
     await expect(checkAndroidUpdate(driver())).resolves.toEqual({ versionCode: 10 });
   });

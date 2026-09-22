@@ -1,6 +1,8 @@
+import { registerPlugin } from "@capacitor/core";
+
 /** Android-only, low-frequency check for a newer APK on Routino's own site. */
 export const ANDROID_UPDATE_FEED_URL = "https://routino.me/app/android-update.json";
-export const ANDROID_DOWNLOAD_SECTION_URL = "https://routino.me/#get";
+export const ANDROID_UPDATE_APK_URL = "https://routino.me/downloads/routino-android-1.0.apk";
 export const ANDROID_UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 const LAST_CHECK_KEY = "routino:android-update:last-check:v1";
@@ -26,6 +28,12 @@ export interface AndroidUpdateDriver {
 export interface AndroidUpdate {
   versionCode: number;
 }
+
+interface AndroidUpdateBridge {
+  download(options: { url: string }): Promise<void>;
+}
+
+const androidUpdateBridge = registerPlugin<AndroidUpdateBridge>("AndroidUpdate");
 
 function positiveInteger(value: unknown): number | null {
   const parsed = Number(value);
@@ -107,8 +115,7 @@ export async function checkAndroidUpdateOnBoot(): Promise<AndroidUpdate | null> 
   });
 }
 
-/** The button destination is fixed in the app and cannot be changed by the feed. */
-export async function openAndroidUpdatePage(): Promise<void> {
-  const { Browser } = await import("@capacitor/browser");
-  await Browser.open({ url: ANDROID_DOWNLOAD_SECTION_URL });
+/** Starts the signed APK download in Android's native Download Manager. */
+export async function downloadAndroidUpdate(): Promise<void> {
+  await androidUpdateBridge.download({ url: ANDROID_UPDATE_APK_URL });
 }

@@ -6,12 +6,12 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const updates = vi.hoisted(() => ({
   check: vi.fn(),
-  open: vi.fn(),
+  download: vi.fn(),
 }));
 
 vi.mock("@/lib/android-update", () => ({
   checkAndroidUpdateOnBoot: updates.check,
-  openAndroidUpdatePage: updates.open,
+  downloadAndroidUpdate: updates.download,
 }));
 
 import { AndroidUpdateBanner } from "./AndroidUpdateBanner";
@@ -23,7 +23,8 @@ describe("AndroidUpdateBanner", () => {
   beforeEach(() => {
     localStorage.clear();
     updates.check.mockReset();
-    updates.open.mockReset();
+    updates.download.mockReset();
+    updates.download.mockResolvedValue(undefined);
     updates.check.mockResolvedValue({ versionCode: 10 });
     host = document.createElement("div");
     document.body.append(host);
@@ -35,7 +36,7 @@ describe("AndroidUpdateBanner", () => {
     host.remove();
   });
 
-  it("shows an Android-only in-app update card and opens the fixed download page", async () => {
+  it("starts the APK download directly without opening the website download section", async () => {
     await act(async () => root.render(<AndroidUpdateBanner />));
 
     expect(host.textContent).toContain("نسخهٔ جدید روتینو آماده است");
@@ -44,7 +45,7 @@ describe("AndroidUpdateBanner", () => {
     )!;
     await act(async () => update.click());
 
-    expect(updates.open).toHaveBeenCalledTimes(1);
+    expect(updates.download).toHaveBeenCalledTimes(1);
   });
 
   it("does not render when the local Android version is current", async () => {
