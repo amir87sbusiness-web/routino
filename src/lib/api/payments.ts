@@ -29,7 +29,6 @@ export interface PlansResponse {
 const PLANS_CACHE_KEY = "routino:plans:v2";
 export const PLANS_CACHE_TTL_MS = 12 * 60 * 60_000;
 const QUOTE_BATCH_CACHE_TTL_MS = 60_000;
-const ANDROID_PAYMENT_BRIDGE_URL = "https://routino.me/pay/start";
 
 interface PlansCacheEntry {
   value: PlansResponse;
@@ -222,23 +221,11 @@ export async function checkout(
   attemptId: string,
   signal?: AbortSignal,
 ): Promise<CheckoutResult> {
-  const result = await authedRequest<CheckoutResult>("/payments/checkout", {
+  return authedRequest("/payments/checkout", {
     method: "POST",
     body: { planId, code: code || undefined, platform, attemptId },
     signal,
   });
-
-  if (platform !== "android" || !result.paymentUrl) return result;
-
-  // ZarinPal rejects a native-app/localhost referrer for this merchant. Android
-  // therefore opens a first-party routino.me page, which immediately forwards
-  // the same server-issued Authority to StartPay. Never fall back to the direct
-  // gateway URL if Authority is missing; failing closed is safer than repeating
-  // the rejected flow.
-  if (!result.authority) return { ...result, paymentUrl: undefined };
-  const bridgeUrl = new URL(ANDROID_PAYMENT_BRIDGE_URL);
-  bridgeUrl.searchParams.set("authority", result.authority);
-  return { ...result, paymentUrl: bridgeUrl.toString() };
 }
 
 const PROVIDER_BUSY_MAX_RETRIES = 3;
