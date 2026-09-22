@@ -2,10 +2,16 @@ import { Pause, Play, Timer } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { faNum, type Lang } from "@/lib/dates";
-import { isAndroidNativeTimer, syncAndroidTimer } from "@/lib/android-timer-notification";
+import {
+  consumeAndroidTimerCommand,
+  isAndroidNativeTimer,
+  reconcileAndroidTimerSnapshot,
+  syncAndroidTimer,
+} from "@/lib/android-timer-notification";
 import { showLocalWebNotification } from "@/lib/local-web-notifications";
 import {
   advanceTimer,
+  createTimer,
   loadTimer,
   pauseTimer,
   resumeTimer,
@@ -48,7 +54,55 @@ export function ActiveTimerBar({ owner, lang, t, onOpen, requestResume }: Active
 
   useEffect(() => {
     publish(loadTimer(owner));
+    let consumingNativeCommand = false;
+    const consumeNativeCommand = async () => {
+      if (!isAndroidNativeTimer() || consumingNativeCommand) return;
+      consumingNativeCommand = true;
+      try {
+        const command = await consumeAndroidTimerCommand();
+        if (!command) return;
+        const current = reconcileAndroidTimerSnapshot(timerRef.current, command.timer);
+        if (command.action === "pause" || command.action === "resume") {
+          publish(current, true);
+          return;
+        }
+        const pending = [...current.pending];
+        if (command.action === "finish" && !current.onBreak && current.focusMs >= 1_000) {
+          const endedAt = command.actedAt ?? Date.now();
+          pending.push({
+            id: `${current.runId}:partial:${current.round}`,
+            mode: current.mode,
+            focusSeconds: Math.round(current.focusMs / 1_000),
+            startedAt: current.sessionStartedAt ?? endedAt - current.focusMs,
+            endedAt,
+            linked: current.linked,
+          });
+        }
+        publish(
+          {
+            ...createTimer(
+              current.mode,
+              current.mode === "pomodoro" ? current.focusMinutes : current.freeMinutes,
+              {
+                breakMinutes: current.breakMinutes,
+                cycles: current.cycles,
+                freeMinutes: current.freeMinutes,
+                linked: current.linked,
+              },
+            ),
+            pending,
+            finished: command.action === "finish",
+          },
+          true,
+        );
+      } catch {
+        // Native state remains persisted and will be retried on the next foreground tick.
+      } finally {
+        consumingNativeCommand = false;
+      }
+    };
     const settle = () => {
+      void consumeNativeCommand();
       const before = timerRef.current;
       const result = advanceTimer(before, Date.now());
       if (result.state === before) return;
@@ -77,14 +131,21 @@ export function ActiveTimerBar({ owner, lang, t, onOpen, requestResume }: Active
     const onStorage = (event: StorageEvent) => {
       if (event.key === `routino:active-timer:v1:${owner}`) publish(loadTimer(owner));
     };
+    const onForeground = () => {
+      if (document.visibilityState === "visible") void consumeNativeCommand();
+    };
     window.addEventListener(TIMER_UPDATED_EVENT, onTimerUpdated);
     window.addEventListener("storage", onStorage);
+    document.addEventListener("visibilitychange", onForeground);
+    window.addEventListener("focus", onForeground);
     const interval = window.setInterval(settle, 1000);
     settle();
     return () => {
       window.clearInterval(interval);
       window.removeEventListener(TIMER_UPDATED_EVENT, onTimerUpdated);
       window.removeEventListener("storage", onStorage);
+      document.removeEventListener("visibilitychange", onForeground);
+      window.removeEventListener("focus", onForeground);
     };
   }, [owner, publish]);
 

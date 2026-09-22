@@ -11,13 +11,14 @@ interface TimerNotificationBridge {
 
 export interface AndroidTimerCommand {
   id: string;
-  action: "pause" | "finish" | "cancel";
+  action: "pause" | "resume" | "finish" | "cancel";
   /** Native action time and latest native timeline, when the bridge can provide them. */
   actedAt?: number;
   timer?: NativeTimerSnapshot;
 }
 
-interface NativeTimerSnapshot {
+export interface NativeTimerSnapshot {
+  active?: boolean;
   mode: TimerState["mode"];
   remainingMs: number;
   elapsedMs: number;
@@ -42,6 +43,12 @@ export function isAndroidNativeTimer(): boolean {
 export function syncAndroidTimer(state: TimerState): Promise<void> {
   if (!isAndroidNativeTimer()) return Promise.resolve();
   const timer: NativeTimerSnapshot = {
+    active:
+      state.running ||
+      state.onBreak ||
+      state.sessionStartedAt !== null ||
+      state.focusMs > 0 ||
+      state.elapsedMs > 0,
     mode: state.mode,
     remainingMs: state.remainingMs,
     elapsedMs: state.elapsedMs,
@@ -67,12 +74,44 @@ export async function consumeAndroidTimerCommand(): Promise<AndroidTimerCommand 
   if (
     !command ||
     typeof command.id !== "string" ||
-    !["pause", "finish", "cancel"].includes(command.action) ||
+    !["pause", "resume", "finish", "cancel"].includes(command.action) ||
     consumedCommandIds.has(command.id)
   )
     return null;
   consumedCommandIds.add(command.id);
   return command;
+}
+
+/** Make the native foreground service authoritative after notification actions. */
+export function reconcileAndroidTimerSnapshot(
+  local: TimerState,
+  native: NativeTimerSnapshot | undefined,
+): TimerState {
+  if (!native || native.mode !== local.mode) return local;
+  const focusMs =
+    native.mode === "stopwatch"
+      ? native.elapsedMs
+      : native.onBreak
+        ? 0
+        : Math.max(
+            0,
+            (native.mode === "free" ? local.freeMinutes : native.focusMinutes) * 60_000 -
+              native.remainingMs,
+          );
+  return {
+    ...local,
+    remainingMs: native.remainingMs,
+    elapsedMs: native.elapsedMs,
+    focusMinutes: native.focusMinutes,
+    breakMinutes: native.breakMinutes,
+    cycles: native.cycles,
+    round: native.round,
+    onBreak: native.onBreak,
+    focusMs,
+    anchorAt: native.anchorAt,
+    running: native.running,
+    finished: false,
+  };
 }
 
 export async function openAndroidNotificationSettings(): Promise<void> {

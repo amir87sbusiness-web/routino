@@ -47,10 +47,58 @@ public class TimerTimelineTest {
     }
 
     @Test
+    public void consumingPauseOrResumeKeepsTheRestorableNativeSnapshot() {
+        assertFalse(TimerNotificationPlugin.shouldClearSnapshotAfterReadingCommand(
+            "{\"action\":\"pause\"}"));
+        assertFalse(TimerNotificationPlugin.shouldClearSnapshotAfterReadingCommand(
+            "{\"action\":\"resume\"}"));
+        assertTrue(TimerNotificationPlugin.shouldClearSnapshotAfterReadingCommand(
+            "{\"action\":\"finish\"}"));
+    }
+
+    @Test
     public void restoresASavedTimerBeforeHandlingAColdNotificationAction() {
         TimerTimeline timer = TimerNotificationService.timerFromValues(
             "free", true, 60_000, 0, 1, 1, 1, 1, false, 1_000);
         assertEquals("free", timer.mode);
         assertTrue(timer.running);
+    }
+
+    @Test
+    public void pauseFreezesTheNativeCountdownUntilResume() {
+        TimerTimeline timer = new TimerTimeline(
+            "free", 60_000, 0, 60_000, 10_000, 1, 1, false, 1_000);
+
+        timer.pause(11_000);
+        assertFalse(timer.running);
+        assertEquals(50_000, timer.remainingMs);
+        assertEquals(0, timer.anchorAt);
+
+        timer.advance(31_000);
+        assertEquals(50_000, timer.remainingMs);
+
+        timer.resume(31_000);
+        timer.advance(41_000);
+        assertTrue(timer.running);
+        assertEquals(40_000, timer.remainingMs);
+    }
+
+    @Test
+    public void restoresAPausedSnapshotSoTheNotificationCanResumeIt() {
+        TimerTimeline timer = TimerNotificationService.timerFromValues(
+            "free", false, 42_000, 0, 1, 1, 1, 1, false, 0);
+
+        assertFalse(timer.running);
+        assertEquals(42_000, timer.remainingMs);
+    }
+
+    @Test
+    public void pausedNotificationSwitchesItsPrimaryActionToResume() {
+        assertEquals(
+            TimerNotificationService.ACTION_PAUSE,
+            TimerNotificationService.primaryActionFor(true));
+        assertEquals(
+            TimerNotificationService.ACTION_RESUME,
+            TimerNotificationService.primaryActionFor(false));
     }
 }

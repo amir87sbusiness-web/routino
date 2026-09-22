@@ -15,6 +15,13 @@ final class TimerTimeline {
 
     TimerTimeline(String mode, long remainingMs, long elapsedMs, long focusDurationMs,
                   long breakDurationMs, int cycles, int round, boolean onBreak, long anchorAt) {
+        this(mode, remainingMs, elapsedMs, focusDurationMs, breakDurationMs,
+            cycles, round, onBreak, anchorAt, true);
+    }
+
+    TimerTimeline(String mode, long remainingMs, long elapsedMs, long focusDurationMs,
+                  long breakDurationMs, int cycles, int round, boolean onBreak, long anchorAt,
+                  boolean running) {
         this.mode = mode;
         this.remainingMs = Math.max(0, remainingMs);
         this.elapsedMs = Math.max(0, elapsedMs);
@@ -24,6 +31,7 @@ final class TimerTimeline {
         this.round = Math.max(1, round);
         this.onBreak = onBreak;
         this.anchorAt = anchorAt;
+        this.running = running;
     }
 
     long deadlineMs() {
@@ -68,5 +76,19 @@ final class TimerTimeline {
             remainingMs -= delta;
             anchorAt = now;
         }
+    }
+
+    void pause(long now) {
+        if (!running) return;
+        advance(now);
+        if (!running) return;
+        running = false;
+        anchorAt = 0;
+    }
+
+    void resume(long now) {
+        if (running || now <= 0) return;
+        running = true;
+        anchorAt = now;
     }
 }

@@ -14,6 +14,7 @@ import {
   consumeAndroidTimerCommand,
   isAndroidNativeTimer,
   openAndroidNotificationSettings,
+  reconcileAndroidTimerSnapshot,
   syncAndroidTimer,
 } from "@/lib/android-timer-notification";
 import { dueHabitsOn, getLog, isCompleted } from "@/lib/logic";
@@ -323,10 +324,19 @@ export function TimerPage() {
         const command = await consumeAndroidTimerCommand();
         if (cancelled || !command) return;
         const now = command.actedAt ?? Date.now();
-        if (command.action === "pause") {
-          publish(pauseTimer(settle(now, false), now));
+        const reconciled = command.timer
+          ? reconcileAndroidTimerSnapshot(timerRef.current, command.timer)
+          : command.action === "pause"
+            ? pauseTimer(settle(now, false), now)
+            : command.action === "resume"
+              ? resumeTimer(timerRef.current, now)
+              : timerRef.current;
+        if (command.action === "pause" || command.action === "resume") {
+          publish(reconciled);
           return;
         }
+        timerRef.current = reconciled;
+        setTimer(reconciled);
         if (command.action === "finish") {
           finalizeSession(true, true, now);
           return;
@@ -334,11 +344,15 @@ export function TimerPage() {
         finalizeSession(false, false, now);
         const current = timerRef.current;
         publish({
-          ...createTimer(mode, mode === "pomodoro" ? current.focusMinutes : current.freeMinutes, {
-            breakMinutes: current.breakMinutes,
-            cycles: current.cycles,
-            linked: current.linked,
-          }),
+          ...createTimer(
+            current.mode,
+            current.mode === "pomodoro" ? current.focusMinutes : current.freeMinutes,
+            {
+              breakMinutes: current.breakMinutes,
+              cycles: current.cycles,
+              linked: current.linked,
+            },
+          ),
           pending: current.pending,
         });
       } catch {
@@ -356,7 +370,7 @@ export function TimerPage() {
       document.removeEventListener("visibilitychange", onForeground);
       window.removeEventListener("focus", onForeground);
     };
-  }, [owner, mode]);
+  }, [owner]);
 
   useEffect(() => {
     if (!isAndroidNativeTimer()) return;

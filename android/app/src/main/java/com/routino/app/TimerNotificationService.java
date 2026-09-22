@@ -25,6 +25,7 @@ public class TimerNotificationService extends Service {
     static final String ACTION_SYNC = "com.routino.app.timer.SYNC";
     static final String ACTION_STOP = "com.routino.app.timer.STOP";
     static final String ACTION_PAUSE = "com.routino.app.timer.PAUSE";
+    static final String ACTION_RESUME = "com.routino.app.timer.RESUME";
     static final String ACTION_FINISH = "com.routino.app.timer.FINISH";
     static final String ACTION_CANCEL = "com.routino.app.timer.CANCEL";
     static final String EXTRA_SNAPSHOT = "snapshot";
@@ -93,19 +94,19 @@ public class TimerNotificationService extends Service {
         return timerFromValues(value.getString("mode"), value.optBoolean("running"),
             value.getLong("remainingMs"), value.getLong("elapsedMs"),
             value.getLong("focusMinutes"), value.getLong("breakMinutes"), value.getInt("cycles"),
-            value.getInt("round"), value.getBoolean("onBreak"), value.getLong("anchorAt"));
+            value.getInt("round"), value.getBoolean("onBreak"), value.optLong("anchorAt", 0));
     }
 
     static TimerTimeline timerFromValues(String mode, boolean running, long remainingMs, long elapsedMs,
             long focusMinutes, long breakMinutes, int cycles, int round, boolean onBreak, long anchorAt) {
-        if (!running || anchorAt <= 0) {
-            throw new IllegalArgumentException("Inactive timer snapshot");
+        if (running && anchorAt <= 0) {
+            throw new IllegalArgumentException("Running timer requires an anchor");
         }
         if (!mode.equals("free") && !mode.equals("pomodoro") && !mode.equals("stopwatch")) {
             throw new IllegalArgumentException("Unknown timer mode");
         }
         return new TimerTimeline(mode, remainingMs, elapsedMs, focusMinutes * 60_000L,
-            breakMinutes * 60_000L, cycles, round, onBreak, anchorAt);
+            breakMinutes * 60_000L, cycles, round, onBreak, anchorAt, running);
     }
 
     private PendingIntent openApp() {
@@ -116,7 +117,12 @@ public class TimerNotificationService extends Service {
     }
 
     private boolean isTimerAction(String action) {
-        return ACTION_PAUSE.equals(action) || ACTION_FINISH.equals(action) || ACTION_CANCEL.equals(action);
+        return ACTION_PAUSE.equals(action) || ACTION_RESUME.equals(action)
+            || ACTION_FINISH.equals(action) || ACTION_CANCEL.equals(action);
+    }
+
+    static String primaryActionFor(boolean running) {
+        return running ? ACTION_PAUSE : ACTION_RESUME;
     }
 
     private PendingIntent timerAction(String action, int requestCode) {
@@ -147,17 +153,21 @@ public class TimerNotificationService extends Service {
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setSilent(true)
-            .setWhen(when)
-            .setShowWhen(true)
-            .setUsesChronometer(true)
             .setPriority(NotificationCompat.PRIORITY_LOW);
+        if (timer.running) {
+            builder.setWhen(when).setShowWhen(true).setUsesChronometer(true);
+        } else {
+            builder.setShowWhen(false).setUsesChronometer(false);
+        }
+        String primaryAction = primaryActionFor(timer.running);
         builder.addAction(new NotificationCompat.Action.Builder(
-            R.drawable.ic_stat_routino, "مکث", timerAction(ACTION_PAUSE, 7101)).build());
+            R.drawable.ic_stat_routino, timer.running ? "مکث" : "ادامه",
+            timerAction(primaryAction, timer.running ? 7101 : 7104)).build());
         builder.addAction(new NotificationCompat.Action.Builder(
             R.drawable.ic_stat_routino, "پایان و ثبت", timerAction(ACTION_FINISH, 7102)).build());
         builder.addAction(new NotificationCompat.Action.Builder(
             R.drawable.ic_stat_routino, "لغو", timerAction(ACTION_CANCEL, 7103)).build());
-        if (!stopwatch && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+        if (timer.running && !stopwatch && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             builder.setChronometerCountDown(true);
         }
         return builder.build();
@@ -167,9 +177,9 @@ public class TimerNotificationService extends Service {
         handler.removeCallbacks(boundary);
         if (timer == null) return;
         boolean wasRunning = timer.running;
-        timer.advance(System.currentTimeMillis());
-        if (!timer.running) {
-            if (wasRunning) showCompleted();
+        if (wasRunning) timer.advance(System.currentTimeMillis());
+        if (wasRunning && !timer.running) {
+            showCompleted();
             stopTimer();
             return;
         }
@@ -177,6 +187,7 @@ public class TimerNotificationService extends Service {
             getSystemService(NotificationManager.class).notify(RUNNING_ID, buildRunningNotification());
         }
         persistAdvancedSnapshot();
+        if (!timer.running) return;
         // The system chronometer moves continuously; this refresh also keeps the explicit
         // remaining-time text correct for launchers that do not render a chronometer.
         handler.postDelayed(boundary, 1_000);
@@ -188,6 +199,8 @@ public class TimerNotificationService extends Service {
             value.put("remainingMs", timer.remainingMs);
             value.put("elapsedMs", timer.elapsedMs);
             value.put("anchorAt", timer.anchorAt);
+            value.put("running", timer.running);
+            if (!timer.running) value.put("anchorAt", JSONObject.NULL);
             value.put("round", timer.round);
             value.put("onBreak", timer.onBreak);
             getPrefs().edit().putString(EXTRA_SNAPSHOT, value.toString()).apply();
@@ -210,18 +223,34 @@ public class TimerNotificationService extends Service {
     private void recordAction(String nativeAction) {
         refresh(false);
         if (timer == null) return;
-        String action = ACTION_PAUSE.equals(nativeAction) ? "pause"
-            : ACTION_FINISH.equals(nativeAction) ? "finish" : "cancel";
+        long actedAt = System.currentTimeMillis();
+        String action;
+        if (ACTION_PAUSE.equals(nativeAction)) {
+            timer.pause(actedAt);
+            action = "pause";
+        } else if (ACTION_RESUME.equals(nativeAction)) {
+            timer.resume(actedAt);
+            action = "resume";
+        } else {
+            action = ACTION_FINISH.equals(nativeAction) ? "finish" : "cancel";
+        }
+        persistAdvancedSnapshot();
         String snapshot = getPrefs().getString(EXTRA_SNAPSHOT, null);
         if (snapshot == null) return;
         try {
             JSONObject command = new JSONObject();
             command.put("id", UUID.randomUUID().toString());
             command.put("action", action);
-            command.put("actedAt", System.currentTimeMillis());
+            command.put("actedAt", actedAt);
             command.put("timer", new JSONObject(snapshot));
             getPrefs().edit().putString(EXTRA_COMMAND, command.toString()).apply();
-            stopTimer(false);
+            if ("pause".equals(action) || "resume".equals(action)) {
+                getSystemService(NotificationManager.class).notify(RUNNING_ID, buildRunningNotification());
+                handler.removeCallbacks(boundary);
+                if (timer.running) handler.postDelayed(boundary, 1_000);
+            } else {
+                stopTimer(false);
+            }
         } catch (JSONException ignored) {
             // Do not stop an active timer when the snapshot cannot be persisted safely.
         }

@@ -4,9 +4,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTimer, loadTimer, resumeTimer, saveTimer } from "@/lib/timer-runtime";
 import { ActiveTimerBar } from "./ActiveTimerBar";
 
-const mocks = vi.hoisted(() => ({ localNotify: vi.fn(async () => "shown") }));
+const mocks = vi.hoisted(() => ({
+  localNotify: vi.fn(async () => "shown"),
+  native: false,
+  nativeCommand: vi.fn(),
+}));
 vi.mock("@/lib/local-web-notifications", () => ({
   showLocalWebNotification: mocks.localNotify,
+}));
+vi.mock("@/lib/android-timer-notification", () => ({
+  isAndroidNativeTimer: () => mocks.native,
+  syncAndroidTimer: vi.fn(async () => undefined),
+  consumeAndroidTimerCommand: mocks.nativeCommand,
+  reconcileAndroidTimerSnapshot: (state: object, snapshot: object) => ({ ...state, ...snapshot }),
 }));
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -20,6 +30,8 @@ describe("ActiveTimerBar", () => {
     vi.setSystemTime(1_000);
     localStorage.clear();
     mocks.localNotify.mockReset().mockResolvedValue("shown");
+    mocks.native = false;
+    mocks.nativeCommand.mockReset().mockResolvedValue(null);
     host = document.createElement("div");
     document.body.append(host);
     root = createRoot(host);
@@ -89,6 +101,38 @@ describe("ActiveTimerBar", () => {
     await act(async () => resume.click());
     expect(requestResume).toHaveBeenCalledTimes(1);
     expect(loadTimer("user-1").running).toBe(false);
+  });
+
+  it("applies a native notification pause outside the timer route", async () => {
+    mocks.native = true;
+    saveTimer("user-1", resumeTimer(createTimer("free", 2), 1_000));
+    mocks.nativeCommand
+      .mockResolvedValueOnce({
+        id: "pause-from-notification",
+        action: "pause",
+        actedAt: 31_000,
+        timer: {
+          mode: "free",
+          remainingMs: 90_000,
+          elapsedMs: 0,
+          focusMinutes: 25,
+          breakMinutes: 5,
+          cycles: 4,
+          round: 1,
+          onBreak: false,
+          anchorAt: null,
+          running: false,
+        },
+      })
+      .mockResolvedValue(null);
+
+    await act(async () =>
+      root.render(<ActiveTimerBar owner="user-1" lang="fa" t={(fa) => fa} onOpen={vi.fn()} />),
+    );
+    await act(async () => vi.advanceTimersByTimeAsync(1_000));
+
+    expect(host.querySelector('button[aria-label="ادامه"]')).not.toBeNull();
+    expect(loadTimer("user-1")).toMatchObject({ running: false, remainingMs: 90_000 });
   });
 
   it("announces completion while the user is outside the timer route", async () => {

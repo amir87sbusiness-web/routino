@@ -24,6 +24,7 @@ vi.mock("@/lib/android-timer-notification", () => ({
   isAndroidNativeTimer: () => mocks.android,
   syncAndroidTimer: mocks.sync,
   consumeAndroidTimerCommand: mocks.consume,
+  reconcileAndroidTimerSnapshot: (state: object, snapshot: object) => ({ ...state, ...snapshot }),
   openAndroidNotificationSettings: mocks.openSettings,
 }));
 vi.mock("@/lib/local-web-notifications", () => ({
@@ -88,6 +89,37 @@ describe("TimerPage native timer integration", () => {
 
     expect(mocks.sync).toHaveBeenCalledWith(expect.objectContaining({ running: true }));
     expect(mocks.requestPermission).not.toHaveBeenCalled();
+  });
+
+  it("applies resume from the paused native notification without resetting the timer", async () => {
+    const paused = { ...resumeTimer(createTimer("free", 2), 1_000), running: false, anchorAt: null };
+    saveTimer("user-1", paused);
+    mocks.consume.mockResolvedValueOnce({
+      id: "resume-from-notification",
+      action: "resume",
+      actedAt: 31_000,
+      timer: {
+        mode: "free",
+        remainingMs: 90_000,
+        elapsedMs: 0,
+        focusMinutes: 25,
+        breakMinutes: 5,
+        cycles: 4,
+        round: 1,
+        onBreak: false,
+        anchorAt: 31_000,
+        running: true,
+      },
+    });
+
+    await act(async () => root.render(<TimerPage />));
+    await act(async () => Promise.resolve());
+
+    expect(loadTimer("user-1")).toMatchObject({
+      running: true,
+      anchorAt: 31_000,
+      remainingMs: 90_000,
+    });
   });
 
   it("requests a prompt permission from the explicit CTA", async () => {

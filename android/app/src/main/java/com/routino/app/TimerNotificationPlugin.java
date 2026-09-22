@@ -24,7 +24,7 @@ public class TimerNotificationPlugin extends Plugin {
             return;
         }
         Intent intent = new Intent(getContext(), TimerNotificationService.class);
-        if (snapshot.optBoolean("running")) {
+        if (snapshot.optBoolean("running") || snapshot.optBoolean("active")) {
             intent.setAction(TimerNotificationService.ACTION_SYNC);
             intent.putExtra(TimerNotificationService.EXTRA_SNAPSHOT, snapshot.toString());
             try {
@@ -66,7 +66,8 @@ public class TimerNotificationPlugin extends Plugin {
     }
 
     static boolean shouldClearSnapshotAfterReadingCommand(String raw) {
-        return raw != null;
+        if (raw == null) return false;
+        return raw.contains("\"action\":\"finish\"") || raw.contains("\"action\":\"cancel\"");
     }
 
     /** Opens this app's Android notification page after an explicit user tap. */
