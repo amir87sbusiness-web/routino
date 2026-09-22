@@ -28,12 +28,6 @@ import {
 } from "@/components/ui";
 import { faNum, formatDate, type Calendar, type Lang } from "@/lib/dates";
 import {
-  checkNativeExactAlarmSetting,
-  isNativeRuntime,
-  requestNativeExactAlarmSetting,
-  requestNotificationPermission,
-} from "@/lib/native-notifications";
-import {
   shouldTriggerCompletionFeedback,
   triggerCompletionFeedback,
 } from "@/lib/completion-feedback";
@@ -134,32 +128,17 @@ export function nextQuickTaskColor(tasks: Task[], dateKey: string): string {
 }
 
 export function enableTaskReminderNotifications({
-  updatePreferences,
   t,
 }: {
   updatePreferences: (patch: Partial<Settings>) => void;
   t: (fa: string, en: string) => string;
 }) {
-  updatePreferences({ notificationsEnabled: true });
-  void (async () => {
-    const granted = await requestNotificationPermission();
-    if (!granted) {
-      toast.error(
-        t(
-          "کار ذخیره شد، اما مجوز اعلان بسته است؛ یادآوری از تنظیمات فعال می‌شود.",
-          "Task saved, but notification permission is blocked; enable reminders in Settings.",
-        ),
-      );
-      return;
-    }
-    if (isNativeRuntime()) {
-      const exact = await checkNativeExactAlarmSetting();
-      if (exact !== "granted" && exact !== "not-android") {
-        await requestNativeExactAlarmSetting();
-      }
-    }
-    updatePreferences({ notificationsEnabled: true });
-  })();
+  toast.warning(
+    t(
+      "کار ذخیره شد؛ برای دریافت یادآوری، اعلان‌ها را از تنظیمات فعال کن.",
+      "Task saved; enable notifications in Settings to receive its reminder.",
+    ),
+  );
 }
 
 export function TaskFormModal({

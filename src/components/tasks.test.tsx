@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   addQuickTask,
   draftToTask,
+  enableTaskReminderNotifications,
   emptyTaskDraft,
   nextQuickTaskColor,
   TaskFormModal,
@@ -44,6 +45,12 @@ describe("Task history representation", () => {
 });
 
 describe("task draft compatibility", () => {
+  it("does not request permission while saving a reminder", () => {
+    const updatePreferences = vi.fn();
+    enableTaskReminderNotifications({ updatePreferences, t: (_fa, en) => en });
+    expect(updatePreferences).not.toHaveBeenCalled();
+  });
+
   it("loads a legacy binary task without requiring new fields", () => {
     expect(taskToDraft(task)).toMatchObject({
       id: task.id,

@@ -30,6 +30,15 @@ final class TimerTimeline {
         return anchorAt + remainingMs;
     }
 
+    static String formatClock(long millis) {
+        long seconds = Math.max(0, millis) / 1_000;
+        long hours = seconds / 3_600;
+        long minutes = (seconds % 3_600) / 60;
+        long remainder = seconds % 60;
+        if (hours > 0) return String.format(java.util.Locale.ROOT, "%d:%02d:%02d", hours, minutes, remainder);
+        return String.format(java.util.Locale.ROOT, "%02d:%02d", minutes, remainder);
+    }
+
     void advance(long now) {
         if (!running || now <= anchorAt) return;
         long delta = now - anchorAt;

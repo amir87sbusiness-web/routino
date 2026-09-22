@@ -17,6 +17,7 @@ import {
   syncAndroidTimer,
 } from "@/lib/android-timer-notification";
 import { dueHabitsOn, getLog, isCompleted } from "@/lib/logic";
+import { showLocalWebNotification } from "@/lib/local-web-notifications";
 import {
   checkNativeNotificationPermission,
   requestNativePermission,
@@ -74,16 +75,6 @@ export function TimerPage() {
   const { celebration, clear: clearCelebration } = useCelebration(ctx?.db);
   const ctxRef = useRef(ctx);
   ctxRef.current = ctx;
-
-  const notify = (body: string) => {
-    if (typeof Notification !== "undefined" && Notification.permission === "granted") {
-      try {
-        new Notification("Routino", { body });
-      } catch {
-        /* noop */
-      }
-    }
-  };
 
   /** History and linked credit are one idempotent app update. */
   const applyCompletion = (item: TimerCompletion, feedbackEligible = false): boolean => {
@@ -151,17 +142,21 @@ export function TimerPage() {
       publish(state, transitions.length > 0 || clockMovedBack);
     }
     flushPending();
-    if (announce && document.visibilityState === "visible" && transitions.length === 1) {
-      const transition = transitions[0];
-      notify(
+    if (announce && !isAndroidNativeTimer() && transitions.length > 0) {
+      const transition = transitions.at(-1)!;
+      const body =
         transition === "finished"
           ? state.mode === "pomodoro"
             ? "🎉 همه‌ی دورها تموم شد! آفرین."
             : "⏰ تایمر تمام شد!"
           : transition === "focus-ended"
             ? "⏰ زمان تمرکز تموم شد! وقت استراحته."
-            : "☕️ استراحت تموم شد! برگرد سر تمرکز.",
-      );
+            : "☕️ استراحت تموم شد! برگرد سر تمرکز.";
+      const id =
+        transition === "finished"
+          ? `${owner}|timer|${before.runId}|finished`
+          : `${owner}|timer|${before.runId}|${state.round}|${transition}`;
+      void showLocalWebNotification({ id, title: "Routino", body });
     }
     return timerRef.current;
   };
@@ -189,12 +184,14 @@ export function TimerPage() {
     if (!owner) return;
     ownerRef.current = owner;
     publish(loadTimer(owner), false);
-    settle(Date.now(), false);
+    settle(Date.now());
     void syncAndroidTimer(timerRef.current).catch(() => {
       if (timerRef.current.running)
         toast.warning("تایمر اجرا می‌شود، اما اعلان بالای گوشی فعال نشد.");
     });
-    const onVisible = () => settle(Date.now(), false);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") settle(Date.now());
+    };
     const onStorage = (event: StorageEvent) => {
       if (event.key === `routino:active-timer:v1:${owner}`) {
         publish(loadTimer(owner), false);

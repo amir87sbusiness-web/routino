@@ -48,6 +48,7 @@ import {
 import { applyServerEntitlement, dueHabitsOn, isCompleted, getLog } from "@/lib/logic";
 import { productWriteAllowed } from "@/lib/access-state";
 import { isNativeRuntime, reconcileNativeReminders } from "@/lib/native-notifications";
+import { showLocalWebNotification } from "@/lib/local-web-notifications";
 import { syncNativeBars } from "@/lib/native";
 import { loginAs, wipeContent } from "@/lib/wipe";
 import { subscriptionReminderEvents } from "@/lib/subscription-reminders";
@@ -705,19 +706,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const events = subscriptionReminderEvents(cur);
       if (!events.length) return;
       const fa = cur.settings.lang === "fa";
-      if (
-        !isNativeRuntime() &&
-        typeof Notification !== "undefined" &&
-        Notification.permission === "granted"
-      ) {
+      const owner = cur.auth?.userId ?? cur.auth?.phone ?? "local";
+      if (!isNativeRuntime()) {
         for (const event of events) {
-          try {
-            new Notification(fa ? event.title.fa : event.title.en, {
-              body: fa ? event.body.fa : event.body.en,
-            });
-          } catch {
-            /* in-app notification below remains the guaranteed fallback */
-          }
+          void showLocalWebNotification({
+            id: `${owner}|${event.key}`,
+            title: fa ? event.title.fa : event.title.en,
+            body: fa ? event.body.fa : event.body.en,
+          });
         }
       }
       setDb((prev) =>
@@ -821,26 +817,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // native too. The native OS-level alarms above are what fire when the
   // native app is backgrounded or closed.
   useEffect(() => {
+    const catchUpMs = 5 * 60_000;
     const check = () => {
       const cur = dbRef.current;
       if (!cur || !cur.settings.notificationsEnabled || !cur.auth) return;
       if (!productWriteAllowed(cur, sessionGateRef.current)) return;
       const now = new Date();
-      const hhmm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
       const dk = todayKey();
       const fired = new Set(cur.meta.firedReminders);
-      const newNotifs: { title: string; body: string }[] = [];
+      const newNotifs: { id: string; title: string; body: string }[] = [];
       const newFired: string[] = [];
       const fa = cur.settings.lang === "fa";
       const cal = cur.settings.calendar;
+      const owner = cur.auth.userId ?? cur.auth.phone;
+      const isRecentlyDue = (at: number) => {
+        const age = now.getTime() - at;
+        return age >= 0 && age <= catchUpMs;
+      };
 
       for (const h of dueHabitsOn(cur, dk, cal)) {
-        if (!h.reminderTime || h.reminderTime !== hhmm) continue;
+        if (!h.reminderTime) continue;
+        const dueAt = new Date(`${dk}T${h.reminderTime}:00`).getTime();
+        if (!Number.isFinite(dueAt) || !isRecentlyDue(dueAt)) continue;
         if (isCompleted(h, getLog(cur, h.id, dk))) continue;
-        const k = `habit|${h.id}|${dk}|${hhmm}`;
+        const k = `habit|${h.id}|${dk}|${h.reminderTime}`;
         if (fired.has(k)) continue;
         newFired.push(k);
         newNotifs.push({
+          id: `${owner}|${k}`,
           title: fa ? "یادآوری عادت" : "Habit reminder",
           body: fa ? `وقتشه: ${h.name}` : `Time for: ${h.name}`,
         });
@@ -848,38 +852,34 @@ export function AppProvider({ children }: { children: ReactNode }) {
       for (const task of cur.tasks) {
         if (!task.reminderAt || task.done) continue;
         const rt = new Date(task.reminderAt);
-        if (Math.abs(rt.getTime() - now.getTime()) > 45_000) continue;
-        const k = `task|${task.id}`;
+        if (!isRecentlyDue(rt.getTime())) continue;
+        const k = `task|${task.id}|${task.reminderAt}`;
         if (fired.has(k)) continue;
         newFired.push(k);
         newNotifs.push({
+          id: `${owner}|${k}`,
           title: fa ? "یادآوری کار" : "Task reminder",
           body: task.title,
         });
       }
-      if (cur.settings.journalReminder === hhmm) {
-        const k = `journal|${dk}|${hhmm}`;
-        if (!fired.has(k) && !cur.journal[dk]?.text) {
+      if (cur.settings.journalReminder) {
+        const dueAt = new Date(`${dk}T${cur.settings.journalReminder}:00`).getTime();
+        const k = `journal|${dk}|${cur.settings.journalReminder}`;
+        if (isRecentlyDue(dueAt) && !fired.has(k) && !cur.journal[dk]?.text) {
           newFired.push(k);
           newNotifs.push({
+            id: `${owner}|${k}`,
             title: fa ? "ژورنال روتینو" : "Routino Journal",
             body: fa ? "وقت ژورنال‌نویسیه ✍️" : "Time to write your journal ✍️",
           });
         }
       }
       if (newNotifs.length === 0) return;
-      // browser notifications (best-effort)
-      if (
-        !isNativeRuntime() &&
-        typeof Notification !== "undefined" &&
-        Notification.permission === "granted"
-      ) {
+      // Browser notifications are local-only and best-effort. The helper uses
+      // the registered service worker when possible and never prompts.
+      if (!isNativeRuntime()) {
         for (const n of newNotifs) {
-          try {
-            new Notification(n.title, { body: n.body });
-          } catch {
-            /* unsupported */
-          }
+          void showLocalWebNotification(n);
         }
       }
       // No write here: the persist effect picks this up. Both `notifications`
@@ -907,9 +907,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
       });
     };
     const iv = setInterval(check, 30_000);
+    const onForeground = () => {
+      if (document.visibilityState === "visible") check();
+    };
     check();
-    return () => clearInterval(iv);
-  }, []);
+    document.addEventListener("visibilitychange", onForeground);
+    window.addEventListener("focus", onForeground);
+    return () => {
+      clearInterval(iv);
+      document.removeEventListener("visibilitychange", onForeground);
+      window.removeEventListener("focus", onForeground);
+    };
+  }, [db?.auth?.phone, db?.auth?.userId]);
 
   const lang: Lang = db?.settings.lang ?? "fa";
   const cal: Calendar = db?.settings.calendar ?? "jalali";

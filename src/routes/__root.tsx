@@ -5,6 +5,7 @@ import { UpdateWatcher } from "../components/pwa";
 import { AccountDeletionWarning } from "../components/AccountDeletionWarning";
 import { AppProvider } from "../state/app";
 import { recordDiagnostic } from "../lib/diagnostics";
+import { allowsNativeSelection } from "../lib/native-selection";
 import "../styles.css";
 
 function NotFoundComponent() {

@@ -10,6 +10,8 @@ const mocks = vi.hoisted(() => ({
   openSettings: vi.fn(async () => undefined),
   checkPermission: vi.fn(async () => "granted"),
   requestPermission: vi.fn(async () => true),
+  localNotify: vi.fn(async () => "shown"),
+  android: true,
   ctx: null as any,
 }));
 
@@ -19,10 +21,13 @@ vi.mock("@/components/habits", () => ({
   useCelebration: () => ({ celebration: null, clear: vi.fn() }),
 }));
 vi.mock("@/lib/android-timer-notification", () => ({
-  isAndroidNativeTimer: () => true,
+  isAndroidNativeTimer: () => mocks.android,
   syncAndroidTimer: mocks.sync,
   consumeAndroidTimerCommand: mocks.consume,
   openAndroidNotificationSettings: mocks.openSettings,
+}));
+vi.mock("@/lib/local-web-notifications", () => ({
+  showLocalWebNotification: mocks.localNotify,
 }));
 vi.mock("@/lib/native-notifications", () => ({
   checkNativeNotificationPermission: mocks.checkPermission,
@@ -62,6 +67,8 @@ describe("TimerPage native timer integration", () => {
     mocks.openSettings.mockClear();
     mocks.checkPermission.mockReset().mockResolvedValue("granted");
     mocks.requestPermission.mockReset().mockResolvedValue(true);
+    mocks.localNotify.mockReset().mockResolvedValue("shown");
+    mocks.android = true;
     host = document.createElement("div");
     document.body.append(host);
     root = createRoot(host);
@@ -128,5 +135,70 @@ describe("TimerPage native timer integration", () => {
     // Foreground listeners may poll more than once, but the command id must
     // never apply more than once.
     expect(mocks.sync.mock.calls.filter(([timer]) => timer.running === false)).toHaveLength(1);
+  });
+
+  it("announces a web timer completion once through the shared local notification path", async () => {
+    mocks.android = false;
+    const active = resumeTimer(createTimer("free", 1), 1_000);
+    saveTimer("user-1", active);
+
+    await act(async () => root.render(<TimerPage />));
+    await act(async () => vi.advanceTimersByTimeAsync(60_000));
+
+    expect(mocks.localNotify).toHaveBeenCalledTimes(1);
+    expect(mocks.localNotify).toHaveBeenCalledWith({
+      id: `user-1|timer|${active.runId}|finished`,
+      title: "Routino",
+      body: "⏰ تایمر تمام شد!",
+    });
+  });
+
+  it("announces a completion discovered when the PWA returns from suspension", async () => {
+    mocks.android = false;
+    const active = resumeTimer(createTimer("free", 1), 1_000);
+    saveTimer("user-1", active);
+    await act(async () => root.render(<TimerPage />));
+
+    vi.setSystemTime(61_000);
+    Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
+    await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+
+    expect(mocks.localNotify).toHaveBeenCalledWith(
+      expect.objectContaining({ id: `user-1|timer|${active.runId}|finished` }),
+    );
+  });
+
+  it("announces the latest relevant transition after a multi-phase suspension", async () => {
+    mocks.android = false;
+    const active = resumeTimer(
+      createTimer("pomodoro", 1, { breakMinutes: 1, cycles: 2 }),
+      1_000,
+    );
+    saveTimer("user-1", active);
+    await act(async () => root.render(<TimerPage />));
+
+    vi.setSystemTime(181_000);
+    await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+
+    expect(mocks.localNotify).toHaveBeenCalledTimes(1);
+    expect(mocks.localNotify).toHaveBeenCalledWith({
+      id: `user-1|timer|${active.runId}|finished`,
+      title: "Routino",
+      body: "🎉 همه‌ی دورها تموم شد! آفرین.",
+    });
+  });
+
+  it("announces an elapsed timer when mounting the timer route directly", async () => {
+    mocks.android = false;
+    const active = resumeTimer(createTimer("free", 1), 1_000);
+    saveTimer("user-1", active);
+    vi.setSystemTime(61_000);
+
+    await act(async () => root.render(<TimerPage />));
+
+    expect(mocks.localNotify).toHaveBeenCalledTimes(1);
+    expect(mocks.localNotify).toHaveBeenCalledWith(
+      expect.objectContaining({ id: `user-1|timer|${active.runId}|finished` }),
+    );
   });
 });

@@ -2,7 +2,8 @@ import { Pause, Play, Timer } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { faNum, type Lang } from "@/lib/dates";
-import { syncAndroidTimer } from "@/lib/android-timer-notification";
+import { isAndroidNativeTimer, syncAndroidTimer } from "@/lib/android-timer-notification";
+import { showLocalWebNotification } from "@/lib/local-web-notifications";
 import {
   advanceTimer,
   loadTimer,
@@ -52,6 +53,22 @@ export function ActiveTimerBar({ owner, lang, t, onOpen, requestResume }: Active
       const result = advanceTimer(before, Date.now());
       if (result.state === before) return;
       publish(result.state, result.transitions.length > 0);
+      if (!isAndroidNativeTimer() && result.transitions.length > 0) {
+        const transition = result.transitions.at(-1)!;
+        const body =
+          transition === "finished"
+            ? result.state.mode === "pomodoro"
+              ? "🎉 همه‌ی دورها تموم شد! آفرین."
+              : "⏰ تایمر تمام شد!"
+            : transition === "focus-ended"
+              ? "⏰ زمان تمرکز تموم شد! وقت استراحته."
+              : "☕️ استراحت تموم شد! برگرد سر تمرکز.";
+        const id =
+          transition === "finished"
+            ? `${owner}|timer|${before.runId}|finished`
+            : `${owner}|timer|${before.runId}|${result.state.round}|${transition}`;
+        void showLocalWebNotification({ id, title: "Routino", body });
+      }
     };
     const onTimerUpdated = (event: Event) => {
       const detail = (event as CustomEvent<TimerUpdatedDetail>).detail;

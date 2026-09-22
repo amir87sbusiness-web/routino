@@ -25,12 +25,6 @@ import {
 import { faNum, monthTitle, todayKey } from "@/lib/dates";
 import { ensurePresetCategory, presetToHabitDraft } from "@/lib/habit-starters";
 import { earnedBadges, getLog, isCompleted, monthProgress, streak } from "@/lib/logic";
-import {
-  checkNativeExactAlarmSetting,
-  isNativeRuntime,
-  requestNativeExactAlarmSetting,
-  requestNotificationPermission,
-} from "@/lib/native-notifications";
 import { CATEGORY_COLOR_CHOICES, DEFAULT_CATEGORIES, PRESET_HABITS } from "@/lib/presets";
 import { uid, type Habit } from "@/lib/store";
 import { useAppMaybe } from "@/state/app";
@@ -58,7 +52,7 @@ function HabitsPage() {
   const [deleteTarget, setDeleteTarget] = useState<Habit | null>(null);
 
   if (!ctx?.db) return null;
-  const { db, update, reorderLocal, updatePreferences, t, lang, cal } = ctx;
+  const { db, update, reorderLocal, t, lang, cal } = ctx;
 
   // فیلترهای ویژه علاوه بر دسته‌ها: انجام‌شده / انجام‌نشدهٔ امروز.
   const TODAY = todayKey();
@@ -89,26 +83,12 @@ function HabitsPage() {
       return;
     }
     if (habit.reminderTime && !db.settings.notificationsEnabled) {
-      updatePreferences({ notificationsEnabled: true });
-      void (async () => {
-        const granted = await requestNotificationPermission();
-        if (!granted) {
-          toast.error(
-            t(
-              "عادت ذخیره شد، اما مجوز اعلان بسته است؛ یادآوری از تنظیمات فعال می‌شود.",
-              "Habit saved, but notification permission is blocked; enable reminders in Settings.",
-            ),
-          );
-          return;
-        }
-        if (isNativeRuntime()) {
-          const exact = await checkNativeExactAlarmSetting();
-          if (exact !== "granted" && exact !== "not-android") {
-            await requestNativeExactAlarmSetting();
-          }
-        }
-        updatePreferences({ notificationsEnabled: true });
-      })();
+      toast.warning(
+        t(
+          "عادت ذخیره شد؛ برای دریافت یادآوری، اعلان‌ها را از تنظیمات فعال کن.",
+          "Habit saved; enable notifications in Settings to receive its reminder.",
+        ),
+      );
     }
     setFormOpen(false);
   };

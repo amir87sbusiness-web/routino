@@ -4,6 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createTimer, loadTimer, resumeTimer, saveTimer } from "@/lib/timer-runtime";
 import { ActiveTimerBar } from "./ActiveTimerBar";
 
+const mocks = vi.hoisted(() => ({ localNotify: vi.fn(async () => "shown") }));
+vi.mock("@/lib/local-web-notifications", () => ({
+  showLocalWebNotification: mocks.localNotify,
+}));
+
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 describe("ActiveTimerBar", () => {
@@ -14,6 +19,7 @@ describe("ActiveTimerBar", () => {
     vi.useFakeTimers();
     vi.setSystemTime(1_000);
     localStorage.clear();
+    mocks.localNotify.mockReset().mockResolvedValue("shown");
     host = document.createElement("div");
     document.body.append(host);
     root = createRoot(host);
@@ -83,5 +89,22 @@ describe("ActiveTimerBar", () => {
     await act(async () => resume.click());
     expect(requestResume).toHaveBeenCalledTimes(1);
     expect(loadTimer("user-1").running).toBe(false);
+  });
+
+  it("announces completion while the user is outside the timer route", async () => {
+    const active = resumeTimer(createTimer("free", 1), 1_000);
+    saveTimer("user-1", active);
+    await act(async () =>
+      root.render(<ActiveTimerBar owner="user-1" lang="fa" t={(fa) => fa} onOpen={vi.fn()} />),
+    );
+
+    await act(async () => vi.advanceTimersByTimeAsync(60_000));
+
+    expect(mocks.localNotify).toHaveBeenCalledOnce();
+    expect(mocks.localNotify).toHaveBeenCalledWith({
+      id: `user-1|timer|${active.runId}|finished`,
+      title: "Routino",
+      body: "⏰ تایمر تمام شد!",
+    });
   });
 });

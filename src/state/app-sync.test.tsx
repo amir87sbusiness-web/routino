@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   importSubscription: vi.fn(),
   markEntitlementChecked: vi.fn(),
   reconcileNativeReminders: vi.fn(),
+  showLocalWebNotification: vi.fn(async () => "shown"),
+  nativeRuntime: true,
   requestNativePermission: vi.fn(),
   reorderLocalRows: vi.fn(),
   saveLocal: vi.fn(),
@@ -59,9 +61,12 @@ vi.mock("@/lib/db/local", () => ({
 vi.mock("@/lib/db/vault", () => ({ switchOwnerVault: mocks.switchOwnerVault }));
 vi.mock("@/lib/native", () => ({ syncNativeBars: vi.fn() }));
 vi.mock("@/lib/native-notifications", () => ({
-  isNativeRuntime: vi.fn(() => true),
+  isNativeRuntime: vi.fn(() => mocks.nativeRuntime),
   reconcileNativeReminders: mocks.reconcileNativeReminders,
   requestNativePermission: mocks.requestNativePermission,
+}));
+vi.mock("@/lib/local-web-notifications", () => ({
+  showLocalWebNotification: mocks.showLocalWebNotification,
 }));
 vi.mock("@/lib/sync/engine", () => ({
   hasPendingChanges: mocks.hasPendingChanges,
@@ -135,6 +140,8 @@ describe("AppProvider sync lifecycle", () => {
     mocks.reconcileNativeReminders
       .mockReset()
       .mockResolvedValue({ status: "scheduled", scheduled: 0 });
+    mocks.showLocalWebNotification.mockReset().mockResolvedValue("shown");
+    mocks.nativeRuntime = true;
     mocks.requestNativePermission.mockReset().mockResolvedValue(true);
     mocks.reorderLocalRows.mockReset().mockResolvedValue(undefined);
     mocks.saveLocal.mockReset();
@@ -206,6 +213,57 @@ describe("AppProvider sync lifecycle", () => {
       }),
     );
     expect(mocks.requestNativePermission).not.toHaveBeenCalled();
+  });
+
+  it("delivers a due subscription reminder through the shared web notification path", async () => {
+    await act(async () => root.unmount());
+    mocks.nativeRuntime = false;
+    app = null;
+    root = createRoot(host);
+
+    await act(async () => root.render(<AppProvider><Probe /></AppProvider>));
+    await settle();
+
+    expect(mocks.showLocalWebNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: expect.stringMatching(/^user-1\|trial\|expires-soon\|/),
+        title: "روز آخر دورهٔ آزمایشی",
+      }),
+    );
+  });
+
+  it("catches up a task reminder a few minutes after browser throttling with an owner-scoped occurrence id", async () => {
+    await act(async () => root.unmount());
+    mocks.nativeRuntime = false;
+    const now = new Date();
+    const reminder = new Date(now.getTime() - 3 * 60_000);
+    initial = {
+      ...initial,
+      tasks: [
+        {
+          id: "late-task",
+          dateKey: reminder.toISOString().slice(0, 10),
+          title: "Late task",
+          type: "binary",
+          target: 1,
+          value: 0,
+          done: false,
+          reminderAt: reminder.toISOString(),
+        },
+      ],
+    };
+    mocks.hydrate.mockResolvedValue({ db: initial, local: {}, migrated: false });
+    app = null;
+    root = createRoot(host);
+
+    await act(async () => root.render(<AppProvider><Probe /></AppProvider>));
+    await settle();
+
+    expect(mocks.showLocalWebNotification).toHaveBeenCalledWith({
+      id: `user-1|task|late-task|${reminder.toISOString()}`,
+      title: "یادآوری کار",
+      body: "Late task",
+    });
   });
 
   it("cancels product reminders at expiry but keeps lifecycle reminders and restores them after payment", async () => {

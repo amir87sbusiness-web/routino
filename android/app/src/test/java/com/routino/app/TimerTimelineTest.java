@@ -34,4 +34,23 @@ public class TimerTimelineTest {
         assertEquals(15_000, timer.elapsedMs);
         assertEquals(11_000, timer.anchorAt);
     }
+
+    @Test
+    public void formatsRemainingTimeForTheNotificationContent() {
+        assertEquals("01:05", TimerTimeline.formatClock(65_000));
+        assertEquals("00:00", TimerTimeline.formatClock(-1));
+    }
+
+    @Test
+    public void pollingWithoutANotificationActionKeepsTheRunningSnapshot() {
+        assertFalse(TimerNotificationPlugin.shouldClearSnapshotAfterReadingCommand(null));
+    }
+
+    @Test
+    public void restoresASavedTimerBeforeHandlingAColdNotificationAction() {
+        TimerTimeline timer = TimerNotificationService.timerFromValues(
+            "free", true, 60_000, 0, 1, 1, 1, 1, false, 1_000);
+        assertEquals("free", timer.mode);
+        assertTrue(timer.running);
+    }
 }
