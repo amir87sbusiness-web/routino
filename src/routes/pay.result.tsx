@@ -7,6 +7,7 @@
  * self-heals a payment whose callback never landed. While the payment is still
  * settling, this page polls.
  */
+import { Capacitor } from "@capacitor/core";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { BadgeCheck, CircleX, Hourglass, RotateCcw } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -92,6 +93,19 @@ function PayResultPage() {
       if (timer) clearTimeout(timer);
     };
   }, [applyEntitlement, paymentId]);
+
+  // Android checkout should feel like one flow: once the backend confirms the
+  // payment, continue into Routino automatically. Web keeps the normal result
+  // screen. Never navigate based only on the status carried by the deep link.
+  useEffect(() => {
+    if (Capacitor.getPlatform() !== "android" || state !== "done" || result?.payment.status !== "paid") {
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void navigate({ to: "/" });
+    }, 650);
+    return () => window.clearTimeout(timer);
+  }, [navigate, result?.payment.status, state]);
 
   const t = ctx?.t ?? ((fa: string) => fa);
   const lang = ctx?.lang ?? "fa";
