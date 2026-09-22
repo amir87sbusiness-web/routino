@@ -136,7 +136,11 @@ const DASHBOARD_SCRIPT = `<script>
   function faOne(value){ return Number(value || 0).toLocaleString("fa-IR", { maximumFractionDigits: 1 }); }
   function money(value){ return fa(value) + " تومان"; }
   function safe(value){ return String(value == null ? "" : value).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
-  function phone(value){ var s=String(value||""); return /^98\d{10}$/.test(s) ? "0" + s.slice(2) : s || "—"; }
+  function phone(value){
+    var s=String(value||"");
+    var canonical=s.length===12 && s.slice(0,2)==="98" && !isNaN(Number(s));
+    return canonical ? "0" + s.slice(2) : s || "—";
+  }
   function pctDelta(value){
     if (value == null || !isFinite(Number(value))) return "—";
     var n=Number(value); if (Math.abs(n)<.05) return "۰٪";
@@ -171,7 +175,8 @@ const DASHBOARD_SCRIPT = `<script>
     return Array.from(map.values());
   }
   function chartLabel(point, groupBy){
-    if (selectedRange === "year" && /^\d{3,4}-\d{2}$/.test(String(point.date))){ var m=Number(String(point.date).slice(-2)); return JALALI_MONTHS[m-1] || point.date; }
+    var key=String(point.date||"");
+    if (selectedRange === "year" && key.length===7 && key.charAt(4)==="-"){ var m=Number(key.slice(-2)); return JALALI_MONTHS[m-1] || key; }
     return dayLabel(point.date, groupBy);
   }
   function setClock(){
