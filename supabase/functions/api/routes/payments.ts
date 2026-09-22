@@ -95,14 +95,14 @@ export function paymentRoutes(deps: Deps) {
     const t = now();
     const result = await checkoutPayment(db, env, psp, user, body, t);
 
-    // Native Android opens a Custom Tab with no Routino web referrer. Enter the
-    // gateway through Routino's real web origin first; the static page forwards
-    // immediately to the fixed ZarinPal StartPay endpoint without another tap.
+    // Native checkout is already authenticated by the app session. Use a tiny
+    // public handoff page on Routino's origin only to satisfy the gateway's web
+    // origin requirement; it never loads the SPA and never asks for login/OTP.
     if (!result.free && body.platform === "android") {
-      const webBase = env.PUBLIC_WEB_URL.replace(/\/$/, "");
+      const publicOrigin = new URL(env.PUBLIC_WEB_URL).origin;
       return c.json({
         ...result,
-        paymentUrl: `${webBase}/pay-start.html?authority=${encodeURIComponent(result.authority)}`,
+        paymentUrl: `${publicOrigin}/pay-start.html?authority=${encodeURIComponent(result.authority)}`,
       });
     }
 
