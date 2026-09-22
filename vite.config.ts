@@ -97,6 +97,7 @@ export default defineConfig({
           /^\/v1(?:\/|$)/,
           /^\/admin(?:\/|$)/,
           /^\/payments\/callback(?:\/|$)/,
+          /^\/app\/pay-start\.html$/,
         ],
         runtimeCaching: [],
 
