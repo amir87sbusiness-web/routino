@@ -130,14 +130,17 @@ const DASHBOARD_SCRIPT = `<script>
   var selectedRange = "today";
   var requestSerial = 0;
   var loadedOnce = false;
-  var currentPayload = null;
   var JALALI_MONTHS = ["فروردین","اردیبهشت","خرداد","تیر","مرداد","شهریور","مهر","آبان","آذر","دی","بهمن","اسفند"];
 
   function fa(value){ return Number(value || 0).toLocaleString("fa-IR"); }
   function faOne(value){ return Number(value || 0).toLocaleString("fa-IR", { maximumFractionDigits: 1 }); }
   function money(value){ return fa(value) + " تومان"; }
   function safe(value){ return String(value == null ? "" : value).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
-  function phone(value){ var s=String(value||""); return /^98\d{10}$/.test(s) ? "0" + s.slice(2) : s || "—"; }
+  function phone(value){
+    var s=String(value||"");
+    var canonical=s.length===12 && s.slice(0,2)==="98" && !isNaN(Number(s));
+    return canonical ? "0" + s.slice(2) : s || "—";
+  }
   function pctDelta(value){
     if (value == null || !isFinite(Number(value))) return "—";
     var n=Number(value); if (Math.abs(n)<.05) return "۰٪";
@@ -172,7 +175,8 @@ const DASHBOARD_SCRIPT = `<script>
     return Array.from(map.values());
   }
   function chartLabel(point, groupBy){
-    if (selectedRange === "year" && /^\d{3,4}-\d{2}$/.test(String(point.date))){ var m=Number(String(point.date).slice(-2)); return JALALI_MONTHS[m-1] || point.date; }
+    var key=String(point.date||"");
+    if (selectedRange === "year" && key.length===7 && key.charAt(4)==="-"){ var m=Number(key.slice(-2)); return JALALI_MONTHS[m-1] || key; }
     return dayLabel(point.date, groupBy);
   }
   function setClock(){
@@ -248,13 +252,13 @@ const DASHBOARD_SCRIPT = `<script>
     wrap.querySelectorAll('[data-dash-index]').forEach(function(el){var idx=Number(el.getAttribute('data-dash-index'));el.addEventListener('mouseenter',function(){show(idx);});el.addEventListener('mouseleave',hide);el.addEventListener('click',function(e){e.stopPropagation();show(idx);});});
     wrap.addEventListener('mouseleave',hide);
   }
-  function periodNote(payload){
+  function periodNote(){
     var host=document.getElementById("dashboardPeriodNote"); if(!host) return;
     if(selectedRange==="today") host.textContent="امروز = از ۰۰:۰۰ تهران تا الان";
     else if(selectedRange==="yesterday") host.textContent="دیروز = ۰۰:۰۰ تا ۲۴:۰۰ به وقت تهران";
     else host.textContent="همه مرزهای روز بر اساس Asia/Tehran هستند";
   }
-  function render(payload){ currentPayload=payload; renderKpis(payload); renderStatus(payload); renderPlans(payload); renderRecent(payload); renderChart(payload); periodNote(payload); }
+  function render(payload){ renderKpis(payload); renderStatus(payload); renderPlans(payload); renderRecent(payload); renderChart(payload); periodNote(); }
   function queryString(){
     var q='?range='+encodeURIComponent(selectedRange);
     if(selectedRange==='custom'){
