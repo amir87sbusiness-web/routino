@@ -73,7 +73,7 @@ describe("a payment whose callback never came back", () => {
 
   it("continues a callback-proven Verify only in scheduled recovery", async () => {
     const { access } = await signIn("09121110007");
-    const { authority } = await checkout(access);
+    const { paymentId, authority } = await checkout(access);
 
     const callback = await h.app.inject({
       method: "GET",
@@ -296,7 +296,7 @@ describe("a payment whose callback never came back", () => {
 
   it("does not start a second Verify while an authoritative recovery lease is active", async () => {
     const { access } = await signIn("09121110013");
-    const { paymentId, authority } = await checkout(access);
+    const { authority } = await checkout(access);
     h.psp._settle(authority, "paid");
     const originalVerify = h.psp.verify.bind(h.psp);
     let verifyCalls = 0;
