@@ -4,7 +4,6 @@ import {
   createSyncScheduler,
   EDIT_SYNC_DELAY_MS,
   FOREGROUND_MIN_BACKGROUND_MS,
-  FOREGROUND_SYNC_COOLDOWN_MS,
 } from "./scheduler";
 
 describe("lifecycle sync scheduler", () => {
