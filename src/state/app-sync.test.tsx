@@ -221,7 +221,13 @@ describe("AppProvider sync lifecycle", () => {
     app = null;
     root = createRoot(host);
 
-    await act(async () => root.render(<AppProvider><Probe /></AppProvider>));
+    await act(async () =>
+      root.render(
+        <AppProvider>
+          <Probe />
+        </AppProvider>,
+      ),
+    );
     await settle();
 
     expect(mocks.showLocalWebNotification).toHaveBeenCalledWith(
@@ -256,7 +262,13 @@ describe("AppProvider sync lifecycle", () => {
     app = null;
     root = createRoot(host);
 
-    await act(async () => root.render(<AppProvider><Probe /></AppProvider>));
+    await act(async () =>
+      root.render(
+        <AppProvider>
+          <Probe />
+        </AppProvider>,
+      ),
+    );
     await settle();
 
     expect(mocks.showLocalWebNotification).toHaveBeenCalledWith({

@@ -40,7 +40,9 @@ describe("android timer notification bridge", () => {
     await syncAndroidTimer(running);
 
     expect(bridge.sync).toHaveBeenCalledWith(
-      expect.objectContaining({ timer: expect.objectContaining({ running: true, anchorAt: 1_000 }) }),
+      expect.objectContaining({
+        timer: expect.objectContaining({ running: true, anchorAt: 1_000 }),
+      }),
     );
   });
 

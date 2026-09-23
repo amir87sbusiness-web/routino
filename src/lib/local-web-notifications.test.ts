@@ -19,9 +19,9 @@ describe("showLocalWebNotification", () => {
     const requestPermission = vi.fn();
     vi.stubGlobal("Notification", { permission: "default", requestPermission });
 
-    expect(
-      await showLocalWebNotification({ id: "task|1", title: "Task", body: "Do it" }),
-    ).toBe("permission-required");
+    expect(await showLocalWebNotification({ id: "task|1", title: "Task", body: "Do it" })).toBe(
+      "permission-required",
+    );
     expect(requestPermission).not.toHaveBeenCalled();
   });
 

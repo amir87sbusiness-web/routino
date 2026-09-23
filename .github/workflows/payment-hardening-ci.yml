@@ -25,28 +25,9 @@ jobs:
         run: npm ci
       - name: Install backend dependencies
         run: npm --prefix backend ci
-      - name: Format lint-error files for repair
-        run: |
-          FILES=(
-            src/components/AnimatedCompletionList.test.tsx
-            src/components/AnimatedCompletionList.tsx
-            src/lib/android-timer-notification.test.ts
-            src/lib/local-web-notifications.test.ts
-            src/lib/local-web-notifications.ts
-            src/routes/timer.test.tsx
-            src/state/app-sync.test.tsx
-          )
-          npx prettier --write "${FILES[@]}"
-          for f in "${FILES[@]}"; do
-            echo "PRETTIER_FILE_START:$f"
-            base64 -w0 "$f"
-            echo
-            echo "PRETTIER_FILE_END:$f"
-          done
       - name: Prettier check
         run: npx prettier --check backend/src/routes/payment-recovery.ts backend/test/payment-recovery.test.ts supabase/functions/api/routes/payment-recovery.ts scripts/generate-icons.test.mjs scripts/gen-setup-sql.mjs
-      - name: Lint (non-blocking until existing debt is cleaned)
-        continue-on-error: true
+      - name: Lint
         run: npm run lint
       - name: Root typecheck
         run: npx tsc --noEmit -p tsconfig.json
