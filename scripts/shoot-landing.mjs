@@ -43,11 +43,6 @@ const SHOTS = [
   { name: "timer-dark", path: "/app/timer", theme: "dark", ...PHONE },
   { name: "journal-dark", path: "/app/journal", theme: "dark", ...PHONE },
   { name: "desktop-dark", path: "/app/", theme: "dark", ...DESK },
-  { name: "desktop-analytics-dark", path: "/app/analytics", theme: "dark", ...DESK },
-  // روشن — چند تا برای اینکه معلوم باشد هر دو تم هست
-  { name: "today", path: "/app/", theme: "light", ...PHONE },
-  { name: "analytics", path: "/app/analytics", theme: "light", ...PHONE },
-  { name: "desktop", path: "/app/", theme: "light", ...DESK },
 ];
 
 /**

@@ -72,7 +72,6 @@ psql -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d "$target" -c "
   union all select 'entitlements', count(*) from entitlements
   union all select 'payments',     count(*) from payments
   union all select 'grants',       count(*) from grants
-  union all select 'devices',      count(*) from devices
   union all select 'records',      count(*) from records
   order by 1"
 

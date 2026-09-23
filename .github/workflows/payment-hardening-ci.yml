@@ -1,9 +1,12 @@
-name: Payment hardening validation
+name: Routino CI
 
 on:
   push:
     branches:
-      - fix/payment-recovery-hardening-20260912
+      - main
+  pull_request:
+    branches:
+      - main
 
 permissions:
   contents: read

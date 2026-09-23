@@ -286,9 +286,9 @@ export const grants = pgTable(
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    /** Plans are sold in months; the trial is 7 days. Both units are recorded
-     * rather than approximating one with the other — a "1 Year" plan must mean
-     * 12 real months, not 360 days, which is what the old client did. */
+    /** Paid plans are sold in months while trial/admin grants may use days. Both
+     * units are recorded rather than approximating one with the other — a
+     * "1 Year" plan must mean 12 real months, not 360 days. */
     months: integer("months").notNull().default(0),
     days: integer("days").notNull().default(0),
     /** trial | payment | migration | admin */

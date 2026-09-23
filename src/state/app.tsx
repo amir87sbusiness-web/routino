@@ -40,8 +40,7 @@ import { DEFAULT_CATEGORIES } from "@/lib/presets";
 import {
   defaultDb,
   uid,
-  type Db,
-  type Feedback,
+  type Db
   type Settings,
   type Subscription,
 } from "@/lib/store";
@@ -79,7 +78,6 @@ interface AppCtx {
   updatePreferences: (patch: PreferencePatch) => void;
   applyEntitlement: (subscription: Subscription) => void;
   markNotificationsRead: () => void;
-  submitFeedback: (feedback: Feedback) => void;
   recordFeedbackPrompt: () => void;
   signOutLocal: () => void;
   signInLocal: (phone: string, subscription: Subscription | null) => void;
@@ -254,19 +252,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       notifications: current.notifications.map((notification) => ({ ...notification, read: true })),
     }));
   }, [commitSystemUpdate]);
-
-  const submitFeedback = useCallback(
-    (feedback: Feedback) => {
-      commitSystemUpdate((current) => ({
-        ...current,
-        feedback: [
-          { ...feedback, phone: feedback.phone ?? current.auth?.phone },
-          ...current.feedback,
-        ],
-      }));
-    },
-    [commitSystemUpdate],
-  );
 
   const recordFeedbackPrompt = useCallback(() => {
     commitSystemUpdate((current) => ({
@@ -934,7 +919,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updatePreferences,
       applyEntitlement,
       markNotificationsRead,
-      submitFeedback,
       recordFeedbackPrompt,
       signOutLocal,
       signInLocal,
@@ -956,7 +940,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updatePreferences,
       applyEntitlement,
       markNotificationsRead,
-      submitFeedback,
       recordFeedbackPrompt,
       signOutLocal,
       signInLocal,
