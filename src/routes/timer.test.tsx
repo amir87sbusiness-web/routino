@@ -81,6 +81,19 @@ describe("TimerPage native timer integration", () => {
     vi.useRealTimers();
   });
 
+  it("keeps hook order stable when app context becomes available after the first render", async () => {
+    const readyContext = mocks.ctx;
+    mocks.ctx = null;
+
+    await act(async () => root.render(<TimerPage />));
+    expect(host.innerHTML).toBe("");
+
+    mocks.ctx = readyContext;
+    await act(async () => root.render(<TimerPage />));
+
+    expect(host.querySelector<HTMLButtonElement>('button[aria-label="شروع"]')).not.toBeNull();
+  });
+
   it("starts the native service immediately before any notification permission prompt", async () => {
     mocks.checkPermission.mockResolvedValue("prompt");
     await act(async () => root.render(<TimerPage />));
