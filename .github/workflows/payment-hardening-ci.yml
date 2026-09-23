@@ -25,6 +25,37 @@ jobs:
         run: npm ci
       - name: Install backend dependencies
         run: npm --prefix backend ci
+      - name: Format current lint-error files for repair
+        run: |
+          npx prettier --write src/components/AnimatedCompletionList.test.tsx src/components/AnimatedCompletionList.tsx src/lib/android-timer-notification.test.ts src/lib/local-web-notifications.test.ts src/lib/local-web-notifications.ts src/routes/timer.test.tsx src/state/app-sync.test.tsx
+          echo "PRETTIER_FILE_START src/components/AnimatedCompletionList.test.tsx"
+          base64 -w0 "src/components/AnimatedCompletionList.test.tsx"
+          echo
+          echo "PRETTIER_FILE_END src/components/AnimatedCompletionList.test.tsx"
+          echo "PRETTIER_FILE_START src/components/AnimatedCompletionList.tsx"
+          base64 -w0 "src/components/AnimatedCompletionList.tsx"
+          echo
+          echo "PRETTIER_FILE_END src/components/AnimatedCompletionList.tsx"
+          echo "PRETTIER_FILE_START src/lib/android-timer-notification.test.ts"
+          base64 -w0 "src/lib/android-timer-notification.test.ts"
+          echo
+          echo "PRETTIER_FILE_END src/lib/android-timer-notification.test.ts"
+          echo "PRETTIER_FILE_START src/lib/local-web-notifications.test.ts"
+          base64 -w0 "src/lib/local-web-notifications.test.ts"
+          echo
+          echo "PRETTIER_FILE_END src/lib/local-web-notifications.test.ts"
+          echo "PRETTIER_FILE_START src/lib/local-web-notifications.ts"
+          base64 -w0 "src/lib/local-web-notifications.ts"
+          echo
+          echo "PRETTIER_FILE_END src/lib/local-web-notifications.ts"
+          echo "PRETTIER_FILE_START src/routes/timer.test.tsx"
+          base64 -w0 "src/routes/timer.test.tsx"
+          echo
+          echo "PRETTIER_FILE_END src/routes/timer.test.tsx"
+          echo "PRETTIER_FILE_START src/state/app-sync.test.tsx"
+          base64 -w0 "src/state/app-sync.test.tsx"
+          echo
+          echo "PRETTIER_FILE_END src/state/app-sync.test.tsx"
       - name: Prettier check
         run: npx prettier --check backend/src/routes/payment-recovery.ts backend/test/payment-recovery.test.ts supabase/functions/api/routes/payment-recovery.ts scripts/generate-icons.test.mjs scripts/gen-setup-sql.mjs
       - name: Lint (non-blocking until existing debt is cleaned)
