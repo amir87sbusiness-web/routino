@@ -40,7 +40,7 @@ import { DEFAULT_CATEGORIES } from "@/lib/presets";
 import {
   defaultDb,
   uid,
-  type Db
+  type Db,
   type Settings,
   type Subscription,
 } from "@/lib/store";
