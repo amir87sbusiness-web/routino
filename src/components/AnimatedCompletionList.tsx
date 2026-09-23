@@ -153,7 +153,8 @@ export function AnimatedCompletionList<T extends { id: string }>({
       for (const timer of timersRef.current.values()) clearTimeout(timer);
       const drag = dragRef.current;
       if (drag?.timer) clearTimeout(drag.timer);
-      if (drag?.touchMoveListener) drag.target.removeEventListener("touchmove", drag.touchMoveListener);
+      if (drag?.touchMoveListener)
+        drag.target.removeEventListener("touchmove", drag.touchMoveListener);
       if (drag?.target.hasPointerCapture?.(drag.pointerId)) {
         drag.target.releasePointerCapture(drag.pointerId);
       }
@@ -178,7 +179,8 @@ export function AnimatedCompletionList<T extends { id: string }>({
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== pointerId) return;
     if (drag.timer) clearTimeout(drag.timer);
-    if (drag.touchMoveListener) drag.target.removeEventListener("touchmove", drag.touchMoveListener);
+    if (drag.touchMoveListener)
+      drag.target.removeEventListener("touchmove", drag.touchMoveListener);
     if (drag.target.hasPointerCapture?.(pointerId)) drag.target.releasePointerCapture(pointerId);
     if (drag.active) {
       suppressClickUntil.current = Date.now() + 300;
