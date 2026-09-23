@@ -1,4 +1,4 @@
-import { addDays, faNum, keyToDate, monthDays, todayKey, type Calendar, type Lang } from "./dates";
+import { addDays, faNum, monthDays, todayKey, type Calendar, type Lang } from "./dates";
 import { getLog, isCompleted, isDueOn } from "./logic";
 import type { Db, Habit, Task } from "./store";
 
