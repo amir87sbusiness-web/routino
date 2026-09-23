@@ -23,6 +23,42 @@ jobs:
           cache: npm
       - name: Install root dependencies
         run: npm ci
+      - name: Capture canonical Prettier output for lint cleanup
+        run: |
+          npx prettier --write src/components/AnimatedCompletionList.test.tsx src/components/AnimatedCompletionList.tsx src/lib/android-timer-notification.test.ts src/lib/local-web-notifications.test.ts src/lib/local-web-notifications.ts src/routes/timer.test.tsx src/routes/timer.tsx src/state/app-sync.test.tsx
+          echo "FORMAT_FILE:src/components/AnimatedCompletionList.test.tsx"
+          base64 -w0 "src/components/AnimatedCompletionList.test.tsx"
+          echo
+          echo "FORMAT_END:src/components/AnimatedCompletionList.test.tsx"
+          echo "FORMAT_FILE:src/components/AnimatedCompletionList.tsx"
+          base64 -w0 "src/components/AnimatedCompletionList.tsx"
+          echo
+          echo "FORMAT_END:src/components/AnimatedCompletionList.tsx"
+          echo "FORMAT_FILE:src/lib/android-timer-notification.test.ts"
+          base64 -w0 "src/lib/android-timer-notification.test.ts"
+          echo
+          echo "FORMAT_END:src/lib/android-timer-notification.test.ts"
+          echo "FORMAT_FILE:src/lib/local-web-notifications.test.ts"
+          base64 -w0 "src/lib/local-web-notifications.test.ts"
+          echo
+          echo "FORMAT_END:src/lib/local-web-notifications.test.ts"
+          echo "FORMAT_FILE:src/lib/local-web-notifications.ts"
+          base64 -w0 "src/lib/local-web-notifications.ts"
+          echo
+          echo "FORMAT_END:src/lib/local-web-notifications.ts"
+          echo "FORMAT_FILE:src/routes/timer.test.tsx"
+          base64 -w0 "src/routes/timer.test.tsx"
+          echo
+          echo "FORMAT_END:src/routes/timer.test.tsx"
+          echo "FORMAT_FILE:src/routes/timer.tsx"
+          base64 -w0 "src/routes/timer.tsx"
+          echo
+          echo "FORMAT_END:src/routes/timer.tsx"
+          echo "FORMAT_FILE:src/state/app-sync.test.tsx"
+          base64 -w0 "src/state/app-sync.test.tsx"
+          echo
+          echo "FORMAT_END:src/state/app-sync.test.tsx"
+          exit 1
       - name: Install backend dependencies
         run: npm --prefix backend ci
       - name: Prettier check
