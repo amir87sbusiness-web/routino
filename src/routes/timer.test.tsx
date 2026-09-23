@@ -69,7 +69,7 @@ describe("TimerPage native timer integration", () => {
     localStorage.clear();
     db = defaultDb([]);
     db.auth = { userId: "user-1", phone: "09120000000", verifiedAt: 1_000 };
-    mocks.ctx = {
+    const context: TimerTestContext = {
       db,
       cal: "gregorian",
       lang: "fa",
@@ -77,10 +77,11 @@ describe("TimerPage native timer integration", () => {
       requestProductWrite: () => true,
       update: (fn: (value: Db) => Db) => {
         db = fn(db);
-        mocks.ctx.db = db;
+        context.db = db;
         return true;
       },
     };
+    mocks.ctx = context;
     mocks.sync.mockClear();
     mocks.consume.mockReset().mockResolvedValue(null);
     mocks.openSettings.mockClear();
