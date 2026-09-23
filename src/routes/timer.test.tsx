@@ -2,17 +2,33 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultDb, type Db } from "@/lib/store";
-import { createTimer, loadTimer, resumeTimer, saveTimer } from "@/lib/timer-runtime";
+import type { AndroidTimerCommand } from "@/lib/android-timer-notification";
+import {
+  createTimer,
+  loadTimer,
+  resumeTimer,
+  saveTimer,
+  type TimerState,
+} from "@/lib/timer-runtime";
+
+interface TimerTestContext {
+  db: Db;
+  cal: "gregorian";
+  lang: "fa";
+  t: (fa: string) => string;
+  requestProductWrite: () => boolean;
+  update: (fn: (value: Db) => Db) => boolean;
+}
 
 const mocks = vi.hoisted(() => ({
-  sync: vi.fn<(timer: any) => Promise<void>>(async () => undefined),
-  consume: vi.fn<() => Promise<any>>(async () => null),
+  sync: vi.fn<(timer: TimerState) => Promise<void>>(async () => undefined),
+  consume: vi.fn<() => Promise<AndroidTimerCommand | null>>(async () => null),
   openSettings: vi.fn(async () => undefined),
   checkPermission: vi.fn(async () => "granted"),
   requestPermission: vi.fn(async () => true),
   localNotify: vi.fn(async () => "shown"),
   android: true,
-  ctx: null as any,
+  ctx: null as TimerTestContext | null,
 }));
 
 vi.mock("@/components/AppShell", () => ({ AppShell: ({ children }: { children: React.ReactNode }) => children }));
