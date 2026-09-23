@@ -1,21 +1,39 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AndroidTimerCommand } from "@/lib/android-timer-notification";
 import { defaultDb, type Db } from "@/lib/store";
-import { createTimer, loadTimer, resumeTimer, saveTimer } from "@/lib/timer-runtime";
+import {
+  createTimer,
+  loadTimer,
+  resumeTimer,
+  saveTimer,
+  type TimerState,
+} from "@/lib/timer-runtime";
+
+interface MockTimerContext {
+  db: Db;
+  cal: "gregorian";
+  lang: "fa";
+  t: (fa: string) => string;
+  requestProductWrite: () => boolean;
+  update: (fn: (value: Db) => Db) => boolean;
+}
 
 const mocks = vi.hoisted(() => ({
-  sync: vi.fn<(timer: any) => Promise<void>>(async () => undefined),
-  consume: vi.fn<() => Promise<any>>(async () => null),
+  sync: vi.fn<(timer: TimerState) => Promise<void>>(async () => undefined),
+  consume: vi.fn<() => Promise<AndroidTimerCommand | null>>(async () => null),
   openSettings: vi.fn(async () => undefined),
   checkPermission: vi.fn(async () => "granted"),
   requestPermission: vi.fn(async () => true),
   localNotify: vi.fn(async () => "shown"),
   android: true,
-  ctx: null as any,
+  ctx: null as MockTimerContext | null,
 }));
 
-vi.mock("@/components/AppShell", () => ({ AppShell: ({ children }: { children: React.ReactNode }) => children }));
+vi.mock("@/components/AppShell", () => ({
+  AppShell: ({ children }: { children: React.ReactNode }) => children,
+}));
 vi.mock("@/components/habits", () => ({
   CelebrationModal: () => null,
   useCelebration: () => ({ celebration: null, clear: vi.fn() }),
@@ -59,7 +77,7 @@ describe("TimerPage native timer integration", () => {
       requestProductWrite: () => true,
       update: (fn: (value: Db) => Db) => {
         db = fn(db);
-        mocks.ctx.db = db;
+        mocks.ctx!.db = db;
         return true;
       },
     };
@@ -98,14 +116,20 @@ describe("TimerPage native timer integration", () => {
     mocks.checkPermission.mockResolvedValue("prompt");
     await act(async () => root.render(<TimerPage />));
 
-    await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="شروع"]')!.click());
+    await act(async () =>
+      host.querySelector<HTMLButtonElement>('button[aria-label="شروع"]')!.click(),
+    );
 
     expect(mocks.sync).toHaveBeenCalledWith(expect.objectContaining({ running: true }));
     expect(mocks.requestPermission).not.toHaveBeenCalled();
   });
 
   it("applies resume from the paused native notification without resetting the timer", async () => {
-    const paused = { ...resumeTimer(createTimer("free", 2), 1_000), running: false, anchorAt: null };
+    const paused = {
+      ...resumeTimer(createTimer("free", 2), 1_000),
+      running: false,
+      anchorAt: null,
+    };
     saveTimer("user-1", paused);
     mocks.consume.mockResolvedValueOnce({
       id: "resume-from-notification",
@@ -138,9 +162,13 @@ describe("TimerPage native timer integration", () => {
   it("requests a prompt permission from the explicit CTA", async () => {
     mocks.checkPermission.mockResolvedValue("prompt");
     await act(async () => root.render(<TimerPage />));
-    await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="شروع"]')!.click());
+    await act(async () =>
+      host.querySelector<HTMLButtonElement>('button[aria-label="شروع"]')!.click(),
+    );
 
-    const cta = [...host.querySelectorAll("button")].find((button) => button.textContent === "فعال‌کردن اعلان")!;
+    const cta = [...host.querySelectorAll("button")].find(
+      (button) => button.textContent === "فعال‌کردن اعلان",
+    )!;
     await act(async () => cta.click());
     expect(mocks.requestPermission).toHaveBeenCalledTimes(1);
   });
@@ -148,9 +176,13 @@ describe("TimerPage native timer integration", () => {
   it("opens Android notification settings from the CTA after denial", async () => {
     mocks.checkPermission.mockResolvedValue("denied");
     await act(async () => root.render(<TimerPage />));
-    await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="شروع"]')!.click());
+    await act(async () =>
+      host.querySelector<HTMLButtonElement>('button[aria-label="شروع"]')!.click(),
+    );
 
-    const cta = [...host.querySelectorAll("button")].find((button) => button.textContent === "فعال‌کردن اعلان")!;
+    const cta = [...host.querySelectorAll("button")].find(
+      (button) => button.textContent === "فعال‌کردن اعلان",
+    )!;
     await act(async () => cta.click());
     expect(mocks.openSettings).toHaveBeenCalledTimes(1);
   });
@@ -161,9 +193,13 @@ describe("TimerPage native timer integration", () => {
       .mockResolvedValueOnce("denied")
       .mockResolvedValueOnce("prompt");
     await act(async () => root.render(<TimerPage />));
-    await act(async () => host.querySelector<HTMLButtonElement>('button[aria-label="شروع"]')!.click());
+    await act(async () =>
+      host.querySelector<HTMLButtonElement>('button[aria-label="شروع"]')!.click(),
+    );
 
-    const cta = [...host.querySelectorAll("button")].find((button) => button.textContent === "فعال‌کردن اعلان")!;
+    const cta = [...host.querySelectorAll("button")].find(
+      (button) => button.textContent === "فعال‌کردن اعلان",
+    )!;
     await act(async () => cta.click());
 
     expect(mocks.requestPermission).toHaveBeenCalledTimes(1);
@@ -215,10 +251,7 @@ describe("TimerPage native timer integration", () => {
 
   it("announces the latest relevant transition after a multi-phase suspension", async () => {
     mocks.android = false;
-    const active = resumeTimer(
-      createTimer("pomodoro", 1, { breakMinutes: 1, cycles: 2 }),
-      1_000,
-    );
+    const active = resumeTimer(createTimer("pomodoro", 1, { breakMinutes: 1, cycles: 2 }), 1_000);
     saveTimer("user-1", active);
     await act(async () => root.render(<TimerPage />));
 

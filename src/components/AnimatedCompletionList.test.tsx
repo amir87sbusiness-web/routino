@@ -77,7 +77,16 @@ describe("AnimatedCompletionList", () => {
   };
 
   it("waits 450ms before grouping a newly completed item in manual order", () => {
-    act(() => root.render(<Harness initial={[{ id: "done", completed: true }, { id: "open", completed: false }]} />));
+    act(() =>
+      root.render(
+        <Harness
+          initial={[
+            { id: "done", completed: true },
+            { id: "open", completed: false },
+          ]}
+        />,
+      ),
+    );
     act(() => host.querySelector<HTMLElement>("[data-toggle=open]")!.click());
 
     expect(order()).toEqual(["open", "done"]);
@@ -88,11 +97,17 @@ describe("AnimatedCompletionList", () => {
   });
 
   it("keeps multiple completed items in their manual base order, not check time", () => {
-    act(() => root.render(<Harness initial={[
-      { id: "a", completed: false },
-      { id: "b", completed: false },
-      { id: "c", completed: false },
-    ]} />));
+    act(() =>
+      root.render(
+        <Harness
+          initial={[
+            { id: "a", completed: false },
+            { id: "b", completed: false },
+            { id: "c", completed: false },
+          ]}
+        />,
+      ),
+    );
     act(() => host.querySelector<HTMLElement>("[data-toggle=b]")!.click());
     act(() => vi.advanceTimersByTime(450));
     act(() => host.querySelector<HTMLElement>("[data-toggle=a]")!.click());
@@ -215,14 +230,19 @@ describe("AnimatedCompletionList", () => {
   });
 
   it("blocks native touch scrolling only after a long press activates dragging", () => {
-    act(() => root.render(
-      <AnimatedCompletionList
-        items={[{ id: "a", completed: false }, { id: "b", completed: false }]}
-        isCompleted={(item) => item.completed}
-        onReorder={() => undefined}
-        renderItem={(item) => <span>{item.id}</span>}
-      />,
-    ));
+    act(() =>
+      root.render(
+        <AnimatedCompletionList
+          items={[
+            { id: "a", completed: false },
+            { id: "b", completed: false },
+          ]}
+          isCompleted={(item) => item.completed}
+          onReorder={() => undefined}
+          renderItem={(item) => <span>{item.id}</span>}
+        />,
+      ),
+    );
     const row = host.querySelector<HTMLElement>("[data-completion-id=a]")!;
     act(() => pointer(row, "pointerdown", 10));
     const before = new Event("touchmove", { bubbles: true, cancelable: true });
