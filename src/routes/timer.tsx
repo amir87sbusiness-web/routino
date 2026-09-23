@@ -182,6 +182,13 @@ export function TimerPage() {
     publish(next);
   };
 
+  // Native action listeners bind only when the account changes, but they must
+  // always execute the latest render's timer callbacks.
+  const settleRef = useRef(settle);
+  settleRef.current = settle;
+  const finalizeSessionRef = useRef(finalizeSession);
+  finalizeSessionRef.current = finalizeSession;
+
   useEffect(() => {
     if (!owner) return;
     ownerRef.current = owner;
@@ -230,7 +237,7 @@ export function TimerPage() {
         const reconciled = command.timer
           ? reconcileAndroidTimerSnapshot(timerRef.current, command.timer)
           : command.action === "pause"
-            ? pauseTimer(settle(now, false), now)
+            ? pauseTimer(settleRef.current(now, false), now)
             : command.action === "resume"
               ? resumeTimer(timerRef.current, now)
               : timerRef.current;
@@ -241,10 +248,10 @@ export function TimerPage() {
         timerRef.current = reconciled;
         setTimer(reconciled);
         if (command.action === "finish") {
-          finalizeSession(true, true, now);
+          finalizeSessionRef.current(true, true, now);
           return;
         }
-        finalizeSession(false, false, now);
+        finalizeSessionRef.current(false, false, now);
         const current = timerRef.current;
         publish({
           ...createTimer(
