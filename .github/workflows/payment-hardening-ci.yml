@@ -23,6 +23,13 @@ jobs:
           cache: npm
       - name: Install root dependencies
         run: npm ci
+      - name: Regenerate backend lockfile for repair
+        run: |
+          npm --prefix backend install --package-lock-only --ignore-scripts
+          echo "BACKEND_LOCK_BASE64_START"
+          base64 -w0 backend/package-lock.json
+          echo
+          echo "BACKEND_LOCK_BASE64_END"
       - name: Install backend dependencies
         run: npm --prefix backend ci
       - name: Prettier check
