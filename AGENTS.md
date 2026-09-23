@@ -1,6 +1,6 @@
 # Routino — single project guide
 
-Updated 2026-09-07. Read this, then only relevant source files; do not re-analyze the repo. Explain in plain Persian. This replaces the old project documentation.
+Updated 2026-09-23. Read this first, then inspect only the source areas relevant to the task. Explain changes in plain Persian. This is the canonical project guide.
 
 ## Rules
 
@@ -14,7 +14,8 @@ Updated 2026-09-07. Read this, then only relevant source files; do not re-analyz
 - Never hand-edit generated shared/, src/routeTree.gen.ts, dist/ or www/.
 - src/lib/phone.ts and backend/src/lib/phone.ts must stay byte-identical.
 - High risk: src/lib/db/ and backend/src/services/payment-flow.ts.
-- Keep this guide current; do not add more project documentation files.
+- Keep this guide current; do not add historical release logs here.
+- Prettier uses `endOfLine: "auto"` because the repo is developed on Windows and validated on Linux CI.
 
 ## Source map
 
@@ -102,22 +103,3 @@ Updated 2026-09-07. Read this, then only relevant source files; do not re-analyz
 - Writer keeps v1 when fresh v2 JSONB<2048bytes to avoid loss of TOAST compression.
 - Nine synthetic shapes:0–20.9% physical archive saving;10k-task JSON -33.8% but equal physical space.
 - After any v2 archive exists, do not roll back to a v1-only reader. Archive migration is separate from launch fixes.
-
-## Verified release state — recheck next time
-
-- Audit branch codex/reduce-sync-storage-cost, base06d8fec; cost/launch changes uncommitted.
-- 2026-09-07: backend520 tests; Edge117passed/9opt-in skipped; real local PostgreSQL stress8passed, fake providers.
-- Stress:1000sync+50login+20checkout; same OTP accepted once; same-phone slot once; Verifycapacity1 peak1.
-- Twenty pending payments recovered to20grants/0leases; no extra Verify during backoff.
-- APIv75 deployed and ACTIVE on2026-09-07; /health, /health/ready, /v1/plans and /app/ returned200; readiness db=up.
-- Downloaded production source:45 files matched local source (normalized line endings), zero mismatches.
-- Rollback source: C:/Users/User/AppData/Local/Temp/routino-api-before-launch-fixes-20260907.
-- Runtime delta: routes/{payments,subscriptions,sync}.ts; shared/{lib/pay-result-page,services/otp,services/payment-flow}.ts.
-- No schema/secret/cron/amount changes in this release; synthetic local tests do not touch real users.
-- Logs: artifacts/launch-audit-2026-09-06/{auth-payment-fixed,backend-launch-fixes-final,edge-launch-fixes-final}.log.
-- Scoped review found/fixed unbound-Authority retry loss; follow-up found no further important issue.
-- Public health is not real OTP/bank/device proof; those launch smoke checks remain unverified here.
-- Owner reported the launch smoke checks OK after APIv75; this is owner confirmation, not agent-observed bank evidence.
-- Cleanup2026-09-07: removed20 unreferenced declarations/341 canonical lines across15 files; generated Edge copies refreshed. No behavior changes or SQL migrations. Preserve active SQL maintenance and Edge-only imports when auditing dead code.
-- Cleanup validation: frontend326/backend516/Edge117 passed;13 optional tests skipped (local PostgreSQL/stress not enabled). Both TypeScript unused checks, web/landing build and independent deletion review passed. Logs: artifacts/dead-code-*-tests.log and dead-code-build.log.
-- Launch publication: APIv76 ACTIVE. Signed Android1.0 built and verified; APK SHA256 8a482f50218cb3dc9090821562d1f63e899c7031b32cbd1bfcc8c3f4533abb16. Web release includes /downloads/routino-android-1.0.apk with working CTA. Source is published through origin/main to existing Cloudflare build integration; verify live assets after push. Archive writer SQL remains unapplied.
