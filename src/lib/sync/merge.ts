@@ -14,9 +14,9 @@ import type { RemoteRecord } from "../api/sync";
 
 /** Server-side kinds, mirrored from `SYNC_KINDS` in backend/src/db/schema.ts.
  *
- * `feedback` is deliberately absent even though it IS a local table: it is
- * push-only to its own endpoint and the server rejects it as an unknown kind.
- * Including it here would make every push 400 and sync would never run at all. */
+ * `feedback` is deliberately absent even though a legacy local table still
+ * exists: it is not part of the active sync protocol and the server rejects it
+ * as an unknown kind. Including it here would make every push fail. */
 export const SYNCABLE_TABLES = [
   "categories",
   "habits",

@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   // App Store / Google Play این مقدار را با دامنه‌ی واقعی خودت جایگزین کن.
   appId: "com.routino.app",
   appName: "Routino",
-  // خروجی بیلد SPA که vite.mobile.config.ts می‌سازد
+  // خروجی بیلد SPA که vite.config.ts با BUILD_TARGET=mobile می‌سازد
   webDir: "www",
   server: {
     androidScheme: "https",

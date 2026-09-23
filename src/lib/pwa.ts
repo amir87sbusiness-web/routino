@@ -11,8 +11,9 @@ import { Capacitor } from "@capacitor/core";
 /**
  * Asks the browser not to evict our data.
  *
- * This matters more here than in most apps: IndexedDB is the ONLY copy of the
- * user's personal content. Browsers may evict best-effort storage under pressure;
+ * This matters more here than in most apps: IndexedDB is the primary local copy
+ * used for offline work. Signed-in data also syncs to the server, but browsers may
+ * still evict best-effort local storage under pressure;
  * persistence greatly reduces that risk but cannot override an explicit site-data
  * clear, private browsing, or browser/profile removal.
  *

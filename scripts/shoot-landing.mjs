@@ -43,11 +43,6 @@ const SHOTS = [
   { name: "timer-dark", path: "/app/timer", theme: "dark", ...PHONE },
   { name: "journal-dark", path: "/app/journal", theme: "dark", ...PHONE },
   { name: "desktop-dark", path: "/app/", theme: "dark", ...DESK },
-  { name: "desktop-analytics-dark", path: "/app/analytics", theme: "dark", ...DESK },
-  // روشن — چند تا برای اینکه معلوم باشد هر دو تم هست
-  { name: "today", path: "/app/", theme: "light", ...PHONE },
-  { name: "analytics", path: "/app/analytics", theme: "light", ...PHONE },
-  { name: "desktop", path: "/app/", theme: "light", ...DESK },
 ];
 
 /**
@@ -56,7 +51,7 @@ const SHOTS = [
  *     node scripts/shoot-landing.mjs timer-dark
  *
  * چرا مهم است؟ داده‌ی نمایشی تصادفی ساخته می‌شود، پس گرفتنِ دوباره‌ی همه یعنی
- * هر ۱۰ فایل عوض می‌شوند حتی اگر فقط یک صفحه تغییر کرده باشد. بدون آرگومان،
+ * همهٔ فایل‌ها عوض می‌شوند حتی اگر فقط یک صفحه تغییر کرده باشد. بدون آرگومان،
  * مثل قبل همه گرفته می‌شوند.
  */
 function pickShots() {
