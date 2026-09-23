@@ -37,13 +37,7 @@ import { applyChanges, reorderLocalRows, type LocallyOrderableTable } from "@/li
 import { switchOwnerVault } from "@/lib/db/vault";
 import { resolveServerEntitlement } from "@/lib/entitlement-migration";
 import { DEFAULT_CATEGORIES } from "@/lib/presets";
-import {
-  defaultDb,
-  uid,
-  type Db,
-  type Settings,
-  type Subscription,
-} from "@/lib/store";
+import { defaultDb, uid, type Db, type Settings, type Subscription } from "@/lib/store";
 import { applyServerEntitlement, dueHabitsOn, isCompleted, getLog } from "@/lib/logic";
 import { productWriteAllowed } from "@/lib/access-state";
 import { isNativeRuntime, reconcileNativeReminders } from "@/lib/native-notifications";
