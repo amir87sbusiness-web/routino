@@ -47,9 +47,12 @@ void (async () => {
     const payment = parsePaymentDeepLink(url);
     if (!payment) return;
     lastHandledUrl = url;
+    // Best effort: closing a Custom Tab must never block payment confirmation.
+    void import("@capacitor/browser").then(({ Browser }) => Browser.close()).catch(() => {});
     void router.navigate({
       to: "/pay/result",
       search: payment,
+      replace: true,
     });
   };
 

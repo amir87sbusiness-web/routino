@@ -3,9 +3,8 @@
  *
  * The gateway's callback page redirects here (web) or deep-links here
  * (android/ios) with `?paymentId=…&status=…`. The status in the URL is only a
- * hint for the first paint — the truth is `GET /v1/payments/:id`, which also
- * self-heals a payment whose callback never landed. While the payment is still
- * settling, this page polls.
+ * hint only — the truth is the authenticated `GET /v1/payments/:id`.
+ * Status reads never call the provider. Pending results use bounded backoff.
  */
 import { Capacitor } from "@capacitor/core";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
@@ -38,15 +37,22 @@ const POLL_DELAYS_MS = [3_000, 7_000, 15_000, 30_000] as const;
 function PayResultPage() {
   const ctx = useAppMaybe();
   const navigate = useNavigate();
-  const { paymentId, status: hintedStatus } = Route.useSearch();
+  const { paymentId } = Route.useSearch();
   const [result, setResult] = useState<PaymentStatus | null>(null);
   const [state, setState] = useState<"loading" | "done" | "timeout" | "error">("loading");
+  const [retry, setRetry] = useState(0);
   const polls = useRef(0);
   const applied = useRef(false);
 
   const applyEntitlement = ctx?.applyEntitlement;
+  const hydrated = Boolean(ctx?.db);
 
   useEffect(() => {
+    if (!hydrated) return;
+    polls.current = 0;
+    applied.current = false;
+    setResult(null);
+    setState("loading");
     if (!paymentId || !hasSession()) {
       setState("error");
       return;
@@ -74,9 +80,11 @@ function PayResultPage() {
         if (s === "paid" || s === "canceled" || s === "failed" || s === "verify_failed") {
           // Cache the server's answer locally — this is what opens the gate.
           if (s === "paid" && applyEntitlement && !applied.current) {
-            applied.current = true;
             const sub = entitlementToSubscription(res.entitlement);
-            if (sub) applyEntitlement(sub);
+            if (sub) {
+              applyEntitlement(sub);
+              applied.current = true;
+            }
           }
           setState("done");
           return;
@@ -92,24 +100,30 @@ function PayResultPage() {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [applyEntitlement, paymentId]);
+  }, [applyEntitlement, hydrated, paymentId, retry]);
 
   // Android checkout should feel like one flow: once the backend confirms the
   // payment, continue into Routino automatically. Web keeps the normal result
   // screen. Never navigate based only on the status carried by the deep link.
   useEffect(() => {
-    if (Capacitor.getPlatform() !== "android" || state !== "done" || result?.payment.status !== "paid") {
+    if (
+      Capacitor.getPlatform() !== "android" ||
+      state !== "done" ||
+      result?.payment.status !== "paid" ||
+      result.payment.id !== paymentId ||
+      !applied.current
+    ) {
       return;
     }
     const timer = window.setTimeout(() => {
-      void navigate({ to: "/" });
+      void navigate({ to: "/", replace: true });
     }, 650);
     return () => window.clearTimeout(timer);
-  }, [navigate, result?.payment.status, state]);
+  }, [navigate, paymentId, result, state]);
 
   const t = ctx?.t ?? ((fa: string) => fa);
   const lang = ctx?.lang ?? "fa";
-  const status = result?.payment.status ?? hintedStatus;
+  const status = result && result.payment.id === paymentId ? result.payment.status : undefined;
 
   const body = (() => {
     if (!paymentId || state === "error") {
@@ -189,7 +203,11 @@ function PayResultPage() {
       <Logo className="h-14 w-14" />
       {body}
       <div className="flex w-full max-w-xs flex-col gap-2">
-        {status === "paid" ? (
+        {state === "timeout" ? (
+          <Button onClick={() => setRetry((value) => value + 1)} className="py-3">
+            {t("بررسی دوبارهٔ وضعیت", "Check payment status")}
+          </Button>
+        ) : status === "paid" ? (
           <Button onClick={() => navigate({ to: "/" })} className="py-3">
             {t("شروع روتینو 🚀", "Start Routino 🚀")}
           </Button>

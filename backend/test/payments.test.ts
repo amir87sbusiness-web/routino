@@ -107,6 +107,32 @@ describe("POST /v1/payments/quote", () => {
 });
 
 describe("checkout → gateway → callback", () => {
+  it("hands Android to the public origin and confirms paid status with the existing session", async () => {
+    const { access, user } = await signIn();
+    const res = await checkout(access, { planId: "m1", platform: "android" });
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    const url = new URL(body.paymentUrl);
+    expect(url.origin).toBe(new URL(h.env.PUBLIC_WEB_URL).origin);
+    expect(url.pathname).toBe("/pay-start");
+    expect([...url.searchParams.keys()]).toEqual(["authority"]);
+    expect(url.searchParams.get("authority")).toBe(body.authority);
+    const cb = await settleAndCallback(body.authority, "paid");
+    expect(cb.body).toContain(`routino://pay/result?paymentId=${body.paymentId}`);
+    expect(cb.body).not.toContain("نسخه وب");
+    const status = await h.app.inject({
+      method: "GET",
+      url: `/v1/payments/${body.paymentId}`,
+      headers: auth(access),
+    });
+    expect(status.json().payment.status).toBe("paid");
+    expect(status.json().entitlement.status).toBe("active");
+    expect(
+      await h.query(`select id from grants where user_id = '${user.id}' and source = 'payment'`),
+    ).toHaveLength(1);
+    expect(h.sms.sent).toHaveLength(1);
+  });
+
   it("returns the same redirect and makes one PSP call when an attempt is retried", async () => {
     const { access, user } = await signIn();
     const attemptId = crypto.randomUUID();

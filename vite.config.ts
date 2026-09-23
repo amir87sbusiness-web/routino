@@ -97,7 +97,7 @@ export default defineConfig({
           /^\/v1(?:\/|$)/,
           /^\/admin(?:\/|$)/,
           /^\/payments\/callback(?:\/|$)/,
-          /^\/app\/pay-start\.html$/,
+          /^\/app\/pay-start(?:\.html|\/)?$/,
         ],
         runtimeCaching: [],
 
@@ -105,6 +105,7 @@ export default defineConfig({
         // ({js,css,html,ico,png,svg}). وزیرمتن woff2 است و بدون این، متن فارسی
         // در حالت آفلاین با فونت سیستمی و RTL خراب رندر می‌شود.
         globPatterns: ["**/*.{js,css,html,ico,png,svg,webmanifest,woff2,mp3}"],
+        globIgnores: ["**/pay-start.html", "**/pay-start.js"],
 
         // باندل ~۵۹۰KB است؛ سقف پیش‌فرض ۲MB است ولی صریح بودنش بهتر از
         // «چرا فایل اصلی کش نشد؟» است.

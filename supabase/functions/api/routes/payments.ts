@@ -102,7 +102,7 @@ export function paymentRoutes(deps: Deps) {
       const publicOrigin = new URL(env.PUBLIC_WEB_URL).origin;
       return c.json({
         ...result,
-        paymentUrl: `${publicOrigin}/pay-start.html?authority=${encodeURIComponent(result.authority)}`,
+        paymentUrl: `${publicOrigin}/pay-start?authority=${encodeURIComponent(result.authority)}`,
       });
     }
 

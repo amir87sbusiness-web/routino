@@ -36,6 +36,12 @@ export async function onRequest(context) {
   const { request, next, env } = context;
   const url = new URL(request.url);
 
+  // Pages normalizes .html to an extensionless URL. Keep legacy checkout
+  // links out of the authenticated shell even if the routing manifest drifts.
+  if (/^\/app\/pay-start(?:\.html|\/)?$/.test(url.pathname)) {
+    return Response.redirect(new URL(`/pay-start${url.search}`, url.origin), 302);
+  }
+
   // A real file under /app/ — let the asset server answer it.
   if (/\.[a-zA-Z0-9]+$/.test(url.pathname)) return next();
 

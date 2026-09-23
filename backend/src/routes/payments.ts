@@ -106,7 +106,7 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
       const publicOrigin = new URL(env.PUBLIC_WEB_URL).origin;
       return {
         ...result,
-        paymentUrl: `${publicOrigin}/pay-start.html?authority=${encodeURIComponent(result.authority)}`,
+        paymentUrl: `${publicOrigin}/pay-start?authority=${encodeURIComponent(result.authority)}`,
       };
     }
 

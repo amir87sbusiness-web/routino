@@ -42,7 +42,7 @@ export function renderResultPage(
   // authoritative payment endpoint if verification is still settling. Keeping a
   // native user on this browser page adds latency and an unnecessary extra step.
   const retrySeconds =
-    !native && outcome === "pending" && input.retryCallbackAfterSeconds
+    outcome === "pending" && input.retryCallbackAfterSeconds
       ? Math.max(5, Math.min(300, Math.ceil(input.retryCallbackAfterSeconds)))
       : 0;
   const title = ok
@@ -92,11 +92,11 @@ export function renderResultPage(
   <p>${detail}</p>
   ${retrySeconds ? '<a class="btn" id="retry-verification" href="">بررسی دوبارهٔ پرداخت</a>' : ""}
   <a class="btn" href="${esc(target)}">بازگشت به روتینو</a>
-  ${native ? `<a class="alt" href="${esc(webUrl)}">باز نشد؟ نسخه وب را باز کن</a>` : ""}
+  ${native ? "<p>اگر برنامه باز نشد، «بازگشت به روتینو» را بزن.</p>" : ""}
 </div>
 <script>
   ${
-    native
+    native && !retrySeconds
       ? `
   // Return native checkout to the app immediately. The app verifies the final
   // state from the server, so query-string status is never trusted for access.

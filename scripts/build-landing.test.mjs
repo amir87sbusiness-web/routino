@@ -40,10 +40,15 @@ describe("landing build script", () => {
       copyInput("src/lib/legal-info.ts");
       copyInput("src/lib/legal-text.json");
       const apk = join(sandbox, "landing", "downloads", "routino-android-1.0.apk");
+      const versionCode = Number(
+        readFileSync(join(sandbox, "android/app/build.gradle"), "utf8").match(
+          /versionCode\s+(\d+)/,
+        )[1],
+      );
       writeFileSync(
         `${apk}.json`,
         JSON.stringify({
-          versionCode: 23,
+          versionCode,
           bytes: statSync(apk).size,
           sha256: createHash("sha256").update(readFileSync(apk)).digest("hex"),
         }),
@@ -100,14 +105,14 @@ describe("landing build script", () => {
       assert.equal(existsSync(join(sandbox, "dist", "favicon.ico")), true);
       assert.deepEqual(
         JSON.parse(readFileSync(join(sandbox, "dist", "app", "android-update.json"), "utf8")),
-        { versionCode: 23 },
+        { versionCode },
       );
 
       writeFileSync(
         join(sandbox, "android", "app", "build.gradle"),
         readFileSync(join(sandbox, "android", "app", "build.gradle"), "utf8").replace(
-          "versionCode 23",
-          "versionCode 24",
+          `versionCode ${versionCode}`,
+          `versionCode ${versionCode + 1}`,
         ),
       );
       const mismatchedRelease = spawnSync(process.execPath, ["scripts/build-landing.mjs"], {

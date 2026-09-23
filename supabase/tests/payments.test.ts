@@ -82,6 +82,30 @@ describe("POST /v1/payments/quote", () => {
 });
 
 describe("checkout → gateway → callback", () => {
+  it("hands Android to the public origin and confirms paid status with the existing session", async () => {
+    const { access, user } = await signIn(h);
+    const res = await checkout(access, { planId: "m1", platform: "android" });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const url = new URL(body.paymentUrl);
+    expect(url.origin).toBe(new URL(h.env.PUBLIC_WEB_URL).origin);
+    expect(url.pathname).toBe("/pay-start");
+    expect([...url.searchParams.keys()]).toEqual(["authority"]);
+    expect(url.searchParams.get("authority")).toBe(body.authority);
+    const cb = await settleAndCallback(body.authority, "paid");
+    const html = await cb.text();
+    expect(html).toContain(`routino://pay/result?paymentId=${body.paymentId}`);
+    expect(html).not.toContain("نسخه وب");
+    const status = await h.call("GET", `/v1/payments/${body.paymentId}`, { headers: auth(access) });
+    const confirmed = await status.json();
+    expect(confirmed.payment.status).toBe("paid");
+    expect(confirmed.entitlement.status).toBe("active");
+    expect(
+      await h.query(`select id from grants where user_id = '${user.id}' and source = 'payment'`),
+    ).toHaveLength(1);
+    expect(h.sms.sent).toHaveLength(1);
+  });
+
   it("requires a checkout attempt UUID on Edge", async () => {
     const { access } = await signIn(h);
     const res = await h.call("POST", "/v1/payments/checkout", {
