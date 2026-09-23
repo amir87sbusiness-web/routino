@@ -6,11 +6,7 @@ export interface LocalWebNotificationPayload {
 }
 
 export type LocalWebNotificationResult =
-  | "shown"
-  | "duplicate"
-  | "permission-required"
-  | "unsupported"
-  | "failed";
+  "shown" | "duplicate" | "permission-required" | "unsupported" | "failed";
 
 const DELIVERED_KEY = "routino:web-notifications:delivered:v1";
 const MAX_DELIVERED_IDS = 300;
@@ -20,7 +16,9 @@ const inFlight = new Set<string>();
 function deliveredIds(): string[] {
   try {
     const value = JSON.parse(localStorage.getItem(DELIVERED_KEY) ?? "[]");
-    return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+    return Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string")
+      : [];
   } catch {
     return [];
   }
