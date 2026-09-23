@@ -112,6 +112,18 @@ describe("TimerPage native timer integration", () => {
     expect(host.querySelector<HTMLButtonElement>('button[aria-label="شروع"]')).not.toBeNull();
   });
 
+  it("does not rebind the native command consumer on same-owner rerenders", async () => {
+    await act(async () => root.render(<TimerPage />));
+    await act(async () => Promise.resolve());
+
+    expect(mocks.consume).toHaveBeenCalledTimes(1);
+
+    await act(async () => root.render(<TimerPage />));
+    await act(async () => Promise.resolve());
+
+    expect(mocks.consume).toHaveBeenCalledTimes(1);
+  });
+
   it("starts the native service immediately before any notification permission prompt", async () => {
     mocks.checkPermission.mockResolvedValue("prompt");
     await act(async () => root.render(<TimerPage />));
