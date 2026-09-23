@@ -73,7 +73,7 @@ describe("a payment whose callback never came back", () => {
 
   it("continues a callback-proven Verify only in scheduled recovery", async () => {
     const { access } = await signIn("09121110007");
-    const { paymentId, authority } = await checkout(access);
+    const { authority } = await checkout(access);
 
     const callback = await h.app.inject({
       method: "GET",
