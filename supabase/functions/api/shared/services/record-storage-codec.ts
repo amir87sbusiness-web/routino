@@ -62,7 +62,7 @@ function expandHabitMonthCells(cells: unknown): JsonObject {
 }
 
 /** Converts canonical client data into the compact JSON array stored in Postgres. */
-export function encodeRecordForStorage(kind: StoredSyncKind, id: string, value: unknown): unknown {
+export function encodeRecordForStorage(kind: StoredSyncKind, _id: string, value: unknown): unknown {
   if (kind === "taskMonths") return value;
   if (value === null) return null;
   if (Array.isArray(value)) return value;
