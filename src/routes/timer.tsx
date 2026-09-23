@@ -215,6 +215,92 @@ export function TimerPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [owner]);
 
+  // The native plugin atomically consumes the command before returning it.
+  // Reconcile on both initial mount and foreground because Android can deliver
+  // an action while the WebView process is paused or already alive.
+  useEffect(() => {
+    if (!owner || !isAndroidNativeTimer()) return;
+    let cancelled = false;
+    const consume = async () => {
+      try {
+        const command = await consumeAndroidTimerCommand();
+        if (cancelled || !command) return;
+        const now = command.actedAt ?? Date.now();
+        const reconciled = command.timer
+          ? reconcileAndroidTimerSnapshot(timerRef.current, command.timer)
+          : command.action === "pause"
+            ? pauseTimer(settle(now, false), now)
+            : command.action === "resume"
+              ? resumeTimer(timerRef.current, now)
+              : timerRef.current;
+        if (command.action === "pause" || command.action === "resume") {
+          publish(reconciled);
+          return;
+        }
+        timerRef.current = reconciled;
+        setTimer(reconciled);
+        if (command.action === "finish") {
+          finalizeSession(true, true, now);
+          return;
+        }
+        finalizeSession(false, false, now);
+        const current = timerRef.current;
+        publish({
+          ...createTimer(
+            current.mode,
+            current.mode === "pomodoro" ? current.focusMinutes : current.freeMinutes,
+            {
+              breakMinutes: current.breakMinutes,
+              cycles: current.cycles,
+              linked: current.linked,
+            },
+          ),
+          pending: current.pending,
+        });
+      } catch {
+        // The active timer remains safe in local storage if the native bridge is unavailable.
+      }
+    };
+    const onForeground = () => {
+      if (document.visibilityState === "visible") void consume();
+    };
+    void consume();
+    document.addEventListener("visibilitychange", onForeground);
+    window.addEventListener("focus", onForeground);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onForeground);
+      window.removeEventListener("focus", onForeground);
+    };
+    // Native command listeners rebind only when account ownership changes;
+    // the callbacks read current timer/app state through refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [owner]);
+
+  useEffect(() => {
+    if (!ctx?.db || !isAndroidNativeTimer()) return;
+    let cancelled = false;
+    const refreshPermission = async () => {
+      try {
+        const permission = await checkNativeNotificationPermission();
+        if (!cancelled) setTimerNotificationPermission(permission);
+      } catch {
+        if (!cancelled) setTimerNotificationPermission("denied");
+      }
+    };
+    void refreshPermission();
+    const onForeground = () => {
+      if (document.visibilityState === "visible") void refreshPermission();
+    };
+    document.addEventListener("visibilitychange", onForeground);
+    window.addEventListener("focus", onForeground);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onForeground);
+      window.removeEventListener("focus", onForeground);
+    };
+  }, []);
+
   if (!ctx?.db) return null;
   const { db, t, lang, cal } = ctx;
 
@@ -312,89 +398,6 @@ export function TimerPage() {
       finished: true,
     });
   };
-
-  // The native plugin atomically consumes the command before returning it.
-  // Reconcile on both initial mount and foreground because Android can deliver
-  // an action while the WebView process is paused or already alive.
-  useEffect(() => {
-    if (!owner || !isAndroidNativeTimer()) return;
-    let cancelled = false;
-    const consume = async () => {
-      try {
-        const command = await consumeAndroidTimerCommand();
-        if (cancelled || !command) return;
-        const now = command.actedAt ?? Date.now();
-        const reconciled = command.timer
-          ? reconcileAndroidTimerSnapshot(timerRef.current, command.timer)
-          : command.action === "pause"
-            ? pauseTimer(settle(now, false), now)
-            : command.action === "resume"
-              ? resumeTimer(timerRef.current, now)
-              : timerRef.current;
-        if (command.action === "pause" || command.action === "resume") {
-          publish(reconciled);
-          return;
-        }
-        timerRef.current = reconciled;
-        setTimer(reconciled);
-        if (command.action === "finish") {
-          finalizeSession(true, true, now);
-          return;
-        }
-        finalizeSession(false, false, now);
-        const current = timerRef.current;
-        publish({
-          ...createTimer(
-            current.mode,
-            current.mode === "pomodoro" ? current.focusMinutes : current.freeMinutes,
-            {
-              breakMinutes: current.breakMinutes,
-              cycles: current.cycles,
-              linked: current.linked,
-            },
-          ),
-          pending: current.pending,
-        });
-      } catch {
-        // The active timer remains safe in local storage if the native bridge is unavailable.
-      }
-    };
-    const onForeground = () => {
-      if (document.visibilityState === "visible") void consume();
-    };
-    void consume();
-    document.addEventListener("visibilitychange", onForeground);
-    window.addEventListener("focus", onForeground);
-    return () => {
-      cancelled = true;
-      document.removeEventListener("visibilitychange", onForeground);
-      window.removeEventListener("focus", onForeground);
-    };
-  }, [owner]);
-
-  useEffect(() => {
-    if (!isAndroidNativeTimer()) return;
-    let cancelled = false;
-    const refreshPermission = async () => {
-      try {
-        const permission = await checkNativeNotificationPermission();
-        if (!cancelled) setTimerNotificationPermission(permission);
-      } catch {
-        if (!cancelled) setTimerNotificationPermission("denied");
-      }
-    };
-    void refreshPermission();
-    const onForeground = () => {
-      if (document.visibilityState === "visible") void refreshPermission();
-    };
-    document.addEventListener("visibilitychange", onForeground);
-    window.addEventListener("focus", onForeground);
-    return () => {
-      cancelled = true;
-      document.removeEventListener("visibilitychange", onForeground);
-      window.removeEventListener("focus", onForeground);
-    };
-  }, []);
 
   const activateTimerNotification = async () => {
     try {
