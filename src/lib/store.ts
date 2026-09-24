@@ -94,6 +94,9 @@ export interface Task {
   deadlineAt?: string | null; // local ISO datetime-local; absent keeps legacy behavior
   color?: string; // hex, chosen from CATEGORY_COLOR_CHOICES
   icon?: string; // key from CATEGORY_ICONS
+  /** Optional shared category. Missing means a legacy/never-categorized task;
+   * null is an explicit category removal by a category-aware client. */
+  categoryId?: string | null;
 }
 
 export type TimerMode = "pomodoro" | "free" | "stopwatch";

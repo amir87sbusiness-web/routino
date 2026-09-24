@@ -233,6 +233,7 @@ export function Chip({
   return (
     <button
       onClick={onClick}
+      aria-pressed={active ?? false}
       className={cn(
         "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all",
         active

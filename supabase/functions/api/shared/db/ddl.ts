@@ -119,7 +119,8 @@ begin
         case when p_data ? 'reminderAt' then jsonb_build_object('reminderAt', p_data->'reminderAt') else '{}'::jsonb end ||
         case when p_data ? 'deadlineAt' then jsonb_build_object('deadlineAt', p_data->'deadlineAt') else '{}'::jsonb end ||
         case when p_data ? 'color' then jsonb_build_object('color', p_data->'color') else '{}'::jsonb end ||
-        case when p_data ? 'icon' then jsonb_build_object('icon', p_data->'icon') else '{}'::jsonb end;
+        case when p_data ? 'icon' then jsonb_build_object('icon', p_data->'icon') else '{}'::jsonb end ||
+        case when p_data ? 'categoryId' then jsonb_build_object('categoryId', p_data->'categoryId') else '{}'::jsonb end;
       return jsonb_build_array(p_data->'dateKey', p_data->'title', p_data->'type',
         p_data->'target', p_data->'value', p_data->'done') ||
         case when v_extras = '{}'::jsonb then '[]'::jsonb else jsonb_build_array(v_extras) end;
@@ -612,6 +613,28 @@ begin
                     else routino_decode_record_data(existing.kind, existing.id, existing.data)
                end as data
       ) existing_state
+      left join lateral (
+        select true as found, expanded.task_data->'categoryId' as category_id
+          from records archive
+          cross join lateral jsonb_array_elements(archive.data->'items') item
+          cross join lateral (
+            select routino_expand_task_archive_item(
+              archive.data->'v', archive.data->>'monthKey', item
+            )->2 as task_data
+          ) expanded
+         where d.kind = 'tasks'
+           and d.deleted = false
+           and not (d.data ? 'categoryId')
+           and archive.user_id = p_user_id
+           and archive.kind = 'taskMonths'
+           and archive.deleted = false
+           and archive.id like left(d.data->>'dateKey', 7) || '|%'
+           and archive.data->>'monthKey' = left(d.data->>'dateKey', 7)
+           and item->>0 = d.id
+           and expanded.task_data ? 'categoryId'
+         order by archive.updated_at desc, archive.id
+         limit 1
+      ) archived_state on true
       cross join lateral (
         select case
                  when d.kind = 'habitMonths'
@@ -630,6 +653,23 @@ begin
                       ) < (incoming_cell.value->>'updatedAt')::bigint
                    ), '{}'::jsonb)
                  )
+                 when d.kind = 'tasks'
+                  and d.deleted = false
+                  and existing.user_id is not null
+                  and existing.deleted = false
+                  and not (d.data ? 'categoryId')
+                  and existing_state.data ? 'categoryId'
+                 then d.data || jsonb_build_object('categoryId', existing_state.data->'categoryId')
+                 when d.kind = 'tasks'
+                  and d.deleted = false
+                  and not (d.data ? 'categoryId')
+                  and (
+                    existing.user_id is null
+                    or existing.deleted
+                    or not (existing_state.data ? 'categoryId')
+                  )
+                  and archived_state.found
+                 then d.data || jsonb_build_object('categoryId', archived_state.category_id)
                  else d.data
                end as final_data,
                case
@@ -906,7 +946,7 @@ begin
      or not (p_data ?& array['id','dateKey','title','type','target','value','done'])
      or p_data - array[
        'id','dateKey','title','type','target','value','done',
-       'note','unitKind','reminderAt','deadlineAt','color','icon'
+       'note','unitKind','reminderAt','deadlineAt','color','icon','categoryId'
      ] <> '{}'::jsonb
      or jsonb_typeof(p_data->'id') <> 'string'
      or p_data->>'id' <> p_id
@@ -960,6 +1000,14 @@ begin
        p_data ? 'icon' and (
          jsonb_typeof(p_data->'icon') <> 'string'
          or routino_js_string_length(p_data->>'icon') > 64
+       )
+     )
+     or (
+       p_data ? 'categoryId'
+       and jsonb_typeof(p_data->'categoryId') <> 'null'
+       and (
+         jsonb_typeof(p_data->'categoryId') <> 'string'
+         or p_data->>'categoryId' !~ '^[A-Za-z0-9_:.-]{1,128}$'
        )
      ) then
     return false;
@@ -1058,7 +1106,7 @@ begin
   if jsonb_typeof(p->0) is distinct from 'string'
      or (p->>0) !~ '^[0-9]{2}$'
      or jsonb_typeof(p->5) is distinct from 'object' then return 'null'::jsonb; end if;
-  if (p->5) - array['note','unitKind','reminderAt','deadlineAt','color','icon'] <> '{}'::jsonb
+  if (p->5) - array['note','unitKind','reminderAt','deadlineAt','color','icon','categoryId'] <> '{}'::jsonb
     then return 'null'::jsonb; end if;
   return jsonb_build_array(p_item->0, p_item->1,
     jsonb_build_object('id', p_item->0, 'dateKey', p_month || '-' || (p->>0),

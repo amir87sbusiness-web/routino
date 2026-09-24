@@ -8,7 +8,6 @@ import { buildChartBars } from "@/lib/chart";
 import {
   addMonths,
   analyticsDayKeys,
-  dayOfMonth,
   faNum,
   formatShortDate,
   monthTitle,
@@ -17,8 +16,9 @@ import {
   type Lang,
 } from "@/lib/dates";
 import { avgOf, dayScore, weeklyReview, type WeeklyReview } from "@/lib/logic";
-import { taskMonthAnalytics } from "@/lib/analytics";
+import { taskMonthAnalytics, taskRangeAnalytics } from "@/lib/analytics";
 import { useAppMaybe } from "@/state/app";
+import { resolveTaskAppearance } from "@/lib/task-appearance";
 
 export const Route = createFileRoute("/analytics")({
   component: () => (
@@ -208,10 +208,8 @@ function AnalyticsPage() {
   const review = weeklyReview(db, cal, TODAY);
   const habits = db.habits.filter((h) => !h.archived);
   const taskAnalytics = taskMonthAnalytics(db.tasks, monthAnchor, cal);
-  const taskLabels = taskAnalytics.series.map(({ dateKey }) => {
-    const day = dayOfMonth(dateKey, cal);
-    return day % 5 === 0 ? faNum(day, lang) : "";
-  });
+  const taskSeries = taskRangeAnalytics(db.tasks, dayKeys, TODAY);
+  const taskChart = buildChartBars(taskSeries, range.id, cal, lang);
 
   return (
     <div className="page-stagger flex flex-col gap-5">
@@ -362,82 +360,96 @@ function AnalyticsPage() {
         <>
           <Card>
             <div className="mb-3 flex items-center justify-between gap-2">
-              <p className="text-sm font-bold text-foreground">
-                {t("عملکرد کارها", "Task performance")}
+              <p className="shrink-0 text-sm font-bold text-foreground">
+                {t("عملکرد کلی کارها", "Overall task performance")}
               </p>
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  aria-label="prev-task-month"
-                  onClick={() => setMonthAnchor((month) => addMonths(month, -1, cal))}
-                  className="rounded-full p-1.5 text-muted-foreground hover:bg-secondary"
-                >
-                  <ChevronRight className="h-4 w-4 ltr:hidden" />
-                  <ChevronLeft className="h-4 w-4 rtl:hidden" />
-                </button>
-                <span className="min-w-20 text-center text-[11px] font-bold text-foreground">
-                  {monthTitle(monthAnchor, cal, lang)}
-                </span>
-                <button
-                  type="button"
-                  aria-label="next-task-month"
-                  disabled={addMonths(monthAnchor, 1, cal) > TODAY}
-                  onClick={() => setMonthAnchor((month) => addMonths(month, 1, cal))}
-                  className="rounded-full p-1.5 text-muted-foreground hover:bg-secondary disabled:opacity-30"
-                >
-                  <ChevronLeft className="h-4 w-4 ltr:hidden" />
-                  <ChevronRight className="h-4 w-4 rtl:hidden" />
-                </button>
+              <div className="scrollbar-none flex gap-1 overflow-x-auto">
+                {RANGES.map((item) => (
+                  <Chip key={item.id} active={range.id === item.id} onClick={() => setRange(item)}>
+                    {t(item.fa, item.en)}
+                  </Chip>
+                ))}
               </div>
             </div>
-            <MiniBars
-              data={taskAnalytics.series.map((item) => item.percent)}
-              labels={taskLabels}
-              lang={lang}
-            />
+            <MiniBars data={taskChart.buckets} labels={taskChart.labels} lang={lang} />
             <p className="mt-3 text-center text-[11px] text-muted-foreground">
               {t("میانگین", "Average")}:{" "}
-              <b className="text-foreground">{faNum(avgOf(taskAnalytics.series), lang)}٪</b>
+              <b className="text-foreground">{faNum(avgOf(taskSeries), lang)}٪</b>
+              {taskChart.barUnit === "week" &&
+                t(` · هر ستون = ${faNum(7, lang)} روز`, " · each bar = 7 days")}
+              {taskChart.barUnit === "month" && t(" · هر ستون = ۱ ماه", " · each bar = 1 month")}
             </p>
           </Card>
 
           <section>
-            <SectionTitle>{t("وضعیت کارهای این ماه", "This month's tasks")}</SectionTitle>
+            <SectionTitle
+              action={
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    aria-label="prev-task-month"
+                    onClick={() => setMonthAnchor((month) => addMonths(month, -1, cal))}
+                    className="rounded-full p-1.5 text-muted-foreground hover:bg-secondary"
+                  >
+                    <ChevronRight className="h-4 w-4 ltr:hidden" />
+                    <ChevronLeft className="h-4 w-4 rtl:hidden" />
+                  </button>
+                  <span className="min-w-20 text-center text-[11px] font-bold text-foreground">
+                    {monthTitle(monthAnchor, cal, lang)}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="next-task-month"
+                    disabled={addMonths(monthAnchor, 1, cal) > TODAY}
+                    onClick={() => setMonthAnchor((month) => addMonths(month, 1, cal))}
+                    className="rounded-full p-1.5 text-muted-foreground hover:bg-secondary disabled:opacity-30"
+                  >
+                    <ChevronLeft className="h-4 w-4 ltr:hidden" />
+                    <ChevronRight className="h-4 w-4 rtl:hidden" />
+                  </button>
+                </div>
+              }
+            >
+              {t("وضعیت کارهای این ماه", "This month's tasks")}
+            </SectionTitle>
             <div className="flex flex-col gap-2">
               {taskAnalytics.items.length === 0 ? (
                 <p className="text-center text-xs text-muted-foreground">
                   {t("در این ماه کاری ثبت نشده.", "No tasks in this month.")}
                 </p>
               ) : (
-                taskAnalytics.items.map(({ task, status }) => (
-                  <div key={task.id} className="card-surface flex items-center gap-2 p-3">
-                    <span
-                      className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white"
-                      style={{ backgroundColor: task.color ?? "var(--primary)" }}
-                    >
-                      <CatIcon icon={task.icon ?? "star"} className="h-3.5 w-3.5" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p
-                        className={`truncate text-xs font-bold ${status === "done" ? "text-muted-foreground line-through" : "text-foreground"}`}
+                taskAnalytics.items.map(({ task, status }) => {
+                  const appearance = resolveTaskAppearance(task, db.categories);
+                  return (
+                    <div key={task.id} className="card-surface flex items-center gap-2 p-3">
+                      <span
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-white"
+                        style={{ backgroundColor: appearance.color }}
                       >
-                        {task.title}
-                      </p>
-                      <p className="text-[9px] text-muted-foreground">
-                        {formatShortDate(task.dateKey, cal, lang)}
-                      </p>
+                        <CatIcon icon={appearance.icon} className="h-3.5 w-3.5" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p
+                          className={`truncate text-xs font-bold ${status === "done" ? "text-muted-foreground line-through" : "text-foreground"}`}
+                        >
+                          {task.title}
+                        </p>
+                        <p className="text-[9px] text-muted-foreground">
+                          {formatShortDate(task.dateKey, cal, lang)}
+                        </p>
+                      </div>
+                      <span
+                        className={`rounded-full px-2 py-1 text-[9px] font-bold ${status === "done" ? "bg-success/10 text-success" : status === "overdue" ? "bg-destructive/10 text-destructive" : "bg-secondary text-muted-foreground"}`}
+                      >
+                        {status === "done"
+                          ? t("انجام‌شده", "Done")
+                          : status === "overdue"
+                            ? t("به‌تعویق‌افتاده", "Overdue")
+                            : t("انجام‌نشده", "Pending")}
+                      </span>
                     </div>
-                    <span
-                      className={`rounded-full px-2 py-1 text-[9px] font-bold ${status === "done" ? "bg-success/10 text-success" : status === "overdue" ? "bg-destructive/10 text-destructive" : "bg-secondary text-muted-foreground"}`}
-                    >
-                      {status === "done"
-                        ? t("انجام‌شده", "Done")
-                        : status === "overdue"
-                          ? t("به‌تعویق‌افتاده", "Overdue")
-                          : t("انجام‌نشده", "Pending")}
-                    </span>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </section>

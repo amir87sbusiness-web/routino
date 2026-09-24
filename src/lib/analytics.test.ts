@@ -9,6 +9,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { buildChartBars } from "./chart";
+import { taskRangeAnalytics } from "./analytics";
 import { addDays, weekStartOf, type Calendar } from "./dates";
 import {
   avgOf,
@@ -306,5 +307,66 @@ describe("buildChartBars averaging", () => {
     const { buckets } = buildChartBars(series, "quarter", "gregorian", "fa");
     expect(buckets[0]).toBe(50);
     expect(buckets[1]).toBeNull();
+  });
+});
+
+describe("taskRangeAnalytics", () => {
+  it("computes each day from one task traversal and leaves empty days out of the average", () => {
+    const tasks = [
+      {
+        id: "a",
+        dateKey: "2026-09-20",
+        title: "A",
+        type: "binary" as const,
+        target: 1,
+        value: 1,
+        done: true,
+      },
+      {
+        id: "b",
+        dateKey: "2026-09-20",
+        title: "B",
+        type: "binary" as const,
+        target: 1,
+        value: 0,
+        done: false,
+      },
+      {
+        id: "c",
+        dateKey: "2026-09-22",
+        title: "C",
+        type: "binary" as const,
+        target: 1,
+        value: 1,
+        done: true,
+      },
+      {
+        id: "future",
+        dateKey: "2026-09-24",
+        title: "Future",
+        type: "binary" as const,
+        target: 1,
+        value: 1,
+        done: true,
+      },
+    ];
+    Object.defineProperty(tasks, "filter", {
+      value: () => {
+        throw new Error("taskRangeAnalytics must not rescan tasks with filter");
+      },
+    });
+
+    expect(
+      taskRangeAnalytics(
+        tasks,
+        ["2026-09-20", "2026-09-21", "2026-09-22", "2026-09-24"],
+        "2026-09-23",
+      ),
+    ).toEqual([
+      { dateKey: "2026-09-20", percent: 50 },
+      { dateKey: "2026-09-21", percent: null },
+      { dateKey: "2026-09-22", percent: 100 },
+      { dateKey: "2026-09-24", percent: null },
+    ]);
   });
 });

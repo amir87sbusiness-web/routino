@@ -70,6 +70,7 @@ describe("task-month archive codec", () => {
       deadlineAt: "2026-01-05T18:00",
       color: "",
       icon: "",
+      categoryId: null,
       unitKind: "count",
     };
     const v2 = {
@@ -97,6 +98,7 @@ describe("task-month archive codec", () => {
                 deadlineAt: "2026-01-05T18:00",
                 color: "",
                 icon: "",
+                categoryId: null,
                 unitKind: "count",
               },
             ],

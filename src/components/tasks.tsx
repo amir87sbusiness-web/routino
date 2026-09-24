@@ -17,7 +17,6 @@ import { useHorizontalDrag } from "@/components/useHorizontalDrag";
 import {
   Button,
   CatIcon,
-  CATEGORY_ICONS,
   DatePickerCalendar,
   DurationPicker,
   formatDuration,
@@ -32,8 +31,11 @@ import {
   triggerCompletionFeedback,
 } from "@/lib/completion-feedback";
 import { CATEGORY_COLOR_CHOICES } from "@/lib/presets";
-import { uid, type Db, type Settings, type Task } from "@/lib/store";
+import { uid, type Category, type Db, type Settings, type Task } from "@/lib/store";
+import { resolveTaskAppearance, uncategorizedTaskColor } from "@/lib/task-appearance";
 import { isTaskOverdue, tasksVisibleOn } from "@/lib/deadlines";
+
+export { resolveTaskAppearance, uncategorizedTaskColor } from "@/lib/task-appearance";
 
 const TASK_DEFAULT_COLOR = CATEGORY_COLOR_CHOICES[0];
 const TASK_DEFAULT_ICON = "star";
@@ -53,9 +55,14 @@ export interface TaskDraft {
   deadlineTime: string;
   color: string;
   icon: string;
+  categoryId: string | null;
+  uncategorizedColor: string;
 }
 
-export function emptyTaskDraft(dateKey: string): TaskDraft {
+export function emptyTaskDraft(
+  dateKey: string,
+  uncategorizedColor = TASK_DEFAULT_COLOR,
+): TaskDraft {
   return {
     dateKey,
     title: "",
@@ -68,8 +75,10 @@ export function emptyTaskDraft(dateKey: string): TaskDraft {
     deadlineOn: false,
     deadlineDate: dateKey,
     deadlineTime: "18:00",
-    color: TASK_DEFAULT_COLOR,
+    color: uncategorizedColor,
     icon: TASK_DEFAULT_ICON,
+    categoryId: null,
+    uncategorizedColor,
   };
 }
 
@@ -91,6 +100,10 @@ export function taskToDraft(task: Task): TaskDraft {
     deadlineTime: deadlineMatch?.[2] ?? "18:00",
     color: task.color ?? TASK_DEFAULT_COLOR,
     icon: task.icon ?? TASK_DEFAULT_ICON,
+    categoryId: task.categoryId ?? null,
+    uncategorizedColor: task.categoryId
+      ? uncategorizedTaskColor(task.id)
+      : (task.color ?? TASK_DEFAULT_COLOR),
   };
 }
 
@@ -101,6 +114,13 @@ export function draftToTask(draft: TaskDraft, existing?: Task): Task {
   const previousValue = Math.max(0, existing?.value ?? 0);
   const value = isQuantity ? previousValue : existing?.done ? 1 : 0;
   const done = isQuantity ? value >= target : Boolean(existing?.done);
+
+  const categoryState =
+    draft.categoryId !== null
+      ? { categoryId: draft.categoryId }
+      : existing && "categoryId" in existing
+        ? { categoryId: null }
+        : {};
 
   return {
     id: existing?.id ?? draft.id ?? uid(),
@@ -116,6 +136,7 @@ export function draftToTask(draft: TaskDraft, existing?: Task): Task {
     deadlineAt: draft.deadlineOn ? `${draft.deadlineDate}T${draft.deadlineTime}` : null,
     color: draft.color,
     icon: draft.icon,
+    ...categoryState,
   };
 }
 
@@ -150,6 +171,7 @@ export function TaskFormModal({
   cal,
   lang,
   t,
+  categories = [],
 }: {
   open: boolean;
   draft: TaskDraft;
@@ -159,6 +181,7 @@ export function TaskFormModal({
   cal: Calendar;
   lang: Lang;
   t: (fa: string, en: string) => string;
+  categories?: Category[];
 }) {
   const [dateOpen, setDateOpen] = useState(false);
   const [reminderPickerOpen, setReminderPickerOpen] = useState(false);
@@ -323,42 +346,54 @@ export function TaskFormModal({
         )}
 
         <div>
-          <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("آیکون", "Icon")}</p>
+          <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+            {t("دسته‌بندی", "Category")}
+          </p>
           <div className="flex flex-wrap gap-1.5">
-            {Object.keys(CATEGORY_ICONS).map((iconKey) => (
+            <button
+              type="button"
+              aria-pressed={!categories.some((category) => category.id === draft.categoryId)}
+              onClick={() =>
+                patchDraft({
+                  categoryId: null,
+                  color: draft.uncategorizedColor,
+                  icon: TASK_DEFAULT_ICON,
+                })
+              }
+              className={`rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${
+                !categories.some((category) => category.id === draft.categoryId)
+                  ? "border-primary bg-primary-soft text-primary"
+                  : "border-border text-muted-foreground"
+              }`}
+            >
+              {t("بدون دسته", "Without category")}
+            </button>
+            {categories.map((category) => (
               <button
-                key={iconKey}
+                key={category.id}
                 type="button"
-                onClick={() => patchDraft({ icon: iconKey })}
-                aria-label={t(`انتخاب آیکون ${iconKey}`, `Choose ${iconKey} icon`)}
-                className={`flex h-8 w-8 items-center justify-center rounded-lg border transition-all ${
-                  draft.icon === iconKey
+                aria-pressed={draft.categoryId === category.id}
+                onClick={() =>
+                  patchDraft({
+                    categoryId: category.id,
+                    color: category.color,
+                    icon: category.icon,
+                  })
+                }
+                className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${
+                  draft.categoryId === category.id
                     ? "border-primary bg-primary-soft text-primary"
                     : "border-border text-muted-foreground"
                 }`}
               >
-                <CatIcon icon={iconKey} className="h-3.5 w-3.5" />
+                <span
+                  className="flex h-5 w-5 items-center justify-center rounded-md text-white"
+                  style={{ backgroundColor: category.color }}
+                >
+                  <CatIcon icon={category.icon} className="h-3 w-3" />
+                </span>
+                {lang === "fa" ? category.nameFa : category.nameEn}
               </button>
-            ))}
-          </div>
-        </div>
-
-        <div>
-          <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("رنگ", "Color")}</p>
-          <div className="flex flex-wrap gap-1.5">
-            {CATEGORY_COLOR_CHOICES.map((color) => (
-              <button
-                key={color}
-                type="button"
-                onClick={() => patchDraft({ color })}
-                aria-label={t(`انتخاب رنگ ${color}`, `Choose color ${color}`)}
-                className={`h-7 w-7 rounded-full transition-transform ${
-                  draft.color === color
-                    ? "scale-110 ring-2 ring-foreground ring-offset-2 ring-offset-card"
-                    : ""
-                }`}
-                style={{ backgroundColor: color }}
-              />
             ))}
           </div>
         </div>
@@ -525,6 +560,7 @@ export function TaskRow({
   onDelete,
   onEdit,
   onCompletionChange,
+  categories = [],
 }: {
   task: Task;
   settings: Pick<Settings, "completionSoundEnabled" | "hapticsEnabled">;
@@ -534,6 +570,7 @@ export function TaskRow({
   onDelete: () => void;
   onEdit?: () => void;
   onCompletionChange?: (completed: boolean) => void;
+  categories?: Category[];
 }) {
   const [justCompleted, setJustCompleted] = useState(false);
   const [rowFlash, setRowFlash] = useState(false);
@@ -541,7 +578,8 @@ export function TaskRow({
   const doneHintRef = useRef<HTMLSpanElement>(null);
   const undoHintRef = useRef<HTMLSpanElement>(null);
   const suppressClickUntil = useRef(0);
-  const tint = task.color ?? "var(--primary)";
+  const appearance = resolveTaskAppearance(task, categories);
+  const tint = appearance.color;
   const overdue = isTaskOverdue(task);
   const SWIPE_THRESHOLD = 76;
 
@@ -671,7 +709,7 @@ export function TaskRow({
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-white"
             style={{ backgroundColor: tint }}
           >
-            <CatIcon icon={task.icon ?? "star"} className="h-3.5 w-3.5" />
+            <CatIcon icon={appearance.icon} className="h-3.5 w-3.5" />
           </span>
 
           <div className="min-w-0 flex-1">
@@ -762,7 +800,7 @@ export function TaskRow({
         {task.type === "quantity" && (
           <Progress
             value={(task.value / task.target) * 100}
-            color={task.color}
+            color={appearance.color}
             className="mt-2.5"
           />
         )}
@@ -898,6 +936,7 @@ export function TodayTodosCard({
               renderItem={(task, onCompletionChange) => (
                 <TaskRow
                   task={task}
+                  categories={db.categories}
                   settings={db.settings}
                   lang={lang}
                   t={t}
@@ -932,6 +971,7 @@ export function TodayTodosCard({
           cal={cal}
           lang={lang}
           t={t}
+          categories={db.categories}
         />
       )}
     </>

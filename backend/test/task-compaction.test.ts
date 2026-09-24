@@ -317,7 +317,13 @@ describe("task archive SQL predicate", () => {
           reminderAt: null,
           color: "#fff",
           icon: "✅",
+          categoryId: "work",
         }),
+      ],
+      [
+        "explicit category clear",
+        "valid-null-category",
+        task("valid-null-category", { categoryId: null }),
       ],
       ["extra key", "bad-extra", task("bad-extra", { surprise: true })],
       ["id mismatch", "bad-id", task("another-id")],
@@ -331,6 +337,7 @@ describe("task archive SQL predicate", () => {
       ["oversized note", "bad-note", task("bad-note", { note: "ن".repeat(4_001) })],
       ["invalid unit", "bad-unit", task("bad-unit", { unitKind: "minutes" })],
       ["invalid reminder", "bad-reminder", task("bad-reminder", { reminderAt: 123 })],
+      ["invalid category", "bad-category", task("bad-category", { categoryId: "" })],
       ["array payload", "bad-array", []],
     ];
 
@@ -830,6 +837,89 @@ describe("bounded transactional task compaction", () => {
     );
     expect(archive!.version).toBe(1);
     expect(await semanticTasks()).toEqual(original);
+  });
+
+  it("round-trips absent, string, and null task categories through archive v1 and v2", async () => {
+    const variants = Array.from({ length: 12 }, (_, index) => {
+      const category = index % 3 === 0 ? {} : { categoryId: index % 3 === 1 ? "work" : null };
+      return task(`category-${String(index).padStart(2, "0")}`, {
+        ...category,
+        note: "😀".repeat(2_000),
+      });
+    });
+    for (const item of variants) await insertTask(String(item.id), item);
+    const original = await semanticTasks();
+
+    await h.query(`select * from routino_compact_task_months('${NOW}', 32)`);
+
+    const versions = await h.query<{ version: number }>(`
+      select (routino_decode_record_data(kind, id, data)->>'v')::int as version
+        from records where user_id='${OWNER}' and kind='taskMonths'
+    `);
+    expect(versions.some(({ version }) => version === 2)).toBe(true);
+    expect(await rawKindCount("tasks")).toBe(0);
+    expect(await semanticTasks()).toEqual(original);
+  });
+
+  it("preserves an archived category when a newer legacy task payload omits the key", async () => {
+    const targetId = "archived-category";
+    const variants = Array.from({ length: 12 }, (_, index) => {
+      const id = index === 0 ? targetId : `archive-padding-${String(index).padStart(2, "0")}`;
+      return task(id, {
+        ...(index === 0 ? { categoryId: "work" } : {}),
+        note: "😀".repeat(2_000),
+      });
+    });
+    for (const item of variants) await insertTask(String(item.id), item);
+    await h.query(`select * from routino_compact_task_months('${NOW}', 32)`);
+
+    const [stored] = await h.query<{ version: number }>(`
+      select (a.data->>'v')::int as version
+        from records a
+        cross join lateral jsonb_array_elements(a.data->'items') item
+       where a.user_id = '${OWNER}' and a.kind = 'taskMonths' and item->>0 = '${targetId}'
+    `);
+    expect(stored!.version).toBe(2);
+    expect(await rawKindCount("tasks")).toBe(0);
+
+    const legacyData = task(targetId, { title: "ویرایش نسخه قدیمی", note: "قدیمی" });
+    await h.query(`
+      select * from routino_push_records('${OWNER}', '${NOW}', ${sqlJson([
+        {
+          kind: "tasks",
+          id: targetId,
+          data: legacyData,
+          updatedAt: OLD_UPDATED_AT + 1,
+          originalUpdatedAt: OLD_UPDATED_AT + 1,
+          deleted: false,
+        },
+      ])})
+    `);
+    const [preserved] = await h.query<{ data: Record<string, unknown> }>(`
+      select routino_decode_record_data(kind, id, data) as data
+        from records
+       where user_id = '${OWNER}' and kind = 'tasks' and id = '${targetId}'
+    `);
+    expect(preserved!.data).toMatchObject({ title: "ویرایش نسخه قدیمی", categoryId: "work" });
+
+    await h.query(`
+      select * from routino_push_records('${OWNER}', '${NOW}', ${sqlJson([
+        {
+          kind: "tasks",
+          id: targetId,
+          data: { ...legacyData, categoryId: null },
+          updatedAt: OLD_UPDATED_AT + 2,
+          originalUpdatedAt: OLD_UPDATED_AT + 2,
+          deleted: false,
+        },
+      ])})
+    `);
+    const [cleared] = await h.query<{ data: Record<string, unknown> }>(`
+      select routino_decode_record_data(kind, id, data) as data
+        from records
+       where user_id = '${OWNER}' and kind = 'tasks' and id = '${targetId}'
+    `);
+    expect(cleared!.data).toMatchObject({ categoryId: null });
   });
 
   it("pulls a real compacted quantity archive with PostgreSQL decimal numeric text", async () => {

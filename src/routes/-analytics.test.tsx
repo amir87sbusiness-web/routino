@@ -93,17 +93,29 @@ describe("Analytics tabs", () => {
     expect(host.textContent).not.toContain("وضعیت کارها");
   });
 
-  it("shows one monthly task chart and monthly task statuses in the task tab", async () => {
+  it("shows range controls for the task chart while monthly task statuses stay independent", async () => {
     const taskTab = [...host.querySelectorAll("button")].find(
       (button) => button.textContent === "کارها",
     )!;
     await act(async () => taskTab.click());
 
-    expect(host.textContent).toContain("عملکرد کارها");
+    expect(host.textContent).toContain("عملکرد کلی کارها");
     expect(host.textContent).toContain("کار انجام‌شده");
     expect(host.textContent).toContain("کار عقب‌افتاده");
     expect(host.textContent).toContain("به‌تعویق‌افتاده");
+    expect(host.textContent).toContain("هفته");
+    expect(host.textContent).toContain("ماه");
+    expect(host.textContent).toContain("سه‌ماهه");
+    expect(host.textContent).toContain("سال");
+    expect(host.querySelector('[aria-label="prev-task-month"]')).not.toBeNull();
     expect(host.textContent).not.toContain("مرور هفتگی");
     expect(host.querySelectorAll('[data-testid="bars"]')).toHaveLength(1);
+
+    const quarter = [...host.querySelectorAll("button")].find(
+      (button) => button.textContent === "سه‌ماهه",
+    )!;
+    await act(async () => quarter.click());
+    expect(host.textContent).toContain("وضعیت کارهای این ماه");
+    expect(host.textContent).toContain("کار انجام‌شده");
   });
 });

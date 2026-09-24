@@ -141,6 +141,7 @@ const taskSchema = z
     deadlineAt: localDateTime.nullable().optional(),
     color: bounded(32).optional(),
     icon: bounded(64).optional(),
+    categoryId: entityId.nullable().optional(),
   })
   .strict()
   .refine((task) => !task.deadlineAt || task.deadlineAt.slice(0, 10) >= task.dateKey, {

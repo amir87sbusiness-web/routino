@@ -25,7 +25,7 @@ begin
   if jsonb_typeof(p->0) is distinct from 'string'
      or (p->>0) !~ '^[0-9]{2}$'
      or jsonb_typeof(p->5) is distinct from 'object' then return 'null'::jsonb; end if;
-  if (p->5) - array['note','unitKind','reminderAt','color','icon'] <> '{}'::jsonb
+  if (p->5) - array['note','unitKind','reminderAt','deadlineAt','color','icon','categoryId'] <> '{}'::jsonb
     then return 'null'::jsonb; end if;
   return jsonb_build_array(p_item->0, p_item->1,
     jsonb_build_object('id', p_item->0, 'dateKey', p_month || '-' || (p->>0),
@@ -118,7 +118,8 @@ begin
          select 1 from records archive
          cross join lateral jsonb_array_elements(
            case when jsonb_typeof(archive.data->'items') = 'array'
-             then archive.data->'items' else '[]'::jsonb end
+             then archive.data->'items'
+             else '[]'::jsonb end
          ) item
           where archive.user_id = source.user_id
             and archive.kind = 'taskMonths'
@@ -168,7 +169,8 @@ begin
            from records archive
            cross join lateral jsonb_array_elements(
              case when jsonb_typeof(archive.data->'items') = 'array'
-               then archive.data->'items' else '[]'::jsonb end
+               then archive.data->'items'
+               else '[]'::jsonb end
            ) item
           where archive.user_id = source.user_id
             and archive.kind = 'taskMonths'
@@ -246,7 +248,10 @@ begin
     select v_group.user_id,
            'taskMonths',
            v_group.month_key || '|' || md5(string_agg(items.task_id, E'\n' order by items.task_id collate "C")),
-           routino_task_archive_storage(jsonb_build_object(
+           routino_encode_record_data(
+             'taskMonths',
+             v_group.month_key || '|' || md5(string_agg(items.task_id, E'\n' order by items.task_id collate "C")),
+             routino_task_archive_storage(jsonb_build_object(
              'v', 2,
              'monthKey', v_group.month_key,
              'count', count(*)::integer,
@@ -262,7 +267,8 @@ begin
                    items.task_data - array['id','dateKey','title','type','target','value','done']))
                order by items.task_id collate "C"
              )
-           )),
+             ))
+           ),
            max(items.updated_at),
            false,
            v_end_seq - v_archive_rows + items.chunk_no

@@ -23,6 +23,13 @@ const deadlineCodecMigrationSql = readFileSync(
   ),
   "utf8",
 );
+const taskCategoryMigrationSql = readFileSync(
+  resolve(
+    fileURLToPath(new URL("../..", import.meta.url)),
+    "supabase/migrations/20260924173000_task_categories.sql",
+  ),
+  "utf8",
+);
 
 let h: Harness;
 
@@ -30,6 +37,7 @@ beforeEach(async () => {
   h ??= await makeHarness();
   await h.truncate();
   await h.raw(deadlineCodecMigrationSql);
+  await h.raw(taskCategoryMigrationSql);
 });
 afterAll(async () => h?.close());
 
@@ -94,6 +102,7 @@ const samples: Array<{ kind: StoredSyncKind; id: string; data: Record<string, un
       note: "یادداشت",
       reminderAt: null,
       deadlineAt: "2026-01-05T18:00",
+      categoryId: "c1",
     },
   },
   {
@@ -129,6 +138,32 @@ const samples: Array<{ kind: StoredSyncKind; id: string; data: Record<string, un
 ];
 
 describe("record storage SQL codec", () => {
+  it("installs the task-category migration twice without rewriting existing rows", async () => {
+    const [user] = await h.query<{ id: string }>(`
+      insert into users (phone) values ('09120000075') returning id
+    `);
+    await h.raw(`
+      insert into records (user_id, kind, id, data, updated_at, deleted, seq) values
+        ('${user!.id}', 'tasks', 'legacy-task',
+          '["2026-01-03","قدیمی","binary",1,0,false]'::jsonb, 1, false, 1),
+        ('${user!.id}', 'tasks', 'deleted-task', null, 2, true, 2);
+    `);
+    const snapshot = () =>
+      h.query(`
+        select u.seq::text, u.sync_record_count, u.sync_data_bytes::text,
+               r.kind, r.id, r.data, r.updated_at::text, r.deleted, r.seq::text as record_seq
+          from users u join records r on r.user_id = u.id
+         where u.id = '${user!.id}'
+         order by r.kind, r.id
+      `);
+    const before = await snapshot();
+
+    await h.raw(taskCategoryMigrationSql);
+    await h.raw(taskCategoryMigrationSql);
+
+    expect(await snapshot()).toEqual(before);
+  });
+
   it("is safe to install twice and never backfills rows implicitly", async () => {
     await h.raw(migrationSql);
     await h.raw(migrationSql);
@@ -275,5 +310,55 @@ describe("record storage SQL codec", () => {
     expect(stored!.data).toEqual(encodeRecordForStorage(sample.kind, sample.id, sample.data));
     expect(Number(stored!.sync_data_bytes)).toBe(Number(stored!.bytes));
     expect(Number(stored!.sync_growth_bytes)).toBe(Number(stored!.bytes));
+  });
+
+  it("preserves a live task category for legacy payloads and clears it only with explicit null", async () => {
+    const [user] = await h.query<{ id: string }>(`
+      insert into users (phone) values ('09120000074') returning id
+    `);
+    const task = (updatedAt: number, data: unknown, deleted = false) => ({
+      kind: "tasks",
+      id: "task-category",
+      data,
+      updatedAt,
+      originalUpdatedAt: updatedAt,
+      deleted,
+    });
+    const base = {
+      id: "task-category",
+      dateKey: "2026-01-03",
+      title: "کار",
+      type: "binary",
+      target: 1,
+      value: 0,
+      done: false,
+      color: "#123456",
+      icon: "heart",
+    };
+    const push = async (incoming: unknown[]) => {
+      await h.query(
+        `select * from routino_push_records('${user!.id}', now(), ${sqlJson(incoming)})`,
+      );
+      return h.query<{ data: Record<string, unknown> | null; deleted: boolean }>(`
+        select routino_decode_record_data(kind, id, data) as data, deleted
+          from records
+         where user_id = '${user!.id}' and kind = 'tasks' and id = 'task-category'
+      `);
+    };
+
+    expect((await push([task(1, { ...base, categoryId: "c1" })]))[0]!.data).toMatchObject({
+      categoryId: "c1",
+    });
+    expect((await push([task(2, { ...base, title: "ویرایش قدیمی" })]))[0]!.data).toMatchObject({
+      title: "ویرایش قدیمی",
+      categoryId: "c1",
+    });
+    expect(
+      (await push([task(3, { ...base, title: "حذف دسته", categoryId: null })]))[0]!.data,
+    ).toMatchObject({
+      title: "حذف دسته",
+      categoryId: null,
+    });
+    expect(await push([task(4, null, true)])).toEqual([{ data: null, deleted: true }]);
   });
 });

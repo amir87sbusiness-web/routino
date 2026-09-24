@@ -416,7 +416,7 @@ function SettingsPage() {
           className="flex w-full items-center justify-between p-4"
         >
           <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-            <Tags className="h-4 w-4 text-primary" /> {t("دسته‌بندی‌های عادت", "Habit categories")}
+            <Tags className="h-4 w-4 text-primary" /> {t("دسته‌بندی‌ها", "Categories")}
             <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-bold text-muted-foreground">
               {faNum(db.categories.length, lang)}
             </span>
@@ -461,8 +461,8 @@ function SettingsPage() {
             </button>
             <p className="text-[10px] text-muted-foreground">
               {t(
-                "دسته‌بندی‌های پیش‌فرض حذف‌شده، با اضافه‌کردن یک عادت آماده از همون دسته دوباره برمی‌گردن.",
-                "Deleted default categories come back automatically when you add a preset habit from that category again.",
+                "دسته‌بندی‌های پیش‌فرض حذف‌شده، با اضافه‌کردن یک عادت آماده از همون دسته دوباره برمی‌گردن. حذف دسته، خود عادت‌ها و کارها رو حذف نمی‌کنه.",
+                "Deleted default categories come back when you add a preset habit from that category again. Deleting a category never deletes its habits or tasks.",
               )}
             </p>
           </div>
@@ -937,8 +937,8 @@ function SettingsPage() {
       >
         <p className="mb-4 text-sm text-muted-foreground">
           {t(
-            `«${deleteCat?.name}» حذف بشه؟ عادت‌های داخلش می‌مونن ولی بدون دسته می‌شن.`,
-            `Delete "${deleteCat?.name}"? Habits in it will remain but become uncategorized.`,
+            `«${deleteCat?.name}» حذف بشه؟ عادت‌ها و کارهای داخلش می‌مونن ولی بدون دسته نمایش داده می‌شن.`,
+            `Delete "${deleteCat?.name}"? Its habits and tasks will remain but appear uncategorized.`,
           )}
         </p>
         <div className="flex gap-2">

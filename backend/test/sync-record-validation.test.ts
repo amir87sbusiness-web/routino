@@ -94,8 +94,12 @@ const rejectCode = (record: Parameters<typeof validateSyncRecord>[0]): SyncRejec
 describe("validateSyncRecord", () => {
   it("exports the canonical task payload validation used by server-only codecs", () => {
     expect(validateTaskPayload("t1", valid.tasks.data)).toBe(true);
+    expect(validateTaskPayload("t1", { ...valid.tasks.data, categoryId: "c1" })).toBe(true);
+    expect(validateTaskPayload("t1", { ...valid.tasks.data, categoryId: null })).toBe(true);
     expect(validateTaskPayload("t1", { ...valid.tasks.data, title: "" })).toBe(false);
     expect(validateTaskPayload("other", valid.tasks.data)).toBe(false);
+    expect(validateTaskPayload("t1", { ...valid.tasks.data, categoryId: "" })).toBe(false);
+    expect(validateTaskPayload("t1", { ...valid.tasks.data, categoryId: 1 })).toBe(false);
   });
 
   it("accepts every live product record shape used by the client", () => {

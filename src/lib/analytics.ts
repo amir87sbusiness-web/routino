@@ -64,6 +64,29 @@ export interface TaskMonthAnalytics {
   items: { task: Task; status: TaskAnalyticsStatus }[];
 }
 
+export function taskRangeAnalytics(
+  tasks: readonly Task[],
+  dayKeys: readonly string[],
+  today = todayKey(),
+): { dateKey: string; percent: number | null }[] {
+  const includedDays = new Set(dayKeys);
+  const totals = new Map<string, { total: number; done: number }>();
+  for (const task of tasks) {
+    if (!includedDays.has(task.dateKey) || task.dateKey > today) continue;
+    const count = totals.get(task.dateKey) ?? { total: 0, done: 0 };
+    count.total += 1;
+    if (task.done) count.done += 1;
+    totals.set(task.dateKey, count);
+  }
+  return dayKeys.map((dateKey) => {
+    const count = totals.get(dateKey);
+    return {
+      dateKey,
+      percent: dateKey > today || !count ? null : Math.round((count.done / count.total) * 100),
+    };
+  });
+}
+
 export function taskMonthAnalytics(
   tasks: Task[],
   monthAnchor: string,
@@ -75,13 +98,7 @@ export function taskMonthAnalytics(
   const days = monthDays(monthAnchor, cal);
   const daySet = new Set(days);
   const monthTasks = tasks.filter((task) => daySet.has(task.dateKey));
-  const series = days.map((dateKey) => {
-    if (dateKey > today) return { dateKey, percent: null };
-    const tasksForDay = monthTasks.filter((task) => task.dateKey === dateKey);
-    if (tasksForDay.length === 0) return { dateKey, percent: null };
-    const done = tasksForDay.filter((task) => task.done).length;
-    return { dateKey, percent: Math.round((done / tasksForDay.length) * 100) };
-  });
+  const series = taskRangeAnalytics(monthTasks, days, today);
   const items = monthTasks.map((task) => {
     const deadlineAt = (task as TaskWithDeadline).deadlineAt;
     const status: TaskAnalyticsStatus = task.done

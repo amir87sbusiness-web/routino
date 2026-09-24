@@ -97,7 +97,15 @@ export function encodeRecordForStorage(kind: StoredSyncKind, _id: string, value:
     case "tasks":
       return appendExtras(
         [data.dateKey, data.title, data.type, data.target, data.value, data.done],
-        optionalFields(data, ["note", "unitKind", "reminderAt", "deadlineAt", "color", "icon"]),
+        optionalFields(data, [
+          "note",
+          "unitKind",
+          "reminderAt",
+          "deadlineAt",
+          "color",
+          "icon",
+          "categoryId",
+        ]),
       );
     case "timerSessions":
       return appendExtras(

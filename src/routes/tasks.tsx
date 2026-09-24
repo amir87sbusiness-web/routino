@@ -7,6 +7,7 @@ import {
   draftToTask,
   enableTaskReminderNotifications,
   emptyTaskDraft,
+  nextQuickTaskColor,
   type TaskDraft,
   TaskFormModal,
   TaskRow,
@@ -51,7 +52,7 @@ function TasksPage() {
   };
 
   const openNewTask = () => {
-    setDraft(emptyTaskDraft(selectedDay));
+    setDraft(emptyTaskDraft(selectedDay, nextQuickTaskColor(db.tasks, selectedDay)));
     setFormOpen(true);
   };
 
@@ -176,6 +177,7 @@ function TasksPage() {
               renderItem={(task, onCompletionChange) => (
                 <TaskRow
                   task={task}
+                  categories={db.categories}
                   settings={db.settings}
                   lang={lang}
                   t={t}
@@ -215,6 +217,7 @@ function TasksPage() {
         cal={cal}
         lang={lang}
         t={t}
+        categories={db.categories}
       />
     </div>
   );

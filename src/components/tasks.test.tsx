@@ -7,12 +7,14 @@ import {
   enableTaskReminderNotifications,
   emptyTaskDraft,
   nextQuickTaskColor,
+  resolveTaskAppearance,
+  uncategorizedTaskColor,
   TaskFormModal,
   TaskRow,
   taskToDraft,
   TodayTodosCard,
 } from "./tasks";
-import type { Task } from "@/lib/store";
+import type { Category, Task } from "@/lib/store";
 import { defaultDb } from "@/lib/store";
 import { CATEGORY_COLOR_CHOICES } from "@/lib/presets";
 import {
@@ -33,6 +35,15 @@ const task: Task = {
   icon: "star",
 };
 
+const category: Category = {
+  id: "work",
+  nameFa: "کار",
+  nameEn: "Work",
+  color: "#2563eb",
+  icon: "briefcase",
+  isDefault: false,
+};
+
 describe("Task history representation", () => {
   it("keeps yearly task search identical after server archive expansion", () => {
     const before = oneYearTaskFixture();
@@ -45,6 +56,34 @@ describe("Task history representation", () => {
 });
 
 describe("task draft compatibility", () => {
+  it("round-trips an optional category and its legacy appearance snapshot", () => {
+    const categorized = draftToTask(
+      {
+        ...emptyTaskDraft("2026-09-19"),
+        title: "گزارش",
+        categoryId: category.id,
+        color: category.color,
+        icon: category.icon,
+      },
+      undefined,
+    );
+
+    expect(categorized).toMatchObject({
+      categoryId: "work",
+      color: "#2563eb",
+      icon: "briefcase",
+    });
+    expect(taskToDraft(categorized)).toMatchObject({ categoryId: "work" });
+
+    const uncategorized = draftToTask(
+      { ...taskToDraft(categorized), categoryId: null },
+      categorized,
+    );
+    expect(uncategorized.categoryId).toBeNull();
+    expect(uncategorized.color).toBe(category.color);
+    expect(uncategorized.icon).toBe(category.icon);
+  });
+
   it("does not request permission while saving a reminder", () => {
     const updatePreferences = vi.fn();
     enableTaskReminderNotifications({ updatePreferences, t: (_fa, en) => en });
@@ -136,6 +175,32 @@ describe("quick task colors", () => {
     expect(first.color).toBe(firstColor);
     expect(second.color).toBe(CATEGORY_COLOR_CHOICES[1]);
     expect(second.color).not.toBe(first.color);
+    expect("categoryId" in first).toBe(false);
+  });
+});
+
+describe("task appearance", () => {
+  it("derives a stable palette color when a categorized task becomes uncategorized", () => {
+    const first = uncategorizedTaskColor("task-1");
+    expect(CATEGORY_COLOR_CHOICES).toContain(first);
+    expect(uncategorizedTaskColor("task-1")).toBe(first);
+  });
+
+  it("uses the live category appearance when the category still exists", () => {
+    expect(
+      resolveTaskAppearance({ ...task, categoryId: category.id, color: "#111111", icon: "star" }, [
+        category,
+      ]),
+    ).toEqual({ color: category.color, icon: category.icon });
+  });
+
+  it("uses a stable default icon and task color when a category is missing", () => {
+    expect(
+      resolveTaskAppearance(
+        { ...task, categoryId: "deleted", color: "#7c3aed", icon: "briefcase" },
+        [],
+      ),
+    ).toEqual({ color: "#7c3aed", icon: "star" });
   });
 });
 
@@ -272,6 +337,7 @@ describe("TaskFormModal measurement controls", () => {
           cal="gregorian"
           lang="en"
           t={(_fa, en) => en}
+          categories={[category]}
         />
       );
     }
@@ -290,6 +356,54 @@ describe("TaskFormModal measurement controls", () => {
     expect(document.body.textContent).toContain("Count (number)");
     expect(document.body.textContent).toContain("Time (hr/min/sec)");
     expect(document.body.textContent).toContain("Deadline");
+  });
+
+  it("restores the uncategorized legacy snapshot after selecting then clearing a category", () => {
+    function Harness() {
+      const [draft, setDraft] = useState(() => emptyTaskDraft("2026-09-19"));
+      return (
+        <>
+          <output data-testid="draft-snapshot">
+            {JSON.stringify({ categoryId: draft.categoryId, color: draft.color, icon: draft.icon })}
+          </output>
+          <TaskFormModal
+            open
+            draft={draft}
+            setDraft={setDraft}
+            onClose={() => undefined}
+            onSave={() => undefined}
+            cal="gregorian"
+            lang="en"
+            t={(_fa, en) => en}
+            categories={[category]}
+          />
+        </>
+      );
+    }
+    act(() => root.render(<Harness />));
+
+    expect(document.body.textContent).toContain("Category");
+    expect(document.body.textContent).toContain("Without category");
+    expect(document.body.textContent).toContain("Work");
+    expect(document.body.textContent).not.toContain("Icon");
+    expect(document.body.textContent).not.toContain("Color");
+
+    const workButton = Array.from(document.body.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Work",
+    )!;
+    act(() => workButton.click());
+    expect(workButton.getAttribute("aria-pressed")).toBe("true");
+    expect(document.querySelector('[data-testid="draft-snapshot"]')?.textContent).toBe(
+      JSON.stringify({ categoryId: "work", color: category.color, icon: category.icon }),
+    );
+
+    const withoutCategoryButton = Array.from(document.body.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Without category",
+    )!;
+    act(() => withoutCategoryButton.click());
+    expect(document.querySelector('[data-testid="draft-snapshot"]')?.textContent).toBe(
+      JSON.stringify({ categoryId: null, color: CATEGORY_COLOR_CHOICES[0], icon: "star" }),
+    );
   });
 
   it("closes an open deadline picker when the deadline is removed", () => {
@@ -450,7 +564,7 @@ describe("TodayTodosCard editing", () => {
 
   it("keeps quick add and opens an existing task in the edit form", () => {
     function Harness() {
-      const [db, setDb] = useState(() => ({ ...defaultDb([]), tasks: [task] }));
+      const [db, setDb] = useState(() => ({ ...defaultDb([category]), tasks: [task] }));
       return (
         <TodayTodosCard
           db={db}
@@ -474,5 +588,6 @@ describe("TodayTodosCard editing", () => {
     expect(
       document.body.querySelector<HTMLInputElement>('input[value="Test task"]'),
     ).not.toBeNull();
+    expect(document.body.textContent).toContain("Work");
   });
 });
