@@ -224,11 +224,13 @@ export function Chip({
   onClick,
   children,
   color,
+  className,
 }: {
   active?: boolean;
   onClick?: () => void;
   children: ReactNode;
   color?: string;
+  className?: string;
 }) {
   return (
     <button
@@ -239,6 +241,7 @@ export function Chip({
         active
           ? "border-transparent bg-primary text-primary-foreground"
           : "border-border bg-card text-foreground hover:bg-secondary",
+        className,
       )}
       style={active && color ? { backgroundColor: color, color: "#fff" } : undefined}
     >

@@ -739,13 +739,14 @@ export function HabitFormModal({
           <p className="mb-1.5 text-xs font-medium text-muted-foreground">
             {t("دسته‌بندی", "Category")}
           </p>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1">
             {categories.map((c) => (
               <Chip
                 key={c.id}
                 active={draft.categoryId === c.id}
                 color={c.color}
                 onClick={() => setDraft({ ...draft, categoryId: c.id })}
+                className="gap-1 rounded-lg px-2.5 py-1.5"
               >
                 <CatIcon icon={c.icon} className="h-3 w-3" />
                 {lang === "fa" ? c.nameFa : c.nameEn}
@@ -861,13 +862,16 @@ export function HabitFormModal({
           <p className="mb-1.5 text-xs font-medium text-muted-foreground">
             {t("روزهای تکرار (حداقل یک روز)", "Repeat on (at least one day)")}
           </p>
-          <div className="flex flex-wrap gap-1.5">
+          <div data-testid="habit-weekdays" className="grid grid-cols-7 gap-1">
             {pickerOrder.map((wd) => {
               const on = draft.weekdays.includes(wd);
               return (
-                <Chip
+                <button
                   key={wd}
-                  active={on}
+                  type="button"
+                  aria-pressed={on}
+                  aria-label={weekdayNames[wd]}
+                  title={weekdayNames[wd]}
                   onClick={() => {
                     // حداقل یک روز باید انتخاب باشد؛ آخرین روز قابل حذف نیست.
                     if (on && draft.weekdays.length === 1) return;
@@ -878,9 +882,14 @@ export function HabitFormModal({
                         : [...draft.weekdays, wd],
                     });
                   }}
+                  className={`min-w-0 rounded-lg border px-1 py-1.5 text-xs font-medium transition-colors ${
+                    on
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-card text-foreground hover:bg-secondary"
+                  }`}
                 >
-                  {weekdayNames[wd]}
-                </Chip>
+                  {weekdayShort(wd, lang)}
+                </button>
               );
             })}
           </div>
