@@ -7,22 +7,6 @@ export interface WeekSwipeInput {
   lang: Lang;
 }
 
-export interface WeekSettleDurationInput {
-  remainingDistance: number;
-  velocityX: number;
-  targetDirection: -1 | 0 | 1;
-}
-
-export function weekSettleDuration({
-  remainingDistance,
-  velocityX,
-  targetDirection,
-}: WeekSettleDurationInput): number {
-  const distanceMs = Math.min(140, Math.max(0, remainingDistance) * 0.5);
-  const velocityReductionMs = Math.min(140, Math.max(0, velocityX * targetDirection) * 100);
-  return Math.round(Math.max(180, Math.min(320, 180 + distanceMs - velocityReductionMs)));
-}
-
 /** Calendar delta for a physical drag. Positive means the following week. */
 export function resolveWeekSwipe({ dx, velocityX, width, lang }: WeekSwipeInput): -1 | 0 | 1 {
   const distanceThreshold = Math.min(72, Math.max(0, width) * 0.22);

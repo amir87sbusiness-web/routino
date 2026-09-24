@@ -7,33 +7,6 @@ import { faNum, formatDate, todayKey } from "@/lib/dates";
 import { MOOD_EMOJIS } from "@/lib/presets";
 import { useAppMaybe } from "@/state/app";
 
-const MOOD_LABELS = {
-  fa: [
-    "خیلی شاد",
-    "خوب",
-    "معمولی",
-    "غمگین",
-    "خسته",
-    "عصبانی",
-    "هیجان‌زده",
-    "خواب‌آلود",
-    "پرانرژی",
-    "عاشقانه",
-  ],
-  en: [
-    "Very happy",
-    "Good",
-    "Neutral",
-    "Sad",
-    "Exhausted",
-    "Angry",
-    "Excited",
-    "Sleepy",
-    "Strong",
-    "Loved",
-  ],
-} as const;
-
 export const Route = createFileRoute("/journal")({
   component: () => (
     <AppShell>
@@ -61,8 +34,6 @@ function JournalPage() {
 
   if (!ctx?.db) return null;
   const { db, update, t, lang, cal } = ctx;
-  const moodTitle = t("حال و احساس امروز", "Today's mood");
-  const scoreTitle = t("به امروزت چه نمره‌ای می‌دی؟", "How would you rate your day?");
 
   const save = () => {
     const accepted = update((d) => ({
@@ -113,16 +84,16 @@ function JournalPage() {
         )}
       </div>
 
-      <Card className="p-2 sm:p-4">
-        <p className="mb-2 text-xs font-medium text-muted-foreground">{moodTitle}</p>
-        <div className="grid grid-cols-10 gap-px sm:gap-1.5">
-          {MOOD_EMOJIS.map((m, index) => (
+      <Card>
+        <p className="mb-2 text-xs font-medium text-muted-foreground">
+          {t("حال و احساس امروز", "Today's mood")}
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {MOOD_EMOJIS.map((m) => (
             <button
               key={m}
               onClick={() => setMood(mood === m ? null : m)}
-              aria-pressed={mood === m}
-              aria-label={`${moodTitle}: ${MOOD_LABELS[lang][index]} (${faNum(index + 1, lang)}/${faNum(MOOD_EMOJIS.length, lang)})`}
-              className={`aspect-square min-w-0 w-full rounded-lg border text-base transition-all sm:rounded-xl sm:text-xl ${
+              className={`rounded-xl border p-2 text-xl transition-all ${
                 mood === m ? "border-primary bg-primary-soft" : "border-border"
               }`}
             >
@@ -132,15 +103,16 @@ function JournalPage() {
         </div>
       </Card>
 
-      <Card className="p-2 sm:p-4">
-        <p className="mb-2 text-xs font-medium text-muted-foreground">{scoreTitle}</p>
-        <div className="grid grid-cols-10 gap-px sm:gap-1.5" dir="ltr">
+      <Card>
+        <p className="mb-2 text-xs font-medium text-muted-foreground">
+          {t("به امروزت چه نمره‌ای می‌دی؟", "How would you rate your day?")}
+        </p>
+        <div className="flex flex-wrap gap-1.5" dir="ltr">
           {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
             <button
               key={n}
               onClick={() => setScore(score === n ? null : n)}
-              aria-pressed={score === n}
-              className={`aspect-square min-w-0 w-full rounded-lg border text-[11px] font-bold transition-all sm:rounded-xl sm:text-sm ${
+              className={`h-9 w-9 rounded-xl border text-sm font-bold transition-all ${
                 score === n
                   ? "border-transparent bg-primary text-primary-foreground"
                   : "border-border text-muted-foreground"

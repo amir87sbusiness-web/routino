@@ -24,7 +24,6 @@ import {
 import {
   dragDirectionForWeekShift,
   resolveWeekSwipe,
-  weekSettleDuration,
   weekPanelShifts,
 } from "@/lib/mobile-gestures";
 
@@ -33,6 +32,7 @@ const RING_C = 2 * Math.PI * RING_R;
 const TRACK_CENTER = "translate3d(-33.333333%, 0, 0)";
 const TRACK_LEFT = "translate3d(0, 0, 0)";
 const TRACK_RIGHT = "translate3d(-66.666667%, 0, 0)";
+const SETTLE_MS = 280;
 const SETTLE_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
 
 interface WeekStripProps {
@@ -74,10 +74,7 @@ function WeekPanel({
   const todayK = todayKey();
 
   return (
-    <div
-      className="grid w-1/3 shrink-0 grid-cols-7 gap-0.5 sm:gap-1"
-      dir={lang === "fa" ? "rtl" : "ltr"}
-    >
+    <div className="grid w-1/3 shrink-0 grid-cols-7 gap-1" dir={lang === "fa" ? "rtl" : "ltr"}>
       {days.map((dk) => {
         const active = dk === panelSelected;
         const isToday = dk === todayK;
@@ -98,15 +95,15 @@ function WeekPanel({
               if (Date.now() < suppressClickUntil.current) return;
               onSelect(dk);
             }}
-            className="relative flex min-w-0 w-full flex-col items-center gap-0.5 py-0.5 text-[9px] font-medium transition-colors disabled:opacity-30 sm:gap-1 sm:py-1 sm:text-[10px]"
+            className="relative flex flex-col items-center gap-1 py-1 text-[10px] font-medium transition-colors disabled:opacity-30"
           >
             <span
-              className={`w-full truncate px-0.5 text-center text-[9px] leading-none sm:text-[10px] ${active ? "font-bold text-primary" : "text-muted-foreground"}`}
+              className={`w-full truncate px-0.5 text-center text-[10px] leading-none ${active ? "font-bold text-primary" : "text-muted-foreground"}`}
             >
               {weekdayShort(dow, lang)}
             </span>
 
-            <span className="relative flex h-9 w-9 items-center justify-center sm:h-12 sm:w-12">
+            <span className="relative flex h-12 w-12 items-center justify-center">
               <svg viewBox="0 0 48 48" className="absolute inset-0 h-full w-full -rotate-90">
                 <circle
                   cx="24"
@@ -131,7 +128,7 @@ function WeekPanel({
                 )}
               </svg>
               <span
-                className={`z-10 flex h-8 w-8 items-center justify-center rounded-full text-sm font-black transition-colors sm:h-9 sm:w-9 sm:text-base ${
+                className={`z-10 flex h-9 w-9 items-center justify-center rounded-full text-base font-black transition-colors ${
                   emoji
                     ? "bg-transparent text-base"
                     : active
@@ -145,7 +142,7 @@ function WeekPanel({
               </span>
               {count > 0 && (
                 <span
-                  className={`absolute -top-0.5 -end-0.5 z-20 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-0.5 text-[7px] font-bold sm:h-4 sm:min-w-4 sm:px-1 sm:text-[8px] ${
+                  className={`absolute -top-0.5 -end-0.5 z-20 flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[8px] font-bold ${
                     active
                       ? "bg-primary-foreground text-primary"
                       : "bg-primary text-primary-foreground"
@@ -208,33 +205,24 @@ export function WeekStrip(props: WeekStripProps) {
     unlockNextFrame();
   };
 
-  const settle = (shift: -1 | 0 | 1, dx = 0, velocityX = 0) => {
+  const settle = (shift: -1 | 0 | 1) => {
     if (settlingRef.current) return;
     const track = trackRef.current;
     if (!track) return;
     settlingRef.current = true;
     pendingShiftRef.current = shift;
-    const width = viewportRef.current?.clientWidth ?? 0;
-    const dragDirection = shift === 0 ? 0 : dragDirectionForWeekShift(shift, lang);
-    const boundedDx = Math.max(-width, Math.min(width, dx));
-    const targetOffset = dragDirection * width;
-    const targetDirection = targetOffset === boundedDx ? 0 : targetOffset > boundedDx ? 1 : -1;
-    const settleMs = weekSettleDuration({
-      remainingDistance: Math.abs(targetOffset - boundedDx),
-      velocityX,
-      targetDirection,
-    });
-    suppressClickUntil.current = Date.now() + settleMs + 80;
+    suppressClickUntil.current = Date.now() + SETTLE_MS + 80;
 
     if (reducedMotion()) {
       completeSettle();
       return;
     }
 
-    track.style.transition = `transform ${settleMs}ms ${SETTLE_EASING}`;
+    const dragDirection = shift === 0 ? 0 : dragDirectionForWeekShift(shift, lang);
+    track.style.transition = `transform ${SETTLE_MS}ms ${SETTLE_EASING}`;
     track.style.transform =
       dragDirection > 0 ? TRACK_LEFT : dragDirection < 0 ? TRACK_RIGHT : TRACK_CENTER;
-    settleTimerRef.current = setTimeout(completeSettle, settleMs + 40);
+    settleTimerRef.current = setTimeout(completeSettle, SETTLE_MS + 40);
   };
 
   const dragBindings = useHorizontalDrag({
@@ -264,7 +252,7 @@ export function WeekStrip(props: WeekStripProps) {
             width: viewportRef.current?.clientWidth ?? 0,
             lang,
           });
-      settle(shift, dx, velocityX);
+      settle(shift);
     },
   });
 
@@ -286,7 +274,7 @@ export function WeekStrip(props: WeekStripProps) {
     <div className="flex items-center gap-1">
       <button
         onClick={() => settle(-1)}
-        className="hidden shrink-0 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-secondary sm:inline-flex"
+        className="shrink-0 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-secondary"
         aria-label="prev-week"
       >
         <ChevronRight className="h-4 w-4 ltr:hidden" />
@@ -319,7 +307,7 @@ export function WeekStrip(props: WeekStripProps) {
 
       <button
         onClick={() => settle(1)}
-        className="hidden shrink-0 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-secondary sm:inline-flex"
+        className="shrink-0 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-secondary"
         aria-label="next-week"
       >
         <ChevronLeft className="h-4 w-4 ltr:hidden" />

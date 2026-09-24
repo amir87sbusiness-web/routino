@@ -233,7 +233,7 @@ export function TaskFormModal({
             value={draft.title}
             onChange={(event) => patchDraft({ title: event.target.value })}
             placeholder={t("مثلاً: آماده‌کردن گزارش", "e.g. Prepare the report")}
-            autoFocus={Boolean(draft.id)}
+            autoFocus
           />
         </div>
 
@@ -349,35 +349,45 @@ export function TaskFormModal({
           <p className="mb-1.5 text-xs font-medium text-muted-foreground">
             {t("دسته‌بندی", "Category")}
           </p>
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              type="button"
+              aria-pressed={!categories.some((category) => category.id === draft.categoryId)}
+              onClick={() =>
+                patchDraft({
+                  categoryId: null,
+                  color: draft.uncategorizedColor,
+                  icon: TASK_DEFAULT_ICON,
+                })
+              }
+              className={`rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${
+                !categories.some((category) => category.id === draft.categoryId)
+                  ? "border-primary bg-primary-soft text-primary"
+                  : "border-border text-muted-foreground"
+              }`}
+            >
+              {t("بدون دسته", "Without category")}
+            </button>
             {categories.map((category) => (
               <button
                 key={category.id}
                 type="button"
                 aria-pressed={draft.categoryId === category.id}
                 onClick={() =>
-                  patchDraft(
-                    draft.categoryId === category.id
-                      ? {
-                          categoryId: null,
-                          color: draft.uncategorizedColor,
-                          icon: TASK_DEFAULT_ICON,
-                        }
-                      : {
-                          categoryId: category.id,
-                          color: category.color,
-                          icon: category.icon,
-                        },
-                  )
+                  patchDraft({
+                    categoryId: category.id,
+                    color: category.color,
+                    icon: category.icon,
+                  })
                 }
-                className={`flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                className={`flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium transition-colors ${
                   draft.categoryId === category.id
                     ? "border-primary bg-primary-soft text-primary"
                     : "border-border text-muted-foreground"
                 }`}
               >
                 <span
-                  className="flex h-4 w-4 items-center justify-center rounded-md text-white"
+                  className="flex h-5 w-5 items-center justify-center rounded-md text-white"
                   style={{ backgroundColor: category.color }}
                 >
                   <CatIcon icon={category.icon} className="h-3 w-3" />
