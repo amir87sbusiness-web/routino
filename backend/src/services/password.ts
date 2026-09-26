@@ -95,18 +95,16 @@ export function passwordHashNeedsCaseUpgrade(stored: string): boolean {
  */
 export const DUMMY_HASH = `${CASE_INSENSITIVE_SCHEME}$${N}$${R}$${P}$${Buffer.alloc(SALT_LEN).toString("base64")}$${Buffer.alloc(KEYLEN).toString("base64")}`;
 
-export type PasswordReason = "too_short" | "too_long" | "needs_letter_and_digit";
+export type PasswordReason = "too_short" | "too_long";
 
-/** Minimum viable strength: 8+ chars with at least one letter and one digit.
- * Deliberately lenient — length is what matters most, and slow hashing plus
- * lockouts carry the rest. */
+/** Password policy: 8–128 characters, with no composition requirement.
+ * Digit-only and letter-only passwords are intentionally accepted. Slow scrypt
+ * hashing plus online login throttling still protect the authentication path. */
 export function validatePassword(
   raw: string,
 ): { ok: true } | { ok: false; reason: PasswordReason } {
   if (typeof raw !== "string" || raw.length < 8) return { ok: false, reason: "too_short" };
   if (raw.length > 128) return { ok: false, reason: "too_long" };
-  if (!/[A-Za-z]/.test(raw) || /[0-9]/.test(raw) === false)
-    return { ok: false, reason: "needs_letter_and_digit" };
   return { ok: true };
 }
 

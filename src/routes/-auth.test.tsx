@@ -100,7 +100,7 @@ describe("AuthPage registration and recovery", () => {
     await act(async () => change(code, "12345"));
     expect(code.value).toBe("1234");
     const newPassword = host.querySelector<HTMLInputElement>('input[aria-label="رمز عبور جدید"]')!;
-    await act(async () => change(newPassword, "Amir@1387"));
+    await act(async () => change(newPassword, "12345678"));
     await click(
       [...host.querySelectorAll("button")].find(
         (button) => button.textContent === "تکمیل ثبت‌نام",
@@ -109,7 +109,7 @@ describe("AuthPage registration and recovery", () => {
 
     expect(api.verifyOtp).toHaveBeenCalledWith("989123334444", "1234", {
       intent: "signup",
-      newPassword: "Amir@1387",
+      newPassword: "12345678",
     });
     expect(api.importSubscription).not.toHaveBeenCalled();
     expect(app.switchAccount).toHaveBeenCalledWith(
@@ -143,7 +143,7 @@ describe("AuthPage registration and recovery", () => {
 
     await act(async () => change(code, "1234"));
     const newPassword = host.querySelector<HTMLInputElement>('input[aria-label="رمز عبور جدید"]')!;
-    await act(async () => change(newPassword, "Naghmeh@1405"));
+    await act(async () => change(newPassword, "abcdefgh"));
     await click(
       [...host.querySelectorAll("button")].find(
         (button) => button.textContent === "تغییر رمز عبور",
@@ -151,7 +151,7 @@ describe("AuthPage registration and recovery", () => {
     );
     expect(api.verifyOtp).toHaveBeenCalledWith("989123334444", "1234", {
       intent: "password_reset",
-      newPassword: "Naghmeh@1405",
+      newPassword: "abcdefgh",
     });
   });
 });

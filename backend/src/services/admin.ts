@@ -268,7 +268,7 @@ export async function adminSetPassword(
   if (!validatePassword(body.password).ok) {
     throw badRequest(
       "weak_password",
-      "Password must be 8+ chars with at least one letter and one digit",
+      "Password must be 8–128 characters",
     );
   }
 

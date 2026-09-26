@@ -156,10 +156,19 @@ describe("setting a password then signing in with it", () => {
     expect(rows[0]!.password_hash).not.toContain("Amir@1387");
   });
 
-  it("rejects a weak password", async () => {
+  it("accepts digit-only and letter-only passwords when they are at least 8 chars", async () => {
+    const first = await otpSignIn("09123334444");
+    expect((await setPw(first.access, "12345678")).statusCode).toBe(200);
+    expect((await login("09123334444", "12345678")).statusCode).toBe(200);
+
+    const second = await otpSignIn("09121112233");
+    expect((await setPw(second.access, "allletters")).statusCode).toBe(200);
+    expect((await login("09121112233", "allletters")).statusCode).toBe(200);
+  });
+
+  it("rejects a password shorter than 8 characters", async () => {
     const { access } = await otpSignIn("09123334444");
     expect((await setPw(access, "short")).statusCode).toBe(400);
-    expect((await setPw(access, "allletters")).statusCode).toBe(400); // no digit
   });
 
   it("requires the current password to CHANGE an existing one", async () => {

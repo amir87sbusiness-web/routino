@@ -135,7 +135,7 @@ export function authRoutes(deps: Deps) {
     if (intent && (!newPassword || !validatePassword(newPassword).ok)) {
       throw badRequest(
         "weak_password",
-        "Password must be 8+ chars with at least one letter and one digit",
+        "Password must be 8–128 characters",
       );
     }
 
@@ -307,7 +307,7 @@ export function authRoutes(deps: Deps) {
     if (!validatePassword(newPassword).ok) {
       throw badRequest(
         "weak_password",
-        "Password must be 8+ chars with at least one letter and one digit",
+        "Password must be 8–128 characters",
       );
     }
 

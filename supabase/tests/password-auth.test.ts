@@ -49,6 +49,30 @@ describe("edge password sign-in", () => {
     expect((await res.json()).user.phone).toBe("989123334444");
   });
 
+  it("accepts digit-only and letter-only passwords when they are at least 8 chars", async () => {
+    const first = await signIn(h, "09123334444");
+    expect(
+      (
+        await h.call("POST", "/v1/auth/password", {
+          headers: auth(first.access),
+          body: { newPassword: "12345678" },
+        })
+      ).status,
+    ).toBe(200);
+    expect((await login("09123334444", "12345678")).status).toBe(200);
+
+    const second = await signIn(h, "09121112233");
+    expect(
+      (
+        await h.call("POST", "/v1/auth/password", {
+          headers: auth(second.access),
+          body: { newPassword: "allletters" },
+        })
+      ).status,
+    ).toBe(200);
+    expect((await login("09121112233", "allletters")).status).toBe(200);
+  });
+
   it("treats password and username letters as case-insensitive", async () => {
     const { access } = await signIn(h, "09123334444");
     await h.call("POST", "/v1/auth/password", {

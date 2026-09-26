@@ -67,8 +67,8 @@ function AuthPage() {
         return t("کد اشتباهه یا منقضی شده.", "The code is wrong or has expired.");
       case "weak_password":
         return t(
-          "رمز باید حداقل ۸ کاراکتر و شامل حرف و عدد باشد.",
-          "Password must be 8+ characters and include a letter and a number.",
+          "رمز باید بین ۸ تا ۱۲۸ کاراکتر باشد.",
+          "Password must be 8–128 characters.",
         );
     }
     // A gateway failure returns no JSON body, so `err.message` falls back to the
@@ -166,6 +166,10 @@ function AuthPage() {
     }
     if (!newPassword) {
       setError(t("رمز عبور جدید را وارد کن.", "Enter a new password."));
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError(t("رمز باید حداقل ۸ کاراکتر باشد.", "Password must be at least 8 characters."));
       return;
     }
     setError("");
@@ -309,6 +313,8 @@ function AuthPage() {
               dir="ltr"
               type="password"
               aria-label={t("رمز عبور جدید", "New password")}
+              minLength={8}
+              maxLength={128}
               placeholder={t("رمز عبور جدید", "New password")}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
