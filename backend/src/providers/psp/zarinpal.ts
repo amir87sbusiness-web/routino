@@ -135,7 +135,8 @@ export function zarinpalPsp(
       // Provider answers that can represent an incomplete/racing payment stay
       // recoverable. -55 is kept retryable like Sheetra's hardened flow because
       // ZarinPal can briefly report transaction-not-found around callback races.
-      if (code === -51 || code === -55 || code === -12) return { kind: "pending", code };
+      if (code === -51) return { kind: "failed", code };
+      if (code === -55 || code === -12) return { kind: "pending", code };
       if (code === -52) return { kind: "unknown", code };
       return { kind: "failed", code };
     },
