@@ -150,7 +150,7 @@ describe("ZarinPal adapter", () => {
   });
 
   it.each([
-    [-51, "pending"],
+    [-51, "failed"],
     [-55, "pending"],
     [-12, "pending"],
     [-52, "unknown"],
