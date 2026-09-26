@@ -195,8 +195,7 @@ export async function adminOverview(db: Database, now: Date) {
     }
   }
   const daily: DailyPoint[] = rawDaily.map((point) => {
-    const value =
-      point && typeof point === "object" ? (point as Record<string, unknown>) : {};
+    const value = point && typeof point === "object" ? (point as Record<string, unknown>) : {};
     return {
       date: String(value.date ?? ""),
       newUsers: metric(value.newUsers as number | string | bigint | undefined),
