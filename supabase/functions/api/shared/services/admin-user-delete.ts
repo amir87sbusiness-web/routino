@@ -96,6 +96,17 @@ export async function adminDeleteUser(db: Database, env: Env, id: string, confir
     const deleted = await tx.delete(users).where(eq(users.id, user.id)).returning();
     if (!deleted.length) throw notFound("unknown_user", "No such user");
 
+    // Automatic 30-day retention cleanup deliberately keeps the tiny lifetime
+    // analytics row. This owner-only path is different: explicit permanent
+    // deletion must also remove the retained phone/analytics identity. The
+    // to_regclass guard keeps the code backward-compatible during SQL rollout.
+    const lifetimeTable = await tx.execute(sql`
+      select to_regclass('public.lifetime_users')::text as table_name
+    `);
+    if (rowsOf<{ table_name: string | null }>(lifetimeTable)[0]?.table_name) {
+      await tx.execute(sql`delete from lifetime_users where phone = ${user.phone}`);
+    }
+
     // A phone-restricted discount is PII too. If its code is referenced by
     // preserved payment history, keep the code but scrub the phone and disable
     // it. Otherwise delete the unused private code entirely.
