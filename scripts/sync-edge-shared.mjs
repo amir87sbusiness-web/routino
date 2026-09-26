@@ -37,6 +37,7 @@ export const SHARED_FILES = [
   "services/provider-capacity.ts",
   "services/tokens.ts",
   "services/entitlement.ts",
+  "services/referral.ts",
   "services/pricing.ts",
   "services/payment-flow.ts",
   "services/admin.ts",

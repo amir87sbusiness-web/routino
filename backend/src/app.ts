@@ -25,6 +25,7 @@ import { healthRoutes } from "./routes/health.js";
 import { paymentRecoveryRoutes } from "./routes/payment-recovery.js";
 import { paymentRoutes } from "./routes/payments.js";
 import { planRoutes } from "./routes/plans.js";
+import { referralRoutes } from "./routes/referrals.js";
 import { subscriptionRoutes } from "./routes/subscriptions.js";
 import { syncRoutes } from "./routes/sync.js";
 import { requestIdFor } from "./lib/request-id.js";
@@ -123,6 +124,7 @@ export async function buildApp(deps: Omit<Deps, "now"> & { now?: () => number })
   await app.register(healthRoutes);
   await app.register(paymentRecoveryRoutes);
   await app.register(planRoutes, { prefix: "/v1" });
+  await app.register(referralRoutes, { prefix: "/v1" });
   await app.register(authRoutes, { prefix: "/v1" });
   await app.register(subscriptionRoutes, { prefix: "/v1" });
   await app.register(syncRoutes, { prefix: "/v1" });

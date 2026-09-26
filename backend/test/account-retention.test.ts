@@ -105,6 +105,21 @@ describe("trial-only account deletion deadline", () => {
     expect(await h.query(`select id from users where id = '${user.id}'`)).toHaveLength(0);
   });
 
+  it("deletes a pending referral claim with a retention-eligible invitee", async () => {
+    const inviter = await addUser("989120000026", "2026-08-31T12:00:00.000Z");
+    const invitee = await addUser("989120000027", "2026-07-01T12:00:00.000Z");
+    await h.raw(`
+      update users set referral_code = 'RETDEL' where id = '${inviter.id}';
+      insert into referrals (inviter_id, invitee_id, claimed_code, claimed_at)
+      values ('${inviter.id}', '${invitee.id}', 'RETDEL', '2026-07-01T12:00:00Z')
+    `);
+
+    expect(await cleanup(1, invitee.id)).toBe(1);
+    expect(
+      await h.query(`select id from referrals where invitee_id = '${invitee.id}'`),
+    ).toHaveLength(0);
+  });
+
   it("keeps a late-started active trial until its seven-day expiry", async () => {
     const user = await addUser("989120000003", "2026-07-24T12:00:00.000Z");
     await addTrial(user.id, "2026-09-03T12:00:00.000Z");

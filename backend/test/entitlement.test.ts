@@ -142,12 +142,22 @@ describe("grantInterval", () => {
 });
 
 describe("hasSettledGrant", () => {
-  it("is false for a trial-only account, true once paid or imported", async () => {
+  it("is false for a trial-only account, true once paid, imported, or rewarded", async () => {
     const now = new Date();
     await grantInterval(h.db, USER, { planId: "trial", days: 7, source: "trial" }, now);
     expect(await hasSettledGrant(h.db, USER)).toBe(false);
 
     await grantInterval(h.db, USER, { planId: "m1", months: 1, source: "payment" }, now);
+    expect(await hasSettledGrant(h.db, USER)).toBe(true);
+  });
+
+  it("treats a referral reward as settled history", async () => {
+    await grantInterval(
+      h.db,
+      USER,
+      { planId: "referral", days: 7, source: "referral" },
+      new Date(),
+    );
     expect(await hasSettledGrant(h.db, USER)).toBe(true);
   });
 });
@@ -201,7 +211,7 @@ describe("startTrialOnce", () => {
     expect(result.entitlement.expiresAt).toBe("2026-07-08T00:00:00.000Z");
   });
 
-  for (const source of ["payment", "migration", "admin"] as const) {
+  for (const source of ["payment", "migration", "admin", "referral"] as const) {
     it(`refuses a trial after a previous ${source} grant`, async () => {
       await grantInterval(h.db, USER, { planId: "prior", days: 1, source }, now);
       const result = await startTrialOnce(h.db, USER, now);

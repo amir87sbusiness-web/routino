@@ -25,6 +25,7 @@ import { healthRoutes } from "./routes/health.ts";
 import { paymentRecoveryRoutes } from "./routes/payment-recovery.ts";
 import { paymentRoutes } from "./routes/payments.ts";
 import { planRoutes } from "./routes/plans.ts";
+import { referralRoutes } from "./routes/referrals.ts";
 import { subscriptionRoutes } from "./routes/subscriptions.ts";
 import { syncRoutes } from "./routes/sync.ts";
 import { requestIdFor } from "./shared/lib/request-id.ts";
@@ -152,6 +153,7 @@ export function buildApp(deps: Deps) {
   app.route("/", healthRoutes(deps));
   app.route("/", paymentRecoveryRoutes(deps));
   app.route("/v1", planRoutes(deps));
+  app.route("/v1", referralRoutes(deps));
   app.route("/v1", authRoutes(deps));
   app.route("/v1", subscriptionRoutes(deps));
   app.route("/v1", syncRoutes(deps));

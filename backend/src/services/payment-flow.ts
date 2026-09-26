@@ -1,6 +1,6 @@
 import { and, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
-import type { Database, DatabaseExecutor } from "../db/client.js";
-import { grants, payments, users } from "../db/schema.js";
+import { rowsOf, type Database, type DatabaseExecutor } from "../db/client.js";
+import { entitlements, grants, payments, referrals, users } from "../db/schema.js";
 import {
   badRequest,
   conflict,
@@ -119,6 +119,25 @@ export async function applyPaid(
     throw conflict("payment_account_deleted", "This payment belongs to a deleted account.");
   }
   await db.transaction(async (tx) => {
+    const participantRows = rowsOf<{ id: string }>(
+      await tx.execute(sql`
+        select u.id
+          from users u
+         where u.id in (
+           ${userId},
+           (select r.inviter_id
+              from referrals r
+             where r.invitee_id = ${userId}
+               and r.successful_at is null)
+         )
+         order by u.id
+         for update
+      `),
+    );
+    if (!participantRows.some((row) => row.id === userId)) {
+      throw conflict("payment_account_deleted", "This payment belongs to a deleted account.");
+    }
+
     const [insertedGrant] = await tx
       .insert(grants)
       .values({
@@ -159,6 +178,83 @@ export async function applyPaid(
         updatedAt: t,
       })
       .where(eq(payments.id, payment.id));
+
+    const qualifyingReferralPayment =
+      payment.amountToman > 0 &&
+      !!authority?.trim() &&
+      authority.trim().toUpperCase() !== "FREE" &&
+      (verified.code === 100 || verified.code === 101);
+    if (qualifyingReferralPayment) {
+      const previousPaid = rowsOf<{ exists: boolean }>(
+        await tx.execute(sql`
+          select exists (
+            select 1 from payments p
+             where p.user_id = ${userId}
+               and p.id <> ${payment.id}
+               and p.status = 'paid'
+               and p.amount_toman > 0
+               and nullif(btrim(p.authority), '') is not null
+               and upper(btrim(p.authority)) <> 'FREE'
+               and p.psp_result in (100, 101)
+               and p.applied_at is not null
+          ) as exists
+        `),
+      )[0]?.exists;
+
+      if (!previousPaid) {
+        const [successfulReferral] = await tx
+          .update(referrals)
+          .set({ successfulPaymentId: payment.id, successfulAt: t })
+          .where(and(eq(referrals.inviteeId, userId), isNull(referrals.successfulAt)))
+          .returning();
+
+        if (successfulReferral) {
+          const reward = async (rewardUserId: string, role: "invitee" | "inviter") => {
+            const key = `referral:${successfulReferral.id}:${role}`;
+            const [insertedReward] = await tx
+              .insert(grants)
+              .values({
+                userId: rewardUserId,
+                months: 0,
+                days: 7,
+                source: "referral",
+                idempotencyKey: key,
+                expiresBefore: null,
+                expiresAfter: null,
+                createdAt: t,
+              })
+              .onConflictDoNothing()
+              .returning();
+            if (!insertedReward) return;
+
+            const [current] = await tx
+              .select({ planId: entitlements.planId })
+              .from(entitlements)
+              .where(eq(entitlements.userId, rewardUserId))
+              .limit(1);
+            const extension = await extendEntitlement(
+              tx,
+              rewardUserId,
+              {
+                planId: current?.planId ?? "referral",
+                days: 7,
+                preserveExistingPlan: true,
+              },
+              t,
+            );
+            await tx
+              .update(grants)
+              .set({ expiresBefore: extension.before, expiresAfter: extension.after })
+              .where(eq(grants.id, insertedReward.id));
+          };
+
+          await reward(userId, "invitee");
+          if (successfulReferral.inviterId) {
+            await reward(successfulReferral.inviterId, "inviter");
+          }
+        }
+      }
+    }
     if (payment.discountCode) {
       try {
         await tx.transaction(async (savepoint) => {

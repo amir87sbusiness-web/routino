@@ -132,8 +132,13 @@ export async function makeHarness(
     async truncate() {
       await db.execute(sql`
         truncate users, records, otp_codes, auth_rate_limit_buckets, discounts,
-                 redemptions, payments, grants, entitlements, feedback
+                 redemptions, payments, grants, entitlements, feedback, referrals
         restart identity cascade
+      `);
+      await db.execute(sql`
+        update referral_program_policy
+           set started_at = '2000-01-01T00:00:00Z'
+         where key = 'referral_v1'
       `);
       await db.delete(schema.plans);
       await seedPlans(db);

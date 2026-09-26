@@ -27,8 +27,9 @@ export type OnboardingPace = "gentle" | "balanced" | "ambitious";
 export type OnboardingBarrier = "starting" | "remembering" | "focus" | "consistency";
 
 export interface OnboardingDraft {
-  version: 3;
+  version: 4;
   ownerUserId: string;
+  referralPromptCompleted: boolean;
   goalId: OnboardingGoalId | null;
   focusId: OnboardingFocusId | null;
   barrier: OnboardingBarrier | null;
@@ -70,7 +71,8 @@ export interface OnboardingFocus {
   descriptionEn: string;
 }
 
-const STORAGE_KEY = "routino:onboarding:v3";
+const STORAGE_KEY = "routino:onboarding:v4";
+const LEGACY_STORAGE_KEY = "routino:onboarding:v3";
 const GOAL_IDS: OnboardingGoalId[] = ["sport", "study", "health", "productive", "sleep", "growth"];
 const BARRIERS: OnboardingBarrier[] = ["starting", "remembering", "focus", "consistency"];
 const PACES: OnboardingPace[] = ["gentle", "balanced", "ambitious"];
@@ -647,8 +649,9 @@ export function getOnboardingFocuses(goalId: OnboardingGoalId): OnboardingFocus[
 
 export function defaultOnboardingDraft(ownerUserId: string): OnboardingDraft {
   return {
-    version: 3,
+    version: 4,
     ownerUserId,
+    referralPromptCompleted: false,
     goalId: null,
     focusId: null,
     barrier: null,
@@ -743,37 +746,47 @@ export function applyOnboardingHabits(
 
 export function saveOnboardingDraft(draft: OnboardingDraft): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
+  localStorage.removeItem(LEGACY_STORAGE_KEY);
 }
 
 export function loadOnboardingDraft(ownerUserId?: string): OnboardingDraft | null {
   try {
-    const parsed = JSON.parse(
-      localStorage.getItem(STORAGE_KEY) ?? "null",
-    ) as Partial<OnboardingDraft>;
+    const current = localStorage.getItem(STORAGE_KEY);
+    const legacy = current ? null : localStorage.getItem(LEGACY_STORAGE_KEY);
+    const parsed = JSON.parse(current ?? legacy ?? "null") as Partial<OnboardingDraft> & {
+      version?: number;
+    };
+    const migrated =
+      parsed.version === 3
+        ? ({ ...parsed, version: 4, referralPromptCompleted: true } as Partial<OnboardingDraft>)
+        : parsed;
     if (
-      parsed.version !== 3 ||
-      typeof parsed.ownerUserId !== "string" ||
-      !parsed.ownerUserId ||
-      (ownerUserId && parsed.ownerUserId !== ownerUserId) ||
-      (parsed.goalId !== null && !GOAL_IDS.includes(parsed.goalId as OnboardingGoalId)) ||
-      (parsed.focusId !== null &&
-        !ONBOARDING_FOCUSES.some((focus) => focus.id === parsed.focusId)) ||
-      (parsed.barrier !== null && !BARRIERS.includes(parsed.barrier as OnboardingBarrier)) ||
-      (parsed.pace !== null && !PACES.includes(parsed.pace as OnboardingPace)) ||
-      (parsed.dayPart !== null && !DAY_PARTS.includes(parsed.dayPart as OnboardingDayPart)) ||
-      !Array.isArray(parsed.weekdays) ||
-      !parsed.weekdays.every((day) => Number.isInteger(day) && day >= 0 && day <= 6) ||
-      typeof parsed.reminderEnabled !== "boolean" ||
-      !Array.isArray(parsed.selectedHabitIds) ||
-      !parsed.selectedHabitIds.every((id) => typeof id === "string")
+      migrated.version !== 4 ||
+      typeof migrated.ownerUserId !== "string" ||
+      !migrated.ownerUserId ||
+      (ownerUserId && migrated.ownerUserId !== ownerUserId) ||
+      typeof migrated.referralPromptCompleted !== "boolean" ||
+      (migrated.goalId !== null && !GOAL_IDS.includes(migrated.goalId as OnboardingGoalId)) ||
+      (migrated.focusId !== null &&
+        !ONBOARDING_FOCUSES.some((focus) => focus.id === migrated.focusId)) ||
+      (migrated.barrier !== null && !BARRIERS.includes(migrated.barrier as OnboardingBarrier)) ||
+      (migrated.pace !== null && !PACES.includes(migrated.pace as OnboardingPace)) ||
+      (migrated.dayPart !== null && !DAY_PARTS.includes(migrated.dayPart as OnboardingDayPart)) ||
+      !Array.isArray(migrated.weekdays) ||
+      !migrated.weekdays.every((day) => Number.isInteger(day) && day >= 0 && day <= 6) ||
+      typeof migrated.reminderEnabled !== "boolean" ||
+      !Array.isArray(migrated.selectedHabitIds) ||
+      !migrated.selectedHabitIds.every((id) => typeof id === "string")
     ) {
       return null;
     }
-    if (parsed.focusId && parsed.goalId) {
-      const focus = ONBOARDING_FOCUSES.find((item) => item.id === parsed.focusId);
-      if (!focus || focus.goalId !== parsed.goalId) return null;
+    if (migrated.focusId && migrated.goalId) {
+      const focus = ONBOARDING_FOCUSES.find((item) => item.id === migrated.focusId);
+      if (!focus || focus.goalId !== migrated.goalId) return null;
     }
-    return parsed as OnboardingDraft;
+    const result = migrated as OnboardingDraft;
+    if (legacy) saveOnboardingDraft(result);
+    return result;
   } catch {
     return null;
   }
@@ -781,4 +794,5 @@ export function loadOnboardingDraft(ownerUserId?: string): OnboardingDraft | nul
 
 export function clearOnboardingDraft(): void {
   localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(LEGACY_STORAGE_KEY);
 }

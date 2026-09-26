@@ -29,9 +29,9 @@ export interface Entitlement {
 
 /** Sources that mean "this account has already been settled" — either the user
  * paid, or they already imported their legacy subscription once. */
-const SETTLED_SOURCES = ["payment", "migration"] as const;
+const SETTLED_SOURCES = ["payment", "migration", "referral"] as const;
 
-export type GrantSource = "trial" | "payment" | "migration" | "admin";
+export type GrantSource = "trial" | "payment" | "migration" | "admin" | "referral";
 
 export interface EntitlementExtension {
   before: Date | null;
@@ -103,6 +103,7 @@ export async function extendEntitlement(
     planId: string;
     months?: number;
     days?: number;
+    preserveExistingPlan?: boolean;
   },
   now: Date,
 ): Promise<EntitlementExtension> {
@@ -132,7 +133,10 @@ export async function extendEntitlement(
         ${tIso}::timestamptz
       )
       on conflict (user_id) do update set
-        plan_id = excluded.plan_id,
+        plan_id = case
+          when ${opts.preserveExistingPlan ?? false} then entitlements.plan_id
+          else excluded.plan_id
+        end,
         updated_at = excluded.updated_at,
         expires_at = greatest(entitlements.expires_at, ${tIso}::timestamptz)
                      + make_interval(months => ${months}, days => ${days})
@@ -159,6 +163,7 @@ export async function grantInterval(
     days?: number;
     source: GrantSource;
     paymentId?: string | null;
+    idempotencyKey?: string | null;
     note?: string | null;
   },
   now: Date,
@@ -173,6 +178,7 @@ export async function grantInterval(
     days,
     source: opts.source,
     paymentId: opts.paymentId ?? null,
+    idempotencyKey: opts.idempotencyKey ?? null,
     note: opts.note ?? null,
     expiresBefore: extension.before,
     expiresAfter: extension.after,

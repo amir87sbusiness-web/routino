@@ -114,13 +114,18 @@ export async function makeHarness(overrides: Partial<NodeJS.ProcessEnv> = {}): P
       // Fresh PGlite per file is ~150ms; truncating between tests is ~1ms.
       await db.execute(sql`
         truncate users, records, otp_codes, provider_capacity_leases, auth_rate_limit_buckets, discounts,
-                 redemptions, payments, grants, entitlements, feedback, anonymous_counters
+                 redemptions, payments, grants, entitlements, feedback, anonymous_counters, referrals
         restart identity cascade
       `);
       await db.execute(sql`
         update account_retention_policy
            set deployed_at = '-infinity', preexisting_grace_until = '-infinity'
          where key = 'trial_cleanup_v1'
+      `);
+      await db.execute(sql`
+        update referral_program_policy
+           set started_at = '2000-01-01T00:00:00Z'
+         where key = 'referral_v1'
       `);
       await db.delete(schema.plans);
       await seedPlans(db);

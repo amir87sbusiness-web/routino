@@ -153,6 +153,38 @@ describe("admin permanent account deletion", () => {
     expect(await h.query(`select id from payments where id = '${otherPaymentId}'`)).toHaveLength(1);
   });
 
+  it("preserves a successful referral audit row when admin deletes the invitee", async () => {
+    const inviter = await createUser("inviter", "989121111112");
+    const invitee = await createUser("invitee", "989121111113");
+    const paymentId = randomUUID();
+    await h.raw(`
+      update users set referral_code = 'ADMDEL' where id = '${inviter.id}';
+      insert into payments
+        (id, user_id, plan_id, months, amount_toman, amount_rial, status,
+         attempt_id, authority, psp_result, applied_at)
+      values
+        ('${paymentId}', '${invitee.id}', 'm1', 1, 59000, 590000, 'paid',
+         '${randomUUID()}', 'ADMIN-DELETE-REF', 100, now());
+      insert into referrals (
+        inviter_id, invitee_id, claimed_code, claimed_at,
+        successful_payment_id, successful_at
+      ) values (
+        '${inviter.id}', '${invitee.id}', 'ADMDEL', now(), '${paymentId}', now()
+      );
+    `);
+
+    expect((await deleteAsAdmin(invitee.id, "invitee")).statusCode).toBe(200);
+    expect(
+      await h.query(`
+        select id from referrals
+         where inviter_id = '${inviter.id}'
+           and invitee_id is null
+           and successful_payment_id = '${paymentId}'
+           and successful_at is not null
+      `),
+    ).toHaveLength(1);
+  });
+
   it("blocks deletion while a payment can still settle", async () => {
     const user = await createUser("victim", "989121111111");
     await h.raw(`

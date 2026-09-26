@@ -237,9 +237,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="text-sm font-black text-foreground">{t("روتینو", "Routino")}</span>
           </Link>
           <span className="hidden text-sm font-bold text-foreground lg:block">
-            {NAV.find((n) => n.to === pathname)
-              ? t(NAV.find((n) => n.to === pathname)!.fa, NAV.find((n) => n.to === pathname)!.en)
-              : ""}
+            {pathname === "/referrals"
+              ? t("دعوت دوستان", "Invite friends")
+              : NAV.find((n) => n.to === pathname)
+                ? t(NAV.find((n) => n.to === pathname)!.fa, NAV.find((n) => n.to === pathname)!.en)
+                : ""}
           </span>
           <div className="flex items-center gap-1">
             <button

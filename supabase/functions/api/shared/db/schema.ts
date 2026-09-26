@@ -61,6 +61,7 @@ export const users = pgTable(
     /** scrypt hash (`scrypt$N$r$p$saltB64$hashB64`), or NULL for OTP-only accounts.
      * The raw password is never stored, logged, or returned. */
     passwordHash: text("password_hash"),
+    referralCode: text("referral_code"),
     /**
      * Per-user monotonic change counter. Incremented with
      * `UPDATE users SET seq = seq + $n ... RETURNING seq`, which takes a row lock
@@ -76,7 +77,16 @@ export const users = pgTable(
     gcSeq: bigint("gc_seq", { mode: "number" }).notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [index("users_created_at").on(t.createdAt, t.id)],
+  (t) => [
+    index("users_created_at").on(t.createdAt, t.id),
+    uniqueIndex("users_referral_code_unique")
+      .on(t.referralCode)
+      .where(sql`${t.referralCode} is not null`),
+    check(
+      "users_referral_code_format",
+      sql`${t.referralCode} is null or ${t.referralCode} ~ '^[A-Z]{6}$'`,
+    ),
+  ],
 );
 
 export const records = pgTable(
@@ -292,9 +302,10 @@ export const grants = pgTable(
      * "1 Year" plan must mean 12 real months, not 360 days. */
     months: integer("months").notNull().default(0),
     days: integer("days").notNull().default(0),
-    /** trial | payment | migration | admin */
+    /** trial | payment | migration | admin | referral */
     source: text("source").notNull(),
     paymentId: uuid("payment_id"),
+    idempotencyKey: text("idempotency_key"),
     /** Free-text audit trail. For `migration` this holds the raw value the
      * client claimed, which is inherently untrusted and worth keeping. */
     note: text("note"),
@@ -310,6 +321,53 @@ export const grants = pgTable(
     uniqueIndex("grants_payment_id_unique")
       .on(t.paymentId)
       .where(sql`${t.paymentId} is not null`),
+    uniqueIndex("grants_idempotency_key_unique")
+      .on(t.idempotencyKey)
+      .where(sql`${t.idempotencyKey} is not null`),
+  ],
+);
+
+/** Singleton rollout boundary for referral-code claims. */
+export const referralProgramPolicy = pgTable(
+  "referral_program_policy",
+  {
+    key: text("key").primaryKey(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [check("referral_program_policy_singleton", sql`${t.key} = 'referral_v1'`)],
+);
+
+/** One immutable inviter claim per invitee. Success is attached later by the
+ * payment flow; this table does not itself grant entitlement. */
+export const referrals = pgTable(
+  "referrals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    inviterId: uuid("inviter_id").references(() => users.id, { onDelete: "set null" }),
+    inviteeId: uuid("invitee_id").references(() => users.id, { onDelete: "set null" }),
+    claimedCode: text("claimed_code").notNull(),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }).notNull().defaultNow(),
+    successfulPaymentId: uuid("successful_payment_id").references(() => payments.id),
+    successfulAt: timestamp("successful_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("referrals_invitee_unique").on(t.inviteeId),
+    index("referrals_inviter").on(t.inviterId),
+    uniqueIndex("referrals_successful_payment_unique")
+      .on(t.successfulPaymentId)
+      .where(sql`${t.successfulPaymentId} is not null`),
+    index("referrals_successful_inviter")
+      .on(t.inviterId)
+      .where(sql`${t.successfulAt} is not null and ${t.inviterId} is not null`),
+    check("referrals_claimed_code_format", sql`${t.claimedCode} ~ '^[A-Z]{6}$'`),
+    check(
+      "referrals_success_paired",
+      sql`(${t.successfulPaymentId} is null) = (${t.successfulAt} is null)`,
+    ),
+    check(
+      "referrals_orphan_only_after_success",
+      sql`${t.inviteeId} is not null or ${t.successfulAt} is not null`,
+    ),
   ],
 );
 
@@ -371,6 +429,25 @@ export const usersRelations = relations(users, ({ many, one }) => ({
   records: many(records),
   grants: many(grants),
   entitlement: one(entitlements),
+  invitedReferrals: many(referrals, { relationName: "referralInviter" }),
+  claimedReferrals: many(referrals, { relationName: "referralInvitee" }),
+}));
+
+export const referralsRelations = relations(referrals, ({ one }) => ({
+  inviter: one(users, {
+    fields: [referrals.inviterId],
+    references: [users.id],
+    relationName: "referralInviter",
+  }),
+  invitee: one(users, {
+    fields: [referrals.inviteeId],
+    references: [users.id],
+    relationName: "referralInvitee",
+  }),
+  successfulPayment: one(payments, {
+    fields: [referrals.successfulPaymentId],
+    references: [payments.id],
+  }),
 }));
 
 export const schema = {
@@ -384,9 +461,12 @@ export const schema = {
   redemptions,
   payments,
   grants,
+  referralProgramPolicy,
+  referrals,
   entitlements,
   feedback,
   anonymousCounters,
   accountRetentionPolicy,
   usersRelations,
+  referralsRelations,
 };

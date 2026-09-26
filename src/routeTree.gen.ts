@@ -13,6 +13,7 @@ import { Route as TimerRouteImport } from "./routes/timer";
 import { Route as TasksRouteImport } from "./routes/tasks";
 import { Route as SubscribeRouteImport } from "./routes/subscribe";
 import { Route as SettingsRouteImport } from "./routes/settings";
+import { Route as ReferralsRouteImport } from "./routes/referrals";
 import { Route as OnboardingRouteImport } from "./routes/onboarding";
 import { Route as JournalRouteImport } from "./routes/journal";
 import { Route as HabitsRouteImport } from "./routes/habits";
@@ -42,6 +43,11 @@ const SubscribeRoute = SubscribeRouteImport.update({
 const SettingsRoute = SettingsRouteImport.update({
   id: "/settings",
   path: "/settings",
+  getParentRoute: () => rootRouteImport,
+} as any);
+const ReferralsRoute = ReferralsRouteImport.update({
+  id: "/referrals",
+  path: "/referrals",
   getParentRoute: () => rootRouteImport,
 } as any);
 const OnboardingRoute = OnboardingRouteImport.update({
@@ -104,6 +110,7 @@ export interface FileRoutesByFullPath {
   "/habits": typeof HabitsRoute;
   "/journal": typeof JournalRoute;
   "/onboarding": typeof OnboardingRoute;
+  "/referrals": typeof ReferralsRoute;
   "/settings": typeof SettingsRoute;
   "/subscribe": typeof SubscribeRoute;
   "/tasks": typeof TasksRoute;
@@ -120,6 +127,7 @@ export interface FileRoutesByTo {
   "/habits": typeof HabitsRoute;
   "/journal": typeof JournalRoute;
   "/onboarding": typeof OnboardingRoute;
+  "/referrals": typeof ReferralsRoute;
   "/settings": typeof SettingsRoute;
   "/subscribe": typeof SubscribeRoute;
   "/tasks": typeof TasksRoute;
@@ -137,6 +145,7 @@ export interface FileRoutesById {
   "/habits": typeof HabitsRoute;
   "/journal": typeof JournalRoute;
   "/onboarding": typeof OnboardingRoute;
+  "/referrals": typeof ReferralsRoute;
   "/settings": typeof SettingsRoute;
   "/subscribe": typeof SubscribeRoute;
   "/tasks": typeof TasksRoute;
@@ -155,6 +164,7 @@ export interface FileRouteTypes {
     | "/habits"
     | "/journal"
     | "/onboarding"
+    | "/referrals"
     | "/settings"
     | "/subscribe"
     | "/tasks"
@@ -171,6 +181,7 @@ export interface FileRouteTypes {
     | "/habits"
     | "/journal"
     | "/onboarding"
+    | "/referrals"
     | "/settings"
     | "/subscribe"
     | "/tasks"
@@ -187,6 +198,7 @@ export interface FileRouteTypes {
     | "/habits"
     | "/journal"
     | "/onboarding"
+    | "/referrals"
     | "/settings"
     | "/subscribe"
     | "/tasks"
@@ -204,6 +216,7 @@ export interface RootRouteChildren {
   HabitsRoute: typeof HabitsRoute;
   JournalRoute: typeof JournalRoute;
   OnboardingRoute: typeof OnboardingRoute;
+  ReferralsRoute: typeof ReferralsRoute;
   SettingsRoute: typeof SettingsRoute;
   SubscribeRoute: typeof SubscribeRoute;
   TasksRoute: typeof TasksRoute;
@@ -240,6 +253,13 @@ declare module "@tanstack/react-router" {
       path: "/settings";
       fullPath: "/settings";
       preLoaderRoute: typeof SettingsRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/referrals": {
+      id: "/referrals";
+      path: "/referrals";
+      fullPath: "/referrals";
+      preLoaderRoute: typeof ReferralsRouteImport;
       parentRoute: typeof rootRouteImport;
     };
     "/onboarding": {
@@ -324,6 +344,7 @@ const rootRouteChildren: RootRouteChildren = {
   HabitsRoute: HabitsRoute,
   JournalRoute: JournalRoute,
   OnboardingRoute: OnboardingRoute,
+  ReferralsRoute: ReferralsRoute,
   SettingsRoute: SettingsRoute,
   SubscribeRoute: SubscribeRoute,
   TasksRoute: TasksRoute,

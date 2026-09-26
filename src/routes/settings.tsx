@@ -12,6 +12,7 @@ import {
   EyeOff,
   FileText,
   Globe,
+  Gift,
   KeyRound,
   Lock,
   LogOut,
@@ -292,6 +293,27 @@ function SettingsPage() {
     <div className="page-stagger flex flex-col gap-4">
       {/* account: profile + username/password together, at the very top */}
       <AccountCard />
+
+      <Link
+        to="/referrals"
+        className="card-surface flex items-center gap-3 p-4 transition-colors hover:bg-secondary"
+      >
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
+          <Gift className="h-5 w-5" aria-hidden="true" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-bold text-foreground">
+            {t("دعوت دوستان", "Invite friends")}
+          </span>
+          <span className="mt-0.5 block text-[11px] text-muted-foreground">
+            {t("برای هر دعوت موفق یک هفته هدیه بگیر", "Earn a free week per successful referral")}
+          </span>
+        </span>
+        <ChevronLeft
+          className="h-4 w-4 shrink-0 text-muted-foreground rtl:rotate-0 ltr:rotate-180"
+          aria-hidden="true"
+        />
+      </Link>
 
       {/* language + calendar */}
       <div className="grid grid-cols-2 gap-3">

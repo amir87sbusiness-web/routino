@@ -152,6 +152,8 @@ const RLS_TABLES = [
   "feedback",
   "anonymous_counters",
   "account_retention_policy",
+  "referral_program_policy",
+  "referrals",
 ];
 
 const rls = `
