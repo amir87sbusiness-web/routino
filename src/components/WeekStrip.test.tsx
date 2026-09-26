@@ -40,7 +40,7 @@ describe("WeekStrip settling", () => {
     expect(onSelect).toHaveBeenCalledWith("2026-09-05");
   });
 
-  it("keeps compact arrow controls and progress rings separated on 320px phones", () => {
+  it("keeps balanced day circles and narrow arrows separated on 320px phones", () => {
     act(() => {
       root.render(
         <WeekStrip selected="2026-08-29" onSelect={() => undefined} cal="gregorian" lang="fa" />,
@@ -51,28 +51,36 @@ describe("WeekStrip settling", () => {
       '[aria-label="prev-week"], [aria-label="next-week"]',
     )) {
       expect(arrow.className).toContain("inline-flex");
-      expect(arrow.className).toContain("w-6");
+      expect(arrow.className).toContain("w-5");
       expect(arrow.className).toContain("p-0");
       expect(arrow.className).not.toContain("hidden");
     }
 
+    const strip = host.firstElementChild;
+    expect(strip?.className).toContain("-mx-3");
+
     const panels = host.querySelectorAll<HTMLDivElement>('div[dir="rtl"]');
     expect(panels).toHaveLength(3);
     expect(panels[0]?.className).toContain("grid-cols-7");
-    expect(panels[0]?.className).toContain("gap-0.5");
+    expect(panels[0]?.className).toContain("gap-0");
     const day = panels[0]?.querySelector<HTMLButtonElement>("button");
     expect(day).not.toBeNull();
     expect(day?.className).toContain("min-w-0");
     const circle = day?.querySelector<HTMLElement>("span.relative");
     expect(circle).not.toBeNull();
-    expect(circle?.className).toContain("h-8");
+    expect(circle?.className).toContain("h-[38px]");
+    expect(circle?.className).toContain("w-[38px]");
     expect(circle?.className).toContain("sm:h-12");
-    const mobileContentWidth = 288;
-    const mobileArrowWidth = 24;
-    const mobileCircleWidth = 32;
-    const mobileGap = 2;
-    expect(mobileCircleWidth * 7 + mobileGap * 6).toBeLessThanOrEqual(
-      mobileContentWidth - mobileArrowWidth * 2,
+    const date = circle?.querySelector<HTMLElement>("span.z-10");
+    expect(date?.className).toContain("h-[31px]");
+    expect(date?.className).toContain("w-[31px]");
+
+    const pageContentWidth = 288;
+    const horizontalBleed = 24;
+    const mobileArrowWidth = 20;
+    const mobileCircleWidth = 38;
+    expect(mobileCircleWidth * 7).toBeLessThanOrEqual(
+      pageContentWidth + horizontalBleed - mobileArrowWidth * 2,
     );
   });
 
@@ -94,7 +102,19 @@ describe("WeekStrip settling", () => {
     const progressArcs = panels[1]!.querySelectorAll('circle[stroke-linecap="round"]');
     expect(progressArcs).toHaveLength(7);
     for (const arc of progressArcs) {
-      expect(arc.getAttribute("stroke-dasharray")).toMatch(/^59\.69/);
+      expect(arc.getAttribute("r")).toBe("20");
+      expect(arc.getAttribute("stroke-dasharray")).toMatch(/^62\.83/);
+    }
+
+    const activeDay = panels[1]!.querySelector("span.bg-primary")?.closest("button");
+    expect(activeDay).not.toBeNull();
+    expect(activeDay?.querySelector("svg")?.getAttribute("class")).toContain("z-20");
+    expect(activeDay?.querySelector('circle[stroke-linecap="round"]')?.getAttribute("stroke")).toBe(
+      "var(--primary-foreground)",
+    );
+    for (const arc of progressArcs) {
+      if (activeDay?.contains(arc)) continue;
+      expect(arc.getAttribute("stroke")).toBe("var(--primary)");
     }
   });
 

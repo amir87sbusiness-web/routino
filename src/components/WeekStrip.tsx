@@ -28,7 +28,7 @@ import {
   weekPanelShifts,
 } from "@/lib/mobile-gestures";
 
-const RING_R = 19;
+const RING_R = 20;
 const RING_C = 2 * Math.PI * RING_R;
 const TRACK_CENTER = "translate3d(-33.333333%, 0, 0)";
 const TRACK_LEFT = "translate3d(0, 0, 0)";
@@ -75,7 +75,7 @@ function WeekPanel({
 
   return (
     <div
-      className="grid w-1/3 shrink-0 grid-cols-7 gap-0.5 sm:gap-1"
+      className="grid w-1/3 shrink-0 grid-cols-7 gap-0 sm:gap-1"
       dir={lang === "fa" ? "rtl" : "ltr"}
     >
       {days.map((dk) => {
@@ -106,8 +106,11 @@ function WeekPanel({
               {weekdayShort(dow, lang)}
             </span>
 
-            <span className="relative flex h-8 w-8 items-center justify-center sm:h-12 sm:w-12">
-              <svg viewBox="0 0 48 48" className="absolute inset-0 h-full w-full -rotate-90">
+            <span className="relative flex h-[38px] w-[38px] items-center justify-center sm:h-12 sm:w-12">
+              <svg
+                viewBox="0 0 48 48"
+                className="pointer-events-none absolute inset-0 z-20 h-full w-full -rotate-90"
+              >
                 <circle
                   cx="24"
                   cy="24"
@@ -131,7 +134,7 @@ function WeekPanel({
                 )}
               </svg>
               <span
-                className={`z-10 flex h-7 w-7 items-center justify-center rounded-full text-xs font-black transition-colors sm:h-9 sm:w-9 sm:text-base ${
+                className={`z-10 flex h-[31px] w-[31px] items-center justify-center rounded-full text-xs font-black transition-colors sm:h-9 sm:w-9 sm:text-base ${
                   emoji
                     ? "bg-transparent text-base"
                     : active
@@ -145,7 +148,7 @@ function WeekPanel({
               </span>
               {count > 0 && (
                 <span
-                  className={`absolute -top-0.5 -end-0.5 z-20 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-0.5 text-[7px] font-bold sm:h-4 sm:min-w-4 sm:px-1 sm:text-[8px] ${
+                  className={`absolute -top-0.5 -end-0.5 z-30 flex h-3.5 min-w-3.5 items-center justify-center rounded-full px-0.5 text-[7px] font-bold sm:h-4 sm:min-w-4 sm:px-1 sm:text-[8px] ${
                     active
                       ? "bg-primary-foreground text-primary"
                       : "bg-primary text-primary-foreground"
@@ -283,10 +286,10 @@ export function WeekStrip(props: WeekStripProps) {
   };
 
   return (
-    <div className="flex items-center gap-0 sm:gap-1">
+    <div className="-mx-3 flex items-center gap-0 sm:mx-0 sm:gap-1">
       <button
         onClick={() => settle(-1)}
-        className="inline-flex h-9 w-6 shrink-0 items-center justify-center rounded-full p-0 text-muted-foreground transition-colors hover:bg-secondary sm:h-auto sm:w-auto sm:p-1.5"
+        className="inline-flex h-9 w-5 shrink-0 items-center justify-center rounded-full p-0 text-muted-foreground transition-colors hover:bg-secondary sm:h-auto sm:w-auto sm:p-1.5"
         aria-label="prev-week"
       >
         <ChevronRight className="h-3.5 w-3.5 ltr:hidden sm:h-4 sm:w-4" />
@@ -319,7 +322,7 @@ export function WeekStrip(props: WeekStripProps) {
 
       <button
         onClick={() => settle(1)}
-        className="inline-flex h-9 w-6 shrink-0 items-center justify-center rounded-full p-0 text-muted-foreground transition-colors hover:bg-secondary sm:h-auto sm:w-auto sm:p-1.5"
+        className="inline-flex h-9 w-5 shrink-0 items-center justify-center rounded-full p-0 text-muted-foreground transition-colors hover:bg-secondary sm:h-auto sm:w-auto sm:p-1.5"
         aria-label="next-week"
       >
         <ChevronLeft className="h-3.5 w-3.5 ltr:hidden sm:h-4 sm:w-4" />
