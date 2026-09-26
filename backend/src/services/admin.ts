@@ -31,7 +31,15 @@ const asDate = (value: Date | string | null | undefined): Date | null =>
 
 export async function adminOverview(db: Database, now: Date) {
   const dayAgo = new Date(now.getTime() - DAY_MS);
+  const nowIso = now.toISOString();
 
+  type DailyPoint = {
+    date: string;
+    newUsers: number;
+    paidPayments: number;
+    revenueToman: number;
+    otpSent: number;
+  };
   type AggregateRow = {
     total_users: number | string | bigint;
     new_users: number | string | bigint;
@@ -46,19 +54,38 @@ export async function adminOverview(db: Database, now: Date) {
     pending: number | string | bigint;
     verify_failed: number | string | bigint;
     otp_sent_last_24h: number | string | bigint;
+    daily: unknown;
   };
 
+  // One database round-trip serves the whole dashboard. Users and payments are
+  // rolled up by Tehran calendar day in their existing full-table aggregate
+  // pass, while OTP history is bounded to the 90 days the UI can display.
   const result = await db.execute(sql`
-    with user_stats as (
+    with bounds as (
       select
-        count(*) as total_users,
-        count(*) filter (
-          where ${users.createdAt} > ${dayAgo.toISOString()}::timestamptz
-        ) as new_users
+        ${nowIso}::timestamptz as now_at,
+        ${dayAgo.toISOString()}::timestamptz as day_ago,
+        (${nowIso}::timestamptz at time zone 'Asia/Tehran')::date as today,
+        (
+          date_trunc('day', ${nowIso}::timestamptz at time zone 'Asia/Tehran')
+          at time zone 'Asia/Tehran'
+        ) - interval '89 days' as trend_start
+    ), user_rollup as (
+      select
+        (${users.createdAt} at time zone 'Asia/Tehran')::date as day,
+        count(*) as user_count,
+        count(*) filter (where ${users.createdAt} > b.day_ago) as last_24h_count
       from ${users}
+      cross join bounds b
+      group by 1
+    ), user_stats as (
+      select
+        coalesce(sum(user_count), 0) as total_users,
+        coalesce(sum(last_24h_count), 0) as new_users
+      from user_rollup
     ), subscription_stats as (
       select count(*) filter (
-        where ${entitlements.expiresAt} > ${now.toISOString()}::timestamptz
+        where ${entitlements.expiresAt} > ${nowIso}::timestamptz
           and exists (
             select 1 from ${grants}
             where ${grants.userId} = ${entitlements.userId}
@@ -67,10 +94,10 @@ export async function adminOverview(db: Database, now: Date) {
       ) as active_subscriptions,
       count(*) filter (
         where ${entitlements.planId} = ${"trial"}
-          and ${entitlements.expiresAt} > ${now.toISOString()}::timestamptz
+          and ${entitlements.expiresAt} > ${nowIso}::timestamptz
       ) as active_trials,
       count(*) filter (
-        where ${entitlements.expiresAt} <= ${now.toISOString()}::timestamptz
+        where ${entitlements.expiresAt} <= ${nowIso}::timestamptz
       ) as expired_users
       from ${entitlements}
     ), counter_stats as (
@@ -78,33 +105,105 @@ export async function adminOverview(db: Database, now: Date) {
         where ${anonymousCounters.key} = ${"trial_starts"}
       ), 0) as trial_starts
       from ${anonymousCounters}
-    ), payment_stats as (
+    ), payment_rollup as (
       select
-        count(*) filter (where ${payments.status} = ${"paid"}) as paid_total,
+        case
+          when ${payments.status} = ${"paid"}
+            then (coalesce(${payments.appliedAt}, ${payments.createdAt}) at time zone 'Asia/Tehran')::date
+          else null
+        end as day,
+        count(*) filter (where ${payments.status} = ${"paid"}) as paid_count,
         coalesce(sum(${payments.amountToman}) filter (
           where ${payments.status} = ${"paid"}
         ), 0) as revenue_toman,
         count(*) filter (
           where ${payments.status} = ${"paid"}
-            and ${payments.createdAt} > ${dayAgo.toISOString()}::timestamptz
+            and ${payments.createdAt} > b.day_ago
         ) as paid_last_24h,
         coalesce(sum(${payments.amountToman}) filter (
           where ${payments.status} = ${"paid"}
-            and ${payments.createdAt} > ${dayAgo.toISOString()}::timestamptz
+            and ${payments.createdAt} > b.day_ago
         ), 0) as revenue_toman_last_24h,
         count(*) filter (where ${payments.status} = ${"redirected"}) as pending,
         count(*) filter (where ${payments.status} = ${"verify_failed"}) as verify_failed
       from ${payments}
-    ), otp_stats as (
-      select count(*) filter (
-        where ${otpCodes.createdAt} > ${dayAgo.toISOString()}::timestamptz
-      ) as otp_sent_last_24h
+      cross join bounds b
+      group by 1
+    ), payment_stats as (
+      select
+        coalesce(sum(paid_count), 0) as paid_total,
+        coalesce(sum(revenue_toman), 0) as revenue_toman,
+        coalesce(sum(paid_last_24h), 0) as paid_last_24h,
+        coalesce(sum(revenue_toman_last_24h), 0) as revenue_toman_last_24h,
+        coalesce(sum(pending), 0) as pending,
+        coalesce(sum(verify_failed), 0) as verify_failed
+      from payment_rollup
+    ), otp_daily as (
+      select
+        (${otpCodes.createdAt} at time zone 'Asia/Tehran')::date as day,
+        count(*) as otp_sent,
+        count(*) filter (where ${otpCodes.createdAt} > b.day_ago) as otp_last_24h
       from ${otpCodes}
+      cross join bounds b
+      where ${otpCodes.createdAt} >= b.trend_start
+        and ${otpCodes.createdAt} <= b.now_at
+      group by 1
+    ), otp_stats as (
+      select coalesce(sum(otp_last_24h), 0) as otp_sent_last_24h
+      from otp_daily
+    ), calendar as (
+      select generate_series(
+        b.today - 89,
+        b.today,
+        interval '1 day'
+      )::date as day
+      from bounds b
+    ), daily_stats as (
+      select coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'date', to_char(c.day, 'YYYY-MM-DD'),
+            'newUsers', coalesce(u.user_count, 0),
+            'paidPayments', coalesce(p.paid_count, 0),
+            'revenueToman', coalesce(p.revenue_toman, 0),
+            'otpSent', coalesce(o.otp_sent, 0)
+          )
+          order by c.day
+        ),
+        '[]'::jsonb
+      ) as daily
+      from calendar c
+      left join user_rollup u on u.day = c.day
+      left join payment_rollup p on p.day = c.day
+      left join otp_daily o on o.day = c.day
     )
-    select * from user_stats, subscription_stats, counter_stats, payment_stats, otp_stats
+    select *
+    from user_stats, subscription_stats, counter_stats, payment_stats, otp_stats, daily_stats
   `);
   const row = rowsOf<AggregateRow>(result)[0];
   const metric = (value: number | string | bigint | undefined) => Number(value ?? 0);
+  const dailyValue = row?.daily;
+  let rawDaily: unknown[] = [];
+  if (Array.isArray(dailyValue)) {
+    rawDaily = dailyValue;
+  } else if (typeof dailyValue === "string") {
+    try {
+      const parsed: unknown = JSON.parse(dailyValue);
+      rawDaily = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      rawDaily = [];
+    }
+  }
+  const daily: DailyPoint[] = rawDaily.map((point) => {
+    const value = point && typeof point === "object" ? (point as Record<string, unknown>) : {};
+    return {
+      date: String(value.date ?? ""),
+      newUsers: metric(value.newUsers as number | string | bigint | undefined),
+      paidPayments: metric(value.paidPayments as number | string | bigint | undefined),
+      revenueToman: metric(value.revenueToman as number | string | bigint | undefined),
+      otpSent: metric(value.otpSent as number | string | bigint | undefined),
+    };
+  });
 
   return {
     users: { total: metric(row?.total_users), last24h: metric(row?.new_users) },
@@ -122,7 +221,8 @@ export async function adminOverview(db: Database, now: Date) {
     // verify_failed = amount mismatch; must never happen. Surfaced loudly.
     alerts: { verifyFailed: metric(row?.verify_failed) },
     otpSentLast24h: metric(row?.otp_sent_last_24h),
-    serverTime: now.toISOString(),
+    daily,
+    serverTime: nowIso,
   };
 }
 
