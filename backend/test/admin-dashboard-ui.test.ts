@@ -3,17 +3,19 @@ import { ADMIN_PAGE } from "../src/lib/admin-page.js";
 import { withAdminDashboardUi } from "../src/routes/admin-dashboard-ui.js";
 
 describe("admin dashboard refresh", () => {
-  it("adds the daily new-purchase vs renewal chart without removing admin sections", () => {
+  it("adds Sheetra-style calendar ranges and charts without extra dashboard requests", () => {
     const page = withAdminDashboardUi(ADMIN_PAGE);
 
-    expect(page).toContain("روند خرید روزانه");
-    expect(page).toContain("اولین خرید هر کاربر در برابر تمدیدهای بعدی");
-    expect(page).toContain('data-sales-days="7"');
-    expect(page).toContain('data-sales-days="30"');
-    expect(page).toContain('data-sales-days="90"');
-    expect(page).toContain("stroke:#16a34a");
-    expect(page).toContain("stroke:#7c3aed");
-    expect(page).toContain('api("/sales-trend?days=" + selectedDays)');
+    expect(page).toContain("نمودار درآمد و فروش");
+    expect(page).toContain("کاربران جدید");
+    expect(page).toContain('data-analytics-range="today"');
+    expect(page).toContain('data-analytics-range="yesterday"');
+    expect(page).toContain('data-analytics-range="7"');
+    expect(page).toContain('data-analytics-range="30"');
+    expect(page).toContain('data-analytics-range="90"');
+    expect(page).toContain("۰۰:۰۰ تهران");
+    expect(page).toContain("linearGradient");
+    expect(page).not.toContain('api("/sales-trend?days="');
 
     expect(page).toContain('id="tab-users"');
     expect(page).toContain('id="tab-payments"');
