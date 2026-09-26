@@ -57,6 +57,12 @@ describe("Task history representation", () => {
 
 describe("task draft compatibility", () => {
   it("round-trips an optional category and its legacy appearance snapshot", () => {
+    const newUncategorized = draftToTask({
+      ...emptyTaskDraft("2026-09-19"),
+      title: "بدون دسته",
+    });
+    expect("categoryId" in newUncategorized).toBe(false);
+
     const categorized = draftToTask(
       {
         ...emptyTaskDraft("2026-09-19"),
@@ -358,9 +364,10 @@ describe("TaskFormModal measurement controls", () => {
     expect(document.body.textContent).toContain("Deadline");
   });
 
-  it("restores the uncategorized legacy snapshot after selecting then clearing a category", () => {
+  it("clears a selected category and restores the uncategorized snapshot without a category option", () => {
+    const uncategorizedColor = "#0ea5e9";
     function Harness() {
-      const [draft, setDraft] = useState(() => emptyTaskDraft("2026-09-19"));
+      const [draft, setDraft] = useState(() => emptyTaskDraft("2026-09-19", uncategorizedColor));
       return (
         <>
           <output data-testid="draft-snapshot">
@@ -383,7 +390,7 @@ describe("TaskFormModal measurement controls", () => {
     act(() => root.render(<Harness />));
 
     expect(document.body.textContent).toContain("Category");
-    expect(document.body.textContent).toContain("Without category");
+    expect(document.body.textContent).not.toContain("Without category");
     expect(document.body.textContent).toContain("Work");
     expect(document.body.textContent).not.toContain("Icon");
     expect(document.body.textContent).not.toContain("Color");
@@ -397,12 +404,42 @@ describe("TaskFormModal measurement controls", () => {
       JSON.stringify({ categoryId: "work", color: category.color, icon: category.icon }),
     );
 
-    const withoutCategoryButton = Array.from(document.body.querySelectorAll("button")).find(
-      (button) => button.textContent?.trim() === "Without category",
-    )!;
-    act(() => withoutCategoryButton.click());
+    act(() => workButton.click());
     expect(document.querySelector('[data-testid="draft-snapshot"]')?.textContent).toBe(
-      JSON.stringify({ categoryId: null, color: CATEGORY_COLOR_CHOICES[0], icon: "star" }),
+      JSON.stringify({ categoryId: null, color: uncategorizedColor, icon: "star" }),
+    );
+  });
+
+  it("does not autofocus a new task title but keeps editing focused", () => {
+    const props = {
+      open: true,
+      onClose: () => undefined,
+      onSave: () => undefined,
+      cal: "gregorian" as const,
+      lang: "en" as const,
+      t: (_fa: string, en: string) => en,
+    };
+    const newDraft = emptyTaskDraft("2026-09-19");
+    act(() => {
+      root.render(<TaskFormModal {...props} draft={newDraft} setDraft={() => undefined} />);
+    });
+    const title = document.body.querySelector<HTMLInputElement>(
+      'input[placeholder="e.g. Prepare the report"]',
+    )!;
+    expect(document.activeElement).not.toBe(title);
+
+    act(() => root.render(null));
+    act(() => {
+      root.render(
+        <TaskFormModal
+          {...props}
+          draft={{ ...newDraft, id: "task-1" }}
+          setDraft={() => undefined}
+        />,
+      );
+    });
+    expect(document.activeElement).toBe(
+      document.body.querySelector('input[placeholder="e.g. Prepare the report"]'),
     );
   });
 

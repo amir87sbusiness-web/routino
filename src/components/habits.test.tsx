@@ -1,4 +1,4 @@
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { draftToHabit, emptyDraft, HabitFormModal, HabitRow, habitToDraft } from "./habits";
@@ -175,5 +175,56 @@ describe("habit deadline draft compatibility", () => {
       );
     });
     expect(document.body.textContent).toContain("Deadline");
+  });
+});
+
+describe("HabitFormModal compact controls", () => {
+  let host: HTMLDivElement;
+  let root: Root;
+
+  beforeEach(() => {
+    host = document.createElement("div");
+    document.body.append(host);
+    root = createRoot(host);
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    host.remove();
+  });
+
+  it("keeps category required and renders localized weekdays in one seven-column row", () => {
+    function Harness() {
+      const [draft, setDraft] = useState(() => ({ ...emptyDraft(category.id), name: "Read" }));
+      return (
+        <HabitFormModal
+          open
+          onClose={() => undefined}
+          draft={draft}
+          setDraft={setDraft}
+          categories={[category]}
+          onSave={() => undefined}
+          lang="en"
+          t={(_fa, en) => en}
+        />
+      );
+    }
+    act(() => root.render(<Harness />));
+
+    const categoryButton = Array.from(document.body.querySelectorAll("button")).find(
+      (button) => button.textContent?.trim() === "Health",
+    )!;
+    act(() => categoryButton.click());
+    expect(categoryButton.getAttribute("aria-pressed")).toBe("true");
+    expect(document.body.textContent).not.toContain("Without category");
+
+    const weekdays = document.querySelector<HTMLElement>('[data-testid="habit-weekdays"]')!;
+    expect(weekdays.className).toContain("grid-cols-7");
+    expect(weekdays.querySelectorAll("button")).toHaveLength(7);
+    expect(
+      Array.from(weekdays.querySelectorAll("button")).map((button) => button.textContent),
+    ).toEqual(["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]);
+    expect(weekdays.querySelector('button[aria-label="Sunday"]')).not.toBeNull();
+    expect(weekdays.querySelector('button[title="Saturday"]')).not.toBeNull();
   });
 });
