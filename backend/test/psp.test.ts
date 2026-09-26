@@ -164,6 +164,16 @@ describe("ZarinPal adapter", () => {
     await expect(zarinpalPsp("m").verify("A000", 590_000)).resolves.toEqual({ kind, code });
   });
 
+  it("treats official -51 as terminal even when Verify returns HTTP 422", async () => {
+    mockFetch(
+      response({ data: [], errors: { code: -51, message: "payment unsuccessful" } }, 422),
+    );
+    await expect(zarinpalPsp("m").verify("A000", 590_000)).resolves.toEqual({
+      kind: "failed",
+      code: -51,
+    });
+  });
+
   it.each([
     ["HTTP failure", response({ error: "upstream" }, 503)],
     ["invalid JSON", new Response("not json", { status: 200 })],
