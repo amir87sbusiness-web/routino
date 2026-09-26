@@ -40,7 +40,7 @@ describe("WeekStrip settling", () => {
     expect(onSelect).toHaveBeenCalledWith("2026-09-05");
   });
 
-  it("keeps balanced day circles and narrow arrows separated on 320px phones", () => {
+  it("grows day circles from 351px without crowding narrow phones", () => {
     act(() => {
       root.render(
         <WeekStrip selected="2026-08-29" onSelect={() => undefined} cal="gregorian" lang="fa" />,
@@ -70,10 +70,14 @@ describe("WeekStrip settling", () => {
     expect(circle).not.toBeNull();
     expect(circle?.className).toContain("h-[38px]");
     expect(circle?.className).toContain("w-[38px]");
+    expect(circle?.className).toContain("min-[351px]:h-[42px]");
+    expect(circle?.className).toContain("min-[351px]:w-[42px]");
     expect(circle?.className).toContain("sm:h-12");
     const date = circle?.querySelector<HTMLElement>("span.z-10");
     expect(date?.className).toContain("h-[31px]");
     expect(date?.className).toContain("w-[31px]");
+    expect(date?.className).toContain("min-[351px]:h-[34px]");
+    expect(date?.className).toContain("min-[351px]:w-[34px]");
 
     const pageContentWidth = 288;
     const horizontalBleed = 24;
@@ -81,6 +85,12 @@ describe("WeekStrip settling", () => {
     const mobileCircleWidth = 38;
     expect(mobileCircleWidth * 7).toBeLessThanOrEqual(
       pageContentWidth + horizontalBleed - mobileArrowWidth * 2,
+    );
+
+    const breakpointContentWidth = 319;
+    const breakpointCircleWidth = 42;
+    expect(breakpointCircleWidth * 7).toBeLessThanOrEqual(
+      breakpointContentWidth + horizontalBleed - mobileArrowWidth * 2,
     );
   });
 

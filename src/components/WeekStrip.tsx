@@ -106,7 +106,7 @@ function WeekPanel({
               {weekdayShort(dow, lang)}
             </span>
 
-            <span className="relative flex h-[38px] w-[38px] items-center justify-center sm:h-12 sm:w-12">
+            <span className="relative flex h-[38px] w-[38px] items-center justify-center min-[351px]:h-[42px] min-[351px]:w-[42px] sm:h-12 sm:w-12">
               <svg
                 viewBox="0 0 48 48"
                 className="pointer-events-none absolute inset-0 z-20 h-full w-full -rotate-90"
@@ -134,7 +134,7 @@ function WeekPanel({
                 )}
               </svg>
               <span
-                className={`z-10 flex h-[31px] w-[31px] items-center justify-center rounded-full text-xs font-black transition-colors sm:h-9 sm:w-9 sm:text-base ${
+                className={`z-10 flex h-[31px] w-[31px] items-center justify-center rounded-full text-xs font-black transition-colors min-[351px]:h-[34px] min-[351px]:w-[34px] sm:h-9 sm:w-9 sm:text-base ${
                   emoji
                     ? "bg-transparent text-base"
                     : active
