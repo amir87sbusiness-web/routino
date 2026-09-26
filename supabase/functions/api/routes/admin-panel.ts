@@ -1,4 +1,4 @@
-/** Serves the admin panel at `/admin` and the dashboard-only sales trend feed. */
+/** Serves the admin panel at `/admin` and the dashboard analytics feed. */
 import { Hono } from "hono";
 import { html, type AppEnv, type Deps } from "../deps.ts";
 import { ADMIN_PAGE } from "../shared/lib/admin-page.ts";
@@ -26,8 +26,15 @@ export function adminPanelRoutes(deps: Deps) {
     if (!token) throw unauthorized("invalid_admin_session", "Admin session is required");
     await verifyAdminSession(deps.env, token, new Date(deps.now()));
 
-    const days = Number(c.req.query("days") ?? 30);
-    return c.json(await adminSalesTrend(deps.db, new Date(deps.now()), days));
+    const range = c.req.query("range");
+    const input = range
+      ? {
+          range,
+          customStart: c.req.query("customStart"),
+          customEnd: c.req.query("customEnd"),
+        }
+      : Number(c.req.query("days") ?? 30);
+    return c.json(await adminSalesTrend(deps.db, new Date(deps.now()), input));
   });
 
   return r;
