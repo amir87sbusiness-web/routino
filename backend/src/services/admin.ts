@@ -194,13 +194,17 @@ export async function adminOverview(db: Database, now: Date) {
       rawDaily = [];
     }
   }
-  const daily: DailyPoint[] = rawDaily.map((point: Record<string, unknown>) => ({
-    date: String(point.date ?? ""),
-    newUsers: metric(point.newUsers as number | string | bigint | undefined),
-    paidPayments: metric(point.paidPayments as number | string | bigint | undefined),
-    revenueToman: metric(point.revenueToman as number | string | bigint | undefined),
-    otpSent: metric(point.otpSent as number | string | bigint | undefined),
-  }));
+  const daily: DailyPoint[] = rawDaily.map((point) => {
+    const value =
+      point && typeof point === "object" ? (point as Record<string, unknown>) : {};
+    return {
+      date: String(value.date ?? ""),
+      newUsers: metric(value.newUsers as number | string | bigint | undefined),
+      paidPayments: metric(value.paidPayments as number | string | bigint | undefined),
+      revenueToman: metric(value.revenueToman as number | string | bigint | undefined),
+      otpSent: metric(value.otpSent as number | string | bigint | undefined),
+    };
+  });
 
   return {
     users: { total: metric(row?.total_users), last24h: metric(row?.new_users) },
