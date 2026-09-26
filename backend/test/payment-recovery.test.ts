@@ -173,7 +173,7 @@ describe("a payment whose callback never came back", () => {
       const { paymentId, authority } = await checkout(access);
       // At 30 minutes the provider checkout can still be valid. Do not call the
       // transaction failed just because Verify is still returning an ambiguous
-      // -51/-55 response.
+      // -55 response.
       await h.raw(`
         update payments
            set status='verifying', psp_result=${providerCode},
