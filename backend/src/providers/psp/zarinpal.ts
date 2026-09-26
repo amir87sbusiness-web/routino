@@ -132,9 +132,9 @@ export function zarinpalPsp(
       if (code === 100) return { kind: "paid", code: 100, ...successDetails };
       if (code === 101) return { kind: "already_verified", code: 101, ...successDetails };
 
-      // Provider answers that can represent an incomplete/racing payment stay
-      // recoverable. -55 is kept retryable like Sheetra's hardened flow because
-      // ZarinPal can briefly report transaction-not-found around callback races.
+      // ZarinPal documents -51 as an explicit unsuccessful payment, so it is
+      // terminal. -55/-12 are not proof that money failed to move and remain
+      // recoverable; authoritative unVerified/inquiry can still settle them.
       if (code === -51) return { kind: "failed", code };
       if (code === -55 || code === -12) return { kind: "pending", code };
       if (code === -52) return { kind: "unknown", code };
