@@ -143,6 +143,12 @@ describe("admin endpoints", () => {
     expect(body.activeSubscriptions).toBe(1);
     expect(body.payments.paidTotal).toBe(1);
     expect(body.payments.revenueToman).toBe(149000);
+    expect(body.daily).toHaveLength(90);
+    expect(body.daily.at(-1)).toMatchObject({
+      newUsers: 1,
+      paidPayments: 1,
+      revenueToman: 149000,
+    });
     expect(user.id).toBeTruthy();
   });
 
