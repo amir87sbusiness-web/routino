@@ -169,7 +169,7 @@ describe("a payment whose callback never came back", () => {
   it.each([-55])(
     "keeps provider code %i recoverable through the 30-minute gateway window, then reviews it without losing authoritative recovery",
     async (providerCode) => {
-      const { access } = await signIn(providerCode === -51 ? "09121110008" : "09121110010");
+      const { access } = await signIn("09121110010");
       const { paymentId, authority } = await checkout(access);
       // At 30 minutes the provider checkout can still be valid. Do not call the
       // transaction failed just because Verify is still returning an ambiguous
