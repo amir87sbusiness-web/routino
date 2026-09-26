@@ -142,6 +142,17 @@ function safeOverview(value) {
     },
     alerts: { verifyFailed: value.alerts.verifyFailed },
     otpSentLast24h: value.otpSentLast24h,
+    daily: Array.isArray(value.daily) ? value.daily.filter((point) =>
+      point && typeof point.date === "string" &&
+      finiteMetric(point.newUsers) && finiteMetric(point.paidPayments) &&
+      finiteMetric(point.revenueToman) && finiteMetric(point.otpSent)
+    ).map((point) => ({
+      date: point.date,
+      newUsers: point.newUsers,
+      paidPayments: point.paidPayments,
+      revenueToman: point.revenueToman,
+      otpSent: point.otpSent,
+    })) : [],
     serverTime: value.serverTime,
   };
 }
