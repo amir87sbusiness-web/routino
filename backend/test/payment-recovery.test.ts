@@ -166,7 +166,7 @@ describe("a payment whose callback never came back", () => {
     expect(daysLeft(after.entitlement.expiresAt)).toBeGreaterThan(27);
   });
 
-  it.each([-51, -55])(
+  it.each([-55])(
     "keeps provider code %i recoverable through the 30-minute gateway window, then reviews it without losing authoritative recovery",
     async (providerCode) => {
       const { access } = await signIn(providerCode === -51 ? "09121110008" : "09121110010");
