@@ -134,10 +134,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     if (!phone) throw badRequest("invalid_phone", "Enter a valid Iranian mobile number");
 
     if (intent && (!newPassword || !validatePassword(newPassword).ok)) {
-      throw badRequest(
-        "weak_password",
-        "Password must be 8–128 characters",
-      );
+      throw badRequest("weak_password", "Password must be 8–128 characters");
     }
 
     const t = now();
@@ -311,10 +308,7 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       }
     }
     if (!validatePassword(newPassword).ok) {
-      throw badRequest(
-        "weak_password",
-        "Password must be 8–128 characters",
-      );
+      throw badRequest("weak_password", "Password must be 8–128 characters");
     }
 
     await db

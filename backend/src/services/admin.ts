@@ -266,10 +266,7 @@ export async function adminSetPassword(
   const phone = normalizePhone(body.phone);
   if (!phone) throw badRequest("invalid_phone", "Enter a valid Iranian mobile number");
   if (!validatePassword(body.password).ok) {
-    throw badRequest(
-      "weak_password",
-      "Password must be 8–128 characters",
-    );
+    throw badRequest("weak_password", "Password must be 8–128 characters");
   }
 
   const passwordHash = await hashPassword(body.password);

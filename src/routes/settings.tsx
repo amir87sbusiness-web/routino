@@ -977,6 +977,8 @@ function PwInput({
         autoCapitalize="none"
         autoCorrect="off"
         spellCheck={false}
+        minLength={8}
+        maxLength={128}
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -1049,10 +1051,7 @@ function AccountCard() {
       case "wrong_password":
         return t("رمز عبور فعلی اشتباهه.", "Current password is wrong.");
       case "weak_password":
-        return t(
-          "رمز باید حداقل ۸ کاراکتر و شامل حرف و عدد باشه.",
-          "Password must be 8+ chars with a letter and a digit.",
-        );
+        return t("رمز باید بین ۸ تا ۱۲۸ کاراکتر باشه.", "Password must be 8–128 characters.");
       case "rate_limited":
         return t(
           "تلاش زیاد بود. کمی بعد دوباره امتحان کن.",
@@ -1215,8 +1214,8 @@ function AccountCard() {
             </p>
             <p className="text-[11px] leading-5 text-muted-foreground">
               {t(
-                "رمز باید حداقل ۸ کاراکتر و شامل حرف و عدد باشه. برای دیدن رمز روی آیکون چشم بزن.",
-                "Password must be 8+ characters with a letter and a digit. Tap the eye to reveal it.",
+                "رمز باید بین ۸ تا ۱۲۸ کاراکتر باشه و می‌تونه فقط عدد یا فقط حروف باشه. برای دیدن رمز روی آیکون چشم بزن.",
+                "Password must be 8–128 characters and may use only digits or only letters. Tap the eye to reveal it.",
               )}
             </p>
             {account?.hasPassword && (

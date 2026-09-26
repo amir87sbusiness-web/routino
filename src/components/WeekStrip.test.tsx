@@ -76,6 +76,28 @@ describe("WeekStrip settling", () => {
     );
   });
 
+  it("renders a filled progress arc for all seven days in the visible week", () => {
+    act(() => {
+      root.render(
+        <WeekStrip
+          selected="2026-08-29"
+          onSelect={() => undefined}
+          cal="gregorian"
+          lang="fa"
+          percentFor={() => 50}
+        />,
+      );
+    });
+
+    const panels = host.querySelectorAll<HTMLDivElement>("div.grid.grid-cols-7");
+    expect(panels).toHaveLength(3);
+    const progressArcs = panels[1]!.querySelectorAll('circle[stroke-linecap="round"]');
+    expect(progressArcs).toHaveLength(7);
+    for (const arc of progressArcs) {
+      expect(arc.getAttribute("stroke-dasharray")).toMatch(/^59\.69/);
+    }
+  });
+
   it("suppresses a day click until arrow paging has settled", () => {
     const onSelect = vi.fn();
     act(() => {

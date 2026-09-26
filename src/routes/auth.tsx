@@ -66,10 +66,7 @@ function AuthPage() {
       case "bad_code":
         return t("کد اشتباهه یا منقضی شده.", "The code is wrong or has expired.");
       case "weak_password":
-        return t(
-          "رمز باید بین ۸ تا ۱۲۸ کاراکتر باشد.",
-          "Password must be 8–128 characters.",
-        );
+        return t("رمز باید بین ۸ تا ۱۲۸ کاراکتر باشد.", "Password must be 8–128 characters.");
     }
     // A gateway failure returns no JSON body, so `err.message` falls back to the
     // bare status line and the user was shown the literal text "HTTP 502" — in
