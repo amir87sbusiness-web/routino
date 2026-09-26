@@ -166,14 +166,14 @@ describe("a payment whose callback never came back", () => {
     expect(daysLeft(after.entitlement.expiresAt)).toBeGreaterThan(27);
   });
 
-  it.each([-51, -55])(
+  it.each([-55])(
     "keeps provider code %i recoverable through the 30-minute gateway window, then reviews it without losing authoritative recovery",
     async (providerCode) => {
-      const { access } = await signIn(providerCode === -51 ? "09121110008" : "09121110010");
+      const { access } = await signIn("09121110010");
       const { paymentId, authority } = await checkout(access);
       // At 30 minutes the provider checkout can still be valid. Do not call the
       // transaction failed just because Verify is still returning an ambiguous
-      // -51/-55 response.
+      // -55 response.
       await h.raw(`
         update payments
            set status='verifying', psp_result=${providerCode},

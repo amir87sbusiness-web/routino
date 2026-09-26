@@ -150,7 +150,7 @@ describe("ZarinPal adapter", () => {
   });
 
   it.each([
-    [-51, "pending"],
+    [-51, "failed"],
     [-55, "pending"],
     [-12, "pending"],
     [-52, "unknown"],
@@ -162,6 +162,14 @@ describe("ZarinPal adapter", () => {
   ] as const)("classifies verify code %i as %s", async (code, kind) => {
     mockFetch(response({ data: [], errors: { code, message: "safe provider message" } }));
     await expect(zarinpalPsp("m").verify("A000", 590_000)).resolves.toEqual({ kind, code });
+  });
+
+  it("treats official -51 as terminal even when Verify returns HTTP 422", async () => {
+    mockFetch(response({ data: [], errors: { code: -51, message: "payment unsuccessful" } }, 422));
+    await expect(zarinpalPsp("m").verify("A000", 590_000)).resolves.toEqual({
+      kind: "failed",
+      code: -51,
+    });
   });
 
   it.each([
