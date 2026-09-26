@@ -184,19 +184,17 @@ export async function adminOverview(db: Database, now: Date) {
   const row = rowsOf<AggregateRow>(result)[0];
   const metric = (value: number | string | bigint | undefined) => Number(value ?? 0);
   const dailyValue = row?.daily;
-  const rawDaily =
-    Array.isArray(dailyValue)
-      ? dailyValue
-      : typeof dailyValue === "string"
-        ? (() => {
-            try {
-              const parsed: unknown = JSON.parse(dailyValue);
-              return Array.isArray(parsed) ? parsed : [];
-            } catch {
-              return [];
-            }
-          })()
-        : [];
+  let rawDaily: unknown[] = [];
+  if (Array.isArray(dailyValue)) {
+    rawDaily = dailyValue;
+  } else if (typeof dailyValue === "string") {
+    try {
+      const parsed: unknown = JSON.parse(dailyValue);
+      rawDaily = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      rawDaily = [];
+    }
+  }
   const daily: DailyPoint[] = rawDaily.map((point: Record<string, unknown>) => ({
     date: String(point.date ?? ""),
     newUsers: metric(point.newUsers as number | string | bigint | undefined),
