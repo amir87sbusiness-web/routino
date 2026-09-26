@@ -40,7 +40,7 @@ describe("WeekStrip settling", () => {
     expect(onSelect).toHaveBeenCalledWith("2026-09-05");
   });
 
-  it("keeps day cells compact on phones while showing arrow controls from sm upward", () => {
+  it("keeps compact arrow controls and progress rings separated on 320px phones", () => {
     act(() => {
       root.render(
         <WeekStrip selected="2026-08-29" onSelect={() => undefined} cal="gregorian" lang="fa" />,
@@ -50,8 +50,10 @@ describe("WeekStrip settling", () => {
     for (const arrow of host.querySelectorAll<HTMLButtonElement>(
       '[aria-label="prev-week"], [aria-label="next-week"]',
     )) {
-      expect(arrow.className).toContain("hidden");
-      expect(arrow.className).toContain("sm:inline-flex");
+      expect(arrow.className).toContain("inline-flex");
+      expect(arrow.className).toContain("w-6");
+      expect(arrow.className).toContain("p-0");
+      expect(arrow.className).not.toContain("hidden");
     }
 
     const panels = host.querySelectorAll<HTMLDivElement>('div[dir="rtl"]');
@@ -63,12 +65,15 @@ describe("WeekStrip settling", () => {
     expect(day?.className).toContain("min-w-0");
     const circle = day?.querySelector<HTMLElement>("span.relative");
     expect(circle).not.toBeNull();
-    expect(circle?.className).toContain("h-9");
+    expect(circle?.className).toContain("h-8");
     expect(circle?.className).toContain("sm:h-12");
     const mobileContentWidth = 288;
-    const mobileCircleWidth = 36;
+    const mobileArrowWidth = 24;
+    const mobileCircleWidth = 32;
     const mobileGap = 2;
-    expect(mobileCircleWidth * 7 + mobileGap * 6).toBeLessThanOrEqual(mobileContentWidth - 16);
+    expect(mobileCircleWidth * 7 + mobileGap * 6).toBeLessThanOrEqual(
+      mobileContentWidth - mobileArrowWidth * 2,
+    );
   });
 
   it("suppresses a day click until arrow paging has settled", () => {

@@ -106,7 +106,7 @@ function WeekPanel({
               {weekdayShort(dow, lang)}
             </span>
 
-            <span className="relative flex h-9 w-9 items-center justify-center sm:h-12 sm:w-12">
+            <span className="relative flex h-8 w-8 items-center justify-center sm:h-12 sm:w-12">
               <svg viewBox="0 0 48 48" className="absolute inset-0 h-full w-full -rotate-90">
                 <circle
                   cx="24"
@@ -131,7 +131,7 @@ function WeekPanel({
                 )}
               </svg>
               <span
-                className={`z-10 flex h-8 w-8 items-center justify-center rounded-full text-sm font-black transition-colors sm:h-9 sm:w-9 sm:text-base ${
+                className={`z-10 flex h-7 w-7 items-center justify-center rounded-full text-xs font-black transition-colors sm:h-9 sm:w-9 sm:text-base ${
                   emoji
                     ? "bg-transparent text-base"
                     : active
@@ -283,14 +283,14 @@ export function WeekStrip(props: WeekStripProps) {
   };
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-0 sm:gap-1">
       <button
         onClick={() => settle(-1)}
-        className="hidden shrink-0 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-secondary sm:inline-flex"
+        className="inline-flex h-9 w-6 shrink-0 items-center justify-center rounded-full p-0 text-muted-foreground transition-colors hover:bg-secondary sm:h-auto sm:w-auto sm:p-1.5"
         aria-label="prev-week"
       >
-        <ChevronRight className="h-4 w-4 ltr:hidden" />
-        <ChevronLeft className="h-4 w-4 rtl:hidden" />
+        <ChevronRight className="h-3.5 w-3.5 ltr:hidden sm:h-4 sm:w-4" />
+        <ChevronLeft className="h-3.5 w-3.5 rtl:hidden sm:h-4 sm:w-4" />
       </button>
 
       <div
@@ -319,11 +319,11 @@ export function WeekStrip(props: WeekStripProps) {
 
       <button
         onClick={() => settle(1)}
-        className="hidden shrink-0 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-secondary sm:inline-flex"
+        className="inline-flex h-9 w-6 shrink-0 items-center justify-center rounded-full p-0 text-muted-foreground transition-colors hover:bg-secondary sm:h-auto sm:w-auto sm:p-1.5"
         aria-label="next-week"
       >
-        <ChevronLeft className="h-4 w-4 ltr:hidden" />
-        <ChevronRight className="h-4 w-4 rtl:hidden" />
+        <ChevronLeft className="h-3.5 w-3.5 ltr:hidden sm:h-4 sm:w-4" />
+        <ChevronRight className="h-3.5 w-3.5 rtl:hidden sm:h-4 sm:w-4" />
       </button>
     </div>
   );
