@@ -58,10 +58,9 @@ export async function adminOverview(db: Database, now: Date) {
     daily: unknown;
   };
 
-  // One database round-trip serves the whole dashboard. The 90-day series is
-  // bucketed in Postgres by Tehran calendar day, so "today" always starts at
-  // 00:00 Asia/Tehran instead of being a rolling 24-hour window. Recent series
-  // reads are bounded and use the existing created_at/status indexes.
+  // One database round-trip serves the whole dashboard. Users and payments are
+  // rolled up by Tehran calendar day in their existing full-table aggregate
+  // pass, while OTP history is bounded to the 90 days the UI can display.
   const result = await db.execute(sql`
     with bounds as (
       select
@@ -72,23 +71,19 @@ export async function adminOverview(db: Database, now: Date) {
           date_trunc('day', ${nowIso}::timestamptz at time zone 'Asia/Tehran')
           at time zone 'Asia/Tehran'
         ) - interval '89 days' as trend_start
-    ), user_stats as (
-      select
-        count(*) as total_users,
-        count(*) filter (
-          where ${users.createdAt} > b.day_ago
-        ) as new_users
-      from ${users}
-      cross join bounds b
-    ), user_daily as (
+    ), user_rollup as (
       select
         (${users.createdAt} at time zone 'Asia/Tehran')::date as day,
-        count(*) as new_users
+        count(*) as user_count,
+        count(*) filter (where ${users.createdAt} > b.day_ago) as last_24h_count
       from ${users}
       cross join bounds b
-      where ${users.createdAt} >= b.trend_start
-        and ${users.createdAt} <= b.now_at
       group by 1
+    ), user_stats as (
+      select
+        coalesce(sum(user_count), 0) as total_users,
+        coalesce(sum(last_24h_count), 0) as new_users
+      from user_rollup
     ), subscription_stats as (
       select count(*) filter (
         where ${entitlements.expiresAt} > ${nowIso}::timestamptz
@@ -111,9 +106,14 @@ export async function adminOverview(db: Database, now: Date) {
         where ${anonymousCounters.key} = ${"trial_starts"}
       ), 0) as trial_starts
       from ${anonymousCounters}
-    ), payment_stats as (
+    ), payment_rollup as (
       select
-        count(*) filter (where ${payments.status} = ${"paid"}) as paid_total,
+        case
+          when ${payments.status} = ${"paid"}
+            then (coalesce(${payments.appliedAt}, ${payments.createdAt}) at time zone 'Asia/Tehran')::date
+          else null
+        end as day,
+        count(*) filter (where ${payments.status} = ${"paid"}) as paid_count,
         coalesce(sum(${payments.amountToman}) filter (
           where ${payments.status} = ${"paid"}
         ), 0) as revenue_toman,
@@ -129,17 +129,16 @@ export async function adminOverview(db: Database, now: Date) {
         count(*) filter (where ${payments.status} = ${"verify_failed"}) as verify_failed
       from ${payments}
       cross join bounds b
-    ), payment_daily as (
-      select
-        (coalesce(${payments.appliedAt}, ${payments.createdAt}) at time zone 'Asia/Tehran')::date as day,
-        count(*) as paid_payments,
-        coalesce(sum(${payments.amountToman}), 0) as revenue_toman
-      from ${payments}
-      cross join bounds b
-      where ${payments.status} = ${"paid"}
-        and coalesce(${payments.appliedAt}, ${payments.createdAt}) >= b.trend_start
-        and coalesce(${payments.appliedAt}, ${payments.createdAt}) <= b.now_at
       group by 1
+    ), payment_stats as (
+      select
+        coalesce(sum(paid_count), 0) as paid_total,
+        coalesce(sum(revenue_toman), 0) as revenue_toman,
+        coalesce(sum(paid_last_24h), 0) as paid_last_24h,
+        coalesce(sum(revenue_toman_last_24h), 0) as revenue_toman_last_24h,
+        coalesce(sum(pending), 0) as pending,
+        coalesce(sum(verify_failed), 0) as verify_failed
+      from payment_rollup
     ), otp_daily as (
       select
         (${otpCodes.createdAt} at time zone 'Asia/Tehran')::date as day,
@@ -165,8 +164,8 @@ export async function adminOverview(db: Database, now: Date) {
         jsonb_agg(
           jsonb_build_object(
             'date', to_char(c.day, 'YYYY-MM-DD'),
-            'newUsers', coalesce(u.new_users, 0),
-            'paidPayments', coalesce(p.paid_payments, 0),
+            'newUsers', coalesce(u.user_count, 0),
+            'paidPayments', coalesce(p.paid_count, 0),
             'revenueToman', coalesce(p.revenue_toman, 0),
             'otpSent', coalesce(o.otp_sent, 0)
           )
@@ -175,8 +174,8 @@ export async function adminOverview(db: Database, now: Date) {
         '[]'::jsonb
       ) as daily
       from calendar c
-      left join user_daily u on u.day = c.day
-      left join payment_daily p on p.day = c.day
+      left join user_rollup u on u.day = c.day
+      left join payment_rollup p on p.day = c.day
       left join otp_daily o on o.day = c.day
     )
     select *
@@ -184,13 +183,14 @@ export async function adminOverview(db: Database, now: Date) {
   `);
   const row = rowsOf<AggregateRow>(result)[0];
   const metric = (value: number | string | bigint | undefined) => Number(value ?? 0);
+  const dailyValue = row?.daily;
   const rawDaily =
-    Array.isArray(row?.daily)
-      ? row.daily
-      : typeof row?.daily === "string"
+    Array.isArray(dailyValue)
+      ? dailyValue
+      : typeof dailyValue === "string"
         ? (() => {
             try {
-              const parsed = JSON.parse(row.daily);
+              const parsed: unknown = JSON.parse(dailyValue);
               return Array.isArray(parsed) ? parsed : [];
             } catch {
               return [];
