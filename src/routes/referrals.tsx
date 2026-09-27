@@ -39,6 +39,14 @@ function errorCopy(error: unknown, t: (fa: string, en: string) => string): strin
       "این حساب امکان ثبت کد دعوت ندارد.",
       "This account cannot claim a referral code.",
     ],
+    not_signed_in: [
+      "نشست حساب منقضی شده؛ دوباره وارد حساب شو.",
+      "Your session expired. Sign in again.",
+    ],
+    session_changed: [
+      "حساب فعال تغییر کرده؛ دوباره وارد حساب شو.",
+      "The active account changed. Sign in again.",
+    ],
     offline: ["اتصال اینترنت رو بررسی کن و دوباره تلاش کن.", "Check your connection and retry."],
   };
   const copy = messages[code] ?? messages.offline!;
@@ -88,7 +96,9 @@ function ReferralsPage() {
         setSummary(await ensureReferralSummaryCached(userId));
       }
     } catch (error) {
-      if (!forceRefresh) setLoadError(errorCopy(error, ctx.t));
+      const message = errorCopy(error, ctx.t);
+      if (forceRefresh) toast.error(message);
+      else setLoadError(message);
     } finally {
       setLoading(false);
       if (forceRefresh && generation === refreshGeneration.current) {

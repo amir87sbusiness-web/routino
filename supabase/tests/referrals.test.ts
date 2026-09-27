@@ -15,9 +15,27 @@ afterAll(async () => {
 describe("referral routes — Edge adapter", () => {
   it("requires authentication", async () => {
     expect((await h.call("GET", "/v1/referrals/me")).status).toBe(401);
+    expect((await h.call("POST", "/v1/referrals/me/refresh")).status).toBe(401);
     expect((await h.call("POST", "/v1/referrals/claim", { body: { code: "ABCDEF" } })).status).toBe(
       401,
     );
+  });
+
+  it("refreshes the summary and entitlement through a non-cacheable POST", async () => {
+    const user = await signIn(h, "09125550006");
+    const response = await h.call("POST", "/v1/referrals/me/refresh", {
+      headers: auth(user.access),
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(await response.json()).toMatchObject({
+      referralCode: expect.stringMatching(/^[A-Z]{6}$/),
+      rewardDays: 7,
+      successfulInvites: 0,
+      earnedDays: 0,
+      entitlement: { status: "none", planId: null },
+    });
   });
 
   it("returns the canonical summary and current entitlement without PII", async () => {

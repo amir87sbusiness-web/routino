@@ -9,7 +9,10 @@ const claimBody = z.object({ code: z.string() });
 export const referralRoutes: FastifyPluginAsync = async (app) => {
   const { db } = app.deps;
 
-  app.get("/referrals/me", { preHandler: app.authenticate }, async (req, reply) => {
+  const readSnapshot = async (
+    req: Parameters<typeof requireUser>[0],
+    reply: { header: (name: string, value: string) => unknown },
+  ) => {
     reply.header("cache-control", "no-store");
     const user = requireUser(req);
     const now = new Date(app.deps.now());
@@ -18,7 +21,10 @@ export const referralRoutes: FastifyPluginAsync = async (app) => {
       readEntitlement(db, user.id, now),
     ]);
     return { ...referral, entitlement };
-  });
+  };
+
+  app.get("/referrals/me", { preHandler: app.authenticate }, readSnapshot);
+  app.post("/referrals/me/refresh", { preHandler: app.authenticate }, readSnapshot);
 
   app.post("/referrals/claim", { preHandler: app.authenticate }, async (req) => {
     const { code } = claimBody.parse(req.body);

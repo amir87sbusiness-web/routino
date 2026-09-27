@@ -141,7 +141,7 @@ describe("referrals page", () => {
     expect(host.textContent).toContain("۲۱");
   });
 
-  it("keeps cached stats without showing an error when refresh fails", async () => {
+  it("keeps cached stats and shows an error when refresh fails", async () => {
     api.queueReferralSummaryRefresh.mockRejectedValue(new Error("offline"));
     const refresh = [...host.querySelectorAll("button")].find((button) =>
       button.textContent?.includes("به‌روزرسانی آمار"),
@@ -149,7 +149,7 @@ describe("referrals page", () => {
 
     await act(async () => refresh.click());
 
-    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.error).toHaveBeenCalledWith("اتصال اینترنت رو بررسی کن و دوباره تلاش کن.");
     expect(host.textContent).toContain("۱۴");
   });
 

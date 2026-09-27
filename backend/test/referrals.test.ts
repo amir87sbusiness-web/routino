@@ -28,6 +28,9 @@ const authorized = (access: string) => ({ authorization: `Bearer ${access}` });
 const getSnapshot = (access: string) =>
   h.app.inject({ method: "GET", url: "/v1/referrals/me", headers: authorized(access) });
 
+const refreshSnapshot = (access: string) =>
+  h.app.inject({ method: "POST", url: "/v1/referrals/me/refresh", headers: authorized(access) });
+
 const getSummary = async (access: string) => {
   const response = await getSnapshot(access);
   return { json: () => response.json() };
@@ -45,6 +48,9 @@ describe("referral routes", () => {
   it("requires authentication without disclosing referral data", async () => {
     expect((await h.app.inject({ method: "GET", url: "/v1/referrals/me" })).statusCode).toBe(401);
     expect(
+      (await h.app.inject({ method: "POST", url: "/v1/referrals/me/refresh" })).statusCode,
+    ).toBe(401);
+    expect(
       (
         await h.app.inject({
           method: "POST",
@@ -53,6 +59,21 @@ describe("referral routes", () => {
         })
       ).statusCode,
     ).toBe(401);
+  });
+
+  it("refreshes the canonical summary and entitlement through a non-cacheable POST", async () => {
+    const { access } = await signIn("09121110023");
+    const response = await refreshSnapshot(access);
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.json()).toMatchObject({
+      referralCode: expect.stringMatching(/^[A-Z]{6}$/),
+      rewardDays: 7,
+      successfulInvites: 0,
+      earnedDays: 0,
+      entitlement: { status: "none", planId: null },
+    });
   });
 
   it("returns the canonical referral summary and current entitlement in one request", async () => {

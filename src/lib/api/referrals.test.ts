@@ -45,7 +45,8 @@ describe("referrals API", () => {
     auth.authedRequest.mockResolvedValue(snapshot);
     expect(await fetchReferralSummary("user-1")).toEqual(snapshot);
     expect(auth.authedRequest).toHaveBeenCalledOnce();
-    expect(auth.authedRequest).toHaveBeenCalledWith("/referrals/me", {
+    expect(auth.authedRequest).toHaveBeenCalledWith("/referrals/me/refresh", {
+      method: "POST",
       expectedUserId: "user-1",
       cache: "no-store",
     });

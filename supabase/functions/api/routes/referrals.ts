@@ -10,7 +10,7 @@ export function referralRoutes(deps: Deps) {
   const r = new Hono<AppEnv>();
   const auth = makeAuthenticate(deps);
 
-  r.get("/referrals/me", auth, async (c) => {
+  const readSnapshot = async (c: Parameters<typeof requireUser>[0]) => {
     c.header("cache-control", "no-store");
     const user = requireUser(c);
     const now = new Date(deps.now());
@@ -19,7 +19,10 @@ export function referralRoutes(deps: Deps) {
       readEntitlement(deps.db, user.id, now),
     ]);
     return c.json({ ...referral, entitlement });
-  });
+  };
+
+  r.get("/referrals/me", auth, readSnapshot);
+  r.post("/referrals/me/refresh", auth, readSnapshot);
 
   r.post("/referrals/claim", auth, async (c) => {
     const { code } = claimBody.parse(await readJson(c));

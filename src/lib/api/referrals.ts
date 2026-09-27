@@ -95,7 +95,8 @@ export function normalizeReferralCode(value: string): string {
 export function refreshReferralSummary(expectedUserId: string): Promise<ReferralSnapshot> {
   const active = refreshes.get(expectedUserId);
   if (active) return active;
-  const request = authedRequest<ReferralSnapshot>("/referrals/me", {
+  const request = authedRequest<ReferralSnapshot>("/referrals/me/refresh", {
+    method: "POST",
     expectedUserId,
     cache: "no-store",
   })
