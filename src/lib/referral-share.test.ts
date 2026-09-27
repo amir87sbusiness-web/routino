@@ -24,6 +24,7 @@ describe("referral sharing", () => {
     share.mockResolvedValue(undefined);
     await expect(shareReferralCode("ABCDEF", "Join")).resolves.toBe("shared");
     expect(share).toHaveBeenCalledOnce();
+    expect(share).toHaveBeenCalledWith(expect.objectContaining({ url: "https://routino.me" }));
     expect(writeText).not.toHaveBeenCalled();
   });
 
@@ -31,7 +32,8 @@ describe("referral sharing", () => {
     Object.defineProperty(navigator, "share", { configurable: true, value: undefined });
     writeText.mockResolvedValue(undefined);
     await expect(shareReferralCode("ABCDEF", "Join")).resolves.toBe("copied");
-    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("ABCDEF"));
+    expect(writeText).toHaveBeenCalledWith("Join\nABCDEF\nhttps://routino.me");
+    expect(writeText).not.toHaveBeenCalledWith(expect.stringContaining("/app"));
   });
 
   it("does not fall back after the user cancels sharing", async () => {

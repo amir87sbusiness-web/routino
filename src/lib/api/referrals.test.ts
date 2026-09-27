@@ -8,6 +8,7 @@ import {
   ensureReferralSummaryCached,
   fetchReferralSummary,
   normalizeReferralCode,
+  queueReferralSummaryRefresh,
   readCachedReferralSummary,
   refreshReferralSummary,
 } from "./referrals";
@@ -22,6 +23,7 @@ const eligible = {
 
 describe("referrals API", () => {
   beforeEach(() => {
+    vi.useRealTimers();
     auth.authedRequest.mockReset();
     localStorage.clear();
   });
@@ -48,6 +50,20 @@ describe("referrals API", () => {
     expect(await ensureReferralSummaryCached("user-1")).toEqual(eligible);
     expect(auth.authedRequest).not.toHaveBeenCalled();
     expect(readCachedReferralSummary("user-2")).toBeNull();
+  });
+
+  it("coalesces repeated refresh requests into one request after one minute", async () => {
+    vi.useFakeTimers();
+    auth.authedRequest.mockResolvedValue(eligible);
+
+    const refreshes = Array.from({ length: 10 }, () => queueReferralSummaryRefresh("user-1"));
+
+    expect(auth.authedRequest).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(59_999);
+    expect(auth.authedRequest).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(Promise.all(refreshes)).resolves.toEqual(Array(10).fill(eligible));
+    expect(auth.authedRequest).toHaveBeenCalledOnce();
   });
 
   it("ignores a corrupt cached summary", () => {

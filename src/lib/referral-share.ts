@@ -1,6 +1,6 @@
 import { Capacitor } from "@capacitor/core";
 
-export const ROUTINO_APP_URL = "https://routino.me/app/";
+export const ROUTINO_APP_URL = "https://routino.me";
 
 export type ReferralShareResult = "shared" | "copied" | "canceled";
 

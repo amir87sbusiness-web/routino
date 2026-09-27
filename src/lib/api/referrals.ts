@@ -2,6 +2,8 @@ import { authedRequest } from "./auth";
 
 const REFERRAL_CACHE_PREFIX = "routino:referrals:v1:";
 const refreshes = new Map<string, Promise<ReferralSummary>>();
+const queuedRefreshes = new Map<string, Promise<ReferralSummary>>();
+const REFERRAL_REFRESH_DELAY_MS = 60_000;
 
 export type ReferralClaimState =
   | { status: "eligible" }
@@ -90,6 +92,20 @@ export function refreshReferralSummary(expectedUserId: string): Promise<Referral
     .then((summary) => cacheReferralSummary(expectedUserId, summary))
     .finally(() => refreshes.delete(expectedUserId));
   refreshes.set(expectedUserId, request);
+  return request;
+}
+
+export function queueReferralSummaryRefresh(expectedUserId: string): Promise<ReferralSummary> {
+  const queued = queuedRefreshes.get(expectedUserId);
+  if (queued) return queued;
+
+  const request = new Promise<ReferralSummary>((resolve, reject) => {
+    setTimeout(() => {
+      void refreshReferralSummary(expectedUserId).then(resolve, reject);
+    }, REFERRAL_REFRESH_DELAY_MS);
+  }).finally(() => queuedRefreshes.delete(expectedUserId));
+
+  queuedRefreshes.set(expectedUserId, request);
   return request;
 }
 

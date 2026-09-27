@@ -9,8 +9,8 @@ import {
   claimReferralCode,
   ensureReferralSummaryCached,
   normalizeReferralCode,
+  queueReferralSummaryRefresh,
   readCachedReferralSummary,
-  refreshReferralSummary,
   type ReferralSummary,
 } from "@/lib/api/referrals";
 import { shareReferralCode } from "@/lib/referral-share";
@@ -67,7 +67,7 @@ function ReferralsPage() {
     try {
       setSummary(
         forceRefresh
-          ? await refreshReferralSummary(userId)
+          ? await queueReferralSummaryRefresh(userId)
           : await ensureReferralSummaryCached(userId),
       );
     } catch (error) {
@@ -147,36 +147,21 @@ function ReferralsPage() {
   };
 
   const claimState = summary?.claimState;
-  const ineligibleCopy =
-    claimState?.status === "ineligible"
-      ? claimState.reason === "account_predates_program"
-        ? t(
-            "ثبت کد دعوت برای حساب‌هایی که قبل از شروع این برنامه ساخته شده‌اند فعال نیست.",
-            "Referral claims are unavailable for accounts created before this program began.",
-          )
-        : t(
-            "بعد از اولین خرید، امکان ثبت کد دعوت وجود ندارد.",
-            "A referral code cannot be claimed after the first purchase.",
-          )
-      : null;
 
   return (
     <div className="page-stagger mx-auto flex max-w-xl flex-col gap-4 pb-20 lg:pb-0">
       <section className="overflow-hidden rounded-3xl border border-primary/20 bg-primary-soft px-5 py-7 text-foreground shadow-sm sm:px-8 sm:py-9">
         <Gift className="mb-5 h-9 w-9 text-primary" aria-hidden="true" />
-        <h1 className="max-w-md text-2xl font-black leading-9 sm:text-3xl">
-          {t("یک هفته هدیه برای هر دعوت موفق", "A free week for every successful referral")}
+        <h1 className="whitespace-nowrap text-[clamp(1.05rem,5.4vw,1.5rem)] font-black leading-8 sm:text-3xl sm:leading-10">
+          {t("یک هفته هدیه با هر دعوت موفق", "A free week per referral")}
         </h1>
         <p className="mt-3 max-w-lg text-sm leading-7 text-foreground">
-          {t(
-            "هر دعوت موفق به روتینو، یک هفته استفاده رایگان برای تو و دوستت.",
-            "Every successful Routino referral gives you and your friend one free week.",
-          )}
+          {t("تو و دوستت، هر کدام یک هفته رایگان.", "You and your friend each get one free week.")}
         </p>
-        <p className="mt-2 max-w-lg text-xs leading-6 text-muted-foreground">
+        <p className="mt-1.5 whitespace-nowrap text-[10px] leading-5 text-muted-foreground sm:text-[11px]">
           {t(
-            "دعوتی موفق است که دوستت با کد تو ثبت‌نام کند و اولین اشتراک خود را بخرد.",
-            "A referral succeeds when your friend signs up with your code and buys their first subscription.",
+            "دوستت با کد تو ثبت‌نام کند و اولین اشتراکش را بخرد.",
+            "Successful after your friend's first subscription purchase.",
           )}
         </p>
       </section>
@@ -240,7 +225,7 @@ function ReferralsPage() {
       </div>
 
       {summary && (
-        <div className="flex flex-col items-center gap-1 text-center">
+        <div className="flex justify-center">
           <Button
             className="min-h-11"
             variant="ghost"
@@ -251,14 +236,10 @@ function ReferralsPage() {
               className={`h-4 w-4 ${refreshBusy ? "animate-spin" : ""}`}
               aria-hidden="true"
             />
-            {t("به‌روزرسانی آمار", "Refresh stats")}
+            {refreshBusy
+              ? t("در صف به‌روزرسانی…", "Refresh queued…")
+              : t("به‌روزرسانی آمار", "Refresh stats")}
           </Button>
-          <p className="text-xs text-muted-foreground">
-            {t(
-              "این صفحه از اطلاعات ذخیره‌شده روی دستگاه استفاده می‌کند.",
-              "This page uses information saved on this device.",
-            )}
-          </p>
         </div>
       )}
 
@@ -318,12 +299,6 @@ function ReferralsPage() {
               "Your referral code is saved and will apply to your first purchase.",
             )}
           </p>
-        </Card>
-      )}
-
-      {ineligibleCopy && (
-        <Card>
-          <p className="text-sm leading-7 text-muted-foreground">{ineligibleCopy}</p>
         </Card>
       )}
     </div>

@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
   ensureReferralSummaryCached: vi.fn(),
   readCachedReferralSummary: vi.fn(),
   refreshReferralSummary: vi.fn(),
+  queueReferralSummaryRefresh: vi.fn(),
   claimReferralCode: vi.fn(),
 }));
 vi.mock("@tanstack/react-router", () => ({
@@ -21,6 +22,7 @@ vi.mock("@/lib/api/referrals", async (original) => ({
   ensureReferralSummaryCached: api.ensureReferralSummaryCached,
   readCachedReferralSummary: api.readCachedReferralSummary,
   refreshReferralSummary: api.refreshReferralSummary,
+  queueReferralSummaryRefresh: api.queueReferralSummaryRefresh,
   claimReferralCode: api.claimReferralCode,
 }));
 vi.mock("@/state/app", () => ({
@@ -51,6 +53,7 @@ describe("referrals page", () => {
     api.readCachedReferralSummary.mockReset().mockReturnValue(null);
     api.ensureReferralSummaryCached.mockReset().mockResolvedValue(eligible);
     api.refreshReferralSummary.mockReset().mockResolvedValue(eligible);
+    api.queueReferralSummaryRefresh.mockReset().mockResolvedValue(eligible);
     api.claimReferralCode.mockReset();
     host = document.createElement("div");
     document.body.append(host);
@@ -65,13 +68,9 @@ describe("referrals page", () => {
 
   it("loads once and renders the approved copy and metrics", () => {
     expect(api.ensureReferralSummaryCached).toHaveBeenCalledTimes(1);
-    expect(host.textContent).toContain("یک هفته هدیه برای هر دعوت موفق");
-    expect(host.textContent).toContain(
-      "هر دعوت موفق به روتینو، یک هفته استفاده رایگان برای تو و دوستت.",
-    );
-    expect(host.textContent).toContain(
-      "دعوتی موفق است که دوستت با کد تو ثبت‌نام کند و اولین اشتراک خود را بخرد.",
-    );
+    expect(host.textContent).toContain("یک هفته هدیه با هر دعوت موفق");
+    expect(host.textContent).toContain("تو و دوستت، هر کدام یک هفته رایگان.");
+    expect(host.textContent).toContain("دوستت با کد تو ثبت‌نام کند و اولین اشتراکش را بخرد.");
     expect(host.textContent).toContain("OWNCOD");
     expect(host.textContent).toContain("۱۴");
   });
@@ -95,13 +94,13 @@ describe("referrals page", () => {
     root = createRoot(host);
     await act(async () => root.render(<Page />));
 
-    expect(host.textContent).toContain("یک هفته هدیه برای هر دعوت موفق");
+    expect(host.textContent).toContain("یک هفته هدیه با هر دعوت موفق");
     expect(host.textContent).toContain("با اولین اتصال");
     expect(host.textContent).toContain("دریافت کد");
   });
 
-  it("refreshes saved stats only after the user asks", async () => {
-    api.refreshReferralSummary.mockResolvedValue({
+  it("queues only the explicit low-frequency stats refresh", async () => {
+    api.queueReferralSummaryRefresh.mockResolvedValue({
       ...eligible,
       successfulInvites: 3,
       earnedDays: 21,
@@ -110,12 +109,26 @@ describe("referrals page", () => {
       button.textContent?.includes("به‌روزرسانی آمار"),
     )!;
 
-    expect(api.refreshReferralSummary).not.toHaveBeenCalled();
+    expect(api.queueReferralSummaryRefresh).not.toHaveBeenCalled();
     await act(async () => refresh.click());
 
-    expect(api.refreshReferralSummary).toHaveBeenCalledOnce();
-    expect(api.refreshReferralSummary).toHaveBeenCalledWith("user-1");
+    expect(api.queueReferralSummaryRefresh).toHaveBeenCalledOnce();
+    expect(api.queueReferralSummaryRefresh).toHaveBeenCalledWith("user-1");
     expect(host.textContent).toContain("۲۱");
+  });
+
+  it("does not explain hidden eligibility rules for older accounts", async () => {
+    await act(async () => root.unmount());
+    api.readCachedReferralSummary.mockReturnValue({
+      ...eligible,
+      claimState: { status: "ineligible", reason: "account_predates_program" },
+    });
+    host.textContent = "";
+    root = createRoot(host);
+    await act(async () => root.render(<Page />));
+
+    expect(host.textContent).not.toContain("قبل از شروع این برنامه");
+    expect(host.textContent).not.toContain("اطلاعات ذخیره‌شده روی دستگاه");
   });
 
   it("normalizes a claim and uses the POST response without refetching", async () => {
