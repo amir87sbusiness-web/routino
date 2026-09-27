@@ -2,10 +2,7 @@ import { authedRequest } from "./auth";
 
 const REFERRAL_CACHE_PREFIX = "routino:referrals:v1:";
 const refreshes = new Map<string, Promise<ReferralSummary>>();
-const manualRefreshes = new Map<
-  string,
-  { startedAt: number; promise: Promise<ReferralSummary> }
->();
+const manualRefreshes = new Map<string, { startedAt: number; promise: Promise<ReferralSummary> }>();
 const REFERRAL_REFRESH_COOLDOWN_MS = 60_000;
 
 export type ReferralClaimState =
