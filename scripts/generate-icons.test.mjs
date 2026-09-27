@@ -203,8 +203,8 @@ describe("Routino brand asset generator", () => {
       join(ROOT, "android", "app", "src", "main", "AndroidManifest.xml"),
       "utf8",
     );
-    assert.match(gradle, /versionCode 29\b/);
-    assert.match(gradle, /versionName "1\.0\.18"/);
+    assert.match(gradle, /versionCode 31\b/);
+    assert.match(gradle, /versionName "1\.0\.20"/);
     assert.doesNotMatch(manifest, /android:roundIcon=/);
   });
 });
