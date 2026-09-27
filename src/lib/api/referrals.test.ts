@@ -52,18 +52,35 @@ describe("referrals API", () => {
     expect(readCachedReferralSummary("user-2")).toBeNull();
   });
 
-  it("coalesces repeated refresh requests into one request after one minute", async () => {
+  it("refreshes immediately, then reuses that result for one minute", async () => {
     vi.useFakeTimers();
-    auth.authedRequest.mockResolvedValue(eligible);
+    vi.setSystemTime(new Date("2026-09-27T12:00:00Z"));
+    const updated = { ...eligible, successfulInvites: 3, earnedDays: 21 };
+    auth.authedRequest.mockResolvedValueOnce(eligible).mockResolvedValueOnce(updated);
 
-    const refreshes = Array.from({ length: 10 }, () => queueReferralSummaryRefresh("user-1"));
+    const first = queueReferralSummaryRefresh("user-1");
+    const repeated = Array.from({ length: 9 }, () => queueReferralSummaryRefresh("user-1"));
 
-    expect(auth.authedRequest).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(59_999);
-    expect(auth.authedRequest).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(1);
-    await expect(Promise.all(refreshes)).resolves.toEqual(Array(10).fill(eligible));
     expect(auth.authedRequest).toHaveBeenCalledOnce();
+    await expect(Promise.all([first, ...repeated])).resolves.toEqual(Array(10).fill(eligible));
+
+    await vi.advanceTimersByTimeAsync(59_999);
+    await expect(queueReferralSummaryRefresh("user-1")).resolves.toEqual(eligible);
+    expect(auth.authedRequest).toHaveBeenCalledOnce();
+
+    await vi.advanceTimersByTimeAsync(1);
+    await expect(queueReferralSummaryRefresh("user-1")).resolves.toEqual(updated);
+    expect(auth.authedRequest).toHaveBeenCalledTimes(2);
+  });
+
+  it("allows an immediate retry when a manual refresh fails", async () => {
+    auth.authedRequest
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce(eligible);
+
+    await expect(queueReferralSummaryRefresh("user-retry")).rejects.toThrow("offline");
+    await expect(queueReferralSummaryRefresh("user-retry")).resolves.toEqual(eligible);
+    expect(auth.authedRequest).toHaveBeenCalledTimes(2);
   });
 
   it("ignores a corrupt cached summary", () => {
