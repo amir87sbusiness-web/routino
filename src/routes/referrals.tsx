@@ -72,14 +72,6 @@ function ReferralsPage() {
       );
     } catch (error) {
       if (!forceRefresh) setLoadError(errorCopy(error, ctx.t));
-      if (summary && !forceRefresh) {
-        toast.error(
-          ctx.t(
-            "به‌روزرسانی انجام نشد؛ اطلاعات ذخیره‌شده نمایش داده می‌شود.",
-            "Could not refresh; showing saved information.",
-          ),
-        );
-      }
     } finally {
       setLoading(false);
       setRefreshBusy(false);
