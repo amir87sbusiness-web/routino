@@ -74,9 +74,7 @@ describe("referrals API", () => {
   });
 
   it("allows an immediate retry when a manual refresh fails", async () => {
-    auth.authedRequest
-      .mockRejectedValueOnce(new Error("offline"))
-      .mockResolvedValueOnce(eligible);
+    auth.authedRequest.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(eligible);
 
     await expect(queueReferralSummaryRefresh("user-retry")).rejects.toThrow("offline");
     await expect(queueReferralSummaryRefresh("user-retry")).resolves.toEqual(eligible);
