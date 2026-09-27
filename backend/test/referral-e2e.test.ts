@@ -20,7 +20,7 @@ async function signIn(phone: string) {
   expect(res.statusCode).toBe(200);
   return res.json() as { access: string; user: { id: string } };
 }
-async function summary(access: string) {
+async function referralSnapshot(access: string) {
   const res = await h.app.inject({
     method: "GET",
     url: "/v1/referrals/me",
@@ -28,6 +28,9 @@ async function summary(access: string) {
   });
   expect(res.statusCode).toBe(200);
   return res.json();
+}
+async function summary(access: string) {
+  return referralSnapshot(access);
 }
 async function checkout(access: string, code?: string) {
   const res = await h.app.inject({
@@ -53,7 +56,9 @@ async function settle(authority: string, outcome: "paid" | "canceled") {
 
 describe("referral HTTP flow with isolated PostgreSQL and a fake bank", () => {
   it("claims without rewards, excludes trial/FREE/failure, rewards first paid purchase and exposes both sides to user/admin without duplicates", async () => {
-    const a = await signIn("09121112231");
+    // The configured owner/admin is an ordinary account in the referral ledger
+    // and must receive the same seven-day reward as every other inviter.
+    const a = await signIn(h.env.ADMIN_PHONE);
     const b = await signIn("09121112232");
     const admin = await adminSignIn(h);
     const code = (await summary(a.access)).referralCode;
@@ -81,8 +86,10 @@ describe("referral HTTP flow with isolated PostgreSQL and a fake bank", () => {
     expect(await h.query("select * from grants where source='referral'")).toHaveLength(0);
     const first = await checkout(b.access);
     const callback = await settle(first.authority, "paid");
-    expect(await summary(a.access)).toMatchObject({ earnedDays: 7, successfulInvites: 1 });
-    expect(await summary(b.access)).toMatchObject({
+    const aRefresh = await referralSnapshot(a.access);
+    const bRefresh = await referralSnapshot(b.access);
+    expect(aRefresh).toMatchObject({ earnedDays: 7, successfulInvites: 1 });
+    expect(bRefresh).toMatchObject({
       earnedDays: 7,
       successfulInvites: 0,
       claimState: { status: "claimed", rewarded: true },
@@ -92,6 +99,14 @@ describe("referral HTTP flow with isolated PostgreSQL and a fake bank", () => {
     );
     expect(rewards).toHaveLength(2);
     expect(rewards.map((r) => r.delta)).toEqual([604800, 604800]);
+    expect(aRefresh.entitlement.planId).toBe("trial");
+    expect(bRefresh.entitlement.planId).toBe("m1");
+    expect(new Date(aRefresh.entitlement.expiresAt).getTime()).toBe(
+      new Date(rewards.find((r) => r.user_id === a.user.id)!.expires_after).getTime(),
+    );
+    expect(new Date(bRefresh.entitlement.expiresAt).getTime()).toBe(
+      new Date(rewards.find((r) => r.user_id === b.user.id)!.expires_after).getTime(),
+    );
     for (const user of [a, b]) {
       const detail = await h.app.inject({
         method: "GET",

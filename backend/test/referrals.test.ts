@@ -25,8 +25,13 @@ async function signIn(phone: string) {
 
 const authorized = (access: string) => ({ authorization: `Bearer ${access}` });
 
-const getSummary = (access: string) =>
+const getSnapshot = (access: string) =>
   h.app.inject({ method: "GET", url: "/v1/referrals/me", headers: authorized(access) });
+
+const getSummary = async (access: string) => {
+  const response = await getSnapshot(access);
+  return { json: () => response.json() };
+};
 
 const claim = (access: string, code: string) =>
   h.app.inject({
@@ -50,10 +55,10 @@ describe("referral routes", () => {
     ).toBe(401);
   });
 
-  it("lazily assigns one persistent code and returns only the canonical summary", async () => {
+  it("returns the canonical referral summary and current entitlement in one request", async () => {
     const { access } = await signIn("09121110001");
-    const first = (await getSummary(access)).json();
-    const second = (await getSummary(access)).json();
+    const first = (await getSnapshot(access)).json();
+    const second = (await getSnapshot(access)).json();
 
     expect(first).toEqual({
       referralCode: expect.stringMatching(/^[A-Z]{6}$/),
@@ -61,10 +66,31 @@ describe("referral routes", () => {
       successfulInvites: 0,
       earnedDays: 0,
       claimState: { status: "eligible" },
+      entitlement: {
+        status: "none",
+        planId: null,
+        startedAt: null,
+        expiresAt: null,
+        issuedAt: expect.any(String),
+        deletionAt: expect.any(String),
+      },
     });
-    expect(second).toEqual(first);
+    expect(second).toMatchObject({
+      referralCode: first.referralCode,
+      rewardDays: 7,
+      successfulInvites: 0,
+      earnedDays: 0,
+      claimState: { status: "eligible" },
+    });
     expect(Object.keys(first).sort()).toEqual(
-      ["claimState", "earnedDays", "referralCode", "rewardDays", "successfulInvites"].sort(),
+      [
+        "claimState",
+        "earnedDays",
+        "entitlement",
+        "referralCode",
+        "rewardDays",
+        "successfulInvites",
+      ].sort(),
     );
   });
 

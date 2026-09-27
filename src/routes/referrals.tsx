@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { Button, Card, Input } from "@/components/ui";
+import { entitlementToSubscription, markEntitlementChecked } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import {
   claimReferralCode,
@@ -76,11 +77,16 @@ function ReferralsPage() {
     } else setLoading(true);
     setLoadError(null);
     try {
-      setSummary(
-        forceRefresh
-          ? await queueReferralSummaryRefresh(userId)
-          : await ensureReferralSummaryCached(userId),
-      );
+      if (forceRefresh) {
+        const snapshot = await queueReferralSummaryRefresh(userId);
+        const { entitlement, ...referral } = snapshot;
+        setSummary(referral);
+        markEntitlementChecked(entitlement);
+        const subscription = entitlementToSubscription(entitlement);
+        if (subscription) ctx.applyEntitlement(subscription);
+      } else {
+        setSummary(await ensureReferralSummaryCached(userId));
+      }
     } catch (error) {
       if (!forceRefresh) setLoadError(errorCopy(error, ctx.t));
     } finally {

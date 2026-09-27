@@ -20,7 +20,7 @@ describe("referral routes — Edge adapter", () => {
     );
   });
 
-  it("returns the canonical summary without PII", async () => {
+  it("returns the canonical summary and current entitlement without PII", async () => {
     const user = await signIn(h, "09125550001");
     const response = await h.call("GET", "/v1/referrals/me", { headers: auth(user.access) });
     expect(response.status).toBe(200);
@@ -31,6 +31,14 @@ describe("referral routes — Edge adapter", () => {
       successfulInvites: 0,
       earnedDays: 0,
       claimState: { status: "eligible" },
+      entitlement: {
+        status: "none",
+        planId: null,
+        startedAt: null,
+        expiresAt: null,
+        issuedAt: expect.any(String),
+        deletionAt: expect.any(String),
+      },
     });
   });
 

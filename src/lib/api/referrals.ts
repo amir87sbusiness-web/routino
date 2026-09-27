@@ -1,10 +1,10 @@
-import { authedRequest } from "./auth";
+import { authedRequest, type ServerEntitlement } from "./auth";
 
 const REFERRAL_CACHE_PREFIX = "routino:referrals:v1:";
-const refreshes = new Map<string, Promise<ReferralSummary>>();
+const refreshes = new Map<string, Promise<ReferralSnapshot>>();
 const manualRefreshes = new Map<
   string,
-  { succeededAt: number | null; promise: Promise<ReferralSummary> }
+  { succeededAt: number | null; promise: Promise<ReferralSnapshot> }
 >();
 const REFERRAL_REFRESH_COOLDOWN_MS = 60_000;
 
@@ -22,6 +22,10 @@ export interface ReferralSummary {
   successfulInvites: number;
   earnedDays: number;
   claimState: ReferralClaimState;
+}
+
+export interface ReferralSnapshot extends ReferralSummary {
+  entitlement: ServerEntitlement;
 }
 
 function cacheKey(userId: string): string {
@@ -88,17 +92,21 @@ export function normalizeReferralCode(value: string): string {
     .slice(0, 6);
 }
 
-export function refreshReferralSummary(expectedUserId: string): Promise<ReferralSummary> {
+export function refreshReferralSummary(expectedUserId: string): Promise<ReferralSnapshot> {
   const active = refreshes.get(expectedUserId);
   if (active) return active;
-  const request = authedRequest<ReferralSummary>("/referrals/me", { expectedUserId })
-    .then((summary) => cacheReferralSummary(expectedUserId, summary))
+  const request = authedRequest<ReferralSnapshot>("/referrals/me", { expectedUserId })
+    .then((snapshot) => {
+      const { entitlement, ...referral } = snapshot;
+      cacheReferralSummary(expectedUserId, referral);
+      return { ...referral, entitlement };
+    })
     .finally(() => refreshes.delete(expectedUserId));
   refreshes.set(expectedUserId, request);
   return request;
 }
 
-export function queueReferralSummaryRefresh(expectedUserId: string): Promise<ReferralSummary> {
+export function queueReferralSummaryRefresh(expectedUserId: string): Promise<ReferralSnapshot> {
   const previous = manualRefreshes.get(expectedUserId);
   if (
     previous &&
@@ -109,7 +117,7 @@ export function queueReferralSummaryRefresh(expectedUserId: string): Promise<Ref
   }
 
   const request = refreshReferralSummary(expectedUserId);
-  const entry: { succeededAt: number | null; promise: Promise<ReferralSummary> } = {
+  const entry: { succeededAt: number | null; promise: Promise<ReferralSnapshot> } = {
     succeededAt: null,
     promise: request,
   };
@@ -131,13 +139,17 @@ export function queueReferralSummaryRefresh(expectedUserId: string): Promise<Ref
   return request;
 }
 
-export function fetchReferralSummary(expectedUserId: string): Promise<ReferralSummary> {
+export function fetchReferralSummary(expectedUserId: string): Promise<ReferralSnapshot> {
   return refreshReferralSummary(expectedUserId);
 }
 
 export function ensureReferralSummaryCached(expectedUserId: string): Promise<ReferralSummary> {
   const cached = readCachedReferralSummary(expectedUserId);
-  return cached ? Promise.resolve(cached) : refreshReferralSummary(expectedUserId);
+  return cached
+    ? Promise.resolve(cached)
+    : refreshReferralSummary(expectedUserId).then(
+        ({ entitlement: _entitlement, ...referral }) => referral,
+      );
 }
 
 export async function claimReferralCode(

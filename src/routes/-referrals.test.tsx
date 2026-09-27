@@ -29,6 +29,7 @@ vi.mock("@/lib/api/referrals", async (original) => ({
 vi.mock("@/state/app", () => ({
   useAppMaybe: () => ({
     db: { auth: { userId: "user-1" } },
+    applyEntitlement: vi.fn(),
     lang: "fa",
     t: (fa: string) => fa,
   }),
@@ -45,6 +46,14 @@ const eligible = {
   earnedDays: 14,
   claimState: { status: "eligible" as const },
 };
+const entitlement = {
+  status: "active" as const,
+  planId: "m1",
+  startedAt: "2026-09-01T00:00:00.000Z",
+  expiresAt: "2026-11-08T00:00:00.000Z",
+  issuedAt: "2026-09-27T12:00:00.000Z",
+  deletionAt: null,
+};
 
 describe("referrals page", () => {
   let host: HTMLDivElement;
@@ -53,8 +62,8 @@ describe("referrals page", () => {
   beforeEach(async () => {
     api.readCachedReferralSummary.mockReset().mockReturnValue(null);
     api.ensureReferralSummaryCached.mockReset().mockResolvedValue(eligible);
-    api.refreshReferralSummary.mockReset().mockResolvedValue(eligible);
-    api.queueReferralSummaryRefresh.mockReset().mockResolvedValue(eligible);
+    api.refreshReferralSummary.mockReset().mockResolvedValue({ ...eligible, entitlement });
+    api.queueReferralSummaryRefresh.mockReset().mockResolvedValue({ ...eligible, entitlement });
     api.claimReferralCode.mockReset();
     toast.success.mockReset();
     toast.error.mockReset();
@@ -103,8 +112,9 @@ describe("referrals page", () => {
   });
 
   it("keeps repeated refresh taps responsive while the request remains coalesced", async () => {
-    let finishRefresh!: (summary: typeof eligible) => void;
-    const queued = new Promise<typeof eligible>((resolve) => {
+    type Snapshot = typeof eligible & { entitlement: typeof entitlement };
+    let finishRefresh!: (snapshot: Snapshot) => void;
+    const queued = new Promise<Snapshot>((resolve) => {
       finishRefresh = resolve;
     });
     api.queueReferralSummaryRefresh.mockReturnValue(queued);
@@ -127,7 +137,7 @@ describe("referrals page", () => {
 
     expect(api.queueReferralSummaryRefresh).toHaveBeenCalledTimes(10);
     expect(api.queueReferralSummaryRefresh).toHaveBeenLastCalledWith("user-1");
-    await act(async () => finishRefresh(refreshed));
+    await act(async () => finishRefresh({ ...refreshed, entitlement }));
     expect(host.textContent).toContain("۲۱");
   });
 

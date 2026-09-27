@@ -20,6 +20,15 @@ const eligible = {
   earnedDays: 14,
   claimState: { status: "eligible" as const },
 };
+const entitlement = {
+  status: "active" as const,
+  planId: "m3",
+  startedAt: "2026-09-01T00:00:00.000Z",
+  expiresAt: "2026-12-08T00:00:00.000Z",
+  issuedAt: "2026-09-27T12:00:00.000Z",
+  deletionAt: null,
+};
+const snapshot = { ...eligible, entitlement };
 
 describe("referrals API", () => {
   beforeEach(() => {
@@ -33,8 +42,8 @@ describe("referrals API", () => {
   });
 
   it("loads the summary with one authenticated request", async () => {
-    auth.authedRequest.mockResolvedValue(eligible);
-    expect(await fetchReferralSummary("user-1")).toEqual(eligible);
+    auth.authedRequest.mockResolvedValue(snapshot);
+    expect(await fetchReferralSummary("user-1")).toEqual(snapshot);
     expect(auth.authedRequest).toHaveBeenCalledOnce();
     expect(auth.authedRequest).toHaveBeenCalledWith("/referrals/me", {
       expectedUserId: "user-1",
@@ -43,7 +52,7 @@ describe("referrals API", () => {
   });
 
   it("reuses the user-scoped cache without a network request", async () => {
-    auth.authedRequest.mockResolvedValue(eligible);
+    auth.authedRequest.mockResolvedValue(snapshot);
     await refreshReferralSummary("user-1");
     auth.authedRequest.mockClear();
 
@@ -56,38 +65,43 @@ describe("referrals API", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-27T12:00:00Z"));
     const updated = { ...eligible, successfulInvites: 3, earnedDays: 21 };
-    auth.authedRequest.mockResolvedValueOnce(eligible).mockResolvedValueOnce(updated);
+    auth.authedRequest
+      .mockResolvedValueOnce(snapshot)
+      .mockResolvedValueOnce({ ...updated, entitlement });
 
     const first = queueReferralSummaryRefresh("user-1");
     const repeated = Array.from({ length: 9 }, () => queueReferralSummaryRefresh("user-1"));
 
     expect(auth.authedRequest).toHaveBeenCalledOnce();
-    await expect(Promise.all([first, ...repeated])).resolves.toEqual(Array(10).fill(eligible));
+    await expect(Promise.all([first, ...repeated])).resolves.toEqual(Array(10).fill(snapshot));
 
     await vi.advanceTimersByTimeAsync(59_999);
-    await expect(queueReferralSummaryRefresh("user-1")).resolves.toEqual(eligible);
+    await expect(queueReferralSummaryRefresh("user-1")).resolves.toEqual(snapshot);
     expect(auth.authedRequest).toHaveBeenCalledOnce();
 
     await vi.advanceTimersByTimeAsync(1);
-    await expect(queueReferralSummaryRefresh("user-1")).resolves.toEqual(updated);
+    await expect(queueReferralSummaryRefresh("user-1")).resolves.toEqual({
+      ...updated,
+      entitlement,
+    });
     expect(auth.authedRequest).toHaveBeenCalledTimes(2);
   });
 
   it("starts the full cooldown only after a slow request succeeds", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-27T15:00:00Z"));
-    let finish!: (value: typeof eligible) => void;
+    let finish!: (value: typeof snapshot) => void;
     auth.authedRequest
       .mockReturnValueOnce(
         new Promise((resolve) => {
           finish = resolve;
         }),
       )
-      .mockResolvedValue(eligible);
+      .mockResolvedValue(snapshot);
     const pending = queueReferralSummaryRefresh("slow-user");
     expect(auth.authedRequest).toHaveBeenCalledOnce();
     await vi.advanceTimersByTimeAsync(20_000);
-    finish(eligible);
+    finish(snapshot);
     await pending;
     await vi.advanceTimersByTimeAsync(59_999);
     await queueReferralSummaryRefresh("slow-user");
@@ -98,10 +112,10 @@ describe("referrals API", () => {
   });
 
   it("allows an immediate retry when a manual refresh fails", async () => {
-    auth.authedRequest.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(eligible);
+    auth.authedRequest.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(snapshot);
 
     await expect(queueReferralSummaryRefresh("user-retry")).rejects.toThrow("offline");
-    await expect(queueReferralSummaryRefresh("user-retry")).resolves.toEqual(eligible);
+    await expect(queueReferralSummaryRefresh("user-retry")).resolves.toEqual(snapshot);
     expect(auth.authedRequest).toHaveBeenCalledTimes(2);
   });
 
