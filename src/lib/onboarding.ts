@@ -40,6 +40,13 @@ export interface OnboardingDraft {
   selectedHabitIds: string[];
 }
 
+/** Weekday presets are sets; persistence order must not affect their active state. */
+export function sameWeekdays(left: number[], right: number[]): boolean {
+  if (left.length !== right.length) return false;
+  const expected = new Set(right);
+  return expected.size === right.length && left.every((day) => expected.has(day));
+}
+
 export interface OnboardingSuggestion {
   id: string;
   categoryId: string;

@@ -74,9 +74,8 @@ describe("AppShell read-only access", () => {
     expect(navigate).not.toHaveBeenCalledWith({ to: "/subscribe" });
   });
 
-  it("primes one persistent referral code for the signed-in account", () => {
-    expect(referrals.ensureReferralSummaryCached).toHaveBeenCalledTimes(1);
-    expect(referrals.ensureReferralSummaryCached).toHaveBeenCalledWith("user-1");
+  it("does not fetch referral data during ordinary signed-in app startup", () => {
+    expect(referrals.ensureReferralSummaryCached).not.toHaveBeenCalled();
   });
 
   it("offers subscribe once after a blocked product action", async () => {

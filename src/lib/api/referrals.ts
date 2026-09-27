@@ -66,7 +66,7 @@ export function readCachedReferralSummary(userId: string): ReferralSummary | nul
   return null;
 }
 
-function cacheReferralSummary(userId: string, summary: ReferralSummary): ReferralSummary {
+export function cacheReferralSummary(userId: string, summary: ReferralSummary): ReferralSummary {
   if (typeof localStorage !== "undefined") {
     try {
       localStorage.setItem(cacheKey(userId), JSON.stringify(summary));

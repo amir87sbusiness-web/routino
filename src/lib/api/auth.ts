@@ -288,6 +288,7 @@ export interface AccountInfo {
   phone: string;
   username: string | null;
   hasPassword: boolean;
+  referral?: import("./referrals").ReferralSummary;
 }
 
 /** The signed-in account's credential state, for the settings screen. */

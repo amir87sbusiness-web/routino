@@ -280,5 +280,18 @@ describe("referral routes", () => {
       successfulInvites: 1,
       earnedDays: 7,
     });
+
+    const account = await h.app.inject({
+      method: "GET",
+      url: "/v1/auth/account",
+      headers: authorized(inviter.access),
+    });
+    expect(account.statusCode).toBe(200);
+    expect(account.json().referral).toMatchObject({
+      referralCode: inviterCode,
+      rewardDays: 7,
+      successfulInvites: 1,
+      earnedDays: 7,
+    });
   });
 });

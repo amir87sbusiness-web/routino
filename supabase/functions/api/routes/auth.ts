@@ -43,6 +43,7 @@ import {
   verifyPassword,
 } from "../shared/services/password.ts";
 import { issueAccessToken } from "../shared/services/tokens.ts";
+import { getReferralSummary } from "../shared/services/referral.ts";
 
 const requestBody = z.object({ phone: z.string().min(1).max(32) });
 const verifyBody = z.object({
@@ -248,10 +249,12 @@ export function authRoutes(deps: Deps) {
     const u = requireUser(c);
     const [row] = await db.select().from(users).where(eq(users.id, u.id)).limit(1);
     if (!row) throw unauthorized("unknown_user", "User no longer exists");
+    const referral = await getReferralSummary(db, u.id);
     return c.json({
       phone: row.phone,
       username: row.username ?? null,
       hasPassword: !!row.passwordHash,
+      referral,
     });
   });
 

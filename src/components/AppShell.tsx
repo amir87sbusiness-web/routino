@@ -24,7 +24,6 @@ import { InstallBanner } from "@/components/pwa";
 import { Button, Logo, Modal } from "@/components/ui";
 import { faNum } from "@/lib/dates";
 import { accessRoute, accessState } from "@/lib/access-state";
-import { ensureReferralSummaryCached } from "@/lib/api/referrals";
 import { requestPersistentStorage } from "@/lib/pwa";
 import { useAppMaybe } from "@/state/app";
 
@@ -129,14 +128,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (db?.settings.onboarded) void requestPersistentStorage();
   }, [db?.settings.onboarded]);
-
-  const referralUserId = db?.auth?.userId;
-  useEffect(() => {
-    if (!referralUserId) return;
-    // One server request per account/device at most: a successful response is
-    // persisted, and later boots (including offline boots) stop here locally.
-    void ensureReferralSummaryCached(referralUserId).catch(() => undefined);
-  }, [referralUserId]);
 
   /**
    * پاپ‌آپ نظرسنجی: حداکثر روزی یک‌بار، و حداکثر یک‌بار در هر بار باز کردن اپ.

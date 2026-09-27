@@ -24,6 +24,7 @@ import {
 import { SmsNotSentError } from "../providers/sms/index.js";
 import { issueAccessToken } from "../services/tokens.js";
 import { acquireProviderLease, releaseProviderLease } from "../services/provider-capacity.js";
+import { getReferralSummary } from "../services/referral.js";
 
 const requestBody = z.object({ phone: z.string().min(1).max(32) });
 const verifyBody = z.object({
@@ -255,7 +256,13 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
     const u = requireUser(req);
     const [row] = await db.select().from(users).where(eq(users.id, u.id)).limit(1);
     if (!row) throw unauthorized("unknown_user", "User no longer exists");
-    return { phone: row.phone, username: row.username ?? null, hasPassword: !!row.passwordHash };
+    const referral = await getReferralSummary(db, u.id);
+    return {
+      phone: row.phone,
+      username: row.username ?? null,
+      hasPassword: !!row.passwordHash,
+      referral,
+    };
   });
 
   /** Sets or changes the account's username. Lowercased and validated; the

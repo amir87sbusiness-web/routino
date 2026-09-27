@@ -12,7 +12,6 @@ import {
   EyeOff,
   FileText,
   Globe,
-  Gift,
   KeyRound,
   Lock,
   LogOut,
@@ -32,6 +31,7 @@ import { toast } from "sonner";
 import { AppShell } from "@/components/AppShell";
 import { FeedbackModal } from "@/components/FeedbackModal";
 import { LegalContent } from "@/components/LegalContent";
+import { ReferralSettingsCard } from "@/components/ReferralSettingsCard";
 import {
   Button,
   CatIcon,
@@ -44,6 +44,11 @@ import {
 } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
 import { fetchAccount, logout, setPassword, setUsername, type AccountInfo } from "@/lib/api/auth";
+import {
+  cacheReferralSummary,
+  readCachedReferralSummary,
+  type ReferralSummary,
+} from "@/lib/api/referrals";
 import {
   BACKUP_UI,
   backupSummary,
@@ -293,27 +298,6 @@ function SettingsPage() {
     <div className="page-stagger flex flex-col gap-4">
       {/* account: profile + username/password together, at the very top */}
       <AccountCard />
-
-      <Link
-        to="/referrals"
-        className="card-surface flex items-center gap-3 p-4 transition-colors hover:bg-secondary"
-      >
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-primary-soft text-primary">
-          <Gift className="h-5 w-5" aria-hidden="true" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-bold text-foreground">
-            {t("دعوت دوستان", "Invite friends")}
-          </span>
-          <span className="mt-0.5 block text-[11px] text-muted-foreground">
-            {t("برای هر دعوت موفق یک هفته هدیه بگیر", "Earn a free week per successful referral")}
-          </span>
-        </span>
-        <ChevronLeft
-          className="h-4 w-4 shrink-0 text-muted-foreground rtl:rotate-0 ltr:rotate-180"
-          aria-hidden="true"
-        />
-      </Link>
 
       {/* language + calendar */}
       <div className="grid grid-cols-2 gap-3">
@@ -1028,7 +1012,11 @@ function PwInput({
  */
 function AccountCard() {
   const ctx = useAppMaybe();
+  const userId = ctx?.db?.auth?.userId;
   const [account, setAccount] = useState<AccountInfo | null>(null);
+  const [referral, setReferral] = useState<ReferralSummary | null>(() =>
+    userId ? readCachedReferralSummary(userId) : null,
+  );
   const [offline, setOffline] = useState(false);
   const [open, setOpen] = useState(false);
   const [uname, setUname] = useState("");
@@ -1045,12 +1033,15 @@ function AccountCard() {
         if (!alive) return;
         setAccount(a);
         setUname(a.username ?? "");
+        if (a.referral && userId) {
+          setReferral(cacheReferralSummary(userId, a.referral));
+        }
       })
       .catch(() => alive && setOffline(true));
     return () => {
       alive = false;
     };
-  }, []);
+  }, [userId]);
 
   if (!ctx?.db) return null;
   const { db, t, lang, cal } = ctx;
@@ -1117,8 +1108,8 @@ function AccountCard() {
     }
   };
 
-  return (
-    <Card className="flex flex-col gap-3">
+  return [
+    <Card key="account" className="flex flex-col gap-3">
       {/* profile: avatar + phone + username chip + plan */}
       <div className="flex items-center gap-3">
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-lg font-black text-primary-foreground">
@@ -1273,6 +1264,7 @@ function AccountCard() {
           )}
         </div>
       </Modal>
-    </Card>
-  );
+    </Card>,
+    <ReferralSettingsCard key="referral" summary={referral} lang={lang} t={t} />,
+  ];
 }

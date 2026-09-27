@@ -30,6 +30,7 @@ import {
   getOnboardingSuggestions,
   maxStarterHabits,
   ONBOARDING_GOALS,
+  sameWeekdays,
   type OnboardingBarrier,
   type OnboardingDayPart,
   type OnboardingDraft,
@@ -470,19 +471,22 @@ export function PersonalizationFlow({
           />
           <div className="space-y-2.5">
             <Choice
-              active={draft.weekdays.length === 7}
+              active={sameWeekdays(draft.weekdays, [0, 1, 2, 3, 4, 5, 6])}
               title={t("هر روز", "Every day")}
               body={t("برای عادت‌های خیلی کوچک و ساده", "Best for tiny, simple habits")}
               onClick={() => patch({ weekdays: [0, 1, 2, 3, 4, 5, 6] })}
             />
             <Choice
-              active={draft.weekdays.join(",") === (lang === "fa" ? "0,1,2,3,6" : "1,2,3,4,5")}
+              active={sameWeekdays(
+                draft.weekdays,
+                lang === "fa" ? [0, 1, 2, 3, 6] : [1, 2, 3, 4, 5],
+              )}
               title={t("۵ روز در هفته", "5 days a week")}
               body={t("ریتم منظم با دو روز استراحت", "A steady rhythm with two lighter days")}
               onClick={() => patch({ weekdays: lang === "fa" ? [6, 0, 1, 2, 3] : [1, 2, 3, 4, 5] })}
             />
             <Choice
-              active={draft.weekdays.join(",") === (lang === "fa" ? "1,3,6" : "1,3,5")}
+              active={sameWeekdays(draft.weekdays, lang === "fa" ? [1, 3, 6] : [1, 3, 5])}
               title={t("۳ روز در هفته", "3 days a week")}
               body={t("شروع سبک و قابل‌کنترل", "A light, manageable start")}
               onClick={() => patch({ weekdays: lang === "fa" ? [6, 1, 3] : [1, 3, 5] })}

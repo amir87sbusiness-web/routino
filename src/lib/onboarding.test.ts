@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { defaultOnboardingDraft, loadOnboardingDraft, saveOnboardingDraft } from "./onboarding";
+import {
+  defaultOnboardingDraft,
+  loadOnboardingDraft,
+  sameWeekdays,
+  saveOnboardingDraft,
+} from "./onboarding";
 
 const legacyDraft = {
   version: 3,
@@ -46,5 +51,13 @@ describe("onboarding draft referral prompt", () => {
 
     expect(loadOnboardingDraft("user-1")).toEqual(draft);
     expect(localStorage.getItem("routino:onboarding:v3")).toBeNull();
+  });
+});
+
+describe("weekday selection equality", () => {
+  it("compares weekdays as a set instead of depending on array order", () => {
+    expect(sameWeekdays([6, 0, 1, 2, 3], [0, 1, 2, 3, 6])).toBe(true);
+    expect(sameWeekdays([6, 1, 3], [1, 3, 6])).toBe(true);
+    expect(sameWeekdays([0, 1, 2], [0, 1, 3])).toBe(false);
   });
 });
