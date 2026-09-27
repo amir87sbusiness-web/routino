@@ -7,6 +7,7 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 const navigate = vi.hoisted(() => vi.fn());
 const app = vi.hoisted(() => ({ ctx: null as Record<string, unknown> | null }));
+const referrals = vi.hoisted(() => ({ ensureReferralSummaryCached: vi.fn() }));
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children, to, ...props }: React.ComponentProps<"a"> & { to: string }) => (
@@ -20,6 +21,7 @@ vi.mock("@tanstack/react-router", () => ({
 vi.mock("@/components/FeedbackModal", () => ({ FeedbackModal: () => null }));
 vi.mock("@/components/pwa", () => ({ InstallBanner: () => null }));
 vi.mock("@/lib/pwa", () => ({ requestPersistentStorage: vi.fn() }));
+vi.mock("@/lib/api/referrals", () => referrals);
 vi.mock("@/state/app", () => ({ useAppMaybe: () => app.ctx }));
 
 import { AppShell } from "./AppShell";
@@ -40,6 +42,7 @@ describe("AppShell read-only access", () => {
 
   beforeEach(async () => {
     navigate.mockReset();
+    referrals.ensureReferralSummaryCached.mockReset().mockResolvedValue(null);
     clearWriteBlocked.mockReset();
     app.ctx = {
       db: expiredDb(),
@@ -69,6 +72,11 @@ describe("AppShell read-only access", () => {
     expect(host.textContent).toContain("تاریخچهٔ محفوظ");
     expect(host.textContent).toContain("اشتراکت تموم شده؛ اطلاعاتت محفوظ است");
     expect(navigate).not.toHaveBeenCalledWith({ to: "/subscribe" });
+  });
+
+  it("primes one persistent referral code for the signed-in account", () => {
+    expect(referrals.ensureReferralSummaryCached).toHaveBeenCalledTimes(1);
+    expect(referrals.ensureReferralSummaryCached).toHaveBeenCalledWith("user-1");
   });
 
   it("offers subscribe once after a blocked product action", async () => {

@@ -7,8 +7,10 @@ import { Button, Card, Input } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
 import {
   claimReferralCode,
-  fetchReferralSummary,
+  ensureReferralSummaryCached,
   normalizeReferralCode,
+  readCachedReferralSummary,
+  refreshReferralSummary,
   type ReferralSummary,
 } from "@/lib/api/referrals";
 import { shareReferralCode } from "@/lib/referral-share";
@@ -45,8 +47,11 @@ function errorCopy(error: unknown, t: (fa: string, en: string) => string): strin
 function ReferralsPage() {
   const ctx = useAppMaybe();
   const userId = ctx?.db?.auth?.userId;
-  const [summary, setSummary] = useState<ReferralSummary | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [summary, setSummary] = useState<ReferralSummary | null>(() =>
+    userId ? readCachedReferralSummary(userId) : null,
+  );
+  const [loading, setLoading] = useState(() => !summary);
+  const [refreshBusy, setRefreshBusy] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [claimCode, setClaimCode] = useState("");
   const [claimBusy, setClaimBusy] = useState(false);
@@ -54,24 +59,44 @@ function ReferralsPage() {
   const [claimError, setClaimError] = useState<string | null>(null);
   const requestedFor = useRef<string | null>(null);
 
-  const load = async () => {
+  const load = async (forceRefresh = false) => {
     if (!ctx || !userId) return;
-    setLoading(true);
+    if (forceRefresh) setRefreshBusy(true);
+    else setLoading(true);
     setLoadError(null);
     try {
-      setSummary(await fetchReferralSummary(userId));
+      setSummary(
+        forceRefresh
+          ? await refreshReferralSummary(userId)
+          : await ensureReferralSummaryCached(userId),
+      );
     } catch (error) {
       setLoadError(errorCopy(error, ctx.t));
+      if (summary) {
+        toast.error(
+          ctx.t(
+            "به‌روزرسانی انجام نشد؛ اطلاعات ذخیره‌شده نمایش داده می‌شود.",
+            "Could not refresh; showing saved information.",
+          ),
+        );
+      }
     } finally {
       setLoading(false);
+      setRefreshBusy(false);
     }
   };
 
   useEffect(() => {
     if (!userId || requestedFor.current === userId) return;
     requestedFor.current = userId;
+    const cached = readCachedReferralSummary(userId);
+    setSummary(cached);
+    setLoading(!cached);
+    setLoadError(null);
+    if (cached) return;
     void load();
-    // The page owns one initial GET. Retrying is always an explicit user action.
+    // The first successful response is cached per account. Future visits are
+    // local-only; refreshing server counters is always an explicit action.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
@@ -121,29 +146,9 @@ function ReferralsPage() {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex min-h-64 items-center justify-center" role="status">
-        <RefreshCw className="h-6 w-6 animate-spin text-primary" aria-hidden="true" />
-        <span className="sr-only">{t("در حال دریافت کد دعوت", "Loading referral code")}</span>
-      </div>
-    );
-  }
-
-  if (!summary || loadError) {
-    return (
-      <Card className="mx-auto max-w-md text-center">
-        <p className="text-sm text-destructive">{loadError}</p>
-        <Button className="mt-4" onClick={() => void load()}>
-          {t("تلاش دوباره", "Try again")}
-        </Button>
-      </Card>
-    );
-  }
-
-  const claimState = summary.claimState;
+  const claimState = summary?.claimState;
   const ineligibleCopy =
-    claimState.status === "ineligible"
+    claimState?.status === "ineligible"
       ? claimState.reason === "account_predates_program"
         ? t(
             "ثبت کد دعوت برای حساب‌هایی که قبل از شروع این برنامه ساخته شده‌اند فعال نیست.",
@@ -182,23 +187,44 @@ function ReferralsPage() {
           className="mt-3 font-mono text-3xl font-black tracking-[0.28em] text-foreground"
           dir="ltr"
         >
-          {summary.referralCode}
+          {summary?.referralCode ?? "------"}
         </div>
-        <div className="mt-5 grid grid-cols-2 gap-2">
-          <Button className="min-h-11" variant="secondary" onClick={() => void copyCode()}>
-            <Copy className="h-4 w-4" aria-hidden="true" /> {t("کپی کد", "Copy code")}
-          </Button>
-          <Button className="min-h-11" disabled={shareBusy} onClick={() => void share()}>
-            <Share2 className="h-4 w-4" aria-hidden="true" /> {t("اشتراک‌گذاری", "Share")}
-          </Button>
-        </div>
+        {summary ? (
+          <div className="mt-5 grid grid-cols-2 gap-2">
+            <Button className="min-h-11" variant="secondary" onClick={() => void copyCode()}>
+              <Copy className="h-4 w-4" aria-hidden="true" /> {t("کپی کد", "Copy code")}
+            </Button>
+            <Button className="min-h-11" disabled={shareBusy} onClick={() => void share()}>
+              <Share2 className="h-4 w-4" aria-hidden="true" /> {t("اشتراک‌گذاری", "Share")}
+            </Button>
+          </div>
+        ) : (
+          <div className="mt-5 rounded-2xl bg-muted/60 px-4 py-4">
+            <p
+              className="text-sm leading-7 text-muted-foreground"
+              role={loadError ? "alert" : undefined}
+            >
+              {loading
+                ? t("در حال آماده‌سازی کد دعوت…", "Preparing your referral code…")
+                : t(
+                    "کد دعوتت با اولین اتصال ساخته می‌شه و بعد همیشه روی همین دستگاه در دسترس می‌مونه.",
+                    "Your referral code is created on the first connection, then stays available on this device.",
+                  )}
+            </p>
+            {!loading && (
+              <Button className="mt-3 min-h-11" onClick={() => void load()}>
+                {t("دریافت کد", "Get code")}
+              </Button>
+            )}
+          </div>
+        )}
       </Card>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3" aria-label={t("آمار دعوت", "Referral stats")}>
         <Card>
           <Users className="mb-3 h-5 w-5 text-primary" aria-hidden="true" />
           <p className="text-2xl font-black tabular-nums text-foreground">
-            {faNum(summary.successfulInvites, lang)}
+            {summary ? faNum(summary.successfulInvites, lang) : "—"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
             {t("دعوت موفق", "Successful referrals")}
@@ -207,13 +233,36 @@ function ReferralsPage() {
         <Card>
           <Gift className="mb-3 h-5 w-5 text-primary" aria-hidden="true" />
           <p className="text-2xl font-black tabular-nums text-foreground">
-            {faNum(summary.earnedDays, lang)}
+            {summary ? faNum(summary.earnedDays, lang) : "—"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">{t("روز هدیه", "Gift days")}</p>
         </Card>
       </div>
 
-      {claimState.status === "eligible" && (
+      {summary && (
+        <div className="flex flex-col items-center gap-1 text-center">
+          <Button
+            className="min-h-11"
+            variant="ghost"
+            disabled={refreshBusy}
+            onClick={() => void load(true)}
+          >
+            <RefreshCw
+              className={`h-4 w-4 ${refreshBusy ? "animate-spin" : ""}`}
+              aria-hidden="true"
+            />
+            {t("به‌روزرسانی آمار", "Refresh stats")}
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            {t(
+              "این صفحه از اطلاعات ذخیره‌شده روی دستگاه استفاده می‌کند.",
+              "This page uses information saved on this device.",
+            )}
+          </p>
+        </div>
+      )}
+
+      {claimState?.status === "eligible" && (
         <Card>
           <h2 className="text-sm font-black text-foreground">
             {t("کد دعوت یک دوست رو داری؟", "Have a friend's referral code?")}
@@ -258,7 +307,7 @@ function ReferralsPage() {
         </Card>
       )}
 
-      {claimState.status === "claimed" && (
+      {claimState?.status === "claimed" && (
         <Card className="flex items-center gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary">
             <Check className="h-5 w-5" aria-hidden="true" />
