@@ -11,7 +11,7 @@ function readyDraft(weekdays: number[]): OnboardingDraft {
     ...defaultOnboardingDraft("user-1"),
     goalId: "health",
     focusId: "health_energy",
-    barrier: "time",
+    barrier: "starting",
     pace: "balanced",
     dayPart: "morning",
     weekdays,

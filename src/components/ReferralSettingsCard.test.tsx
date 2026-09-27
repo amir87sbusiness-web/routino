@@ -1,7 +1,6 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ReferralSummary } from "@/lib/api/referrals";
 import { ReferralSettingsCard } from "./ReferralSettingsCard";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -13,14 +12,6 @@ vi.mock("@tanstack/react-router", () => ({
     </a>
   ),
 }));
-
-const summary: ReferralSummary = {
-  referralCode: "ABCDEF",
-  rewardDays: 7,
-  successfulInvites: 3,
-  earnedDays: 21,
-  claimState: { status: "eligible" },
-};
 
 describe("ReferralSettingsCard", () => {
   let host: HTMLDivElement;
@@ -40,22 +31,10 @@ describe("ReferralSettingsCard", () => {
     writeText.mockClear();
   });
 
-  it("shows the server summary and copies the stable code without an API request", async () => {
-    await act(async () => {
-      root.render(<ReferralSettingsCard summary={summary} lang="fa" t={(fa) => fa} />);
-    });
-
-    expect(host.textContent).toContain("ABCDEF");
-    expect(host.textContent).toContain("۳");
-    expect(host.textContent).toContain("۲۱");
-    expect(host.textContent).toContain(
-      "بعد از اولین خرید موفق دوستت، هر دوی شما ۷ روز اشتراک هدیه می‌گیرید.",
-    );
-
-    const copy = [...host.querySelectorAll("button")].find((button) =>
-      button.textContent?.includes("کپی"),
-    )!;
-    await act(async () => copy.click());
-    expect(writeText).toHaveBeenCalledWith("ABCDEF");
+  it("opens the full referral page without exposing stats in Settings", async () => {
+    await act(async () => root.render(<ReferralSettingsCard t={(fa) => fa} />));
+    expect(host.textContent).toBe("دعوت دوستان");
+    expect(host.querySelector("a")?.getAttribute("href")).toBe("/referrals");
+    expect(host.querySelector("button")).toBeNull();
   });
 });

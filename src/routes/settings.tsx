@@ -44,11 +44,7 @@ import {
 } from "@/components/ui";
 import { ApiError } from "@/lib/api/client";
 import { fetchAccount, logout, setPassword, setUsername, type AccountInfo } from "@/lib/api/auth";
-import {
-  cacheReferralSummary,
-  readCachedReferralSummary,
-  type ReferralSummary,
-} from "@/lib/api/referrals";
+import { cacheReferralSummary } from "@/lib/api/referrals";
 import {
   BACKUP_UI,
   backupSummary,
@@ -1014,9 +1010,6 @@ function AccountCard() {
   const ctx = useAppMaybe();
   const userId = ctx?.db?.auth?.userId;
   const [account, setAccount] = useState<AccountInfo | null>(null);
-  const [referral, setReferral] = useState<ReferralSummary | null>(() =>
-    userId ? readCachedReferralSummary(userId) : null,
-  );
   const [offline, setOffline] = useState(false);
   const [open, setOpen] = useState(false);
   const [uname, setUname] = useState("");
@@ -1034,7 +1027,7 @@ function AccountCard() {
         setAccount(a);
         setUname(a.username ?? "");
         if (a.referral && userId) {
-          setReferral(cacheReferralSummary(userId, a.referral));
+          cacheReferralSummary(userId, a.referral);
         }
       })
       .catch(() => alive && setOffline(true));
@@ -1265,6 +1258,6 @@ function AccountCard() {
         </div>
       </Modal>
     </Card>,
-    <ReferralSettingsCard key="referral" summary={referral} lang={lang} t={t} />,
+    <ReferralSettingsCard key="referral" t={t} />,
   ];
 }

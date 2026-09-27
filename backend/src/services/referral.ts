@@ -10,7 +10,7 @@ const MAX_CODE_ASSIGNMENT_ATTEMPTS = 8;
 
 export type ReferralClaimState =
   | { status: "eligible" }
-  | { status: "claimed" }
+  | { status: "claimed"; rewarded?: boolean }
   | {
       status: "ineligible";
       reason: "account_predates_program" | "paid_purchase_exists";
@@ -96,6 +96,7 @@ interface ReferralStateRow {
   has_claim: boolean;
   has_paid_purchase: boolean;
   successful_invites: number | string;
+  received_reward: boolean;
 }
 
 async function readReferralState(db: DatabaseExecutor, userId: string): Promise<ReferralStateRow> {
@@ -115,6 +116,9 @@ async function readReferralState(db: DatabaseExecutor, userId: string): Promise<
                     and p.psp_result in (100, 101)
                     and p.applied_at is not null
                ) as has_paid_purchase,
+               exists (
+                 select 1 from referrals r where r.invitee_id = u.id and r.successful_at is not null
+               ) as received_reward,
                (
                  select count(*) from referrals r
                   where r.inviter_id = u.id and r.successful_at is not null
@@ -131,7 +135,8 @@ async function readReferralState(db: DatabaseExecutor, userId: string): Promise<
 }
 
 function claimStateFor(row: ReferralStateRow): ReferralClaimState {
-  if (row.has_claim) return { status: "claimed" };
+  if (row.has_claim)
+    return row.received_reward ? { status: "claimed", rewarded: true } : { status: "claimed" };
   if (row.account_predates_program) {
     return { status: "ineligible", reason: "account_predates_program" };
   }
@@ -152,7 +157,7 @@ export async function getReferralSummary(
     referralCode,
     rewardDays: REFERRAL_REWARD_DAYS,
     successfulInvites,
-    earnedDays: successfulInvites * REFERRAL_REWARD_DAYS,
+    earnedDays: (successfulInvites + (state.received_reward ? 1 : 0)) * REFERRAL_REWARD_DAYS,
     claimState: claimStateFor(state),
   };
 }

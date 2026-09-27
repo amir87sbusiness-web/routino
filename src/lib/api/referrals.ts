@@ -2,12 +2,15 @@ import { authedRequest } from "./auth";
 
 const REFERRAL_CACHE_PREFIX = "routino:referrals:v1:";
 const refreshes = new Map<string, Promise<ReferralSummary>>();
-const manualRefreshes = new Map<string, { startedAt: number; promise: Promise<ReferralSummary> }>();
+const manualRefreshes = new Map<
+  string,
+  { succeededAt: number | null; promise: Promise<ReferralSummary> }
+>();
 const REFERRAL_REFRESH_COOLDOWN_MS = 60_000;
 
 export type ReferralClaimState =
   | { status: "eligible" }
-  | { status: "claimed" }
+  | { status: "claimed"; rewarded?: boolean }
   | {
       status: "ineligible";
       reason: "account_predates_program" | "paid_purchase_exists";
@@ -97,21 +100,33 @@ export function refreshReferralSummary(expectedUserId: string): Promise<Referral
 
 export function queueReferralSummaryRefresh(expectedUserId: string): Promise<ReferralSummary> {
   const previous = manualRefreshes.get(expectedUserId);
-  if (previous && Date.now() - previous.startedAt < REFERRAL_REFRESH_COOLDOWN_MS) {
+  if (
+    previous &&
+    (previous.succeededAt === null ||
+      Date.now() - previous.succeededAt < REFERRAL_REFRESH_COOLDOWN_MS)
+  ) {
     return previous.promise;
   }
 
   const request = refreshReferralSummary(expectedUserId);
-  const entry = { startedAt: Date.now(), promise: request };
+  const entry: { succeededAt: number | null; promise: Promise<ReferralSummary> } = {
+    succeededAt: null,
+    promise: request,
+  };
   manualRefreshes.set(expectedUserId, entry);
 
   // A network/server failure should not lock the user out of retrying for a
   // full minute. Successful refreshes stay reusable for the cooldown window.
-  void request.catch(() => {
-    if (manualRefreshes.get(expectedUserId) === entry) {
-      manualRefreshes.delete(expectedUserId);
-    }
-  });
+  void request.then(
+    () => {
+      entry.succeededAt = Date.now();
+    },
+    () => {
+      if (manualRefreshes.get(expectedUserId) === entry) {
+        manualRefreshes.delete(expectedUserId);
+      }
+    },
+  );
 
   return request;
 }

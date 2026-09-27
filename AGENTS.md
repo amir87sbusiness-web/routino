@@ -103,3 +103,8 @@ Updated 2026-09-23. Read this first, then inspect only the source areas relevant
 - Writer keeps v1 when fresh v2 JSONB<2048bytes to avoid loss of TOAST compression.
 - Nine synthetic shapes:0–20.9% physical archive saving;10k-task JSON -33.8% but equal physical space.
 - After any v2 archive exists, do not roll back to a v1-only reader. Archive migration is separate from launch fixes.
+
+## Referral contract
+
+- Claim/trial/FREE/zero/failed payments give no referral reward. Only the first verified positive bank purchase atomically grants 7 days per participant; repeated callbacks and later purchases cannot reward again. Preserve existing plans and remaining entitlement.
+- Referral earnedDays includes both successful invitations and the account's own rewarded claim. Settings exposes only the Invite friends link. Manual stats refresh requests immediately, then uses a client-only 60-second cooldown after success; failed requests remain retryable. No polling.

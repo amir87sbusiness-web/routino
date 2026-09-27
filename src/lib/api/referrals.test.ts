@@ -73,6 +73,30 @@ describe("referrals API", () => {
     expect(auth.authedRequest).toHaveBeenCalledTimes(2);
   });
 
+  it("starts the full cooldown only after a slow request succeeds", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-27T15:00:00Z"));
+    let finish!: (value: typeof eligible) => void;
+    auth.authedRequest
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      )
+      .mockResolvedValue(eligible);
+    const pending = queueReferralSummaryRefresh("slow-user");
+    expect(auth.authedRequest).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(20_000);
+    finish(eligible);
+    await pending;
+    await vi.advanceTimersByTimeAsync(59_999);
+    await queueReferralSummaryRefresh("slow-user");
+    expect(auth.authedRequest).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1);
+    await queueReferralSummaryRefresh("slow-user");
+    expect(auth.authedRequest).toHaveBeenCalledTimes(2);
+  });
+
   it("allows an immediate retry when a manual refresh fails", async () => {
     auth.authedRequest.mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(eligible);
 

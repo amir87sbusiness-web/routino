@@ -760,7 +760,10 @@ export function loadOnboardingDraft(ownerUserId?: string): OnboardingDraft | nul
   try {
     const current = localStorage.getItem(STORAGE_KEY);
     const legacy = current ? null : localStorage.getItem(LEGACY_STORAGE_KEY);
-    const parsed = JSON.parse(current ?? legacy ?? "null") as Partial<OnboardingDraft> & {
+    const parsed = JSON.parse(current ?? legacy ?? "null") as Omit<
+      Partial<OnboardingDraft>,
+      "version"
+    > & {
       version?: number;
     };
     const migrated =

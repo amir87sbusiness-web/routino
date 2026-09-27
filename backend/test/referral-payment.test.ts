@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
 import { schema } from "../src/db/schema.js";
 import { grantInterval } from "../src/services/entitlement.js";
+import { getReferralSummary } from "../src/services/referral.js";
 import { applyPaid } from "../src/services/payment-flow.js";
 import { makeHarness, type Harness } from "./helpers/pglite.js";
 
@@ -100,6 +101,15 @@ describe("referral rewards in the verified-payment transaction", () => {
       .select()
       .from(schema.entitlements)
       .where(eq(schema.entitlements.userId, inviter.id));
+    expect(await getReferralSummary(h.db, inviter.id)).toMatchObject({
+      successfulInvites: 1,
+      earnedDays: 7,
+    });
+    expect(await getReferralSummary(h.db, invitee.id)).toMatchObject({
+      successfulInvites: 0,
+      earnedDays: 7,
+      claimState: { status: "claimed", rewarded: true },
+    });
     expect(inviterEntitlement?.planId).toBe("m3");
     expect(inviterEntitlement?.expiresAt.toISOString()).toBe("2026-10-13T12:00:00.000Z");
   });

@@ -26,7 +26,7 @@ const deadlineCodecMigrationSql = readFileSync(
 const taskCategoryMigrationSql = readFileSync(
   resolve(
     fileURLToPath(new URL("../..", import.meta.url)),
-    "supabase/migrations/20260924173000_task_categories.sql",
+    "supabase/migrations/20260924151651_task_categories.sql",
   ),
   "utf8",
 );

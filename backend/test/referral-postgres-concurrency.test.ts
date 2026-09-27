@@ -71,4 +71,51 @@ describePostgres("referral claim/payment race on real PostgreSQL", () => {
       expect(rewardRows).toHaveLength(0);
     }
   }, 10_000);
+  it("rewards exactly once under concurrent duplicate and distinct paid callbacks", async () => {
+    await admin.query(
+      "truncate table referrals, entitlements, grants, payments, users restart identity cascade",
+    );
+    const db = drizzle(pool, { schema });
+    const [inviter, invitee] = await db
+      .insert(schema.users)
+      .values([{ phone: "989127771001", referralCode: "PAIDCX" }, { phone: "989127771002" }])
+      .returning();
+    await claimReferralCode(db, invitee!.id, "PAIDCX", new Date());
+    const payments = await db
+      .insert(schema.payments)
+      .values(
+        [1, 2].map((n) => ({
+          userId: invitee!.id,
+          planId: "m1",
+          months: 1,
+          amountToman: 59000,
+          amountRial: 590000,
+          status: "redirected",
+          authority: `CONCURRENT-${n}`,
+        })),
+      )
+      .returning();
+    await Promise.all(
+      [payments[0]!, payments[0]!, payments[0]!, payments[1]!].map((payment) =>
+        applyPaid(
+          db,
+          payment,
+          { kind: "paid", code: 100, refNumber: `REF-${payment.id}` },
+          new Date(),
+        ),
+      ),
+    );
+    const rewards = await db
+      .select()
+      .from(schema.grants)
+      .where(eq(schema.grants.source, "referral"));
+    expect(rewards).toHaveLength(2);
+    expect(rewards.map((r) => r.days)).toEqual([7, 7]);
+    expect(new Set(rewards.map((r) => r.userId))).toEqual(new Set([inviter!.id, invitee!.id]));
+    expect(
+      await db.select().from(schema.grants).where(eq(schema.grants.source, "payment")),
+    ).toHaveLength(2);
+    const [referral] = await db.select().from(schema.referrals);
+    expect(payments.map((p) => p.id)).toContain(referral!.successfulPaymentId);
+  }, 10_000);
 });

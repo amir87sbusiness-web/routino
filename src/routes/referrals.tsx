@@ -57,12 +57,23 @@ function ReferralsPage() {
   const [claimBusy, setClaimBusy] = useState(false);
   const [shareBusy, setShareBusy] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
+  const refreshAnimation = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const refreshGeneration = useRef(0);
+  useEffect(
+    () => () => {
+      if (refreshAnimation.current !== null) clearTimeout(refreshAnimation.current);
+    },
+    [],
+  );
   const requestedFor = useRef<string | null>(null);
 
   const load = async (forceRefresh = false) => {
     if (!ctx || !userId) return;
-    if (forceRefresh) setRefreshBusy(true);
-    else setLoading(true);
+    const generation = ++refreshGeneration.current;
+    if (forceRefresh) {
+      if (refreshAnimation.current !== null) clearTimeout(refreshAnimation.current);
+      setRefreshBusy(true);
+    } else setLoading(true);
     setLoadError(null);
     try {
       setSummary(
@@ -74,7 +85,9 @@ function ReferralsPage() {
       if (!forceRefresh) setLoadError(errorCopy(error, ctx.t));
     } finally {
       setLoading(false);
-      setRefreshBusy(false);
+      if (forceRefresh && generation === refreshGeneration.current) {
+        refreshAnimation.current = setTimeout(() => setRefreshBusy(false), 450);
+      }
     }
   };
 
@@ -281,10 +294,12 @@ function ReferralsPage() {
             <Check className="h-5 w-5" aria-hidden="true" />
           </span>
           <p className="text-sm font-bold text-foreground">
-            {t(
-              "کد دعوتت ثبت شده و با اولین خرید اعمال می‌شه.",
-              "Your referral code is saved and will apply to your first purchase.",
-            )}
+            {claimState.rewarded
+              ? t("۷ روز هدیه گرفتی", "You received 7 gift days")
+              : t(
+                  "کد دعوتت ثبت شده و با اولین خرید اعمال می‌شه.",
+                  "Your referral code is saved and will apply to your first purchase.",
+                )}
           </p>
         </Card>
       )}
