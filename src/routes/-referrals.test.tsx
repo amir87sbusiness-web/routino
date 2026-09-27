@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   queueReferralSummaryRefresh: vi.fn(),
   claimReferralCode: vi.fn(),
 }));
+const toast = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (options: unknown) => options,
 }));
@@ -32,7 +33,7 @@ vi.mock("@/state/app", () => ({
     t: (fa: string) => fa,
   }),
 }));
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("sonner", () => ({ toast }));
 
 import { Route } from "./referrals";
 
@@ -55,6 +56,8 @@ describe("referrals page", () => {
     api.refreshReferralSummary.mockReset().mockResolvedValue(eligible);
     api.queueReferralSummaryRefresh.mockReset().mockResolvedValue(eligible);
     api.claimReferralCode.mockReset();
+    toast.success.mockReset();
+    toast.error.mockReset();
     host = document.createElement("div");
     document.body.append(host);
     root = createRoot(host);
@@ -99,22 +102,45 @@ describe("referrals page", () => {
     expect(host.textContent).toContain("دریافت کد");
   });
 
-  it("queues only the explicit low-frequency stats refresh", async () => {
-    api.queueReferralSummaryRefresh.mockResolvedValue({
+  it("keeps repeated refresh taps responsive while the request remains coalesced", async () => {
+    let finishRefresh!: (summary: typeof eligible) => void;
+    const queued = new Promise<typeof eligible>((resolve) => {
+      finishRefresh = resolve;
+    });
+    api.queueReferralSummaryRefresh.mockReturnValue(queued);
+    const refreshed = {
       ...eligible,
       successfulInvites: 3,
       earnedDays: 21,
+    };
+    const refresh = [...host.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("به‌روزرسانی آمار"),
+    )! as HTMLButtonElement;
+
+    expect(api.queueReferralSummaryRefresh).not.toHaveBeenCalled();
+    await act(async () => refresh.click());
+    expect(refresh.disabled).toBe(false);
+    expect(refresh.textContent).toContain("در حال دریافت آمار");
+    await act(async () => {
+      for (let tap = 1; tap < 10; tap += 1) refresh.click();
     });
+
+    expect(api.queueReferralSummaryRefresh).toHaveBeenCalledTimes(10);
+    expect(api.queueReferralSummaryRefresh).toHaveBeenLastCalledWith("user-1");
+    await act(async () => finishRefresh(refreshed));
+    expect(host.textContent).toContain("۲۱");
+  });
+
+  it("keeps cached stats without showing an error when refresh fails", async () => {
+    api.queueReferralSummaryRefresh.mockRejectedValue(new Error("offline"));
     const refresh = [...host.querySelectorAll("button")].find((button) =>
       button.textContent?.includes("به‌روزرسانی آمار"),
     )!;
 
-    expect(api.queueReferralSummaryRefresh).not.toHaveBeenCalled();
     await act(async () => refresh.click());
 
-    expect(api.queueReferralSummaryRefresh).toHaveBeenCalledOnce();
-    expect(api.queueReferralSummaryRefresh).toHaveBeenCalledWith("user-1");
-    expect(host.textContent).toContain("۲۱");
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(host.textContent).toContain("۱۴");
   });
 
   it("does not explain hidden eligibility rules for older accounts", async () => {

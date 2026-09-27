@@ -71,8 +71,8 @@ function ReferralsPage() {
           : await ensureReferralSummaryCached(userId),
       );
     } catch (error) {
-      setLoadError(errorCopy(error, ctx.t));
-      if (summary) {
+      if (!forceRefresh) setLoadError(errorCopy(error, ctx.t));
+      if (summary && !forceRefresh) {
         toast.error(
           ctx.t(
             "به‌روزرسانی انجام نشد؛ اطلاعات ذخیره‌شده نمایش داده می‌شود.",
@@ -226,18 +226,13 @@ function ReferralsPage() {
 
       {summary && (
         <div className="flex justify-center">
-          <Button
-            className="min-h-11"
-            variant="ghost"
-            disabled={refreshBusy}
-            onClick={() => void load(true)}
-          >
+          <Button className="min-h-11" variant="ghost" onClick={() => void load(true)}>
             <RefreshCw
               className={`h-4 w-4 ${refreshBusy ? "animate-spin" : ""}`}
               aria-hidden="true"
             />
             {refreshBusy
-              ? t("در صف به‌روزرسانی…", "Refresh queued…")
+              ? t("در حال دریافت آمار…", "Fetching stats…")
               : t("به‌روزرسانی آمار", "Refresh stats")}
           </Button>
         </div>
