@@ -11,6 +11,7 @@ export function referralRoutes(deps: Deps) {
   const auth = makeAuthenticate(deps);
 
   r.get("/referrals/me", auth, async (c) => {
+    c.header("cache-control", "no-store");
     const user = requireUser(c);
     const now = new Date(deps.now());
     const [referral, entitlement] = await Promise.all([

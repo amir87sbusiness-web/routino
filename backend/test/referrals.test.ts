@@ -60,6 +60,8 @@ describe("referral routes", () => {
     const first = (await getSnapshot(access)).json();
     const second = (await getSnapshot(access)).json();
 
+    expect((await getSnapshot(access)).headers["cache-control"]).toBe("no-store");
+
     expect(first).toEqual({
       referralCode: expect.stringMatching(/^[A-Z]{6}$/),
       rewardDays: 7,

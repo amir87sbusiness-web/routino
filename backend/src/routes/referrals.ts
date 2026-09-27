@@ -9,7 +9,8 @@ const claimBody = z.object({ code: z.string() });
 export const referralRoutes: FastifyPluginAsync = async (app) => {
   const { db } = app.deps;
 
-  app.get("/referrals/me", { preHandler: app.authenticate }, async (req) => {
+  app.get("/referrals/me", { preHandler: app.authenticate }, async (req, reply) => {
+    reply.header("cache-control", "no-store");
     const user = requireUser(req);
     const now = new Date(app.deps.now());
     const [referral, entitlement] = await Promise.all([

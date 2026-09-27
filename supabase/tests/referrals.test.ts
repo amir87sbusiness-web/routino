@@ -24,6 +24,7 @@ describe("referral routes — Edge adapter", () => {
     const user = await signIn(h, "09125550001");
     const response = await h.call("GET", "/v1/referrals/me", { headers: auth(user.access) });
     expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
     const body = await response.json();
     expect(body).toEqual({
       referralCode: expect.stringMatching(/^[A-Z]{6}$/),

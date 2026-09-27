@@ -366,6 +366,7 @@ export async function authedRequest<T>(
     expectedUserId?: string;
     keepalive?: boolean;
     signal?: AbortSignal;
+    cache?: RequestCache;
   } = {},
 ): Promise<T> {
   const { expectedUserId, ...requestOptions } = opts;

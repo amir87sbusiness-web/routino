@@ -47,6 +47,7 @@ describe("referrals API", () => {
     expect(auth.authedRequest).toHaveBeenCalledOnce();
     expect(auth.authedRequest).toHaveBeenCalledWith("/referrals/me", {
       expectedUserId: "user-1",
+      cache: "no-store",
     });
     expect(readCachedReferralSummary("user-1")).toEqual(eligible);
   });
