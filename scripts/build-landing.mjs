@@ -291,19 +291,16 @@ async function makeOgImage() {
 function writeSeoFiles() {
   writeFileSync(
     join(OUT_DIR, "robots.txt"),
-    ["User-agent: *", "Allow: /", "Disallow: /app/", "", `Sitemap: ${SITE}/sitemap.xml`, ""].join(
-      "\n",
-    ),
+    ["User-agent: *", "Allow: /", "", `Sitemap: ${SITE}/sitemap.xml`, ""].join("\n"),
   );
 
-  const today = new Date().toISOString().slice(0, 10);
   writeFileSync(
     join(OUT_DIR, "sitemap.xml"),
     [
       '<?xml version="1.0" encoding="UTF-8"?>',
       '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
-      `  <url><loc>${SITE}/</loc><lastmod>${today}</lastmod><priority>1.0</priority></url>`,
-      `  <url><loc>${SITE}/legal/</loc><lastmod>${today}</lastmod><priority>0.3</priority></url>`,
+      `  <url><loc>${SITE}/</loc></url>`,
+      `  <url><loc>${SITE}/legal/</loc></url>`,
       "</urlset>",
       "",
     ].join("\n"),
@@ -436,12 +433,15 @@ async function main() {
       "",
       "/app/index.html",
       "  Cache-Control: no-cache",
+      "  X-Robots-Tag: noindex, nofollow",
       "",
       "/app",
       "  Cache-Control: no-cache",
+      "  X-Robots-Tag: noindex, nofollow",
       "",
       "/app/",
       "  Cache-Control: no-cache",
+      "  X-Robots-Tag: noindex, nofollow",
       "",
       "/app/sw.js",
       "  Cache-Control: no-cache",
