@@ -81,18 +81,20 @@ function TasksPage() {
   };
 
   return (
-    <div className="page-stagger flex flex-col gap-5">
-      <WeekStrip
-        selected={selectedDay}
-        onSelect={setSelectedDay}
-        cal={cal}
-        lang={lang}
-        countFor={taskCount}
-        percentFor={taskPercent}
-      />
+    <div data-guide-scope="tasks" className="page-stagger flex flex-col gap-5">
+      <div data-guide="intro">
+        <WeekStrip
+          selected={selectedDay}
+          onSelect={setSelectedDay}
+          cal={cal}
+          lang={lang}
+          countFor={taskCount}
+          percentFor={taskPercent}
+        />
+      </div>
 
       <div>
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div data-guide="date" className="flex flex-wrap items-center gap-1.5">
           <Chip
             active={selectedDay === todayK}
             onClick={() => {
@@ -135,7 +137,7 @@ function TasksPage() {
       </div>
 
       <div className="card-surface overflow-hidden !p-0">
-        <div className="flex items-center gap-2 p-4 pb-0">
+        <div data-guide="list" className="flex items-center gap-2 p-4 pb-0">
           <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-success/20 text-success">
             <Check className="h-3.5 w-3.5" strokeWidth={3} />
           </span>
@@ -149,6 +151,7 @@ function TasksPage() {
 
         <div className="flex flex-col gap-2 p-4 pt-3">
           <button
+            data-guide="create"
             type="button"
             onClick={openNewTask}
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-border px-3 py-3 text-sm font-bold text-primary transition-colors hover:bg-primary-soft focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"

@@ -70,6 +70,13 @@ Updated 2026-09-23. Read this first, then inspect only the source areas relevant
 - Retention requires proven trial/registration-only eligibility, no financial/admin history. Never run manual cleanup for tests.
 - Backup/export/import UI is temporarily disabled by BACKUP_UI in src/lib/backup.ts; implementations remain for reactivation. Import policy stays active-paid only. Content reset is not account deletion.
 
+## In-app guide
+
+- Automatic section/form guides enroll only from auth `isNew`, and activate after successful getting-started completion. Existing accounts can opt in with Settings replay.
+- Guide progress is device-local and account-scoped in `routino:guide:v1:<userId>`; never sync it or change product records for a tour.
+- X dismisses the current section visit and saves its step; next visit resumes. Got it completes that section. Replay resets only the current account's guide and opens Today.
+- `ProductGuide` is mounted once beside the root Outlet. `data-guide-scope` and `data-guide` anchor the shared content; Modal `guide` scopes take priority. Help hints remain available to all accounts and pause automatic guides.
+
 ## Auth and payment invariants
 
 - OTP TTL120s, cap5 attempts; consume conditionally with consumed_at IS NULL RETURNING.

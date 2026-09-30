@@ -54,11 +54,13 @@ function TodayPage() {
   const habitCount = (k: string) => dueHabitsOn(db, k, cal).length;
 
   return (
-    <div className="page-stagger flex flex-col gap-6">
+    <div data-guide-scope="today" className="page-stagger flex flex-col gap-6">
       {/* header */}
-      <div className="flex items-center justify-between gap-3">
+      <div data-guide="navigation" className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-black leading-tight text-foreground">{greeting}</h1>
+          <h1 data-guide="intro" className="text-2xl font-black leading-tight text-foreground">
+            {greeting}
+          </h1>
           <p className="mt-1 text-sm text-muted-foreground">{formatDate(dk, cal, lang)}</p>
         </div>
         {score !== null && (
@@ -92,14 +94,16 @@ function TodayPage() {
       </div>
 
       {/* week strip */}
-      <WeekStrip
-        selected={dk}
-        onSelect={setDk}
-        cal={cal}
-        lang={lang}
-        countFor={habitCount}
-        percentFor={(k) => dayScore(db, k, cal)}
-      />
+      <div data-guide="date">
+        <WeekStrip
+          selected={dk}
+          onSelect={setDk}
+          cal={cal}
+          lang={lang}
+          countFor={habitCount}
+          percentFor={(k) => dayScore(db, k, cal)}
+        />
+      </div>
       {!isToday && (
         <button
           onClick={() => setDk(todayKey())}
@@ -110,7 +114,7 @@ function TodayPage() {
       )}
 
       {/* today's tasks */}
-      <section>
+      <section data-guide="tasks">
         <SectionTitle
           action={
             <Link to="/tasks" className="text-xs font-medium text-primary">
@@ -138,7 +142,7 @@ function TodayPage() {
       </section>
 
       {/* habits due */}
-      <section>
+      <section data-guide="habits">
         <SectionTitle
           action={
             <Link to="/habits" className="flex items-center text-xs font-medium text-primary">

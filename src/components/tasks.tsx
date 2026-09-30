@@ -1,3 +1,4 @@
+import { HelpHint } from "@/components/ProductGuide";
 /** Shared task row + quick "Today's To-dos" card, used on both Home and Tasks pages. */
 import { Link } from "@tanstack/react-router";
 import {
@@ -197,13 +198,14 @@ export function TaskFormModal({
 
   return (
     <Modal
+      guide="task-form"
       open={open}
       onClose={onClose}
       title={draft.id ? t("ویرایش کار", "Edit task") : t("کار جدید", "New task")}
       wide
     >
       <div className="flex flex-col gap-4">
-        <div>
+        <div data-guide="name">
           <p className="mb-1.5 text-xs font-medium text-muted-foreground">
             {t("تاریخ کار", "Task date")}
           </p>
@@ -262,9 +264,9 @@ export function TaskFormModal({
           </div>
         )}
 
-        <div>
+        <div data-guide="measurement">
           <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-            {t("نوع سنجش", "Measurement")}
+            {t("نوع سنجش", "Measurement")} <HelpHint topic="measurement" lang={lang} />
           </p>
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -299,7 +301,7 @@ export function TaskFormModal({
 
         {draft.type === "quantity" && (
           <div className="flex flex-col gap-3">
-            <div>
+            <div data-guide="target">
               <p className="mb-1.5 text-xs font-medium text-muted-foreground">
                 {t("واحد سنجش", "Unit type")}
               </p>
@@ -342,7 +344,7 @@ export function TaskFormModal({
             {draft.unitKind === "time" ? (
               <div>
                 <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-                  {t("مدت‌زمان هدف", "Target duration")}
+                  {t("مدت‌زمان هدف", "Target duration")} <HelpHint topic="target" lang={lang} />
                 </p>
                 <DurationPicker
                   totalMinutes={draft.target}
@@ -354,7 +356,7 @@ export function TaskFormModal({
             ) : (
               <div>
                 <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-                  {t("مقدار هدف", "Target amount")}
+                  {t("مقدار هدف", "Target amount")} <HelpHint topic="target" lang={lang} />
                 </p>
                 <Input
                   type="number"
@@ -425,9 +427,10 @@ export function TaskFormModal({
         </div>
 
         <div>
-          <div className="flex items-center justify-between gap-3">
+          <div data-guide="reminder" className="flex items-center justify-between gap-3">
             <p className="text-xs font-medium text-muted-foreground">
-              {t("یادآوری در همین روز", "Reminder on this day")}
+              {t("یادآوری در همین روز", "Reminder on this day")}{" "}
+              <HelpHint topic="task-reminder" lang={lang} />
             </p>
             <button
               type="button"
@@ -475,7 +478,9 @@ export function TaskFormModal({
 
         <div>
           <div className="flex items-center justify-between gap-3">
-            <p className="text-xs font-medium text-muted-foreground">{t("ددلاین", "Deadline")}</p>
+            <p className="text-xs font-medium text-muted-foreground">
+              {t("ددلاین", "Deadline")} <HelpHint topic="task-deadline" lang={lang} />
+            </p>
             <button
               type="button"
               role="switch"
@@ -551,6 +556,7 @@ export function TaskFormModal({
         </div>
 
         <Button
+          data-guide="save"
           onClick={onSave}
           disabled={
             !draft.title.trim() ||

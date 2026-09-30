@@ -1,3 +1,4 @@
+import { HelpHint } from "@/components/ProductGuide";
 /** Habit form modal and daily log row. */
 import { Check, Minus, Pencil, Plus, SmilePlus, X } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -448,7 +449,12 @@ export function HabitRow({
       </div>
 
       {/* detail modal: actual amount, note, mood */}
-      <Modal open={detailOpen} onClose={() => setDetailOpen(false)} title={habit.name}>
+      <Modal
+        guide="habit-log"
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        title={habit.name}
+      >
         <div className="flex flex-col gap-4">
           {isFuture && (
             <p className="rounded-xl bg-secondary px-3 py-2 text-center text-[11px] font-medium text-muted-foreground">
@@ -733,13 +739,14 @@ export function HabitFormModal({
   const [deadlinePickerOpen, setDeadlinePickerOpen] = useState(false);
   return (
     <Modal
+      guide="habit-form"
       open={open}
       onClose={onClose}
       title={draft.id ? t("ویرایش عادت", "Edit habit") : t("عادت جدید", "New habit")}
       wide
     >
       <div className="flex flex-col gap-4">
-        <div>
+        <div data-guide="name">
           <p className="mb-1.5 text-xs font-medium text-muted-foreground">
             {t("نام عادت", "Habit name")}
           </p>
@@ -770,9 +777,9 @@ export function HabitFormModal({
           </div>
         </div>
 
-        <div>
+        <div data-guide="measurement">
           <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-            {t("نوع سنجش", "Measurement")}
+            {t("نوع سنجش", "Measurement")} <HelpHint topic="measurement" lang={lang} />
           </p>
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -836,7 +843,7 @@ export function HabitFormModal({
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-                    {t("مقدار هدف", "Target amount")}
+                    {t("مقدار هدف", "Target amount")} <HelpHint topic="target" lang={lang} />
                   </p>
                   <Input
                     type="number"
@@ -860,7 +867,7 @@ export function HabitFormModal({
             ) : (
               <div>
                 <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-                  {t("مدت‌زمان هدف", "Target duration")}
+                  {t("مدت‌زمان هدف", "Target duration")} <HelpHint topic="target" lang={lang} />
                 </p>
                 <DurationPicker
                   totalMinutes={draft.target}
@@ -873,9 +880,10 @@ export function HabitFormModal({
           </div>
         )}
 
-        <div>
+        <div data-guide="repeat">
           <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-            {t("روزهای تکرار (حداقل یک روز)", "Repeat on (at least one day)")}
+            {t("روزهای تکرار (حداقل یک روز)", "Repeat on (at least one day)")}{" "}
+            <HelpHint topic="repeat" lang={lang} />
           </p>
           <div data-testid="habit-weekdays" className="grid grid-cols-7 gap-1">
             {pickerOrder.map((wd) => {
@@ -911,9 +919,10 @@ export function HabitFormModal({
         </div>
 
         <div className="grid grid-cols-2 gap-2">
-          <div>
+          <div data-guide="monthly">
             <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-              {t("هدف ماهانه (روز)", "Monthly goal (days)")}
+              {t("هدف ماهانه (روز)", "Monthly goal (days)")}{" "}
+              <HelpHint topic="monthly" lang={lang} />
             </p>
             <Input
               type="number"
@@ -928,7 +937,8 @@ export function HabitFormModal({
           </div>
           <div>
             <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-              {t("یادآوری روزانه", "Daily reminder")}
+              {t("یادآوری روزانه", "Daily reminder")}{" "}
+              <HelpHint topic="habit-reminder" lang={lang} />
             </p>
             <button
               type="button"
@@ -963,7 +973,7 @@ export function HabitFormModal({
 
         <div>
           <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-            {t("ددلاین روزانه", "Deadline")}
+            {t("ددلاین روزانه", "Deadline")} <HelpHint topic="habit-deadline" lang={lang} />
           </p>
           <button
             type="button"
@@ -994,7 +1004,11 @@ export function HabitFormModal({
           )}
         </div>
 
-        <Button disabled={!draft.name.trim() || draft.weekdays.length === 0} onClick={onSave}>
+        <Button
+          data-guide="save"
+          disabled={!draft.name.trim() || draft.weekdays.length === 0}
+          onClick={onSave}
+        >
           {draft.id ? <Pencil className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
           {draft.id ? t("ذخیره تغییرات", "Save changes") : t("اضافه کردن", "Add habit")}
         </Button>

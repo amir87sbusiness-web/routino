@@ -36,6 +36,7 @@ vi.mock("@/state/app", () => ({
 }));
 
 import { Route } from "./auth";
+import { readGuide } from "@/lib/product-guide";
 
 const AuthPage = (Route as unknown as { component: () => React.ReactNode }).component;
 
@@ -56,6 +57,7 @@ describe("AuthPage registration and recovery", () => {
   let root: Root;
 
   beforeEach(async () => {
+    localStorage.clear();
     api.requestOtp.mockResolvedValue({ ok: true, retryAfter: 60 });
     api.verifyOtp.mockResolvedValue({
       user: { id: "u1", phone: "989123334444" },
@@ -81,6 +83,43 @@ describe("AuthPage registration and recovery", () => {
     expect([...host.querySelectorAll("button")].map((button) => button.textContent)).toContain(
       "فراموشی رمز عبور",
     );
+  });
+
+  it.each([true, false])("enrolls a guide only when the server says isNew=%s", async (isNew) => {
+    api.verifyOtp.mockResolvedValue({
+      user: { id: "u1", phone: "989123334444" },
+      entitlement: { status: "none", planId: null, expiresAt: null, issuedAt: "now" },
+      isNew,
+    });
+    await click(
+      [...host.querySelectorAll("button")].find((button) => button.textContent === "ثبت‌نام")!,
+    );
+    await act(async () =>
+      change(
+        host.querySelector<HTMLInputElement>('input[placeholder="09xxxxxxxxx"]')!,
+        "09123334444",
+      ),
+    );
+    await click(
+      [...host.querySelectorAll("button")].find(
+        (button) => button.textContent === "ارسال کد پیامکی",
+      )!,
+    );
+    await act(async () => {
+      change(host.querySelector<HTMLInputElement>('input[aria-label="کد پیامکی"]')!, "1234");
+      change(
+        host.querySelector<HTMLInputElement>('input[aria-label="رمز عبور جدید"]')!,
+        "Example@1405",
+      );
+    });
+    await click(
+      [...host.querySelectorAll("button")].find(
+        (button) => button.textContent === "تکمیل ثبت‌نام",
+      )!,
+    );
+    expect(readGuide("u1").pending).toBe(isNew);
+    expect(readGuide("u1").enabled).toBe(false);
+    expect(navigate).toHaveBeenLastCalledWith({ to: isNew ? "/getting-started" : "/" });
   });
 
   it("uses a four-digit code and sends the registration intent", async () => {

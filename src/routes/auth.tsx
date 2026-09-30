@@ -5,6 +5,7 @@ import { ApiError } from "@/lib/api/client";
 import { passwordLogin, requestOtp, verifyOtp, type ServerEntitlement } from "@/lib/api/auth";
 import { faNum } from "@/lib/dates";
 import { defaultOnboardingDraft, loadOnboardingDraft, saveOnboardingDraft } from "@/lib/onboarding";
+import { prepareGuide } from "@/lib/product-guide";
 import { normalizePhone, toAsciiDigits, toLocalPhone } from "@/lib/phone";
 import { useAppMaybe } from "@/state/app";
 
@@ -103,6 +104,7 @@ function AuthPage() {
     await switchAccount(user, serverEntitlement);
     let pendingOnboarding = loadOnboardingDraft(user.id);
     if (isNew) {
+      prepareGuide(user.id);
       pendingOnboarding = defaultOnboardingDraft(user.id);
       saveOnboardingDraft(pendingOnboarding);
     }

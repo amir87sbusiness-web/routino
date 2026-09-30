@@ -1,3 +1,4 @@
+import { HelpHint } from "@/components/ProductGuide";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { CalendarCheck2, ChevronLeft, ChevronRight, Flame } from "lucide-react";
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
@@ -212,7 +213,10 @@ function AnalyticsPage() {
   const taskChart = buildChartBars(taskSeries, range.id, cal, lang);
 
   return (
-    <div className="page-stagger flex flex-col gap-5">
+    <div
+      data-guide-scope={tab === "habits" ? "analytics-habits" : "analytics-tasks"}
+      className="page-stagger flex flex-col gap-5"
+    >
       <div className="grid grid-cols-2 gap-2 rounded-2xl bg-secondary/60 p-1">
         <button
           type="button"
@@ -232,13 +236,15 @@ function AnalyticsPage() {
 
       {tab === "habits" && (
         <>
-          <WeeklyReviewCard review={review} cal={cal} lang={lang} t={t} />
+          <div data-guide="weekly">
+            <WeeklyReviewCard review={review} cal={cal} lang={lang} t={t} />
+          </div>
 
           {/* overall trend */}
-          <Card>
+          <Card data-guide="overall">
             <div className="mb-3 flex items-center justify-between gap-2">
               <p className="shrink-0 text-sm font-bold text-foreground">
-                {t("عملکرد کلی", "Overall performance")}
+                {t("عملکرد کلی", "Overall performance")} <HelpHint topic="progress" lang={lang} />
               </p>
               <div className="scrollbar-none flex gap-1 overflow-x-auto">
                 {RANGES.map((r) => (
@@ -259,7 +265,7 @@ function AnalyticsPage() {
           </Card>
 
           {/* per-habit summary */}
-          <section>
+          <section data-guide="individual">
             <SectionTitle
               action={
                 <div className="flex items-center gap-1">
@@ -358,10 +364,11 @@ function AnalyticsPage() {
 
       {tab === "tasks" && (
         <>
-          <Card>
+          <Card data-guide="overall">
             <div className="mb-3 flex items-center justify-between gap-2">
               <p className="shrink-0 text-sm font-bold text-foreground">
-                {t("عملکرد کلی کارها", "Overall task performance")}
+                {t("عملکرد کلی کارها", "Overall task performance")}{" "}
+                <HelpHint topic="progress" lang={lang} />
               </p>
               <div className="scrollbar-none flex gap-1 overflow-x-auto">
                 {RANGES.map((item) => (
@@ -381,7 +388,7 @@ function AnalyticsPage() {
             </p>
           </Card>
 
-          <section>
+          <section data-guide="list">
             <SectionTitle
               action={
                 <div className="flex items-center gap-1">

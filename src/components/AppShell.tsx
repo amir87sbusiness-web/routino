@@ -234,7 +234,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="mx-auto w-full max-w-2xl flex-1 pb-nav lg:pb-8">
         {/* Top bar */}
-        <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-background/80 px-4 pb-2 pt-safe backdrop-blur-md lg:rounded-b-2xl">
+        <header
+          data-guide-header="true"
+          className="sticky top-0 z-30 flex items-center justify-between border-b border-border bg-background/80 px-4 pb-2 pt-safe backdrop-blur-md lg:rounded-b-2xl"
+        >
           <Link
             to="/settings"
             aria-label={t("تنظیمات", "Settings")}
@@ -312,7 +315,10 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       {/* Mobile bottom nav */}
-      <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 pb-safe backdrop-blur-md lg:hidden">
+      <nav
+        data-guide-nav="true"
+        className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-card/95 pb-safe backdrop-blur-md lg:hidden"
+      >
         <div className="mx-auto flex max-w-2xl items-stretch">
           {BOTTOM_NAV.map((item) => {
             const Icon = item.icon;

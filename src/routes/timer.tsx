@@ -1,3 +1,4 @@
+import { HelpHint } from "@/components/ProductGuide";
 import { createFileRoute } from "@tanstack/react-router";
 import { Coffee, Pause, Play, RotateCcw, Square, Timer as TimerIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -524,21 +525,28 @@ export function TimerPage() {
   };
 
   return (
-    <div className="page-stagger flex flex-col gap-6">
+    <div data-guide-scope="timer" className="page-stagger flex flex-col gap-6">
       {/* mode switch */}
-      <div className="grid grid-cols-3 gap-2">
+      <div data-guide="modes" className="grid grid-cols-3 gap-2">
+        <div className="relative">
+          <button
+            data-guide="pomodoro"
+            onClick={() => switchMode("pomodoro")}
+            className={`flex w-full flex-col items-center gap-1 rounded-2xl border px-2 py-3 text-xs font-bold transition-all ${
+              mode === "pomodoro"
+                ? "border-primary bg-primary-soft text-primary"
+                : "border-border text-muted-foreground"
+            }`}
+          >
+            <TimerIcon className="h-4 w-4" />
+            {t("پومودورو", "Pomodoro")}
+          </button>
+          <span className="absolute -top-2 -end-2">
+            <HelpHint topic="pomodoro" lang={lang} />
+          </span>
+        </div>
         <button
-          onClick={() => switchMode("pomodoro")}
-          className={`flex flex-col items-center gap-1 rounded-2xl border px-2 py-3 text-xs font-bold transition-all ${
-            mode === "pomodoro"
-              ? "border-primary bg-primary-soft text-primary"
-              : "border-border text-muted-foreground"
-          }`}
-        >
-          <TimerIcon className="h-4 w-4" />
-          {t("پومودورو", "Pomodoro")}
-        </button>
-        <button
+          data-guide="clock"
           onClick={() => switchMode("free")}
           className={`flex flex-col items-center gap-1 rounded-2xl border px-2 py-3 text-xs font-bold transition-all ${
             mode === "free"
@@ -623,7 +631,7 @@ export function TimerPage() {
 
         {/* آیکون‌های تنها: بدون aria-label اسکرین‌ریدر فقط «دکمه» می‌گوید — و
             اینها کنترل‌های اصلی تایمرند، نه چیز فرعی. */}
-        <div className="flex gap-3">
+        <div data-guide="controls" className="flex gap-3">
           <Button
             onClick={toggleRunning}
             disabled={mode !== "stopwatch" && remaining === 0 && !running}
@@ -739,9 +747,10 @@ export function TimerPage() {
       </Card>
 
       {/* link to a time-tracked source or a standalone Goal item */}
-      <Card>
+      <Card data-guide="link">
         <p className="mb-2 text-sm font-bold text-foreground">
-          {t("اتصال تایمر به هدف زمانی", "Link timer to a time goal")}
+          {t("اتصال تایمر به هدف زمانی", "Link timer to a time goal")}{" "}
+          <HelpHint topic="link" lang={lang} />
         </p>
         <p className="mb-3 text-[10px] text-muted-foreground">
           {t(

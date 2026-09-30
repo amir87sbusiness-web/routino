@@ -115,9 +115,9 @@ function HabitsPage() {
   };
 
   return (
-    <div className="page-stagger flex flex-col gap-5">
-      <div className="flex gap-2">
-        <Button className="flex-1" onClick={() => setPresetsOpen(true)}>
+    <div data-guide-scope="habits" className="page-stagger flex flex-col gap-5">
+      <div data-guide="intro" className="flex gap-2">
+        <Button data-guide="create" className="flex-1" onClick={() => setPresetsOpen(true)}>
           <Plus className="h-4 w-4" /> {t("عادت‌های آماده", "Preset habits")}
         </Button>
         <Button
@@ -134,7 +134,7 @@ function HabitsPage() {
       </div>
 
       {/* category + status filter — only categories that actually have habits show */}
-      <div className="scrollbar-none flex gap-1.5 overflow-x-auto pb-1">
+      <div data-guide="filters" className="scrollbar-none flex gap-1.5 overflow-x-auto pb-1">
         <Chip active={!filterCat} onClick={() => setFilterCat(null)}>
           {t("همه", "All")}
         </Chip>
@@ -159,7 +159,9 @@ function HabitsPage() {
       </div>
 
       {/* achievements summary, grouped by category */}
-      <SectionTitle>{t("عادت‌ها و دستاوردها", "Habits & achievements")}</SectionTitle>
+      <div data-guide="progress">
+        <SectionTitle>{t("عادت‌ها و دستاوردها", "Habits & achievements")}</SectionTitle>
+      </div>
       {habits.length === 0 ? (
         <EmptyState emoji="🪴" text={t("عادتی در این دسته نیست.", "No habits in this category.")} />
       ) : (
@@ -250,6 +252,7 @@ function HabitsPage() {
       <Modal
         open={presetsOpen}
         onClose={() => setPresetsOpen(false)}
+        guide="presets"
         title={t("عادت‌های آماده", "Preset habits")}
         wide
       >
@@ -321,6 +324,7 @@ function HabitsPage() {
       <Modal
         open={catFormOpen}
         onClose={() => setCatFormOpen(false)}
+        guide="category"
         title={t("دسته‌بندی جدید", "New category")}
       >
         <div className="flex flex-col gap-3">

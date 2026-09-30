@@ -15,6 +15,7 @@ import {
   type OnboardingDraft,
 } from "@/lib/onboarding";
 import { subscriptionActive } from "@/lib/logic";
+import { activateGuide } from "@/lib/product-guide";
 import { useAppMaybe } from "@/state/app";
 
 export const Route = createFileRoute("/getting-started")({
@@ -63,8 +64,9 @@ function GettingStartedPage() {
     }
 
     clearOnboardingDraft();
+    if (userId) activateGuide(userId);
     navigate({ to: "/" });
-  }, [ctx, navigate, pendingCompletion]);
+  }, [ctx, navigate, pendingCompletion, userId]);
 
   if (!ctx?.db || !draft || !ready) return null;
   const db = ctx.db;

@@ -335,3 +335,78 @@
     transition: none !important;
   }
 }
+/* Contextual guides share the existing theme and leave app navigation usable. */
+.guide-card {
+  position: fixed;
+  z-index: 90;
+  box-sizing: border-box;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 14px;
+  background: var(--card);
+  color: var(--card-foreground);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 16%);
+  animation: guide-enter 140ms ease-out;
+  scroll-padding: 12px;
+}
+[data-guide-highlight="true"] {
+  outline: 2px solid var(--primary);
+  outline-offset: 4px;
+  border-radius: 10px;
+}
+.guide-help-button,
+.guide-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  vertical-align: middle;
+  border-radius: 50%;
+  color: var(--muted-foreground);
+}
+.guide-help-button:hover,
+.guide-close:hover {
+  background: var(--secondary);
+  color: var(--primary);
+}
+.guide-next,
+.guide-previous {
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.guide-next {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+.guide-previous {
+  background: var(--secondary);
+  color: var(--foreground);
+}
+.guide-previous:disabled {
+  opacity: 0.4;
+}
+.guide-card button:focus-visible,
+.guide-help-button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+@keyframes guide-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .guide-card {
+    animation: none;
+  }
+}

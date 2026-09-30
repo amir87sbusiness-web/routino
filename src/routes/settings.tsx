@@ -1,3 +1,4 @@
+import { HelpHint, GuideReplayButton } from "@/components/ProductGuide";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   AlertTriangle,
@@ -291,14 +292,22 @@ function SettingsPage() {
   };
 
   return (
-    <div className="page-stagger flex flex-col gap-4">
+    <div data-guide-scope="settings" className="page-stagger flex flex-col gap-4">
+      <div data-guide="help">
+        <GuideReplayButton />
+      </div>
       {/* account: profile + username/password together, at the very top */}
-      <AccountCard />
+      <div data-guide="account">
+        <AccountCard />
+      </div>
 
       {/* language + calendar */}
       <div className="grid grid-cols-2 gap-3">
         <Card>
-          <div className="mb-2 flex items-center gap-1.5 text-xs font-bold text-foreground">
+          <div
+            data-guide="appearance"
+            className="mb-2 flex items-center gap-1.5 text-xs font-bold text-foreground"
+          >
             <Globe className="h-3.5 w-3.5 text-primary" /> {t("زبان", "Language")}
           </div>
           <div className="flex flex-col gap-1.5">
@@ -412,7 +421,7 @@ function SettingsPage() {
       </div>
 
       {/* categories */}
-      <Card className="!p-0 overflow-hidden">
+      <Card data-guide="categories" className="!p-0 overflow-hidden">
         <button
           onClick={() => setCatExpanded((v) => !v)}
           className="flex w-full items-center justify-between p-4"
@@ -470,10 +479,11 @@ function SettingsPage() {
           </div>
         )}
       </Card>
-      <Card>
+      <Card data-guide="notifications">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-            <Bell className="h-4 w-4 text-primary" /> {t("نوتیفیکیشن‌ها", "Notifications")}
+            <Bell className="h-4 w-4 text-primary" /> {t("نوتیفیکیشن‌ها", "Notifications")}{" "}
+            <HelpHint topic="notifications" lang={lang} />
           </div>
           <button
             type="button"
@@ -497,6 +507,7 @@ function SettingsPage() {
               <div>
                 <p className="text-xs font-bold text-foreground">
                   {t("صدای تکمیل", "Completion sound")}
+                  <HelpHint topic="sound" lang={lang} />
                 </p>
                 <p className="text-[10px] text-muted-foreground">
                   {t(
@@ -527,6 +538,7 @@ function SettingsPage() {
               <div>
                 <p className="text-xs font-bold text-foreground">
                   {t("بازخورد لمسی", "Haptic feedback")}
+                  <HelpHint topic="haptics" lang={lang} />
                 </p>
                 <p className="text-[10px] text-muted-foreground">
                   {t("روی گوشی‌های سازگار", "On supported phones")}
@@ -564,7 +576,8 @@ function SettingsPage() {
         )}
         <div className="mt-3">
           <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-            {t("ساعت یادآوری ژورنال", "Journal reminder time")}
+            {t("ساعت یادآوری ژورنال", "Journal reminder time")}{" "}
+            <HelpHint topic="journal-reminder" lang={lang} />
           </p>
           <button
             onClick={() => setJournalTimeOpen(true)}
@@ -873,12 +886,21 @@ function SettingsPage() {
             <Trash2 className="h-3.5 w-3.5" /> {t("پاک کردن همهٔ داده‌ها", "Erase all data")}
           </Button>
         </div>
+        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          <span>
+            {t("خروج از حساب", "Sign out")} <HelpHint topic="signout" lang={lang} />
+          </span>
+          <span>
+            {t("پاک کردن همهٔ داده‌ها", "Erase all data")} <HelpHint topic="erase" lang={lang} />
+          </span>
+        </div>
       </Card>
 
       {/* new category modal */}
       <Modal
         open={catFormOpen}
         onClose={() => setCatFormOpen(false)}
+        guide="category"
         title={t("دسته‌بندی جدید", "New category")}
       >
         <div className="flex flex-col gap-4">
@@ -1174,6 +1196,7 @@ function AccountCard() {
       <Modal
         open={open}
         onClose={() => setOpen(false)}
+        guide="password"
         title={t("نام کاربری و رمز عبور", "Username & password")}
       >
         <div className="flex flex-col gap-6">

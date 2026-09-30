@@ -188,8 +188,20 @@ export function NoteField({ value, onChange, label, doneLabel, onSave, placehold
   </>;
 }
 
-export function Card({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn("card-surface p-4", className)}>{children}</div>;
+export function Card({
+  className,
+  children,
+  "data-guide": guide,
+}: {
+  className?: string;
+  children: ReactNode;
+  "data-guide"?: string;
+}) {
+  return (
+    <div data-guide={guide} className={cn("card-surface p-4", className)}>
+      {children}
+    </div>
+  );
 }
 
 export function Progress({
@@ -230,12 +242,14 @@ export function Modal({
   title,
   children,
   wide,
+  guide,
 }: {
   open: boolean;
   onClose: () => void;
   title?: string;
   children: ReactNode;
   wide?: boolean;
+  guide?: import("@/lib/product-guide-content").GuideSection;
 }) {
   const keyboardViewport = useKeyboardViewport(open);
   if (!open) return null;
@@ -255,6 +269,9 @@ export function Modal({
         aria-label={title}
         style={keyboardViewport ? { maxHeight: Math.max(0, keyboardViewport.height - 24) } : undefined}
         onFocusCapture={(event) => keepFocusedFieldVisible(event.target as HTMLElement)}
+        data-guide-modal="true"
+        data-guide-scope={guide}
+        data-guide={guide ? "intro" : undefined}
         className={cn(
           "animate-pop-in relative max-h-[90vh] max-h-[90dvh] w-full overflow-y-auto rounded-t-3xl bg-card px-5 pt-5 pb-modal-safe shadow-2xl sm:rounded-3xl",
           wide ? "sm:max-w-2xl" : "sm:max-w-md",

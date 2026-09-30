@@ -4,6 +4,7 @@ import { Toaster } from "sonner";
 import { UpdateWatcher } from "../components/pwa";
 import { AccountDeletionWarning } from "../components/AccountDeletionWarning";
 import { AppProvider } from "../state/app";
+import { ProductGuide } from "../components/ProductGuide";
 import { recordDiagnostic } from "../lib/diagnostics";
 import { allowsNativeSelection } from "../lib/native-selection";
 import "../styles.css";
@@ -100,6 +101,7 @@ function RootComponent() {
     <AppProvider>
       {/* این Outlet محل قرارگیری صفحات فرزند است */}
       <Outlet />
+      <ProductGuide />
       <AccountDeletionWarning />
       {/* اعلان «نسخه‌ی جدید آماده‌ست» — داخل Provider تا به زبان کاربر باشد */}
       <UpdateWatcher />

@@ -1,3 +1,5 @@
+import { MonthCalendarGrid } from "@/components/habits";
+import { HelpHint } from "@/components/ProductGuide";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowRight, Clock3, Flame, Sigma, Target, TrendingUp, Trophy } from "lucide-react";
 import { useState } from "react";
@@ -68,7 +70,7 @@ function HabitDetailPage() {
   const { buckets, labels: barLabels, barUnit } = buildChartBars(series, range.id, cal, lang);
 
   return (
-    <div className="page-stagger flex flex-col gap-5">
+    <div data-guide-scope="habit-detail" className="page-stagger flex flex-col gap-5">
       <div className="flex items-center gap-3">
         <Link to="/habits" className="rounded-full p-2 text-muted-foreground hover:bg-secondary">
           <ArrowRight className="h-5 w-5 ltr:rotate-180" />
@@ -87,16 +89,20 @@ function HabitDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+      <div data-guide="summary" className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         <Card className="flex flex-col items-center gap-1 py-3">
           <Flame className="h-5 w-5 text-primary" />
           <p className="text-lg font-black text-foreground">{faNum(st, lang)}</p>
-          <p className="text-[10px] text-muted-foreground">{t("استریک", "Streak")}</p>
+          <p className="text-[10px] text-muted-foreground">
+            {t("استریک", "Streak")} <HelpHint topic="streak" lang={lang} />
+          </p>
         </Card>
         <Card className="flex flex-col items-center gap-1 py-3">
           <TrendingUp className="h-5 w-5 text-primary" />
           <p className="text-lg font-black text-foreground">{faNum(rate, lang)}٪</p>
-          <p className="text-[10px] text-muted-foreground">{t("موفقیت", "Success")}</p>
+          <p className="text-[10px] text-muted-foreground">
+            {t("موفقیت", "Success")} <HelpHint topic="success" lang={lang} />
+          </p>
         </Card>
         <Card className="flex flex-col items-center gap-1 py-3"><Target className="h-5 w-5 text-primary" /><p className="text-lg font-black text-foreground">{faNum(mp.doneDays, lang)}/{faNum(mp.goalDays, lang)}</p><p className="text-[10px] text-muted-foreground">{t("این ماه", "This month")}</p></Card>
         <Card className="flex flex-col items-center gap-1 py-3">
@@ -106,6 +112,7 @@ function HabitDetailPage() {
           </p>
           <p className="text-[10px] text-muted-foreground">
             {t("بیشترین استریک", "Longest streak")}
+            <HelpHint topic="longest" lang={lang} />
           </p>
         </Card>
         {habit.type === "quantity" && (
@@ -124,12 +131,13 @@ function HabitDetailPage() {
               {habit.unitKind === "time"
                 ? t("مجموع زمان", "Total time")
                 : t("مجموع مقدار", "Total amount")}
+              <HelpHint topic="total" lang={lang} />
             </p>
           </Card>
         )}
       </div>
 
-      <Card><div className="mb-2 flex items-center justify-between"><p className="text-sm font-bold text-foreground">{t("هدف ماهانه:", "Monthly goal:")} {monthTitle(todayKey(), cal, lang)}</p><span className="text-xs font-black text-primary">{faNum(mp.percent, lang)}٪</span></div><Progress value={mp.percent} color={cat?.color} /></Card>
+      <Card data-guide="monthly"><div className="mb-2 flex items-center justify-between"><p className="text-sm font-bold text-foreground">{t("هدف ماهانه:", "Monthly goal:")} <HelpHint topic="monthly" lang={lang} /> {monthTitle(todayKey(), cal, lang)}</p><span className="text-xs font-black text-primary">{faNum(mp.percent, lang)}٪</span></div><Progress value={mp.percent} color={cat?.color} /></Card>
 
       {linkedGoals.length > 0 && (
         <Card>
@@ -151,7 +159,7 @@ function HabitDetailPage() {
         </Card>
       )}
 
-      <Card>
+      <Card data-guide="chart">
         <div className="mb-3 flex items-center justify-between gap-2">
           <p className="shrink-0 text-sm font-bold text-foreground">{t("روند انجام", "Trend")}</p>
           <div className="scrollbar-none flex gap-1 overflow-x-auto">
@@ -169,6 +177,13 @@ function HabitDetailPage() {
           {barUnit === "week" && t(` · هر ستون = ${faNum(7, lang)} روز`, " · each bar = 7 days")}
           {barUnit === "month" && t(" · هر ستون = ۱ ماه", " · each bar = 1 month")}
         </p>
+      </Card>
+
+      <Card data-guide="calendar">
+        <p className="mb-3 text-sm font-bold">{t("تقویم ثبت‌ها", "Record calendar")}</p>
+        <div className="mx-auto w-full max-w-xs [&_div]:text-[11px]">
+          <MonthCalendarGrid db={db} habit={habit} cal={cal} lang={lang} color={cat?.color} />
+        </div>
       </Card>
 
       {/* recent notes */}

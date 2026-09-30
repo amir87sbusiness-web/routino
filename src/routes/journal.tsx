@@ -92,17 +92,23 @@ function JournalPage() {
   };
 
   return (
-    <div className="page-stagger flex flex-col gap-5" style={keyboardViewport ? { paddingBottom: keyboardViewport.inset } : undefined}>
-      <WeekStrip
-        selected={dk}
-        onSelect={setDk}
-        cal={cal}
-        lang={lang}
-        percentFor={journalPercent}
-        emojiFor={journalEmoji}
-        subLabelFor={journalSubLabel}
-        disableFuture
-      />
+    <div
+      data-guide-scope="journal"
+      className="page-stagger flex flex-col gap-5"
+      style={keyboardViewport ? { paddingBottom: keyboardViewport.inset } : undefined}
+    >
+      <div data-guide="intro">
+        <WeekStrip
+          selected={dk}
+          onSelect={setDk}
+          cal={cal}
+          lang={lang}
+          percentFor={journalPercent}
+          emojiFor={journalEmoji}
+          subLabelFor={journalSubLabel}
+          disableFuture
+        />
+      </div>
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">{formatDate(dk, cal, lang)}</p>
         {dk !== todayKey() && (
@@ -115,7 +121,7 @@ function JournalPage() {
         )}
       </div>
 
-      <Card className="p-2 sm:p-4">
+      <Card data-guide="mood" className="p-2 sm:p-4">
         <p className="mb-2 text-xs font-medium text-muted-foreground">{moodTitle}</p>
         <div className="grid grid-cols-10 gap-px sm:gap-1.5">
           {MOOD_EMOJIS.map((m, index) => (
@@ -134,7 +140,7 @@ function JournalPage() {
         </div>
       </Card>
 
-      <Card className="p-2 sm:p-4">
+      <Card data-guide="note" className="p-2 sm:p-4">
         <p className="mb-2 text-xs font-medium text-muted-foreground">{scoreTitle}</p>
         <div className="grid grid-cols-10 gap-px sm:gap-1.5" dir="ltr">
           {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
@@ -178,7 +184,9 @@ function JournalPage() {
         />
       </Card>
 
-      <Button onClick={save}>{saved ? t("ذخیره شد ✓", "Saved ✓") : t("ذخیره", "Save")}</Button>
+      <Button data-guide="save" onClick={save}>
+        {saved ? t("ذخیره شد ✓", "Saved ✓") : t("ذخیره", "Save")}
+      </Button>
 
       {/* history */}
       <section>
