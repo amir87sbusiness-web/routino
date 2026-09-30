@@ -509,12 +509,8 @@ export function GoalsListView({ db, update, t, lang, cal }: SharedProps) {
             <span><b className="block text-sm text-destructive">{faNum(overview.overdue, lang)}</b><small className="text-[9px] text-muted-foreground">{t("دیرکرد", "Late")}</small></span>
           </div>
         </div>
-        <div className="mt-4 flex h-2 overflow-hidden rounded-full bg-secondary" aria-label={t("نمودار وضعیت هدف‌ها", "Goal status chart")}>
-          {overview.total > 0 && <>
-            <span className="bg-success" style={{ width: `${(overview.completed / overview.total) * 100}%` }} />
-            <span className="bg-primary" style={{ width: `${((overview.active - overview.overdue) / overview.total) * 100}%` }} />
-            <span className="bg-destructive" style={{ width: `${(overview.overdue / overview.total) * 100}%` }} />
-          </>}
+        <div className="mt-4" aria-label={t("پیشرفت کل هدف‌ها", "Overall goal progress")}>
+          <Progress value={overview.percent} color={overview.percent === 100 ? "var(--success)" : undefined} />
         </div>
       </Card>
 
@@ -557,7 +553,6 @@ export function GoalsListView({ db, update, t, lang, cal }: SharedProps) {
             onInput={(event) => setTitle(event.currentTarget.value)}
             maxLength={256}
             placeholder={t("مثلاً: آمادگی برای ماراتن", "e.g. Get ready for a marathon")}
-            autoFocus
           />
           <textarea
             value={description}

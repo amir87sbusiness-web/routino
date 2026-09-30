@@ -105,6 +105,36 @@ describe("Goals UI", () => {
     expect(db.goals.some((item) => item.title === "یادگیری زبان")).toBe(true);
   });
 
+  it("opens goal creation without focusing a typing field until the user chooses it", async () => {
+    const db = activeDb();
+    await act(async () => root.render(<GoalsListView db={db} update={() => true} t={t} lang="fa" cal="jalali" />));
+    await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent?.includes("هدف جدید"))!.click());
+    const dialog = document.body.querySelector('[role="dialog"]')!;
+    const input = dialog.querySelector('input[placeholder="مثلاً: آمادگی برای ماراتن"]') as HTMLInputElement;
+    expect(input).not.toBeNull();
+    expect(dialog.querySelectorAll("input, textarea")).not.toContain(document.activeElement);
+    await act(async () => input.focus());
+    expect(document.activeElement).toBe(input);
+  });
+
+  it.each([0, 50, 100])("fills the overview bar to the actual %i percent, not the status distribution", async (percent) => {
+    const db = activeDb();
+    db.goals = [goal({ status: "completed", completedAt: 1, items: [
+      { id: "read", kind: "custom", title: "مطالعه", measure: "count", value: percent, target: 100 },
+    ] })];
+    await act(async () => {
+      root.render(<GoalsListView db={db} update={() => true} t={t} lang="fa" cal="jalali" />);
+    });
+    await act(async () => { await new Promise((resolve) => setTimeout(resolve, 40)); });
+    const heading = [...host.querySelectorAll("h2")].find((element) => element.textContent === "خلاصه هدف‌ها")!;
+    const summary = heading.parentElement!.parentElement!.parentElement!;
+    const bar = summary.querySelector('[role="progressbar"]')!;
+    expect(bar).not.toBeNull();
+    expect(bar.getAttribute("aria-valuenow")).toBe(String(percent));
+    expect((bar.firstElementChild as HTMLElement).style.width).toBe(`${percent}%`);
+    expect(summary.textContent).toContain(percent === 0 ? "۰٪" : percent === 50 ? "۵۰٪" : "۱۰۰٪");
+  });
+
   it("adds a custom count item and updates it only inside the goal", async () => {
     let db = activeDb();
     db.goals = [goal()];
