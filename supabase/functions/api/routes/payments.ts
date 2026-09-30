@@ -13,6 +13,7 @@ import { html, makeAuthenticate, readJson, requireUser, type AppEnv, type Deps }
 import { users } from "../shared/db/schema.ts";
 import { badRequest, unauthorized } from "../shared/lib/http-errors.ts";
 import { renderResultPage } from "../shared/lib/pay-result-page.ts";
+import { logPaymentStage, paymentAuthorityHash } from "../shared/lib/payment-diagnostics.ts";
 import {
   checkoutPayment,
   handlePaymentCallback,
@@ -94,6 +95,12 @@ export function paymentRoutes(deps: Deps) {
     const body = checkoutBody.parse(await readJson(c));
     const t = now();
     const result = await checkoutPayment(db, env, psp, user, body, t);
+    logPaymentStage("checkout_ready", {
+      paymentId: result.paymentId,
+      platform: body.platform ?? "web",
+      authorityHash: result.free ? undefined : paymentAuthorityHash(result.authority),
+      outcome: result.free ? "free" : "issued",
+    });
 
     // Native checkout is already authenticated by the app session. Use a tiny
     // public handoff page on Routino's origin only to satisfy the gateway's web
@@ -119,6 +126,10 @@ export function paymentRoutes(deps: Deps) {
         values.length === 1 ? values[0] : values,
       ]),
     );
+    logPaymentStage("callback_received", {
+      paymentId: query.paymentId,
+      authorityHash: paymentAuthorityHash(query.Authority),
+    });
     const result = await handlePaymentCallback(
       db,
       psp,
@@ -126,6 +137,7 @@ export function paymentRoutes(deps: Deps) {
       now(),
       env.PSP_PROVIDER_MAX_CONCURRENCY,
     );
+    logPaymentStage("callback_result", { paymentId: result.payment?.id, outcome: result.outcome });
     return html(c, renderResultPage(env, result));
   });
 

@@ -5,7 +5,13 @@ const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export type DiagnosticName =
-  "api_error" | "api_offline" | "api_slow" | "ui_error" | "unhandled_error" | "unhandled_rejection";
+  | "api_error"
+  | "api_offline"
+  | "api_slow"
+  | "ui_error"
+  | "unhandled_error"
+  | "unhandled_rejection"
+  | "payment_step";
 
 export interface DiagnosticEvent {
   name: DiagnosticName;
@@ -25,10 +31,16 @@ const names = new Set<DiagnosticName>([
   "ui_error",
   "unhandled_error",
   "unhandled_rejection",
+  "payment_step",
 ]);
 
 function storage(): Storage | null {
-  return typeof localStorage === "undefined" ? null : localStorage;
+  try {
+    return typeof localStorage === "undefined" ? null : localStorage;
+  } catch {
+    // Some WebViews/private contexts deny even reading the storage getter.
+    return null;
+  }
 }
 
 function normalizePath(raw: string): string {
@@ -60,8 +72,61 @@ function safeMeta(meta: Record<string, unknown> = {}): DiagnosticEvent["meta"] {
   if (typeof meta.code === "string" && /^[a-z0-9_-]{1,48}$/i.test(meta.code)) {
     out.code = meta.code;
   }
+  if (
+    typeof meta.step === "string" &&
+    [
+      "checkout_started",
+      "checkout_ready",
+      "checkout_error",
+      "redirect_requested",
+      "redirect_opened",
+      "return_received",
+      "result_received",
+      "app_context",
+    ].includes(meta.step)
+  )
+    out.step = meta.step;
+  if (["web", "android", "ios"].includes(String(meta.platform)))
+    out.platform = String(meta.platform);
+  for (const key of ["paymentId", "attemptId"] as const) {
+    if (typeof meta[key] === "string" && UUID_V4.test(meta[key])) out[key] = meta[key];
+  }
+  if (typeof meta.build === "string" && /^\d{1,9}$/.test(meta.build)) out.build = meta.build;
+  if (
+    typeof meta.paymentStatus === "string" &&
+    [
+      "pending",
+      "requesting",
+      "redirected",
+      "verifying",
+      "provider_unknown",
+      "paid",
+      "failed",
+      "canceled",
+      "verify_failed",
+      "manual_review",
+    ].includes(meta.paymentStatus)
+  )
+    out.paymentStatus = meta.paymentStatus;
 
   return out;
+}
+
+let nativeContextRequested = false;
+export function recordPaymentStep(step: string, meta: Record<string, unknown> = {}): void {
+  recordDiagnostic({ name: "payment_step", meta: { ...meta, step } });
+  if (nativeContextRequested || !["android", "ios"].includes(String(meta.platform))) return;
+  nativeContextRequested = true;
+  // Best effort device context. Never await it on checkout or make a network request.
+  void import("@capacitor/app")
+    .then(({ App }) => App.getInfo())
+    .then(({ build }) =>
+      recordDiagnostic({
+        name: "payment_step",
+        meta: { step: "app_context", platform: meta.platform, build },
+      }),
+    )
+    .catch(() => {});
 }
 
 export function readDiagnostics(now = Date.now()): DiagnosticEvent[] {

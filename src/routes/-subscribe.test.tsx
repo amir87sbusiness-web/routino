@@ -342,4 +342,107 @@ describe("SubscribePage payment attempts", () => {
       url: "https://payment.zarinpal.com/pg/StartPay/A1",
     });
   });
+
+  async function failCatalog() {
+    payments.fetchPlans.mockRejectedValueOnce(new ApiError(0, "offline", "network", true));
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    await act(async () => {
+      root.render(<SubscribePage />);
+      await Promise.resolve();
+    });
+    expect(paymentButton(host).disabled).toBe(true);
+  }
+
+  it("can reload prices after a failed catalog request", async () => {
+    await failCatalog();
+    const reload = [...host.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("دریافت دوباره قیمت‌ها"),
+    );
+    expect(reload).toBeDefined();
+    await click(reload!);
+    expect(paymentButton(host).disabled).toBe(false);
+    expect(payments.fetchPlans).toHaveBeenCalledTimes(3);
+  });
+
+  it("retries a failed catalog on reconnect and coalesces overlapping events", async () => {
+    await failCatalog();
+    let finish!: (value: unknown) => void;
+    payments.fetchPlans.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    await act(async () => {
+      window.dispatchEvent(new Event("online"));
+      window.dispatchEvent(new Event("online"));
+      await Promise.resolve();
+    });
+    expect(payments.fetchPlans).toHaveBeenCalledTimes(3);
+    await act(async () =>
+      finish({
+        plans: [
+          {
+            id: "m3",
+            nameFa: "سه‌ماهه",
+            nameEn: "3 Months",
+            months: 3,
+            price: 549000,
+            originalPrice: null,
+          },
+        ],
+        offer: null,
+      }),
+    );
+    expect(paymentButton(host).disabled).toBe(false);
+    await act(async () => window.dispatchEvent(new Event("online")));
+    expect(payments.fetchPlans).toHaveBeenCalledTimes(3);
+  });
+
+  it("retains the same attempt after an uncertain provider response", async () => {
+    payments.checkoutWithProviderBusyRetry
+      .mockRejectedValueOnce(new ApiError(503, "payment_request_unknown", "unknown"))
+      .mockResolvedValueOnce({ free: false, paymentId: "payment-1" });
+    await click(paymentButton(host));
+    const attempt = payments.checkoutWithProviderBusyRetry.mock.calls[0]?.[3];
+    await click(paymentButton(host));
+    expect(payments.checkoutWithProviderBusyRetry.mock.calls[1]?.[3]).toBe(attempt);
+  });
+
+  it("explains timeout without telling an online customer they have no internet", async () => {
+    payments.checkoutWithProviderBusyRetry.mockRejectedValue(
+      new ApiError(0, "timeout", "slow", true),
+    );
+    await click(paymentButton(host));
+    expect(host.textContent).toContain("پاسخ سرور دیر رسید");
+    expect(host.textContent).not.toContain("برای خرید به اینترنت نیاز داری.");
+  });
+
+  it.each([
+    [502, "api_unavailable"],
+    [504, "http_error"],
+    [500, "internal_error"],
+  ])("retains the attempt after an uncertain upstream reply %s %s", async (status, code) => {
+    payments.checkoutWithProviderBusyRetry.mockRejectedValueOnce(
+      new ApiError(status as number, code as string, "upstream"),
+    );
+    await click(paymentButton(host));
+    expect(payments.checkoutWithProviderBusyRetry).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain("نتیجه درخواست هنوز مشخص نیست");
+    await click(paymentButton(host));
+    expect(payments.checkoutWithProviderBusyRetry.mock.calls[1]?.[3]).toBe(
+      payments.checkoutWithProviderBusyRetry.mock.calls[0]?.[3],
+    );
+  });
+
+  it("retains the same attempt after an unreadable checkout response", async () => {
+    payments.checkoutWithProviderBusyRetry
+      .mockRejectedValueOnce(new ApiError(502, "invalid_response", "HTML"))
+      .mockResolvedValueOnce({ free: false, paymentId: "payment-1" });
+    await click(paymentButton(host));
+    await click(paymentButton(host));
+    expect(payments.checkoutWithProviderBusyRetry.mock.calls[1]?.[3]).toBe(
+      payments.checkoutWithProviderBusyRetry.mock.calls[0]?.[3],
+    );
+  });
 });

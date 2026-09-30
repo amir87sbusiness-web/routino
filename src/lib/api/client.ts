@@ -19,7 +19,7 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
-    /** True when the request never reached the server. */
+    /** No usable network response. The server may still have received a POST. */
     readonly offline = false,
     readonly retryAfter?: number,
     readonly support?: string,
@@ -108,9 +108,17 @@ async function nativeRequest(
   for (const [key, value] of Object.entries(res.headers ?? {})) {
     normalizedHeaders[key.toLowerCase()] = String(value);
   }
+  let body: unknown = res.data;
+  if (typeof body === "string") {
+    try {
+      body = body ? JSON.parse(body) : null;
+    } catch {
+      throw new ApiError(res.status, "invalid_response", "Server returned an unreadable response");
+    }
+  }
   return {
     status: res.status,
-    body: res.data,
+    body,
     headers: normalizedHeaders,
   };
 }
@@ -120,8 +128,13 @@ async function webRequest(
   opts: RequestOptions,
   headers: Record<string, string>,
 ): Promise<RawResponse> {
+  if (opts.signal?.aborted) throw new DOMException("Aborted", "AbortError");
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 15_000);
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, opts.timeoutMs ?? 15_000);
   // Honour a caller's signal as well as our timeout.
   const abortFromCaller = () => controller.abort();
   opts.signal?.addEventListener("abort", abortFromCaller, { once: true });
@@ -136,10 +149,20 @@ async function webRequest(
       keepalive: opts.keepalive,
     });
     const text = await res.text();
-    const body: unknown = text ? JSON.parse(text) : null;
+    let body: unknown = null;
+    try {
+      body = text ? JSON.parse(text) : null;
+    } catch {
+      throw new ApiError(res.status, "invalid_response", "Server returned an unreadable response");
+    }
     const h: Record<string, string> = {};
     res.headers.forEach((v, k) => (h[k.toLowerCase()] = v));
     return { status: res.status, body, headers: h };
+  } catch (err) {
+    if (timedOut && !opts.signal?.aborted) {
+      throw new ApiError(0, "timeout", "Server response timed out", true);
+    }
+    throw err;
   } finally {
     clearTimeout(timer);
     opts.signal?.removeEventListener("abort", abortFromCaller);
@@ -158,6 +181,26 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Pr
       ? await nativeRequest(url, opts, headers)
       : await webRequest(url, opts, headers);
   } catch (err) {
+    const timeout =
+      !opts.signal?.aborted &&
+      (err instanceof ApiError
+        ? err.code === "timeout"
+        : err instanceof Error &&
+          (err.name === "TimeoutError" ||
+            /SocketTimeoutException|timed out|timeout/i.test(err.message)));
+    if (err instanceof ApiError && !err.offline) {
+      recordDiagnostic({
+        name: "api_error",
+        meta: {
+          source: "api",
+          path,
+          method: opts.method ?? "GET",
+          status: err.status,
+          code: err.code,
+        },
+      });
+      throw err;
+    }
     // Offline, DNS failure, timeout, blocked. Not exceptional for this app.
     recordDiagnostic({
       name: "api_offline",
@@ -167,13 +210,13 @@ export async function apiRequest<T>(path: string, opts: RequestOptions = {}): Pr
         method: opts.method ?? "GET",
         durationMs: performance.now() - startedAt,
         offline: true,
-        timeout: err instanceof DOMException && err.name === "AbortError",
+        timeout,
       },
     });
     throw new ApiError(
       0,
-      "offline",
-      err instanceof Error ? err.message : "Network unavailable",
+      timeout ? "timeout" : "offline",
+      timeout ? "Server response timed out" : "Network unavailable",
       true,
     );
   }

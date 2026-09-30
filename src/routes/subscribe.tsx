@@ -23,6 +23,7 @@ import {
 } from "@/lib/api/payments";
 import { faNum, formatDate, dateKey } from "@/lib/dates";
 import { subscriptionActive } from "@/lib/logic";
+import { recordPaymentStep } from "@/lib/diagnostics";
 import { useAppMaybe } from "@/state/app";
 
 export const Route = createFileRoute("/subscribe")({
@@ -42,6 +43,8 @@ function SubscribePage() {
   // so the cards stay stable while just their numeric price areas load.
   const [plans, setPlans] = useState<ServerPlan[]>([]);
   const [offline, setOffline] = useState(false);
+  const [plansLoading, setPlansLoading] = useState(true);
+  const reloadPlans = useRef<(() => void) | null>(null);
   const [selected, setSelected] = useState<string>("m3");
   const [codeInput, setCodeInput] = useState("");
   const [appliedCode, setAppliedCode] = useState<{
@@ -65,30 +68,57 @@ function SubscribePage() {
   // price on a checkout screen.
   useEffect(() => {
     let cancelled = false;
-    fetchPlans()
-      .then((res) => {
-        if (cancelled) return;
-        if (!res.plans.length) {
-          setOffline(true);
-          return;
-        }
-        setPlans(res.plans);
-        setOffline(false);
-        // اگر پلنِ پیش‌فرض در فهرست واقعی سرور نبود، به یک پلن معتبر برگرد؛ وگرنه
-        // دکمه‌ی پرداخت روی چیزی می‌ماند که سرور نمی‌شناسد و خرید با خطا رد می‌شود.
-        setSelected((cur) => {
-          if (res.plans.some((p) => p.id === cur)) return cur;
-          return (
-            PLAN_PRESENTATION.find((item) => res.plans.some((plan) => plan.id === item.id))?.id ??
-            res.plans[0].id
-          );
+    let inFlight = false;
+    let needsRetry = true;
+    const load = () => {
+      if (cancelled || inFlight) return;
+      inFlight = true;
+      setPlansLoading(true);
+      void fetchPlans()
+        .then((res) => {
+          if (cancelled) return;
+          if (!res.plans.length) {
+            setOffline(true);
+            return;
+          }
+          setPlans(res.plans);
+          setOffline(false);
+          needsRetry = false;
+          // اگر پلنِ پیش‌فرض در فهرست واقعی سرور نبود، به یک پلن معتبر برگرد؛ وگرنه
+          // دکمه‌ی پرداخت روی چیزی می‌ماند که سرور نمی‌شناسد و خرید با خطا رد می‌شود.
+          setSelected((cur) => {
+            if (res.plans.some((p) => p.id === cur)) return cur;
+            return (
+              PLAN_PRESENTATION.find((item) => res.plans.some((plan) => plan.id === item.id))?.id ??
+              res.plans[0].id
+            );
+          });
+        })
+        .catch(() => {
+          if (!cancelled) setOffline(true);
+        })
+        .finally(() => {
+          inFlight = false;
+          if (!cancelled) setPlansLoading(false);
         });
-      })
-      .catch(() => {
-        if (!cancelled) setOffline(true);
-      });
+    };
+    const retryWhenNeeded = () => {
+      if (needsRetry) load();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") retryWhenNeeded();
+    };
+    reloadPlans.current = load;
+    load();
+    window.addEventListener("online", retryWhenNeeded);
+    window.addEventListener("focus", retryWhenNeeded);
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       cancelled = true;
+      reloadPlans.current = null;
+      window.removeEventListener("online", retryWhenNeeded);
+      window.removeEventListener("focus", retryWhenNeeded);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, []);
 
@@ -256,9 +286,11 @@ function SubscribePage() {
       }
 
       if (res.paymentUrl) {
+        recordPaymentStep("redirect_requested", { platform, paymentId: res.paymentId });
         // Off to the gateway. The callback brings the user back to /pay/result.
         if (Capacitor.isNativePlatform()) {
           await Browser.open({ url: res.paymentUrl });
+          recordPaymentStep("redirect_opened", { platform, paymentId: res.paymentId });
         } else {
           window.location.href = res.paymentUrl;
         }
@@ -269,17 +301,35 @@ function SubscribePage() {
         t("شروع پرداخت ناموفق بود. دوباره تلاش کن.", "Could not start the payment. Try again."),
       );
     } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") return;
+      if (controller.signal.aborted || (err instanceof DOMException && err.name === "AbortError"))
+        return;
       const retryable =
         err instanceof ApiError &&
         (err.offline ||
+          err.status >= 500 ||
           err.code === "provider_busy" ||
           err.code === "payment_network_timeout" ||
           err.code === "payment_provider_unavailable" ||
+          err.code === "payment_request_unknown" ||
+          err.code === "invalid_response" ||
           err.code === "duplicate_payment_attempt");
       if (!retryable) paymentAttempt.current = null;
 
-      if (err instanceof ApiError && err.offline) {
+      if (err instanceof ApiError && err.code === "timeout") {
+        setPayError(
+          t(
+            "پاسخ سرور دیر رسید؛ نتیجه ممکن است هنوز در حال بررسی باشد. تلاش بعدی همین درخواست را بررسی می‌کند.",
+            "The server response was slow. The next attempt checks the same request.",
+          ),
+        );
+      } else if (err instanceof ApiError && err.code === "invalid_response") {
+        setPayError(
+          t(
+            "پاسخ سرور قابل خواندن نبود؛ کمی بعد همین درخواست را دوباره بررسی کن.",
+            "The server response could not be read. Check the same request again shortly.",
+          ),
+        );
+      } else if (err instanceof ApiError && err.offline) {
         setPayError(t("برای خرید به اینترنت نیاز داری.", "Buying needs an internet connection."));
       } else if (err instanceof ApiError && (err.status === 401 || err.code === "not_signed_in")) {
         // Signed in locally but no server session (pre-backend account).
@@ -312,11 +362,14 @@ function SubscribePage() {
             "The gateway is unavailable. Try again shortly.",
           ),
         );
-      } else if (err instanceof ApiError && err.code === "payment_request_unknown") {
+      } else if (
+        err instanceof ApiError &&
+        (err.code === "payment_request_unknown" || err.status >= 500)
+      ) {
         setPayError(
           t(
-            "پاسخ زرین‌پال نامشخص بود و درخواست خودکار تکرار نشد. چند دقیقه بعد دوباره تلاش کن.",
-            "ZarinPal's response was uncertain and was not retried automatically. Try again later.",
+            "نتیجه درخواست هنوز مشخص نیست؛ پرداخت تازه‌ای انجام نده. کمی بعد همین درخواست را دوباره بررسی کن.",
+            "The request is still uncertain. Do not make a new payment; check this request again later.",
           ),
         );
       } else {
@@ -364,12 +417,20 @@ function SubscribePage() {
           </p>
         )}
         {offline && (
-          <div className="flex items-center gap-2 rounded-xl bg-secondary px-3 py-2 text-[11px] font-medium text-muted-foreground">
+          <div
+            className="flex flex-wrap items-center gap-2 rounded-xl bg-secondary px-3 py-2 text-[11px] font-medium text-muted-foreground"
+            role="status"
+          >
             <WifiOff className="h-3.5 w-3.5" />
             {t(
-              "سرور در دسترس نیست؛ برای خرید به اینترنت نیاز داری.",
-              "Server unreachable; buying needs internet.",
+              "دریافت قیمت‌ها انجام نشد؛ اتصال به سرور را دوباره بررسی کن.",
+              "Prices could not be loaded. Check the connection to the server again.",
             )}
+            <Button variant="ghost" disabled={plansLoading} onClick={() => reloadPlans.current?.()}>
+              {plansLoading
+                ? t("در حال بررسی…", "Checking…")
+                : t("دریافت دوباره قیمت‌ها", "Reload prices")}
+            </Button>
           </div>
         )}
       </div>

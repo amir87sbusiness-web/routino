@@ -366,6 +366,7 @@ export async function authedRequest<T>(
     expectedUserId?: string;
     keepalive?: boolean;
     signal?: AbortSignal;
+    timeoutMs?: number;
     cache?: RequestCache;
   } = {},
 ): Promise<T> {

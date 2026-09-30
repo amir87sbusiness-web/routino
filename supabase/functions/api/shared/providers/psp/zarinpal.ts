@@ -7,6 +7,7 @@ import {
   type PspRequestResult,
   type PspVerifyResult,
 } from "./index.ts";
+import { logPaymentStage, paymentAuthorityHash } from "../../lib/payment-diagnostics.ts";
 
 const ZARINPAL_ORIGIN = "https://payment.zarinpal.com";
 export const PSP_TIMEOUT_MS = 20_000;
@@ -48,10 +49,32 @@ function providerCode(body: ProviderBody): number | undefined {
 async function post(
   apiBase: string,
   proxySecret: string | undefined,
-  path: string,
+  path: "request" | "verify" | "inquiry" | "unVerified",
   payload: unknown,
   timeoutMs = PSP_TIMEOUT_MS,
 ): Promise<ProviderBody | undefined> {
+  const started = Date.now();
+  let httpStatus: number | undefined;
+  const report = (outcome: string, body?: ProviderBody) => {
+    try {
+      const input = record(payload);
+      const paymentId =
+        typeof input?.callback_url === "string"
+          ? new URL(input.callback_url).searchParams.get("paymentId")
+          : undefined;
+      logPaymentStage("provider_result", {
+        operation: path,
+        outcome,
+        httpStatus,
+        durationMs: Date.now() - started,
+        providerCode: body ? providerCode(body) : undefined,
+        paymentId,
+        authorityHash: paymentAuthorityHash(input?.authority ?? record(body?.data)?.authority),
+      });
+    } catch {
+      // Even diagnostic normalization must be unable to interrupt the provider flow.
+    }
+  };
   try {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -65,10 +88,30 @@ async function post(
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(timeoutMs),
     });
-
+    httpStatus = res.status;
     const body = (await res.json()) as unknown;
-    return record(body) as ProviderBody | undefined;
-  } catch {
+    const parsed = record(body) as ProviderBody | undefined;
+    const inquiryStatus =
+      path === "inquiry" ? (record(parsed?.data)?.status ?? parsed?.status) : undefined;
+    const outcome = !res.ok
+      ? "http_error"
+      : typeof inquiryStatus === "string"
+        ? ["PAID", "VERIFIED", "IN_BANK", "FAILED", "REVERSED"].includes(inquiryStatus)
+          ? inquiryStatus
+          : "unknown"
+        : parsed && providerCode(parsed) !== undefined
+          ? "response"
+          : "malformed_response";
+    report(outcome, parsed);
+    return parsed;
+  } catch (error) {
+    report(
+      error instanceof Error && ["TimeoutError", "AbortError"].includes(error.name)
+        ? "timeout"
+        : httpStatus === undefined
+          ? "network"
+          : "invalid_json",
+    );
     return undefined;
   }
 }

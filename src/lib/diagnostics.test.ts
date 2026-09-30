@@ -61,4 +61,30 @@ describe("local diagnostics", () => {
     clearDiagnostics();
     expect(readDiagnostics()).toEqual([]);
   });
+
+  it("keeps only bounded payment correlation data and never the gateway URL or authority", () => {
+    recordDiagnostic({
+      name: "payment_step",
+      meta: {
+        step: "checkout_ready",
+        platform: "android",
+        build: "33",
+        paymentId: "123e4567-e89b-42d3-a456-426614174000",
+        attemptId: "223e4567-e89b-42d3-a456-426614174000",
+        paymentStatus: "manual_review",
+        authority: "gateway-secret",
+        paymentUrl: "https://bank.test/private",
+        phone: "09120000000",
+      },
+    });
+    expect(readDiagnostics()[0]?.meta).toEqual({
+      step: "checkout_ready",
+      platform: "android",
+      build: "33",
+      paymentId: "123e4567-e89b-42d3-a456-426614174000",
+      attemptId: "223e4567-e89b-42d3-a456-426614174000",
+      paymentStatus: "manual_review",
+    });
+    expect(exportDiagnostics()).not.toMatch(/gateway-secret|bank.test|09120000000/);
+  });
 });

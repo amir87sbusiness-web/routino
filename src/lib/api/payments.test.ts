@@ -47,6 +47,24 @@ describe("payment checkout API", () => {
     vi.useRealTimers();
   });
 
+  it("continues checkout when accessing diagnostic storage is denied", async () => {
+    const original = Object.getOwnPropertyDescriptor(window, "localStorage")!;
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get() {
+        throw new DOMException("Denied", "SecurityError");
+      },
+    });
+    try {
+      await expect(checkout("m3", undefined, "web", crypto.randomUUID())).resolves.toMatchObject({
+        paymentId: "payment-1",
+      });
+      expect(auth.authedRequest).toHaveBeenCalledTimes(1);
+    } finally {
+      Object.defineProperty(window, "localStorage", original);
+    }
+  });
+
   it("sends the idempotency key but no amount, entitlement, or merchant secret", async () => {
     const attemptId = crypto.randomUUID();
 
@@ -54,6 +72,7 @@ describe("payment checkout API", () => {
 
     expect(auth.authedRequest).toHaveBeenCalledWith("/payments/checkout", {
       method: "POST",
+      timeoutMs: 35_000,
       body: {
         planId: "m3",
         code: "OFF20",

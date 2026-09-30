@@ -96,6 +96,7 @@ Updated 2026-09-23. Read this first, then inspect only the source areas relevant
 - Closing that rare unbound callback requires reopening original URL. Never bind unverified Authority.
 - Grants remain idempotent; entitlement stacking atomic. Discounts count in-flight reservations, not just used_count.
 - App opening reconciles bounded open payments; it is not an unrestricted recovery sweep.
+- Checkout uses a 35s client deadline above the 20s provider deadline. Ambiguous network/provider replies retain the attempt ID; no automatic network retry or new purchase. Failed plan loading can retry manually or on foreground/online events, coalescing in-flight requests. Payment diagnostics whitelist stages/IDs/codes; never log raw Authority, URLs, phone or provider secrets. Pages relay Inquiry uses the existing authenticated allowlist.
 
 ## Cost changes and pending archive rollout
 

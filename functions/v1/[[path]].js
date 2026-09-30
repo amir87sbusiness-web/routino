@@ -13,6 +13,7 @@ const RELAY_AUTH_TTL_MS = 5 * 60 * 1000;
 const ZARINPAL_PATHS = new Set([
   "/pg/v4/payment/request.json",
   "/pg/v4/payment/verify.json",
+  "/pg/v4/payment/inquiry.json",
   "/pg/v4/payment/unVerified.json",
 ]);
 const RELAY_AUTH_CACHE = new Map();

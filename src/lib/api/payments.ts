@@ -7,6 +7,7 @@
  */
 import { ApiError, apiRequest } from "./client";
 import { authedRequest, type ServerEntitlement } from "./auth";
+import { recordPaymentStep } from "../diagnostics";
 
 export interface ServerPlan {
   id: string;
@@ -221,11 +222,25 @@ export async function checkout(
   attemptId: string,
   signal?: AbortSignal,
 ): Promise<CheckoutResult> {
-  return authedRequest("/payments/checkout", {
-    method: "POST",
-    body: { planId, code: code || undefined, platform, attemptId },
-    signal,
-  });
+  recordPaymentStep("checkout_started", { attemptId, platform });
+  try {
+    const result = await authedRequest<CheckoutResult>("/payments/checkout", {
+      method: "POST",
+      // The provider alone may take 20 seconds; allow DB and network overhead.
+      timeoutMs: 35_000,
+      body: { planId, code: code || undefined, platform, attemptId },
+      signal,
+    });
+    recordPaymentStep("checkout_ready", { attemptId, platform, paymentId: result.paymentId });
+    return result;
+  } catch (error) {
+    recordPaymentStep("checkout_error", {
+      attemptId,
+      platform,
+      code: error instanceof ApiError ? error.code : undefined,
+    });
+    throw error;
+  }
 }
 
 const PROVIDER_BUSY_MAX_RETRIES = 3;

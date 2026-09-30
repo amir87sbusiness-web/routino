@@ -17,6 +17,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { users } from "../db/schema.js";
 import { renderResultPage } from "../lib/pay-result-page.js";
+import { logPaymentStage, paymentAuthorityHash } from "../lib/payment-diagnostics.js";
 import { requireUser } from "../plugins/auth.js";
 import { badRequest, unauthorized } from "../plugins/errors.js";
 import {
@@ -98,6 +99,12 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
     const body = checkoutBody.parse(req.body);
     const t = now();
     const result = await checkoutPayment(db, env, psp, user, body, t);
+    logPaymentStage("checkout_ready", {
+      paymentId: result.paymentId,
+      platform: body.platform ?? "web",
+      authorityHash: result.free ? undefined : paymentAuthorityHash(result.authority),
+      outcome: result.free ? "free" : "issued",
+    });
 
     // Native checkout is already authenticated by the app session. Use a tiny
     // public handoff page on Routino's origin only to satisfy the gateway's web
@@ -118,6 +125,10 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
     // `unknown`, not `string | undefined`: a repeated key (`?a=1&a=2`) parses to
     // an array, and this endpoint is public. `handlePaymentCallback` normalises.
     const qs = req.query as Record<string, unknown>;
+    logPaymentStage("callback_received", {
+      paymentId: qs.paymentId,
+      authorityHash: paymentAuthorityHash(qs.Authority),
+    });
     const result = await handlePaymentCallback(
       db,
       psp,
@@ -125,6 +136,7 @@ export const paymentRoutes: FastifyPluginAsync = async (app) => {
       now(),
       env.PSP_PROVIDER_MAX_CONCURRENCY,
     );
+    logPaymentStage("callback_result", { paymentId: result.payment?.id, outcome: result.outcome });
     return reply.type("text/html; charset=utf-8").send(renderResultPage(env, result));
   });
 

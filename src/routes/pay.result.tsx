@@ -14,6 +14,7 @@ import { Button, Logo } from "@/components/ui";
 import { entitlementToSubscription, hasSession } from "@/lib/api/auth";
 import { fetchPayment, type PaymentStatus } from "@/lib/api/payments";
 import { faNum } from "@/lib/dates";
+import { recordPaymentStep } from "@/lib/diagnostics";
 import { useAppMaybe } from "@/state/app";
 
 interface PayResultSearch {
@@ -57,6 +58,7 @@ function PayResultPage() {
       setState("error");
       return;
     }
+    recordPaymentStep("return_received", { paymentId, platform: Capacitor.getPlatform() });
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -77,6 +79,11 @@ function PayResultPage() {
         setResult(res);
 
         const s = res.payment.status;
+        recordPaymentStep("result_received", {
+          paymentId,
+          paymentStatus: s,
+          platform: Capacitor.getPlatform(),
+        });
         if (s === "paid" || s === "canceled" || s === "failed" || s === "verify_failed") {
           // Cache the server's answer locally — this is what opens the gate.
           if (s === "paid" && applyEntitlement && !applied.current) {

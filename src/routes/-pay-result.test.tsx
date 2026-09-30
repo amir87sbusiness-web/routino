@@ -111,3 +111,24 @@ it("keeps Web on its result screen after server-confirmed success", async () => 
   expect(test.apply).toHaveBeenCalledTimes(1);
   expect(test.navigate).not.toHaveBeenCalled();
 });
+
+it("checks the same pending payment after timeout without starting another checkout", async () => {
+  test.platform = "web";
+  test.fetch.mockResolvedValue({ ...paid, payment: { ...paid.payment, status: "manual_review" } });
+  await render();
+  await act(async () => vi.advanceTimersByTimeAsync(90_000));
+  expect(test.fetch).toHaveBeenCalledTimes(5);
+  test.fetch.mockResolvedValue(paid);
+  const button = [...host.querySelectorAll("button")].find((b) =>
+    b.textContent?.includes("بررسی دوباره"),
+  );
+  expect(button).toBeDefined();
+  await act(async () => {
+    button!.click();
+    button!.click();
+  });
+  expect(test.fetch).toHaveBeenCalledTimes(6);
+  expect(test.fetch.mock.calls.every((call) => call[0] === "payment-1")).toBe(true);
+  expect(test.apply).toHaveBeenCalledTimes(1);
+  expect(test.navigate).not.toHaveBeenCalled();
+});

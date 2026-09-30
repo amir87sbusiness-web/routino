@@ -1,6 +1,39 @@
 import { describe, expect, it, vi } from "vitest";
 
 describe("Cloudflare Pages /v1 proxy", () => {
+  it("relays authenticated Inquiry while keeping unsupported and anonymous paths closed", async () => {
+    const upstream = vi.fn(async (input: string | Request, _init?: RequestInit) =>
+      String(input).includes("relay-auth")
+        ? new Response(null, { status: 204 })
+        : new Response('{"data":{"code":100,"status":"IN_BANK"}}'),
+    );
+    vi.stubGlobal("fetch", upstream);
+    const { onRequest } = await import("../functions/v1/[[path]].js");
+    const secret = "inquiry-test-secret".repeat(3);
+    const url = "https://routino.me/v1/_zarinpal/pg/v4/payment/inquiry.json";
+    const anonymous = await onRequest({ request: new Request(url, { method: "POST" }) } as never);
+    expect(anonymous.status).toBe(403);
+    expect(upstream).not.toHaveBeenCalled();
+    const response = await onRequest({
+      request: new Request(url, {
+        method: "POST",
+        headers: { "x-proxy-secret": secret },
+        body: '{"authority":"synthetic"}',
+      }),
+    } as never);
+    expect(response.status).toBe(200);
+    const forwarded = upstream.mock.calls[1];
+    expect(forwarded?.[0]).toBe("https://payment.zarinpal.com/pg/v4/payment/inquiry.json");
+    expect((forwarded?.[1] as RequestInit).headers).not.toHaveProperty("x-proxy-secret");
+    const unsupported = await onRequest({
+      request: new Request("https://routino.me/v1/_zarinpal/pg/v4/payment/refund.json", {
+        method: "POST",
+        headers: { "x-proxy-secret": secret },
+      }),
+    } as never);
+    expect(unsupported.status).toBe(404);
+    expect(upstream).toHaveBeenCalledTimes(2);
+  });
   it("forwards the exact API path, query, method and auth to api.routino.me", async () => {
     const upstream = vi.fn(
       async (request: Request) =>

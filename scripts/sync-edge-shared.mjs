@@ -32,6 +32,7 @@ export const SHARED_FILES = [
   "lib/admin-user-delete-ui.ts",
   "lib/admin-user-list-ui.ts",
   "lib/pay-result-page.ts",
+  "lib/payment-diagnostics.ts",
   "lib/request-id.ts",
   "services/otp.ts",
   "services/provider-capacity.ts",
