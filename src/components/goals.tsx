@@ -1311,7 +1311,7 @@ export function GoalDetailView({
                   completedAt: current.status === "completed" ? null : Date.now(),
                 }));
                 if (accepted && completing) {
-                  queueGoalCompletionCelebration(goal);
+                  if (progress.complete) queueGoalCompletionCelebration(goal);
                   onCompleted?.();
                 }
                 return accepted;

@@ -57,7 +57,7 @@ function goal(items: GoalItem[] = []): Goal {
 }
 
 describe("source goal items", () => {
-  it("captures source measure, title, and link-day baseline", () => {
+  it("includes an already completed habit on its link day", () => {
     const db = defaultDb([]);
     db.habits = [habit()];
     db.logs[logKey("habit-1", "2026-09-29")] = {
@@ -67,9 +67,8 @@ describe("source goal items", () => {
       done: true,
     };
 
-    expect(
-      createGoalItem(db, "habit", "habit-1", 10, new Date(2026, 8, 29, 12).getTime()),
-    ).toMatchObject({
+    const item = createGoalItem(db, "habit", "habit-1", 10, new Date(2026, 8, 29, 12).getTime());
+    expect(item).toMatchObject({
       kind: "source",
       sourceType: "habit",
       sourceId: "habit-1",
@@ -77,8 +76,9 @@ describe("source goal items", () => {
       measure: "binary",
       target: 10,
       linkedDateKey: "2026-09-29",
-      baselineValue: 1,
+      baselineValue: 0,
     });
+    expect(goalItemProgress(db, item)).toMatchObject({ value: 1, percent: 10 });
   });
 
   it("maps quantity sources to count or time and forces binary task target to one", () => {
@@ -106,7 +106,7 @@ describe("source goal items", () => {
     });
   });
 
-  it("subtracts baseline only from the link day, not later binary or quantity progress", () => {
+  it("includes link-day habit progress and continues counting later days", () => {
     const at = new Date(2026, 8, 29, 12).getTime();
     const binaryDb = defaultDb([]);
     binaryDb.habits = [habit()];
@@ -117,6 +117,7 @@ describe("source goal items", () => {
       done: true,
     };
     const binary = createGoalItem(binaryDb, "habit", "habit-1", 2, at);
+    expect(goalItemProgress(binaryDb, binary)).toMatchObject({ value: 1, percent: 50 });
     binaryDb.logs[logKey("habit-1", "2026-09-29")].done = false;
     binaryDb.logs[logKey("habit-1", "2026-09-30")] = {
       habitId: "habit-1",
@@ -135,6 +136,7 @@ describe("source goal items", () => {
       done: false,
     };
     const count = createGoalItem(countDb, "habit", "habit-1", 10, at);
+    expect(goalItemProgress(countDb, count)).toMatchObject({ value: 3, percent: 30 });
     delete countDb.logs[logKey("habit-1", "2026-09-29")];
     countDb.logs[logKey("habit-1", "2026-09-30")] = {
       habitId: "habit-1",
@@ -143,6 +145,24 @@ describe("source goal items", () => {
       done: false,
     };
     expect(goalItemProgress(countDb, count)).toMatchObject({ value: 4, percent: 40 });
+  });
+
+  it.each([
+    { type: "binary" as const, measure: "binary" as const, unitKind: undefined, value: 1, target: 10, percent: 10 },
+    { type: "quantity" as const, measure: "count" as const, unitKind: "count" as const, value: 3, target: 10, percent: 30 },
+    { type: "quantity" as const, measure: "time" as const, unitKind: "time" as const, value: 30, target: 60, percent: 50 },
+  ])("counts the link day for existing $measure habit links without including earlier days", ({ type, measure, unitKind, value, target, percent }) => {
+    const db = defaultDb([]);
+    db.habits = [habit({ type, unitKind })];
+    const item = {
+      ...createGoalItem(db, "habit", "habit-1", target, new Date(2026, 8, 29, 12).getTime()),
+      measure,
+      baselineValue: value,
+    };
+    db.logs[logKey("habit-1", "2026-09-28")] = { habitId: "habit-1", dateKey: "2026-09-28", value: 100, done: true };
+    db.logs[logKey("habit-1", "2026-09-29")] = { habitId: "habit-1", dateKey: "2026-09-29", value, done: true };
+    expect(goalItemProgress(db, item)).toMatchObject({ value, percent });
+    expect(item.baselineValue).toBe(value);
   });
 
   it("marks missing or type-changed sources without inventing progress", () => {
@@ -356,12 +376,15 @@ describe("goal progress", () => {
     });
   });
 
-  it("shows a manually completed goal as 100 percent even with unfinished items", () => {
+  it.each([
+    { item: { id: "binary", kind: "custom", title: "Later", measure: "binary", value: false } as GoalItem, percent: 0 },
+    { item: { id: "count", kind: "custom", title: "Read", measure: "count", value: 5, target: 10 } as GoalItem, percent: 50 },
+    { item: { id: "time", kind: "custom", title: "Study", measure: "time", valueMinutes: 45, targetMinutes: 60 } as GoalItem, percent: 75 },
+  ])("preserves $percent percent when an unfinished goal is manually completed", ({ item, percent }) => {
     const db = defaultDb([]);
-    const unfinished = createCustomGoalItem({ title: "Later", measure: "binary" });
-    expect(
-      goalProgress(db, { ...goal([unfinished]), status: "completed", completedAt: 2 }),
-    ).toMatchObject({ percent: 100, complete: true });
+    db.goals = [{ ...goal([item]), status: "completed", completedAt: 2 }];
+    expect(goalProgress(db, db.goals[0])).toMatchObject({ percent, complete: false });
+    expect(goalOverview(db)).toMatchObject({ percent, completed: 1, active: 0 });
   });
 
   it("clears manual completion when the first item is added", () => {

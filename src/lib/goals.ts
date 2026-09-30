@@ -129,22 +129,15 @@ function sourceFor(
 }
 
 function valueAtLink(
-  db: Db,
   source: Habit | Task,
   sourceType: SourceGoalItem["sourceType"],
-  linkedDateKey: string,
 ): number {
-  if (sourceType === "task") {
-    const task = source as Task;
-    return task.type === "binary" ? (task.done ? 1 : 0) : Math.max(0, task.value);
-  }
-  const habit = source as Habit;
-  const log = db.logs[`${habit.id}|${linkedDateKey}`];
-  if (habit.type === "binary") return isCompleted(habit, log) ? 1 : 0;
-  return Math.max(0, log?.value ?? 0);
+  if (sourceType === "habit") return 0; // Habit tracking includes the entire link day.
+  const task = source as Task;
+  return task.type === "binary" ? (task.done ? 1 : 0) : Math.max(0, task.value);
 }
 
-/** Builds a relation whose baseline excludes progress recorded before linking. */
+/** Habits include their link day; quantitative tasks exclude their pre-link value. */
 export function createGoalItem(
   db: Db,
   sourceType: SourceGoalItem["sourceType"],
@@ -170,7 +163,7 @@ export function createGoalItem(
     ...(sourceType === "habit" && (source as Habit).unit ? { unit: (source as Habit).unit } : {}),
     linkedAt,
     linkedDateKey,
-    baselineValue: valueAtLink(db, source, sourceType, linkedDateKey),
+    baselineValue: valueAtLink(source, sourceType),
   };
 }
 
@@ -317,8 +310,9 @@ export function goalItemProgress(db: Db, item: GoalItem): GoalItemProgress {
       if (log.habitId !== habit.id || log.dateKey < item.linkedDateKey) continue;
       const logValue =
         item.measure === "binary" ? (isCompleted(habit, log) ? 1 : 0) : Math.max(0, log.value);
-      value +=
-        log.dateKey === item.linkedDateKey ? Math.max(0, logValue - item.baselineValue) : logValue;
+      // Ignore stored habit baselines too, so existing links adopt the inclusive
+      // link-day rule without rewriting Goal records or adding a migration.
+      value += logValue;
     }
   }
 
@@ -341,9 +335,6 @@ export function goalProgress(db: Db, goal: Goal): GoalProgress {
     };
   }
   const items = goal.items.map((item) => goalItemProgress(db, item));
-  if (goal.status === "completed") {
-    return { value: 100, target: 100, percent: 100, complete: true, items };
-  }
   const complete = items.length > 0 && items.every((item) => item.complete);
   const roundedPercent = items.length
     ? Math.round(items.reduce((sum, item) => sum + item.percent, 0) / items.length)

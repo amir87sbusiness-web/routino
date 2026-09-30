@@ -112,8 +112,9 @@ Updated 2026-09-23. Read this first, then inspect only the source areas relevant
 ## Goals contract
 
 - Goals are ordinary sync records with source/custom items inline. No relation table, duplicated source ownership, progress history or extra polling.
-- Source progress derives from existing HabitLog/Task data after the link baseline. Source updates do not write Goal progress; only actual completion/reopen status transitions can write the Goal.
+- Habit progress includes the entire link day and later days, ignoring legacy habit baselines without rewriting records. Quantitative Task progress retains its pre-link baseline. Source updates do not write Goal progress; only actual completion/reopen status transitions can write the Goal.
 - Independent binary/count/time items persist their values in the Goal. Timer credits identify both goal and item; timer history is not the progress source.
+- Manual completion changes status only: goals with items retain actual progress, and the 100% celebration requires full progress. Empty goals remain a binary checkbox.
 - Storage uses compact item arrays with legacy object/array dual readers. SQL retains object items near the TOAST threshold when compaction would disable compression; raw JSON size is not physical storage or billing evidence.
 - Dexie v4 adds goals and resets the pull cursor once, retaining existing records/outbox. Older clients ignore unknown Goals; monthly Habit targets remain independent and unchanged.
 - Goals migration adds the allowed kind and codec support only: no record rewrite, backfill, retention change or Android release. Do not roll back to a Goals-unaware API reader after Goals are stored.

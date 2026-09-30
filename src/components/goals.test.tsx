@@ -1,8 +1,8 @@
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { defaultDb, type Db, type Goal } from "@/lib/store";
-import { createGoalItem } from "@/lib/goals";
+import { defaultDb, logKey, type Db, type Goal } from "@/lib/store";
+import { createGoalItem, goalProgress } from "@/lib/goals";
 import { todayKey } from "@/lib/dates";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -163,7 +163,7 @@ describe("Goals UI", () => {
     ]);
   });
 
-  it("connects an existing habit with an independent target", async () => {
+  it("connects an already completed habit and reflects undo and redo in goal progress", async () => {
     let db = activeDb();
     db.goals = [goal()];
     db.habits = [
@@ -179,6 +179,9 @@ describe("Goals UI", () => {
         createdAt: 1,
       },
     ];
+    db.logs[logKey("habit-1", todayKey())] = {
+      habitId: "habit-1", dateKey: todayKey(), value: 1, done: true,
+    };
     const update = vi.fn((fn: (value: Db) => Db) => {
       db = fn(db);
       return true;
@@ -225,6 +228,20 @@ describe("Goals UI", () => {
         target: 10,
       }),
     ]);
+    const renderUpdated = async () => {
+      await act(async () => root.render(
+        <GoalDetailView db={db} goalId="goal-1" update={update} t={t} lang="fa" cal="jalali" />,
+      ));
+    };
+    await renderUpdated();
+    const row = () => host.querySelector('[data-goal-item="habit-1"]') as HTMLElement;
+    expect(row().textContent).toContain("هدف: ۱ / ۱۰");
+    await act(async () => row().querySelector("button")!.click());
+    await renderUpdated();
+    expect(row().textContent).toContain("هدف: ۰ / ۱۰");
+    await act(async () => row().querySelector("button")!.click());
+    await renderUpdated();
+    expect(row().textContent).toContain("هدف: ۱ / ۱۰");
   });
 
   it("edits goal metadata without changing its items", async () => {
@@ -580,5 +597,29 @@ describe("Goals UI", () => {
 
     expect(db.goals[0].status).toBe("completed");
     expect(onCompleted).toHaveBeenCalledOnce();
+  });
+
+  it("manually finishes a partial goal without inflating progress or announcing 100 percent", async () => {
+    let db = activeDb();
+    const item = { id: "half", kind: "custom" as const, title: "مطالعه", measure: "count" as const, value: 5, target: 10 };
+    db.goals = [goal({ items: [item] })];
+    sessionStorage.removeItem("routino:goal-celebration");
+    const onCompleted = vi.fn();
+    const update = (fn: (value: Db) => Db) => { db = fn(db); return true; };
+    const render = () => root.render(
+      <GoalDetailView db={db} goalId="goal-1" update={update} onCompleted={onCompleted} t={t} lang="fa" cal="jalali" />,
+    );
+    await act(async () => render());
+    await act(async () => [...host.querySelectorAll("button")].find((button) => button.textContent === "اتمام هدف")!.click());
+    expect(db.goals[0].status).toBe("active");
+    await act(async () => [...document.body.querySelectorAll("button")].find((button) => button.textContent === "تأیید")!.click());
+    expect(db.goals[0].status).toBe("completed");
+    expect(db.goals[0].items).toEqual([item]);
+    expect(onCompleted).toHaveBeenCalledOnce();
+    expect(goalProgress(db, db.goals[0]).percent).toBe(50);
+    expect(sessionStorage.getItem("routino:goal-celebration")).toBeNull();
+    await act(async () => render());
+    expect(host.textContent).toContain("۵۰٪");
+    expect(host.textContent).toContain("بازکردن دوباره");
   });
 });
