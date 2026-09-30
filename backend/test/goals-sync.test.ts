@@ -13,7 +13,7 @@ import { makeHarness, type Harness } from "./helpers/pglite.js";
 const migrationSql = readFileSync(
   resolve(
     fileURLToPath(new URL("../..", import.meta.url)),
-    "supabase/migrations/20260929202121_add_goals_sync_kind.sql",
+    "supabase/migrations/20260930153505_add_goals_sync_kind.sql",
   ),
   "utf8",
 );
