@@ -272,13 +272,14 @@ describe("streak / successRate / monthProgress", () => {
     expect(successRate(db, h, "gregorian", 14)).toBe(50);
   });
 
-  it("monthProgress measures against the monthly goal, capped at 100", () => {
+  it("monthProgress measures against the habit monthly goal, capped at 100", () => {
     const h = habit({ monthlyGoal: 10 });
     const db = dbWith([h], daysBefore(TODAY, 5));
-    const p = monthProgress(db, h, "gregorian", TODAY);
-    expect(p.goalDays).toBe(10);
-    expect(p.doneDays).toBe(5);
-    expect(p.percent).toBe(50);
+    expect(monthProgress(db, h, "gregorian", TODAY)).toMatchObject({
+      goalDays: 10,
+      doneDays: 5,
+      percent: 50,
+    });
 
     const over = dbWith([habit({ monthlyGoal: 3 })], daysBefore(TODAY, 5));
     expect(monthProgress(over, over.habits[0], "gregorian", TODAY).percent).toBe(100);

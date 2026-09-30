@@ -17,6 +17,7 @@ const bounded = (max: number) => z.string().max(max);
 const entityId = z.string().regex(ENTITY_ID_RE);
 const epochMs = z.number().int().nonnegative().finite().max(Number.MAX_SAFE_INTEGER);
 const finiteAmount = z.number().nonnegative().finite().max(1_000_000_000);
+const positiveAmount = z.number().positive().finite().max(1_000_000_000);
 const note = bounded(4_000).optional();
 const mood = bounded(32).optional();
 
@@ -148,6 +149,103 @@ const taskSchema = z
     message: "deadline cannot precede task start",
   });
 
+const sourceGoalItemSchema = z
+  .object({
+    id: entityId,
+    kind: z.literal("source"),
+    sourceType: z.enum(["habit", "task"]),
+    sourceId: entityId,
+    sourceTitleSnapshot: z.string().min(1).max(256),
+    measure: z.enum(["binary", "count", "time"]),
+    target: positiveAmount,
+    unit: bounded(64).optional(),
+    linkedAt: epochMs,
+    linkedDateKey: dateKey,
+    baselineValue: finiteAmount,
+  })
+  .strict();
+
+const customGoalItemSchema = z.discriminatedUnion("measure", [
+  z
+    .object({
+      id: entityId,
+      kind: z.literal("custom"),
+      note: bounded(4000).optional(),
+      mood: bounded(16).optional(),
+      title: z.string().min(1).max(256),
+      measure: z.literal("binary"),
+      value: z.boolean(),
+    })
+    .strict(),
+  z
+    .object({
+      id: entityId,
+      kind: z.literal("custom"),
+      note: bounded(4000).optional(),
+      mood: bounded(16).optional(),
+      title: z.string().min(1).max(256),
+      measure: z.literal("count"),
+      value: finiteAmount,
+      target: positiveAmount,
+      unit: bounded(64).optional(),
+    })
+    .strict(),
+  z
+    .object({
+      id: entityId,
+      kind: z.literal("custom"),
+      note: bounded(4000).optional(),
+      mood: bounded(16).optional(),
+      title: z.string().min(1).max(256),
+      measure: z.literal("time"),
+      valueMinutes: finiteAmount,
+      targetMinutes: z
+        .number()
+        .positive()
+        .finite()
+        .max(9999 * 60 + 59),
+    })
+    .strict(),
+]);
+
+const goalItemsSchema = z
+  .array(z.union([sourceGoalItemSchema, customGoalItemSchema]))
+  .max(50)
+  .superRefine((items, ctx) => {
+    const ids = new Set<string>();
+    const sources = new Set<string>();
+    for (const item of items) {
+      if (ids.has(item.id)) {
+        ctx.addIssue({ code: "custom", message: "duplicate goal item id" });
+        return;
+      }
+      ids.add(item.id);
+      if (item.kind !== "source") continue;
+      const key = `${item.sourceType}\u0000${item.sourceId}`;
+      if (sources.has(key)) {
+        ctx.addIssue({ code: "custom", message: "duplicate goal source" });
+        return;
+      }
+      sources.add(key);
+    }
+  });
+
+const goalSchema = z
+  .object({
+    id: entityId,
+    title: z.string().min(1).max(256),
+    description: bounded(4_000).optional(),
+    categoryId: entityId.nullable().optional(),
+    reminderAt: localDateTime.nullable().optional(),
+    deadlineAt: localDateTime.nullable().optional(),
+    priority: z.enum(["low", "normal", "high", "critical"]),
+    status: z.enum(["active", "completed"]),
+    items: goalItemsSchema,
+    createdAt: epochMs,
+    completedAt: epochMs.nullable().optional(),
+  })
+  .strict();
+
 /** Canonical task payload contract, shared with server-only task archives. */
 export function validateTaskPayload(id: string, data: unknown): boolean {
   const parsed = taskSchema.safeParse(data);
@@ -166,12 +264,17 @@ const timerSessionSchema = z
       .max(10 * 365 * 86_400),
     startedAt: epochMs,
     endedAt: epochMs,
-    linkedKind: z.enum(["habit", "task"]).optional(),
+    linkedKind: z.enum(["habit", "task", "goal"]).optional(),
     linkedId: entityId.optional(),
+    linkedItemId: entityId.optional(),
     linkedLabel: bounded(256).optional(),
   })
   .strict()
-  .refine((session) => session.endedAt >= session.startedAt);
+  .refine((session) => session.endedAt >= session.startedAt)
+  .refine(
+    (session) => session.linkedKind !== "goal" || Boolean(session.linkedId && session.linkedItemId),
+    { message: "goal timer session must identify its goal and item" },
+  );
 
 const journalSchema = z
   .object({
@@ -188,6 +291,7 @@ const schemas: Record<SyncKind, z.ZodType> = {
   habits: habitSchema,
   habitMonths: habitMonthSchema,
   tasks: taskSchema,
+  goals: goalSchema,
   timerSessions: timerSessionSchema,
   journal: journalSchema,
 };

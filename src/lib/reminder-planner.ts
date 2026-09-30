@@ -1,5 +1,6 @@
 import type { LocalNotificationSchema } from "@capacitor/local-notifications";
 import { addDays, dateKey, keyToDate } from "./dates";
+import { goalProgress } from "./goals";
 import { isDueOn } from "./logic";
 import type { Db, Habit } from "./store";
 
@@ -19,7 +20,7 @@ export interface PlannedReminder {
   extra: {
     routino: true;
     category: "product" | "lifecycle";
-    source: "habit" | "task" | "journal" | "subscription" | "trial";
+    source: "habit" | "task" | "goal" | "journal" | "subscription" | "trial";
     key: string;
   };
 }
@@ -262,6 +263,25 @@ export function planNativeReminders(db: Db, options: ReminderPlanOptions): Plann
           at,
           "product",
           "task",
+        ),
+      );
+    }
+
+    for (const goal of db.goals) {
+      if (goal.status === "completed" || goalProgress(db, goal).complete || !goal.reminderAt)
+        continue;
+      const at = new Date(goal.reminderAt);
+      if (!Number.isFinite(at.getTime()) || at.getTime() <= options.now.getTime()) continue;
+      const key = `goal|${goal.id}`;
+      out.push(
+        candidate(
+          key,
+          fa ? "یادآوری هدف" : "Goal reminder",
+          goal.title,
+          { at, allowWhileIdle: true },
+          at,
+          "product",
+          "goal",
         ),
       );
     }

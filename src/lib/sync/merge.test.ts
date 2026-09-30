@@ -89,6 +89,10 @@ describe("mergeRemote — bookkeeping", () => {
 });
 
 describe("acceptsRemote — what is allowed to arrive at all", () => {
+  it("accepts goals as first-class sync records", () => {
+    expect(acceptsRemote(remote(1, { kind: "goals", id: "goal-1" }))).toBe(true);
+  });
+
   it("refuses every setting, including formerly account-level settings", () => {
     for (const id of ["lang", "calendar", "brandColor", "onboarded", "journalReminder"]) {
       expect(acceptsRemote(remote(1, { kind: "settings", id }))).toBe(false);

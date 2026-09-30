@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { dateKey } from "./dates";
 import { DEFAULT_CATEGORIES } from "./presets";
 import { planNativeReminders, routinoNotificationId } from "./reminder-planner";
-import { defaultDb, type Db, type Habit, type Task } from "./store";
+import { defaultDb, type Db, type Goal, type Habit, type Task } from "./store";
 
 const NOW = new Date(2026, 7, 17, 6, 0, 0, 0); // Monday, 2026-08-17
 
@@ -31,6 +31,19 @@ function task(overrides: Partial<Task> = {}): Task {
     value: 0,
     done: false,
     reminderAt: "2026-08-18T08:00",
+    ...overrides,
+  };
+}
+
+function goal(overrides: Partial<Goal> = {}): Goal {
+  return {
+    id: "goal-1",
+    title: "Get fit",
+    priority: "normal",
+    status: "active",
+    items: [],
+    createdAt: NOW.getTime(),
+    reminderAt: "2026-08-18T08:30",
     ...overrides,
   };
 }
@@ -157,6 +170,36 @@ describe("planNativeReminders", () => {
     value.tasks = [task({ reminderAt: "2026-08-17T05:59" })];
     expect(plan(value)).toEqual([]);
     value.tasks = [];
+    expect(plan(value)).toEqual([]);
+  });
+
+  it("plans goal reminders and removes them after manual or item completion", () => {
+    const value = db();
+    value.goals = [goal()];
+
+    expect(plan(value)[0]).toMatchObject({
+      title: "Goal reminder",
+      body: "Get fit",
+      schedule: { at: new Date(2026, 7, 18, 8, 30), allowWhileIdle: true },
+      extra: { key: "goal|goal-1", source: "goal" },
+    });
+
+    value.goals = [goal({ status: "completed", completedAt: NOW.getTime() })];
+    expect(plan(value)).toEqual([]);
+
+    value.goals = [
+      goal({
+        items: [
+          {
+            id: "done-item",
+            kind: "custom",
+            title: "Done",
+            measure: "binary",
+            value: true,
+          },
+        ],
+      }),
+    ];
     expect(plan(value)).toEqual([]);
   });
 

@@ -134,12 +134,14 @@ export function backupSummary(db: Db): {
   logs: number;
   journal: number;
   tasks: number;
+  goals: number;
 } {
   return {
     habits: db.habits.length,
     logs: Object.keys(db.logs).length,
     journal: Object.keys(db.journal).length,
     tasks: db.tasks.length,
+    goals: db.goals?.length ?? 0,
   };
 }
 
@@ -178,6 +180,7 @@ export function restoreDb(current: Db, backup: Backup): Db {
     // history, journal entries and feedback that it simply never mentioned, on
     // the one feature whose entire purpose is getting data back.
     tasks: Array.isArray(b.tasks) ? b.tasks : current.tasks,
+    goals: Array.isArray(b.goals) ? b.goals : current.goals,
     timerSessions: Array.isArray(b.timerSessions) ? b.timerSessions : current.timerSessions,
     journal: isRecord(b.journal) ? b.journal : current.journal,
     feedback: Array.isArray(b.feedback) ? b.feedback : current.feedback,

@@ -5,17 +5,10 @@ import { AppShell } from "@/components/AppShell";
 import { Card, CatIcon, Chip, formatDuration, MiniBars, Progress } from "@/components/ui";
 import { buildChartBars } from "@/lib/chart";
 import { analyticsDayKeys, faNum, formatShortDate, monthTitle, todayKey } from "@/lib/dates";
-import {
-  avgOf,
-  cappedPercent,
-  getLog,
-  isDueOn,
-  monthProgress,
-  streak,
-  successRate,
-} from "@/lib/logic";
+import { avgOf, cappedPercent, getLog, isDueOn, monthProgress, streak, successRate } from "@/lib/logic";
 import { useAppMaybe } from "@/state/app";
 import { formatCompactValue, habitLifetimeStats } from "@/lib/analytics";
+import { linkedGoalsForSource } from "@/lib/goals";
 
 export const Route = createFileRoute("/habit/$habitId")({
   component: () => (
@@ -57,6 +50,7 @@ function HabitDetailPage() {
   const st = streak(db, habit, cal);
   const rate = successRate(db, habit, cal, range.days);
   const lifetime = habitLifetimeStats(db, habit, cal);
+  const linkedGoals = linkedGoalsForSource(db, "habit", habit.id);
 
   // Rolling windows ending today; bucketing + labels shared with Analytics via
   // buildChartBars so every chart in the app behaves identically.
@@ -104,13 +98,7 @@ function HabitDetailPage() {
           <p className="text-lg font-black text-foreground">{faNum(rate, lang)}٪</p>
           <p className="text-[10px] text-muted-foreground">{t("موفقیت", "Success")}</p>
         </Card>
-        <Card className="flex flex-col items-center gap-1 py-3">
-          <Target className="h-5 w-5 text-primary" />
-          <p className="text-lg font-black text-foreground">
-            {faNum(mp.doneDays, lang)}/{faNum(mp.goalDays, lang)}
-          </p>
-          <p className="text-[10px] text-muted-foreground">{t("این ماه", "This month")}</p>
-        </Card>
+        <Card className="flex flex-col items-center gap-1 py-3"><Target className="h-5 w-5 text-primary" /><p className="text-lg font-black text-foreground">{faNum(mp.doneDays, lang)}/{faNum(mp.goalDays, lang)}</p><p className="text-[10px] text-muted-foreground">{t("این ماه", "This month")}</p></Card>
         <Card className="flex flex-col items-center gap-1 py-3">
           <Trophy className="h-5 w-5 text-primary" />
           <p className="text-lg font-black text-foreground">
@@ -141,15 +129,27 @@ function HabitDetailPage() {
         )}
       </div>
 
-      <Card>
-        <div className="mb-2 flex items-center justify-between">
-          <p className="text-sm font-bold text-foreground">
-            {t("هدف ماهانه:", "Monthly goal:")} {monthTitle(todayKey(), cal, lang)}
+      <Card><div className="mb-2 flex items-center justify-between"><p className="text-sm font-bold text-foreground">{t("هدف ماهانه:", "Monthly goal:")} {monthTitle(todayKey(), cal, lang)}</p><span className="text-xs font-black text-primary">{faNum(mp.percent, lang)}٪</span></div><Progress value={mp.percent} color={cat?.color} /></Card>
+
+      {linkedGoals.length > 0 && (
+        <Card>
+          <p className="mb-2 text-sm font-bold text-foreground">
+            {t("هدف‌های متصل", "Linked goals")}
           </p>
-          <span className="text-xs font-black text-primary">{faNum(mp.percent, lang)}٪</span>
-        </div>
-        <Progress value={mp.percent} color={cat?.color} />
-      </Card>
+          <div className="flex flex-wrap gap-2">
+            {linkedGoals.map((goal) => (
+              <Link
+                key={goal.id}
+                to="/goal/$goalId"
+                params={{ goalId: goal.id }}
+                className="rounded-xl bg-primary-soft px-3 py-2 text-xs font-bold text-primary"
+              >
+                {goal.title}
+              </Link>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <Card>
         <div className="mb-3 flex items-center justify-between gap-2">

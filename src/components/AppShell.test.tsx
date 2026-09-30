@@ -78,6 +78,18 @@ describe("AppShell read-only access", () => {
     expect(referrals.ensureReferralSummaryCached).not.toHaveBeenCalled();
   });
 
+  it("keeps Journal in the mobile primary nav and moves Goals into More", async () => {
+    const mobileNav = host.querySelector("nav.fixed")!;
+    expect(mobileNav.textContent).toContain("ژورنال");
+    expect(mobileNav.textContent).not.toContain("هدف‌ها");
+
+    const more = [...mobileNav.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("بیشتر"),
+    )!;
+    await act(async () => more.click());
+    expect(document.body.textContent).toContain("هدف‌ها");
+  });
+
   it("offers subscribe once after a blocked product action", async () => {
     app.ctx = { ...app.ctx, writeBlocked: true };
     await act(async () => root.render(<AppShell>تاریخچهٔ محفوظ</AppShell>));

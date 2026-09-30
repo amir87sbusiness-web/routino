@@ -195,12 +195,9 @@ function HabitsPage() {
                     renderItem={(h) => {
                       const mp = monthProgress(db, h, cal);
                       const st = streak(db, h, cal);
-                      // hitting the monthly goal recolors the whole card green
                       const reached = mp.percent >= 100;
                       return (
-                        <div
-                          className={`card-surface h-full p-3 ${reached ? "border-success/60 bg-success/10" : ""}`}
-                        >
+                        <div className={`card-surface h-full p-3 ${reached ? "border-success/60 bg-success/10" : ""}`}>
                           <div className="flex items-center gap-2.5">
                             <span
                               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-white"
@@ -213,15 +210,9 @@ function HabitsPage() {
                               params={{ habitId: h.id }}
                               className="min-w-0 flex-1"
                             >
-                              <p
-                                className={`truncate text-sm font-bold ${reached ? "text-success" : "text-foreground"}`}
-                              >
-                                {reached && "🏆 "}
-                                {h.name}
-                              </p>
+                              <p className={`truncate text-sm font-bold ${reached ? "text-success" : "text-foreground"}`}>{reached && "🏆 "}{h.name}</p>
                               <p className="text-[10px] text-muted-foreground">
-                                {faNum(mp.doneDays, lang)}/{faNum(mp.goalDays, lang)}{" "}
-                                {t("روز", "days")}
+                                {faNum(mp.doneDays, lang)}/{faNum(mp.goalDays, lang)} {t("روز", "days")}
                                 {st > 0 && ` · 🔥 ${faNum(st, lang)}`}
                               </p>
                             </Link>
@@ -241,18 +232,7 @@ function HabitsPage() {
                               <Trash2 className="h-3.5 w-3.5" />
                             </button>
                           </div>
-                          <div className="mt-2.5 flex items-center gap-2">
-                            <Progress
-                              value={mp.percent}
-                              color={reached ? "var(--success)" : cat.color}
-                              className="flex-1"
-                            />
-                            <span
-                              className={`shrink-0 text-[10px] font-bold ${reached ? "text-success" : "text-muted-foreground"}`}
-                            >
-                              {faNum(mp.percent, lang)}٪
-                            </span>
-                          </div>
+                          <div className="mt-2.5 flex items-center gap-2"><Progress value={mp.percent} color={reached ? "var(--success)" : cat.color} className="flex-1" /><span className={`shrink-0 text-[10px] font-bold ${reached ? "text-success" : "text-muted-foreground"}`}>{faNum(mp.percent, lang)}٪</span></div>
                         </div>
                       );
                     }}
@@ -262,48 +242,10 @@ function HabitsPage() {
             })}
         </div>
       )}
-
-      {/* badges — one per habit that hit its monthly goal, derived from the logs */}
       <section>
         <SectionTitle>{t("نشان‌ها 🏅", "Badges 🏅")}</SectionTitle>
-        {badges.length === 0 ? (
-          <p className="text-xs text-muted-foreground">
-            {t(
-              "وقتی به هدف ماهانه یک عادت برسی، نشانش اینجا اضافه می‌شه.",
-              "Reach a habit's monthly goal and its badge shows up here.",
-            )}
-          </p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {badges.map((b) => {
-              const habit = db.habits.find((h) => h.id === b.habitId);
-              const badgeCat = db.categories.find((c) => c.id === habit?.categoryId);
-              return (
-                <div key={b.id} className="card-surface flex items-center gap-2 px-3 py-2">
-                  <span className="text-lg">🏆</span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-xs font-bold text-foreground">
-                      {b.habitName}
-                    </span>
-                    <span className="block text-[10px] text-muted-foreground">
-                      {monthTitle(b.monthId, cal, lang)}
-                    </span>
-                  </span>
-                  {badgeCat && (
-                    <span
-                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-white"
-                      style={{ backgroundColor: badgeCat.color }}
-                    >
-                      <CatIcon icon={badgeCat.icon} className="h-3 w-3" />
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
+        {badges.length === 0 ? <p className="text-xs text-muted-foreground">{t("وقتی به هدف ماهانه یک عادت برسی، نشانش اینجا اضافه می‌شه.", "Reach a habit's monthly goal and its badge shows up here.")}</p> : <div className="flex flex-wrap gap-2">{badges.map((badge) => <div key={badge.id} className="card-surface flex items-center gap-2 px-3 py-2"><span className="text-lg">🏆</span><span><span className="block text-xs font-bold text-foreground">{badge.habitName}</span><span className="block text-[10px] text-muted-foreground">{monthTitle(badge.monthId, cal, lang)}</span></span></div>)}</div>}
       </section>
-
       {/* preset picker */}
       <Modal
         open={presetsOpen}

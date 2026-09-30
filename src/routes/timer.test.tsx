@@ -291,4 +291,86 @@ describe("TimerPage native timer integration", () => {
       expect.objectContaining({ id: `user-1|timer|${active.runId}|finished` }),
     );
   });
+
+  it("offers only incomplete custom time items from active goals and preloads their remaining time", async () => {
+    db.goals = [
+      {
+        id: "goal-active",
+        title: "تمرکز",
+        priority: "normal",
+        status: "active",
+        createdAt: 1,
+        items: [
+          {
+            id: "time-open",
+            kind: "custom",
+            title: "مطالعه",
+            measure: "time",
+            valueMinutes: 15,
+            targetMinutes: 45,
+          },
+          {
+            id: "time-done",
+            kind: "custom",
+            title: "کامل",
+            measure: "time",
+            valueMinutes: 60,
+            targetMinutes: 60,
+          },
+          {
+            id: "source-time",
+            kind: "source",
+            sourceType: "habit",
+            sourceId: "habit-1",
+            sourceTitleSnapshot: "عادت زمانی",
+            measure: "time",
+            target: 60,
+            linkedAt: 1,
+            linkedDateKey: "2026-09-30",
+            baselineValue: 0,
+          },
+        ],
+      },
+      {
+        id: "goal-completed",
+        title: "هدف تمام‌شده",
+        priority: "normal",
+        status: "completed",
+        createdAt: 1,
+        items: [
+          {
+            id: "time-in-completed-goal",
+            kind: "custom",
+            title: "نباید دیده شود",
+            measure: "time",
+            valueMinutes: 0,
+            targetMinutes: 30,
+          },
+        ],
+      },
+    ];
+    saveTimer("user-1", createTimer("free", 25));
+
+    await act(async () => root.render(<TimerPage />));
+
+    const chip = [...host.querySelectorAll("button")].find((button) =>
+      button.textContent?.includes("تمرکز · مطالعه"),
+    );
+    expect(chip).toBeDefined();
+    expect(host.textContent).not.toContain("کامل");
+    expect(host.textContent).not.toContain("عادت زمانی");
+    expect(host.textContent).not.toContain("نباید دیده شود");
+
+    await act(async () => chip!.click());
+    expect(loadTimer("user-1")).toMatchObject({
+      linked: {
+        kind: "goal",
+        id: "goal-active",
+        itemId: "time-open",
+        label: "تمرکز · مطالعه",
+      },
+      freeMinutes: 30,
+      remainingMs: 30 * 60_000,
+    });
+  });
 });

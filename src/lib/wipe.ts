@@ -25,6 +25,7 @@ export function wipeContent(db: Db): Db {
     habits: [],
     logs: {},
     tasks: [],
+    goals: [],
     timerSessions: [],
     journal: {},
     feedback: [],

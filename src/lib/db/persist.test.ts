@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { DEFAULT_CATEGORIES } from "../presets";
-import { defaultDb, type Db, type Habit, type TimerSession } from "../store";
+import { defaultDb, type Db, type Goal, type Habit, type TimerSession } from "../store";
 import { db as idb } from "./dexie";
 import { diffDb } from "./diff";
 import { hydrate } from "./hydrate";
@@ -32,6 +32,34 @@ async function persistAndHydrate(prev: Db | null, next: Db): Promise<Db> {
 }
 
 describe("applyChanges", () => {
+  it("round-trips goals through IndexedDB and includes them in the outbox", async () => {
+    const base = defaultDb(DEFAULT_CATEGORIES);
+    const goal: Goal = {
+      id: "g1",
+      title: "Read 12 books",
+      priority: "high",
+      status: "active",
+      items: [
+        {
+          id: "i1",
+          kind: "custom",
+          title: "Books",
+          measure: "count",
+          value: 2,
+          target: 12,
+          unit: "book",
+        },
+      ],
+      createdAt: 1,
+    };
+    const next: Db = { ...base, goals: [goal] };
+
+    const out = await persistAndHydrate(base, next);
+
+    expect(out.goals).toEqual([goal]);
+    expect((await pendingChanges()).goals?.map((row) => row.key)).toEqual(["g1"]);
+  });
+
   it("round-trips a db through storage", async () => {
     const base = defaultDb(DEFAULT_CATEGORIES);
     const next: Db = { ...base, habits: [habit("h1", "مطالعه")] };

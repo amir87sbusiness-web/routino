@@ -87,15 +87,38 @@ export function TimerPage() {
     const dk = dateKey(new Date(item.endedAt));
     const task = link?.kind === "task" ? c.db.tasks.find((x) => x.id === link.id) : null;
     const habit = link?.kind === "habit" ? c.db.habits.find((x) => x.id === link.id) : null;
+    const goalItem =
+      link?.kind === "goal"
+        ? c.db.goals
+            .find((goal) => goal.id === link.id)
+            ?.items.find(
+              (candidate) =>
+                candidate.id === link.itemId &&
+                candidate.kind === "custom" &&
+                candidate.measure === "time",
+            )
+        : null;
     const beforeCompleted =
-      task?.done ?? (habit ? isCompleted(habit, getLog(c.db, habit.id, dk)) : false);
+      task?.done ??
+      (habit
+        ? isCompleted(habit, getLog(c.db, habit.id, dk))
+        : goalItem?.kind === "custom" && goalItem.measure === "time"
+          ? goalItem.valueMinutes >= goalItem.targetMinutes
+          : false);
     const nextValue = task
       ? task.value + (task.unitKind === "time" ? minutes : Math.round(minutes))
       : habit
         ? (getLog(c.db, habit.id, dk)?.value ?? 0) +
           (habit.unitKind === "time" ? minutes : Math.round(minutes))
-        : 0;
-    const target = task?.target ?? habit?.target;
+        : goalItem?.kind === "custom" && goalItem.measure === "time"
+          ? goalItem.valueMinutes + minutes
+          : 0;
+    const target =
+      task?.target ??
+      habit?.target ??
+      (goalItem?.kind === "custom" && goalItem.measure === "time"
+        ? goalItem.targetMinutes
+        : undefined);
     const afterCompleted = Boolean(
       beforeCompleted || (target !== undefined && nextValue >= target),
     );
@@ -317,6 +340,17 @@ export function TimerPage() {
     (task) =>
       task.dateKey === dk && !task.done && task.type === "quantity" && task.unitKind === "time",
   );
+  const openGoalTimeItems = db.goals.flatMap((goal) =>
+    goal.status !== "active"
+      ? []
+      : goal.items.flatMap((item) =>
+          item.kind === "custom" &&
+          item.measure === "time" &&
+          item.valueMinutes < item.targetMinutes
+            ? [{ goal, item }]
+            : [],
+        ),
+  );
 
   /** Remaining minutes toward this linked item's time goal (target - already logged). */
   const remainingMinutesFor = (link: TimerLink): number | null => {
@@ -325,6 +359,13 @@ export function TimerPage() {
       const task = db.tasks.find((x) => x.id === link.id);
       if (!task) return null;
       return Math.max(1, Math.round(task.target - task.value));
+    }
+    if (link.kind === "goal") {
+      const item = db.goals
+        .find((goal) => goal.id === link.id)
+        ?.items.find((candidate) => candidate.id === link.itemId);
+      if (!item || item.kind !== "custom" || item.measure !== "time") return null;
+      return Math.max(1, Math.round(item.targetMinutes - item.valueMinutes));
     }
     const habit = db.habits.find((h) => h.id === link.id);
     if (!habit) return null;
@@ -697,22 +738,22 @@ export function TimerPage() {
         )}
       </Card>
 
-      {/* link to habit/task */}
+      {/* link to a time-tracked source or a standalone Goal item */}
       <Card>
         <p className="mb-2 text-sm font-bold text-foreground">
-          {t("اتصال تایمر به عادت یا کار زمانی", "Link timer to a time-based habit or task")}
+          {t("اتصال تایمر به هدف زمانی", "Link timer to a time goal")}
         </p>
         <p className="mb-3 text-[10px] text-muted-foreground">
           {t(
-            "فقط عادت‌ها و کارهای زمانی قابل اتصال‌ان. با هر حالتی (پومودورو یا آزاد) کار می‌کنه و فقط زمانِ تمرکز به هدف اضافه می‌شه.",
-            "Only time-based habits and tasks can be linked. Works in any mode (Pomodoro or Free); only focus time counts toward the goal.",
+            "عادت‌ها، کارها و آیتم‌های زمانیِ مستقل قابل اتصال‌ان. فقط زمان تمرکز به همان مورد انتخاب‌شده اضافه می‌شه.",
+            "Time-based habits, tasks, and standalone Goal items can be linked. Only focus time is added to the selected item.",
           )}
         </p>
-        {dueHabits.length === 0 && openTasks.length === 0 ? (
+        {dueHabits.length === 0 && openTasks.length === 0 && openGoalTimeItems.length === 0 ? (
           <p className="text-xs text-muted-foreground">
             {t(
-              "هنوز عادت یا کار زمانی برای امروز نداری.",
-              "You don't have any time-based habits or tasks for today yet.",
+              "هنوز مورد زمانیِ ناتمامی برای امروز نداری.",
+              "You don't have an incomplete time-based item for today yet.",
             )}
           </p>
         ) : (
@@ -738,6 +779,20 @@ export function TimerPage() {
                 📋 {task.title}
               </Chip>
             ))}
+            {openGoalTimeItems.map(({ goal, item }) => {
+              const label = `${goal.title} · ${item.title}`;
+              return (
+                <Chip
+                  key={`${goal.id}:${item.id}`}
+                  active={
+                    linked?.kind === "goal" && linked.id === goal.id && linked.itemId === item.id
+                  }
+                  onClick={() => selectLink({ kind: "goal", id: goal.id, itemId: item.id, label })}
+                >
+                  🎯 {label}
+                </Chip>
+              );
+            })}
           </div>
         )}
       </Card>
@@ -763,7 +818,6 @@ export function TimerPage() {
           </div>
         </Card>
       )}
-
       <CelebrationModal celebration={celebration} onClose={clearCelebration} t={t} lang={lang} />
     </div>
   );

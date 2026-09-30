@@ -1,6 +1,9 @@
 import { uid, type TimerMode } from "./store";
 
-export type TimerLink = { kind: "habit" | "task"; id: string; label: string } | null;
+export type TimerLink =
+  | { kind: "habit" | "task"; id: string; label: string }
+  | { kind: "goal"; id: string; itemId: string; label: string }
+  | null;
 
 export interface TimerCompletion {
   id: string;

@@ -66,4 +66,16 @@ describe("timer runtime", () => {
     expect(loadTimer(owner).running).toBe(false);
     localStorage.removeItem(`routino:active-timer:v1:${owner}`);
   });
+
+  it("keeps the exact custom goal item link on the emitted completion", () => {
+    const linked = {
+      kind: "goal" as const,
+      id: "goal-1",
+      itemId: "goal-time-1",
+      label: "تمرکز · مطالعه",
+    };
+    const result = advanceTimer(resumeTimer(createTimer("free", 1, { linked }), 1_000), 61_000);
+
+    expect(result.state.pending[0]?.linked).toEqual(linked);
+  });
 });

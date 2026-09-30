@@ -194,6 +194,36 @@ describe("restoreDb", () => {
     expect(next.logs).toEqual(original.logs);
     expect(next.journal).toEqual(original.journal);
   });
+
+  it("backs up goals and keeps current goals when an older backup omits them", () => {
+    const current = defaultDb(DEFAULT_CATEGORIES);
+    current.goals = [
+      {
+        id: "g1",
+        title: "Get fit",
+        priority: "normal",
+        status: "active",
+        items: [
+          {
+            id: "i1",
+            kind: "custom",
+            title: "Register",
+            measure: "binary",
+            value: false,
+          },
+        ],
+        createdAt: 1,
+      },
+    ];
+    const exported = buildBackup(current);
+    expect(exported.db.goals).toEqual(current.goals);
+
+    const old = buildBackup(seed()) as Omit<ReturnType<typeof buildBackup>, "db"> & {
+      db: Partial<Db>;
+    };
+    delete old.db.goals;
+    expect(restoreDb(current, old as ReturnType<typeof buildBackup>).goals).toEqual(current.goals);
+  });
 });
 
 describe("backupSummary", () => {
@@ -202,5 +232,16 @@ describe("backupSummary", () => {
     expect(sum.habits).toBe(1);
     expect(sum.logs).toBe(1);
     expect(sum.journal).toBe(1);
+  });
+
+  it("previews an older parsed backup that has no goals collection", () => {
+    const old = buildBackup(seed()) as Omit<ReturnType<typeof buildBackup>, "db"> & {
+      db: Partial<Db>;
+    };
+    delete old.db.goals;
+
+    const parsed = parseBackup(JSON.stringify(old));
+
+    expect(backupSummary(parsed.db).goals).toBe(0);
   });
 });

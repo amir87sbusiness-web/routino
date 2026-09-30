@@ -14,6 +14,7 @@ import Dexie, { type Table } from "dexie";
 import type {
   Category,
   Feedback,
+  Goal,
   Habit,
   HabitLog,
   JournalEntry,
@@ -59,13 +60,14 @@ export function nextSeq(): number {
 /** Tables that sync. `feedback` is push-only (it never comes back to a device)
  * but lives here so it survives being offline. */
 export type SyncedTable =
-  "categories" | "habits" | "logs" | "tasks" | "timerSessions" | "journal" | "feedback";
+  "categories" | "habits" | "logs" | "tasks" | "goals" | "timerSessions" | "journal" | "feedback";
 
 export const SYNCED_TABLES: SyncedTable[] = [
   "categories",
   "habits",
   "logs",
   "tasks",
+  "goals",
   "timerSessions",
   "journal",
   "feedback",
@@ -101,6 +103,7 @@ export class RoutinoDexie extends Dexie {
   habits!: Table<RecordRow<Habit>, string>;
   logs!: Table<RecordRow<HabitLog>, string>;
   tasks!: Table<RecordRow<Task>, string>;
+  goals!: Table<RecordRow<Goal>, string>;
   timerSessions!: Table<RecordRow<TimerSession>, string>;
   journal!: Table<RecordRow<JournalEntry>, string>;
   feedback!: Table<RecordRow<Feedback>, string>;
@@ -127,6 +130,19 @@ export class RoutinoDexie extends Dexie {
     // Settings are entirely device-local and live as one tiny localStorage
     // object. Dropping this obsolete store guarantees they cannot enter sync.
     this.version(3).stores({ settings: null });
+    // Goals are independent sync records; adding the store does not rewrite any
+    // existing habit/task data. Older clients intentionally ignored unknown
+    // `goals` records while still advancing their cursor, so this one-time safe
+    // full pull makes those records visible immediately after the upgrade.
+    this.version(4)
+      .stores({ goals: "key, dirty, seq" })
+      .upgrade(async (transaction) => {
+        const syncMeta = transaction.table<SyncMetaRow, string>("syncMeta");
+        const state = await syncMeta.get("cursor");
+        if (!state) return;
+        const { fullResyncGcSeq: _staleWatermark, ...rest } = state;
+        await syncMeta.put({ ...rest, cursor: 0, lastSyncedAt: 0 });
+      });
   }
 }
 

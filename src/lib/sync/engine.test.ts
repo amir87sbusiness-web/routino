@@ -231,10 +231,43 @@ async function localDirtyTask(id: string, title: string, updatedAt = 1000) {
   });
 }
 
+async function localDirtyGoal(id: string, title: string, updatedAt = 1000) {
+  await idb.goals.put({
+    key: id,
+    data: {
+      id,
+      title,
+      priority: "normal",
+      status: "active",
+      items: [],
+      createdAt: 900,
+    },
+    updatedAt,
+    deleted: 0,
+    dirty: 1,
+    seq: 1,
+  });
+}
+
 const localHabitNames = async () =>
   (await idb.table("habits").toArray()).map((r) => (r.data as { name: string } | null)?.name);
 
 describe("sync engine, two devices on one account", () => {
+  it("pushes a dirty goal using the goals wire kind", async () => {
+    await localDirtyGoal("goal-1", "آمادگی برای مسابقه");
+
+    await syncNow(OWNER);
+
+    expect(server.exchanges[0]?.records).toEqual([
+      expect.objectContaining({
+        kind: "goals",
+        id: "goal-1",
+        data: expect.objectContaining({ title: "آمادگی برای مسابقه" }),
+      }),
+    ]);
+    expect((await idb.goals.get("goal-1"))?.dirty).toBe(0);
+  });
+
   it("uses one exchange for the common one-chunk sync", async () => {
     await localDirtyHabit("h1", "ورزش");
 

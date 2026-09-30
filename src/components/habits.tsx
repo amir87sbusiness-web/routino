@@ -1,6 +1,6 @@
-/** Habit form modal, daily log row, milestone celebration logic. */
+/** Habit form modal and daily log row. */
 import { Check, Minus, Pencil, Plus, SmilePlus, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useHorizontalDrag } from "@/components/useHorizontalDrag";
 import {
   Button,
@@ -9,6 +9,7 @@ import {
   DurationPicker,
   formatDuration,
   Input,
+  NoteField,
   Modal,
   Progress,
   TimePicker24,
@@ -51,21 +52,11 @@ import {
   type UnitKind,
 } from "@/lib/store";
 
-/* ---------------- celebration ---------------- */
-
 export interface Celebration {
   habitName: string;
   milestone: 70 | 100;
 }
 
-/** Surfaces a milestone popup once per crossing.
- *
- * `applyLog` already records every milestone it fires in `meta.celebrated` (as
- * its dedup key), so that array is the source of truth. Reading it here — rather
- * than returning the celebration out of `applyLog` — is what lets call sites run
- * `applyLog` inside the `update()` updater, where it always sees fresh state.
- * A value cannot be smuggled out of an updater: React invokes it during render,
- * not at call time. */
 export function useCelebration(db: Db | null | undefined): {
   celebration: Celebration | null;
   clear: () => void;
@@ -77,7 +68,6 @@ export function useCelebration(db: Db | null | undefined): {
 
   useEffect(() => {
     if (!celebrated || !habits) return;
-    // First pass adopts the existing keys, so past milestones don't replay on mount.
     if (seen.current === null) {
       seen.current = new Set(celebrated);
       return;
@@ -86,7 +76,7 @@ export function useCelebration(db: Db | null | undefined): {
       if (seen.current.has(key)) continue;
       seen.current.add(key);
       const [habitId, , milestone] = key.split("|");
-      const habit = habits.find((h) => h.id === habitId);
+      const habit = habits.find((candidate) => candidate.id === habitId);
       if (habit)
         setCelebration({ habitName: habit.name, milestone: Number(milestone) as 70 | 100 });
     }
@@ -95,10 +85,6 @@ export function useCelebration(db: Db | null | undefined): {
   return { celebration, clear: () => setCelebration(null) };
 }
 
-/** Apply a log patch; returns next db + celebration if a milestone was crossed.
- * Must be called INSIDE an `update()` updater so it reads fresh state — the
- * returned `celebration` is for that updater's own bookkeeping; UI should read
- * it via `useCelebration`. */
 export function applyLog(
   db: Db,
   habit: Habit,
@@ -110,19 +96,23 @@ export function applyLog(
   const prev = db.logs[key] ?? { habitId: habit.id, dateKey: dk, value: 0, done: false };
   const nextLog = { ...prev, ...patch };
   let next: Db = { ...db, logs: { ...db.logs, [key]: nextLog } };
-
   const before = monthProgress(db, habit, cal, dk).percent;
   const after = monthProgress(next, habit, cal, dk).percent;
   const monthId = monthDays(dk, cal)[0];
   let celebration: Celebration | null = null;
 
-  // Badges themselves are derived from the logs by earnedBadges(); this loop
-  // only fires the one-time celebration popup for crossing a milestone.
-  for (const m of [70, 100] as const) {
-    const cKey = `${habit.id}|${monthId}|${m}`;
-    if (after >= m && before < m && !next.meta.celebrated.includes(cKey)) {
-      celebration = { habitName: habit.name, milestone: m };
-      next = { ...next, meta: { ...next.meta, celebrated: [...next.meta.celebrated, cKey] } };
+  for (const milestone of [70, 100] as const) {
+    const celebrationKey = `${habit.id}|${monthId}|${milestone}`;
+    if (
+      after >= milestone &&
+      before < milestone &&
+      !next.meta.celebrated.includes(celebrationKey)
+    ) {
+      celebration = { habitName: habit.name, milestone };
+      next = {
+        ...next,
+        meta: { ...next.meta, celebrated: [...next.meta.celebrated, celebrationKey] },
+      };
     }
   }
   return { db: next, celebration };
@@ -174,6 +164,10 @@ export function HabitRow({
   dk,
   onUpdate,
   onCompletionChange,
+  showWeekChecks = true,
+  durationInput,
+  goalProgress,
+  actionMenu,
 }: {
   db: Db;
   habit: Habit;
@@ -183,6 +177,10 @@ export function HabitRow({
   dk: string;
   onUpdate: (fn: (db: Db) => Db) => boolean;
   onCompletionChange?: (completed: boolean) => void;
+  showWeekChecks?: boolean;
+  durationInput?: (minutes: number, onChange: (minutes: number) => void) => ReactNode;
+  goalProgress?: { percent: number; label: string; valueLabel?: string; todayLabel?: string };
+  actionMenu?: ReactNode;
 }) {
   const [detailOpen, setDetailOpen] = useState(false);
   const [noteVal, setNoteVal] = useState("");
@@ -365,9 +363,12 @@ export function HabitRow({
                 </span>
                 <p className="truncate text-sm font-bold text-foreground">{habit.name}</p>
               </div>
-              <WeekChecks db={db} habit={habit} cal={cal} refDk={dk} tint={tint} />
+              {showWeekChecks && (
+                <WeekChecks db={db} habit={habit} cal={cal} refDk={dk} tint={tint} />
+              )}
               <div className="mt-0.5 flex items-center gap-2 text-[10px] text-muted-foreground">
-                {habit.type === "quantity" && (
+                {goalProgress?.valueLabel && <span>{goalProgress.valueLabel}</span>}
+                {habit.type === "quantity" && !goalProgress && (
                   <span>
                     {habit.unitKind === "time"
                       ? `${formatDuration(log?.value ?? 0, lang)} / ${formatDuration(habit.target, lang)}`
@@ -384,6 +385,7 @@ export function HabitRow({
               <div className="flex items-center gap-1">
                 <button
                   disabled={isFuture}
+                  aria-label={t("کاهش مقدار", "Decrease value")}
                   onClick={() => {
                     const step = habit.unitKind === "time" ? 1 : 1;
                     const v = Math.max(0, (log?.value ?? 0) - step);
@@ -395,6 +397,7 @@ export function HabitRow({
                 </button>
                 <button
                   disabled={isFuture}
+                  aria-label={t("افزایش مقدار", "Increase value")}
                   onClick={() => {
                     const step = habit.unitKind === "time" ? 1 : 1;
                     const v = (log?.value ?? 0) + step;
@@ -413,19 +416,27 @@ export function HabitRow({
                 <SmilePlus className="h-4 w-4" />
               </button>
             )}
+            {actionMenu}
           </div>
 
-          {habit.type === "quantity" && (
+          {(habit.type === "quantity" || goalProgress) && (
             <div className="mt-2.5 flex items-center gap-2">
-              <Progress value={cappedPercent(habit, log)} color={cat?.color} className="flex-1" />
+              <Progress
+                value={goalProgress?.percent ?? cappedPercent(habit, log)}
+                color={cat?.color}
+                className="flex-1"
+              />
               <span
-                className={`text-[10px] font-bold ${raw > 100 ? "text-success" : "text-muted-foreground"}`}
+                className={`text-[10px] font-bold ${!goalProgress && raw > 100 ? "text-success" : "text-muted-foreground"}`}
               >
-                {faNum(raw, lang)}٪
+                {goalProgress?.label ?? `${faNum(raw, lang)}٪`}
               </span>
             </div>
           )}
-          {raw > 100 && (
+          {goalProgress?.todayLabel && (
+            <p className="mt-1.5 text-[10px] text-muted-foreground">{goalProgress.todayLabel}</p>
+          )}
+          {!goalProgress && raw > 100 && (
             <p className="mt-1 text-[10px] font-medium text-success">
               {t(
                 `🔥 ${faNum(raw, lang)}٪، یعنی ${faNum(raw - 100, lang)}٪ بیشتر از هدف!`,
@@ -457,7 +468,9 @@ export function HabitRow({
                       `Actual amount (goal: ${habit.target} ${habit.unit ?? ""})`,
                     )}
               </p>
-              {habit.unitKind === "time" ? (
+              {habit.unitKind === "time" && durationInput ? (
+                durationInput(Number(amountVal) || 0, (minutes) => setAmountVal(String(minutes)))
+              ) : habit.unitKind === "time" ? (
                 <DurationPicker
                   totalMinutes={Number(amountVal) || 0}
                   onChange={(m) => setAmountVal(String(m))}
@@ -499,9 +512,12 @@ export function HabitRow({
             <p className="mb-1.5 text-xs font-medium text-muted-foreground">
               {t("یادداشت کوتاه", "Short note")}
             </p>
-            <Input
+            <NoteField
+              label={t("یادداشت کوتاه", "Short note")}
+              doneLabel={t("ذخیره", "Save")}
               value={noteVal}
-              onChange={(e) => setNoteVal(e.target.value)}
+              maxLength={4000}
+              onChange={setNoteVal}
               placeholder={t("مثلاً: امروز سخت بود ولی انجامش دادم", "e.g. tough day but I did it")}
             />
           </div>
@@ -667,7 +683,7 @@ export interface HabitDraft {
   unitKind: UnitKind;
   scheduleKind: ScheduleKind;
   weekdays: number[];
-  monthlyGoal: string; // empty = auto
+  monthlyGoal: string;
   reminderTime: string; // empty = none
   deadlineTime: string; // empty = none
 }
@@ -686,7 +702,6 @@ export function emptyDraft(categoryId: string): HabitDraft {
     scheduleKind: "weekdays",
     // پیش‌فرض: همه‌ی روزهای هفته انتخاب شده (روزانه).
     weekdays: [...ALL_WEEKDAYS],
-    // پیش‌فرض هدف ماهانهٔ هر عادت جدید ۳۰ روز است؛ کاربر می‌تواند در فرم عوضش کند.
     monthlyGoal: "30",
     reminderTime: "",
     deadlineTime: "",
@@ -902,9 +917,11 @@ export function HabitFormModal({
             </p>
             <Input
               type="number"
+              min={1}
+              max={31}
               dir="ltr"
               value={draft.monthlyGoal}
-              onChange={(e) => setDraft({ ...draft, monthlyGoal: e.target.value })}
+              onChange={(event) => setDraft({ ...draft, monthlyGoal: event.target.value })}
               placeholder={t("خودکار", "auto")}
               className="text-center"
             />
@@ -915,7 +932,7 @@ export function HabitFormModal({
             </p>
             <button
               type="button"
-              onClick={() => setReminderPickerOpen((v) => !v)}
+              onClick={() => setReminderPickerOpen((value) => !value)}
               className="w-full rounded-xl border border-border px-3 py-2 text-center text-sm font-bold text-foreground hover:bg-secondary"
               dir="ltr"
             >
@@ -1001,7 +1018,7 @@ export function draftToHabit(draft: HabitDraft, existing?: Habit): Habit {
       draft.weekdays.length >= 7
         ? { kind: "daily", weekdays: undefined }
         : { kind: "weekdays", weekdays: draft.weekdays },
-    monthlyGoal: draft.monthlyGoal ? Math.max(1, Number(draft.monthlyGoal)) : null,
+    monthlyGoal: draft.monthlyGoal ? Math.min(31, Math.max(1, Number(draft.monthlyGoal))) : null,
     reminderTime: draft.reminderTime || null,
     deadlineTime: draft.deadlineTime || null,
     createdAt: existing?.createdAt ?? Date.now(),

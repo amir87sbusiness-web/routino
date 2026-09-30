@@ -10,6 +10,7 @@ import {
   type Category,
   type Db,
   type Feedback,
+  type Goal,
   type Habit,
   type HabitLog,
   type JournalEntry,
@@ -118,19 +119,21 @@ export async function hydrate(now = Date.now()): Promise<HydrateResult> {
   const local = loadLocal();
   await seedIfEmpty();
 
-  const [categories, habits, logs, tasks, timerSessions, journal, feedback] = await Promise.all([
-    idb.categories.toArray(),
-    idb.habits.toArray(),
-    idb.logs.toArray(),
-    idb.tasks.toArray(),
-    idb.timerSessions.toArray(),
-    idb.journal.toArray(),
-    idb.feedback.toArray(),
-  ]);
+  const [categories, habits, logs, tasks, goals, timerSessions, journal, feedback] =
+    await Promise.all([
+      idb.categories.toArray(),
+      idb.habits.toArray(),
+      idb.logs.toArray(),
+      idb.tasks.toArray(),
+      idb.goals.toArray(),
+      idb.timerSessions.toArray(),
+      idb.journal.toArray(),
+      idb.feedback.toArray(),
+    ]);
 
   // Continue the ordering sequence rather than restarting it, so records added
   // this session sort after everything already stored.
-  primeSeq(maxSeq(categories, habits, logs, tasks, timerSessions, journal, feedback));
+  primeSeq(maxSeq(categories, habits, logs, tasks, goals, timerSessions, journal, feedback));
 
   const fresh = defaultDb(DEFAULT_CATEGORIES);
 
@@ -141,6 +144,7 @@ export async function hydrate(now = Date.now()): Promise<HydrateResult> {
       habits: live<Habit>(habits),
       logs: keyed<HabitLog>(logs),
       tasks: live<Task>(tasks),
+      goals: live<Goal>(goals),
       timerSessions: liveNewestFirst<TimerSession>(timerSessions, (s) => s.endedAt),
       journal: keyed<JournalEntry>(journal),
       feedback: live<Feedback>(feedback),

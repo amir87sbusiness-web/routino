@@ -1,4 +1,5 @@
 /** Shared task row + quick "Today's To-dos" card, used on both Home and Tasks pages. */
+import { Link } from "@tanstack/react-router";
 import {
   Bell,
   CalendarDays,
@@ -10,7 +11,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { AnimatedCompletionList } from "@/components/AnimatedCompletionList";
 import { useHorizontalDrag } from "@/components/useHorizontalDrag";
@@ -21,6 +22,7 @@ import {
   DurationPicker,
   formatDuration,
   Input,
+  NoteField,
   Modal,
   Progress,
   TimePicker24,
@@ -31,7 +33,8 @@ import {
   triggerCompletionFeedback,
 } from "@/lib/completion-feedback";
 import { CATEGORY_COLOR_CHOICES } from "@/lib/presets";
-import { uid, type Category, type Db, type Settings, type Task } from "@/lib/store";
+import { uid, type Category, type Db, type Goal, type Settings, type Task } from "@/lib/store";
+import { linkedGoalsForSource } from "@/lib/goals";
 import { resolveTaskAppearance, uncategorizedTaskColor } from "@/lib/task-appearance";
 import { isTaskOverdue, tasksVisibleOn } from "@/lib/deadlines";
 
@@ -172,6 +175,7 @@ export function TaskFormModal({
   lang,
   t,
   categories = [],
+  linkedGoals = [],
 }: {
   open: boolean;
   draft: TaskDraft;
@@ -182,6 +186,7 @@ export function TaskFormModal({
   lang: Lang;
   t: (fa: string, en: string) => string;
   categories?: Category[];
+  linkedGoals?: Goal[];
 }) {
   const [dateOpen, setDateOpen] = useState(false);
   const [reminderPickerOpen, setReminderPickerOpen] = useState(false);
@@ -236,6 +241,26 @@ export function TaskFormModal({
             autoFocus={Boolean(draft.id)}
           />
         </div>
+
+        {draft.id && linkedGoals.length > 0 && (
+          <div>
+            <p className="mb-1.5 text-xs font-medium text-muted-foreground">
+              {t("هدف‌های متصل", "Linked goals")}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {linkedGoals.map((goal) => (
+                <Link
+                  key={goal.id}
+                  to="/goal/$goalId"
+                  params={{ goalId: goal.id }}
+                  className="rounded-xl bg-primary-soft px-3 py-2 text-xs font-bold text-primary"
+                >
+                  {goal.title}
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div>
           <p className="mb-1.5 text-xs font-medium text-muted-foreground">
@@ -390,9 +415,11 @@ export function TaskFormModal({
 
         <div>
           <p className="mb-1.5 text-xs font-medium text-muted-foreground">{t("یادداشت", "Note")}</p>
-          <Input
+          <NoteField
+            label={t("یادداشت", "Note")}
+            doneLabel={t("ذخیره", "Save")}
             value={draft.note}
-            onChange={(event) => patchDraft({ note: event.target.value })}
+            onChange={(note) => patchDraft({ note })}
             placeholder={t("اختیاری", "Optional")}
           />
         </div>
@@ -551,16 +578,20 @@ export function TaskRow({
   onEdit,
   onCompletionChange,
   categories = [],
+  goalProgress,
+  actionMenu,
 }: {
   task: Task;
   settings: Pick<Settings, "completionSoundEnabled" | "hapticsEnabled">;
   lang: Lang;
   t: (fa: string, en: string) => string;
   onUpdate: (patch: Partial<Task>) => boolean;
-  onDelete: () => void;
+  onDelete?: () => void;
   onEdit?: () => void;
   onCompletionChange?: (completed: boolean) => void;
   categories?: Category[];
+  goalProgress?: { percent: number; label: string; valueLabel?: string; summary?: string };
+  actionMenu?: ReactNode;
 }) {
   const [justCompleted, setJustCompleted] = useState(false);
   const [rowFlash, setRowFlash] = useState(false);
@@ -714,7 +745,8 @@ export function TaskRow({
               </span>
             )}
             <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-              {task.type === "quantity" && (
+              {goalProgress?.valueLabel && <span>{goalProgress.valueLabel}</span>}
+              {task.type === "quantity" && !goalProgress && (
                 <span dir="ltr" className="shrink-0 font-medium">
                   {task.unitKind === "time"
                     ? `${formatDuration(task.value, lang)} / ${formatDuration(task.target, lang)}`
@@ -779,20 +811,29 @@ export function TaskRow({
             </button>
           )}
 
-          <button
-            onClick={onDelete}
-            aria-label={t("حذف کار", "Delete task")}
-            className="rounded-full p-1.5 text-muted-foreground hover:text-destructive"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          {onDelete && (
+            <button
+              onClick={onDelete}
+              aria-label={t("حذف کار", "Delete task")}
+              className="rounded-full p-1.5 text-muted-foreground hover:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          )}
+          {actionMenu}
         </div>
         {task.type === "quantity" && (
           <Progress
-            value={(task.value / task.target) * 100}
+            value={goalProgress?.percent ?? (task.value / task.target) * 100}
             color={appearance.color}
             className="mt-2.5"
           />
+        )}
+        {task.type === "quantity" && goalProgress && (
+          <div className="mt-1.5 flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+            <span>{goalProgress.summary}</span>
+            <span className="shrink-0 font-bold">{goalProgress.label}</span>
+          </div>
         )}
       </div>
     </div>
@@ -962,6 +1003,7 @@ export function TodayTodosCard({
           lang={lang}
           t={t}
           categories={db.categories}
+          linkedGoals={linkedGoalsForSource(db, "task", editDraft.id ?? "")}
         />
       )}
     </>

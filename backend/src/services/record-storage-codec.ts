@@ -26,6 +26,43 @@ function appendExtras(base: unknown[], extras: JsonObject): unknown[] {
   return Object.keys(extras).length ? [...base, extras] : base;
 }
 
+// Only the storage representation changes; wire data and local entities stay objects.
+const goalItemFields: Record<string, readonly string[]> = {
+  source: ["id", "sourceType", "sourceId", "sourceTitleSnapshot", "measure", "target", "linkedAt", "linkedDateKey", "baselineValue"],
+  binary: ["id", "title", "value"],
+  count: ["id", "title", "value", "target"],
+  time: ["id", "title", "valueMinutes", "targetMinutes"],
+};
+
+function compactGoalItems(value: unknown): unknown[] {
+  return arrayValue(value, 0, 50).map((raw) => {
+    const item = objectValue(raw);
+    const tag = item.kind === "source" ? "source" : String(item.measure);
+    const fields = goalItemFields[tag];
+    if (!fields) throw new Error("invalid_record_storage");
+    const extras = Object.fromEntries(Object.entries(item).filter(([key]) =>
+      key !== "kind" && (tag === "source" || key !== "measure") && !fields.includes(key),
+    ));
+    return appendExtras([tag, ...fields.map((key) => item[key])], extras);
+  });
+}
+
+function expandGoalItems(value: unknown): unknown[] {
+  return arrayValue(value, 0, 50).map((raw) => {
+    if (!Array.isArray(raw)) return objectValue(raw); // Earlier Goals storage.
+    const tag = String(raw[0]);
+    const fields = goalItemFields[tag];
+    if (!fields) throw new Error("invalid_record_storage");
+    const item = arrayValue(raw, fields.length + 1, fields.length + 2);
+    return {
+      kind: tag === "source" ? "source" : "custom",
+      ...(tag === "source" ? {} : { measure: tag }),
+      ...Object.fromEntries(fields.map((key, index) => [key, item[index + 1]])),
+      ...(item.length === fields.length + 2 ? objectValue(item.at(-1)) : {}),
+    };
+  });
+}
+
 function compactHabitMonthCells(cells: unknown): JsonObject {
   return Object.fromEntries(
     Object.entries(objectValue(cells)).map(([day, rawCell]) => {
@@ -106,10 +143,21 @@ export function encodeRecordForStorage(kind: StoredSyncKind, _id: string, value:
           "categoryId",
         ]),
       );
+    case "goals":
+      return appendExtras(
+        [data.title, data.priority, data.status, compactGoalItems(data.items), data.createdAt],
+        optionalFields(data, [
+          "description",
+          "categoryId",
+          "reminderAt",
+          "deadlineAt",
+          "completedAt",
+        ]),
+      );
     case "timerSessions":
       return appendExtras(
         [data.mode, data.focusSeconds, data.startedAt, data.endedAt],
-        optionalFields(data, ["linkedKind", "linkedId", "linkedLabel"]),
+        optionalFields(data, ["linkedKind", "linkedId", "linkedItemId", "linkedLabel"]),
       );
     case "journal":
       return [data.text, data.score, data.mood, data.updatedAt];
@@ -178,6 +226,18 @@ export function decodeRecordFromStorage(kind: StoredSyncKind, id: string, value:
         value: data[4],
         done: data[5],
         ...(data.length === 7 ? objectValue(data[6]) : {}),
+      };
+    }
+    case "goals": {
+      const data = arrayValue(value, 5, 6);
+      return {
+        id,
+        title: data[0],
+        priority: data[1],
+        status: data[2],
+        items: expandGoalItems(data[3]),
+        createdAt: data[4],
+        ...(data.length === 6 ? objectValue(data[5]) : {}),
       };
     }
     case "timerSessions": {

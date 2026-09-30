@@ -34,6 +34,7 @@ describe("timer completion", () => {
       focusSeconds: 60,
       linkedId: "task-1",
     } satisfies Partial<TimerSession>);
+    expect(replayed.timerSessions[0]).not.toHaveProperty("linkedItemId");
   });
 
   it("records a session but does not credit a habit after its deadline", () => {
@@ -64,6 +65,115 @@ describe("timer completion", () => {
 
     const next = recordTimerCompletion(db, item, "gregorian");
     expect(next.logs).toEqual({});
+    expect(next.timerSessions).toHaveLength(1);
+  });
+
+  it("credits only the linked custom time goal item once and keeps its real value past target", () => {
+    const db = defaultDb([]);
+    db.goals = [
+      {
+        id: "goal-1",
+        title: "تمرکز",
+        priority: "normal",
+        status: "active",
+        createdAt: 1,
+        items: [
+          {
+            id: "goal-time-1",
+            kind: "custom",
+            title: "مطالعه",
+            measure: "time",
+            valueMinutes: 59.5,
+            targetMinutes: 60,
+          },
+          {
+            id: "goal-count-1",
+            kind: "custom",
+            title: "فصل",
+            measure: "count",
+            value: 1,
+            target: 3,
+          },
+        ],
+      },
+    ];
+    const item = {
+      id: "timer-goal-1",
+      mode: "free" as const,
+      focusSeconds: 90,
+      startedAt: 1_000,
+      endedAt: 91_000,
+      linked: {
+        kind: "goal" as const,
+        id: "goal-1",
+        itemId: "goal-time-1",
+        label: "تمرکز · مطالعه",
+      },
+    };
+
+    const first = recordTimerCompletion(db, item, "gregorian");
+    const replayed = recordTimerCompletion(first, item, "gregorian");
+
+    expect(first.goals[0].items).toEqual([
+      expect.objectContaining({ id: "goal-time-1", valueMinutes: 61 }),
+      db.goals[0].items[1],
+    ]);
+    expect(replayed).toBe(first);
+    expect(first.timerSessions).toEqual([
+      expect.objectContaining({
+        id: "timer-goal-1",
+        linkedKind: "goal",
+        linkedId: "goal-1",
+        linkedItemId: "goal-time-1",
+      }),
+    ]);
+  });
+
+  it("records but does not directly credit a missing or source-linked goal item", () => {
+    const db = defaultDb([]);
+    db.goals = [
+      {
+        id: "goal-1",
+        title: "تمرکز",
+        priority: "normal",
+        status: "active",
+        createdAt: 1,
+        items: [
+          {
+            id: "goal-source-1",
+            kind: "source",
+            sourceType: "habit",
+            sourceId: "habit-1",
+            sourceTitleSnapshot: "مطالعه",
+            measure: "time",
+            target: 60,
+            linkedAt: 1,
+            linkedDateKey: "2026-09-30",
+            baselineValue: 0,
+          },
+        ],
+      },
+    ];
+
+    const next = recordTimerCompletion(
+      db,
+      {
+        id: "timer-goal-source",
+        mode: "free",
+        focusSeconds: 60,
+        startedAt: 1_000,
+        endedAt: 61_000,
+        linked: {
+          kind: "goal",
+          id: "goal-1",
+          itemId: "goal-source-1",
+          label: "تمرکز · مطالعه",
+        },
+      },
+      "gregorian",
+    );
+
+    expect(next.goals).toEqual(db.goals);
     expect(next.timerSessions).toHaveLength(1);
   });
 });

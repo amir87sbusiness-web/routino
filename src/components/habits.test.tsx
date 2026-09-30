@@ -175,6 +175,14 @@ describe("habit deadline draft compatibility", () => {
       );
     });
     expect(document.body.textContent).toContain("Deadline");
+    expect(document.body.textContent).toContain("Monthly goal");
+  });
+
+  it("creates and edits a monthly goal independently from Goals", () => {
+    const draft = { ...emptyDraft(category.id), name: "Read" };
+    expect(draft.monthlyGoal).toBe("30");
+    expect(draftToHabit({ ...draft, monthlyGoal: "12" }).monthlyGoal).toBe(12);
+    expect(habitToDraft({ ...habit, monthlyGoal: 20 }).monthlyGoal).toBe("20");
   });
 });
 

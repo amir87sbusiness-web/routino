@@ -1,4 +1,5 @@
 @import "tailwindcss" source(none);
+
 @source "../src";
 /* `tw-animate-css` برداشته شد: تنها مصرف‌کننده‌اش کامپوننت‌های shadcn بودند که
    قبلاً حذف شدند. انیمیشن‌های خودِ اپ (`animate-pop-in`، `animate-check-pop`،
@@ -14,6 +15,18 @@
 @import "@fontsource/vazirmatn/900.css";
 
 @custom-variant dark (&:is(.dark *));
+
+/* Priority is also written on the card; color is not its only signal. */
+.goal-priority-card {
+  --goal-ink: var(--goal-priority-color);
+  background-color: color-mix(in srgb, var(--goal-ink) 7%, var(--card));
+  border-color: color-mix(in srgb, var(--goal-ink) 32%, var(--border));
+}
+.dark .goal-priority-card { --goal-ink: var(--goal-priority-dark); }
+.goal-priority-label {
+  color: var(--goal-ink);
+  background-color: color-mix(in srgb, var(--goal-ink) 12%, var(--card));
+}
 
 /* Safe-area padding so content clears the status bar (top), the Android
    gesture/navigation bar and the iOS home bar (bottom). 0 on web. */

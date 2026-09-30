@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_CATEGORIES } from "../presets";
-import { defaultDb, logKey, type Db, type Habit } from "../store";
+import { defaultDb, logKey, type Db, type Goal, type Habit } from "../store";
 import { diffDb, type Change } from "./diff";
 
 function habit(id: string, name = id): Habit {
@@ -33,6 +33,101 @@ const find = (cs: Change[], table: string, key: string) =>
 const forTable = (cs: Change[], table: string) => cs.filter((c) => c.table === table);
 
 describe("diffDb", () => {
+  it("emits only the changed goal record", () => {
+    const db = seed();
+    const goal: Goal = {
+      id: "g1",
+      title: "Get fit",
+      priority: "normal",
+      status: "active",
+      items: [
+        {
+          id: "i1",
+          kind: "custom",
+          title: "Run",
+          measure: "count",
+          value: 0,
+          target: 10,
+        },
+      ],
+      createdAt: 1,
+    };
+    const withGoal: Db = { ...db, goals: [goal] };
+    expect(diffDb(db, withGoal)).toEqual([
+      { table: "goals", key: "g1", data: goal, deleted: false },
+    ]);
+
+    const advancedGoal: Goal = {
+      ...goal,
+      items: goal.items.map((item) =>
+        item.kind === "custom" && item.measure === "count" ? { ...item, value: 4 } : item,
+      ),
+    };
+    expect(diffDb(withGoal, { ...withGoal, goals: [advancedGoal] })).toEqual([
+      { table: "goals", key: "g1", data: advancedGoal, deleted: false },
+    ]);
+
+    const withoutGoal: Db = { ...withGoal, goals: [] };
+    expect(diffDb(withGoal, withoutGoal)).toEqual([{ table: "goals", key: "g1", deleted: true }]);
+  });
+
+  it("never emits a goal write when only a linked source or log changes", () => {
+    const db = seed();
+    const goal: Goal = {
+      id: "g1",
+      title: "Get fit",
+      priority: "normal",
+      status: "active",
+      items: [
+        {
+          id: "i1",
+          kind: "source",
+          sourceType: "habit",
+          sourceId: "h1",
+          sourceTitleSnapshot: "h1",
+          measure: "binary",
+          target: 10,
+          linkedAt: 1,
+          linkedDateKey: "2026-07-01",
+          baselineValue: 0,
+        },
+      ],
+      createdAt: 1,
+    };
+    const withGoal: Db = {
+      ...db,
+      goals: [goal],
+      tasks: [
+        {
+          id: "t1",
+          dateKey: "2026-07-01",
+          title: "Shoes",
+          type: "binary",
+          target: 1,
+          value: 0,
+          done: false,
+        },
+      ],
+    };
+    const changedHabit: Db = {
+      ...withGoal,
+      habits: withGoal.habits.map((item) => (item.id === "h1" ? { ...item, name: "Run" } : item)),
+    };
+    const changedTask: Db = {
+      ...withGoal,
+      tasks: withGoal.tasks.map((item) => ({ ...item, done: true })),
+    };
+    const key = logKey("h1", "2026-07-02");
+    const changedLog: Db = {
+      ...withGoal,
+      logs: { ...withGoal.logs, [key]: { ...withGoal.logs[key], done: false, value: 0 } },
+    };
+
+    expect(forTable(diffDb(withGoal, changedHabit), "goals")).toEqual([]);
+    expect(forTable(diffDb(withGoal, changedTask), "goals")).toEqual([]);
+    expect(forTable(diffDb(withGoal, changedLog), "goals")).toEqual([]);
+  });
+
   it("emits nothing when nothing changed", () => {
     const db = seed();
     expect(diffDb(db, db)).toEqual([]);

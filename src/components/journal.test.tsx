@@ -2,6 +2,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultDb, type Db } from "@/lib/store";
+import { todayKey } from "@/lib/dates";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
@@ -24,7 +25,8 @@ vi.mock("@/components/AppShell", () => ({
 vi.mock("@/components/WeekStrip", () => ({
   WeekStrip: () => null,
 }));
-vi.mock("@/components/ui", () => ({
+vi.mock("@/components/ui", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/components/ui")>(),
   Button: ({ children, onClick }: { children: React.ReactNode; onClick?: () => void }) => (
     <button onClick={onClick}>{children}</button>
   ),
@@ -44,6 +46,8 @@ describe("Journal choice grids", () => {
   let root: Root;
 
   beforeEach(async () => {
+    vi.stubGlobal("innerHeight", 800);
+    vi.stubGlobal("visualViewport", Object.assign(new EventTarget(), { height: 800, offsetTop: 0, scale: 1 }));
     let db = defaultDb([]);
     app.ctx = {
       db,
@@ -65,6 +69,7 @@ describe("Journal choice grids", () => {
   afterEach(async () => {
     await act(async () => root.unmount());
     host.remove();
+    vi.unstubAllGlobals();
   });
 
   function choiceGrid(label: string) {
@@ -134,5 +139,45 @@ describe("Journal choice grids", () => {
     ];
     expect(moodButtons[0]?.getAttribute("aria-label")).toContain("Very happy");
     expect(moodButtons[5]?.getAttribute("aria-label")).toContain("Angry");
+  });
+
+  async function openJournalEditor() {
+    vi.stubGlobal("innerWidth", 390);
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    await act(async () => (host.querySelector("textarea") as HTMLTextAreaElement).focus());
+    await act(async () => {
+      Object.assign(window.visualViewport!, { height: 420 });
+      window.visualViewport!.dispatchEvent(new Event("resize"));
+    });
+    const dialog = document.body.querySelector('[role="dialog"]') as HTMLElement;
+    const editor = dialog.querySelector("textarea")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")!.set!.call(editor, "یادداشت امروز");
+      editor.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    return dialog;
+  }
+
+  it("persists the journal draft, mood and score from the mobile editor action", async () => {
+    await act(async () => {
+      (choiceGrid("حال و احساس امروز").querySelector("button") as HTMLButtonElement).click();
+      (choiceGrid("به امروزت چه نمره‌ای می‌دی؟").querySelector("button") as HTMLButtonElement).click();
+    });
+    const dialog = await openJournalEditor();
+    const action = dialog.querySelector("button[type='button']") as HTMLButtonElement;
+    await act(async () => action!.click());
+    expect(app.ctx!.db.journal[todayKey()]).toMatchObject({ text: "یادداشت امروز", score: 1, mood: "😄" });
+    expect(document.body.querySelector('[role="dialog"]')).toBeNull();
+    await act(async () => root.render(<JournalRoute />));
+    expect((host.querySelector("textarea") as HTMLTextAreaElement).value).toBe("یادداشت امروز");
+  });
+
+  it("keeps the draft editor open when journal storage rejects the update", async () => {
+    app.ctx!.update = () => false;
+    const dialog = await openJournalEditor();
+    const action = dialog.querySelector("button[type='button']") as HTMLButtonElement;
+    await act(async () => action!.click());
+    expect(app.ctx!.db.journal[todayKey()]).toBeUndefined();
+    expect(document.body.querySelector('[role="dialog"] textarea')).toHaveProperty("value", "یادداشت امروز");
   });
 });

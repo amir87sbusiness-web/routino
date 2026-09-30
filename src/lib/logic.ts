@@ -79,10 +79,10 @@ export function streak(db: Db, habit: Habit, cal: Calendar, today = todayKey()):
 export interface MonthProgress {
   doneDays: number;
   goalDays: number;
-  percent: number; // 0-100
+  percent: number;
 }
 
-/** Progress toward the monthly goal within the current calendar month. */
+/** Progress toward this habit's own monthly goal. It is independent from Goals. */
 export function monthProgress(
   db: Db,
   habit: Habit,
@@ -90,39 +90,29 @@ export function monthProgress(
   refKey = todayKey(),
 ): MonthProgress {
   const days = monthDays(refKey, cal);
-  const dueDays = days.filter((d) => isDueOn(habit, d, cal));
+  const dueDays = days.filter((day) => isDueOn(habit, day, cal));
   const goalDays = habit.monthlyGoal ?? dueDays.length;
-  const doneDays = dueDays.filter((d) => isCompleted(habit, getLog(db, habit.id, d))).length;
+  const doneDays = dueDays.filter((day) => isCompleted(habit, getLog(db, habit.id, day))).length;
   const percent = goalDays > 0 ? Math.min(100, Math.round((doneDays / goalDays) * 100)) : 0;
   return { doneDays, goalDays: goalDays || dueDays.length, percent };
 }
 
 export interface EarnedBadge {
-  /** Stable `${habitId}|${monthId}` key. */
   id: string;
   habitId: string;
   habitName: string;
-  /** First day-key of the month the badge was earned in. */
   monthId: string;
 }
 
-/**
- * Every (habit, month) pair whose monthly goal was fully met, newest month
- * first. Derived from the logs rather than recorded when the goal is crossed,
- * so the badge list stays correct no matter how the data got there (editing an
- * old day, importing, un-completing and re-completing) and can never drift out
- * of sync with what the habit screen shows.
- */
+/** Monthly habit badges are derived from logs, so no duplicate badge state is stored. */
 export function earnedBadges(db: Db, cal: Calendar): EarnedBadge[] {
   const monthIds = new Set<string>([monthDays(todayKey(), cal)[0]]);
-  for (const log of Object.values(db.logs)) {
-    monthIds.add(monthDays(log.dateKey, cal)[0]);
-  }
-  const out: EarnedBadge[] = [];
+  for (const log of Object.values(db.logs)) monthIds.add(monthDays(log.dateKey, cal)[0]);
+  const result: EarnedBadge[] = [];
   for (const habit of db.habits) {
     for (const monthId of monthIds) {
       if (monthProgress(db, habit, cal, monthId).percent >= 100) {
-        out.push({
+        result.push({
           id: `${habit.id}|${monthId}`,
           habitId: habit.id,
           habitName: habit.name,
@@ -131,7 +121,7 @@ export function earnedBadges(db: Db, cal: Calendar): EarnedBadge[] {
       }
     }
   }
-  return out.sort((a, b) => (a.monthId < b.monthId ? 1 : -1));
+  return result.sort((a, b) => (a.monthId < b.monthId ? 1 : -1));
 }
 
 /** Success rate over last N days: completed due days / due days. */

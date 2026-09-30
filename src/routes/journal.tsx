@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { Button, Card, SectionTitle } from "@/components/ui";
+import { Button, Card, NoteField, SectionTitle, useKeyboardViewport } from "@/components/ui";
 import { WeekStrip } from "@/components/WeekStrip";
 import { faNum, formatDate, todayKey } from "@/lib/dates";
 import { MOOD_EMOJIS } from "@/lib/presets";
@@ -49,6 +49,7 @@ function JournalPage() {
   const [score, setScore] = useState<number | null>(null);
   const [mood, setMood] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const keyboardViewport = useKeyboardViewport();
 
   const entry = ctx?.db?.journal[dk];
 
@@ -72,9 +73,10 @@ function JournalPage() {
         [dk]: { dateKey: dk, text, score, mood, updatedAt: Date.now() },
       },
     }));
-    if (!accepted) return;
+    if (!accepted) return false;
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
+    return true;
   };
 
   const journalPercent = (k: string) => {
@@ -90,7 +92,7 @@ function JournalPage() {
   };
 
   return (
-    <div className="page-stagger flex flex-col gap-5">
+    <div className="page-stagger flex flex-col gap-5" style={keyboardViewport ? { paddingBottom: keyboardViewport.inset } : undefined}>
       <WeekStrip
         selected={dk}
         onSelect={setDk}
@@ -156,9 +158,13 @@ function JournalPage() {
         <p className="mb-2 text-xs font-medium text-muted-foreground">
           {t("ژورنال امروز", "Today's journal")}
         </p>
-        <textarea
+        <NoteField
+          multiline
+          label={t("ژورنال امروز", "Today's journal")}
+          doneLabel={t("ذخیره", "Save")}
+          onSave={save}
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={setText}
           // Sync refuses a record whose JSON exceeds 8 KB, and a rejected row is
           // one the server never stores — so an unbounded box here is a way to
           // write a journal entry that silently never leaves the device. 4000 is

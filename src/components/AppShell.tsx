@@ -10,8 +10,10 @@ import {
   BookHeart,
   Home,
   ListTodo,
+  MoreHorizontal,
   Repeat,
   Settings,
+  Target,
   Timer,
   LockKeyhole,
   WifiOff,
@@ -85,6 +87,7 @@ function ReconnectGate({
 
 const NAV = [
   { to: "/", icon: Home, fa: "امروز", en: "Today" },
+  { to: "/goals", icon: Target, fa: "هدف‌ها", en: "Goals" },
   { to: "/habits", icon: Repeat, fa: "عادت‌ها", en: "Habits" },
   { to: "/tasks", icon: ListTodo, fa: "کارها", en: "Tasks" },
   { to: "/timer", icon: Timer, fa: "تایمر", en: "Timer" },
@@ -93,8 +96,10 @@ const NAV = [
   { to: "/settings", icon: Settings, fa: "تنظیمات", en: "Settings" },
 ] as const;
 
-// bottom nav on mobile keeps Settings out — it stays accessible via the top header icon only
-const BOTTOM_NAV = NAV.filter((item) => item.to !== "/settings");
+// Keep the primary daily flow visible; secondary sections live behind More.
+const BOTTOM_NAV = NAV.filter((item) =>
+  ["/", "/journal", "/habits", "/tasks", "/timer"].includes(item.to),
+);
 
 export function AppShell({ children }: { children: ReactNode }) {
   const ctx = useAppMaybe();
@@ -102,6 +107,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [notifOpen, setNotifOpen] = useState(false);
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const db = ctx?.db ?? null;
   const gate = useMemo(() => {
@@ -196,7 +202,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         <nav className="flex flex-col gap-1">
           {NAV.map((item) => {
             const Icon = item.icon;
-            const active = pathname === item.to;
+            const active =
+              pathname === item.to || (item.to === "/goals" && pathname.startsWith("/goal/"));
             return (
               <Link
                 key={item.to}
@@ -309,7 +316,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="mx-auto flex max-w-2xl items-stretch">
           {BOTTOM_NAV.map((item) => {
             const Icon = item.icon;
-            const active = pathname === item.to;
+            const active =
+              pathname === item.to || (item.to === "/goals" && pathname.startsWith("/goal/"));
             return (
               <Link
                 key={item.to}
@@ -323,8 +331,39 @@ export function AppShell({ children }: { children: ReactNode }) {
               </Link>
             );
           })}
+          <button
+            type="button"
+            onClick={() => setMoreOpen(true)}
+            className={`flex flex-1 flex-col items-center gap-1 px-0.5 pt-2.5 pb-1 text-xs font-medium leading-tight transition-colors ${
+              pathname === "/goals" || pathname.startsWith("/goal/") || pathname === "/analytics"
+                ? "text-primary"
+                : "text-muted-foreground"
+            }`}
+          >
+            <MoreHorizontal className="h-6 w-6" />
+            <span className="truncate">{t("بیشتر", "More")}</span>
+          </button>
         </div>
       </nav>
+
+      <Modal open={moreOpen} onClose={() => setMoreOpen(false)} title={t("بیشتر", "More")}>
+        <div className="grid grid-cols-2 gap-2">
+          {NAV.filter((item) => item.to === "/goals" || item.to === "/analytics").map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                onClick={() => setMoreOpen(false)}
+                className="flex flex-col items-center gap-2 rounded-2xl border border-border p-4 text-sm font-bold text-foreground hover:bg-secondary"
+              >
+                <Icon className="h-6 w-6 text-primary" />
+                {t(item.fa, item.en)}
+              </Link>
+            );
+          })}
+        </div>
+      </Modal>
 
       {/* Notification center */}
       <Modal

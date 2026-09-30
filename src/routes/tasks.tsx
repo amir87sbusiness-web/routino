@@ -19,6 +19,7 @@ import { addDays, faNum, formatDate, todayKey } from "@/lib/dates";
 import { useAppMaybe } from "@/state/app";
 import { triggerCompletionFeedback } from "@/lib/completion-feedback";
 import { tasksVisibleOn } from "@/lib/deadlines";
+import { linkedGoalsForSource } from "@/lib/goals";
 
 export const Route = createFileRoute("/tasks")({
   component: () => (
@@ -218,6 +219,7 @@ function TasksPage() {
         lang={lang}
         t={t}
         categories={db.categories}
+        linkedGoals={draft.id ? linkedGoalsForSource(db, "task", draft.id) : []}
       />
     </div>
   );

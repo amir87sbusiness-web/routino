@@ -64,7 +64,8 @@ export interface Habit {
   unit?: string;
   unitKind?: UnitKind; // "count" | "time" — only meaningful when type === "quantity"
   schedule: { kind: ScheduleKind; weekdays?: number[] }; // weekdays: JS getDay()
-  monthlyGoal: number | null; // days per month; null = all due days
+  /** Legacy sync field retained for older clients. New UI does not read or edit it. */
+  monthlyGoal: number | null;
   reminderTime: string | null; // "HH:MM"
   deadlineTime?: string | null; // local "HH:MM"; absent keeps legacy behavior
   createdAt: number;
@@ -99,6 +100,62 @@ export interface Task {
   categoryId?: string | null;
 }
 
+export type GoalStatus = "active" | "completed";
+export type GoalPriority = "low" | "normal" | "high" | "critical";
+export type GoalItemMeasure = "binary" | "count" | "time";
+
+export interface SourceGoalItem {
+  id: string;
+  kind: "source";
+  sourceType: "habit" | "task";
+  sourceId: string;
+  sourceTitleSnapshot: string;
+  measure: GoalItemMeasure;
+  target: number;
+  unit?: string;
+  linkedAt: number;
+  linkedDateKey: string;
+  /** Value already present on the link day. Progress starts after this point. */
+  baselineValue: number;
+}
+
+export type CustomGoalItem = { note?: string; mood?: string } & (
+  | { id: string; kind: "custom"; title: string; measure: "binary"; value: boolean }
+  | {
+      id: string;
+      kind: "custom";
+      title: string;
+      measure: "count";
+      value: number;
+      target: number;
+      unit?: string;
+    }
+  | {
+      id: string;
+      kind: "custom";
+      title: string;
+      measure: "time";
+      valueMinutes: number;
+      targetMinutes: number;
+    }
+);
+
+export type GoalItem = SourceGoalItem | CustomGoalItem;
+
+export interface Goal {
+  id: string;
+  title: string;
+  description?: string;
+  categoryId?: string | null;
+  reminderAt?: string | null;
+  deadlineAt?: string | null;
+  priority: GoalPriority;
+  status: GoalStatus;
+  items: GoalItem[];
+  createdAt: number;
+  completedAt?: number | null;
+}
+
 export type TimerMode = "pomodoro" | "free" | "stopwatch";
 
 /** A completed/stopped timer session, logged for history + linking to a habit/task. */
@@ -108,8 +165,10 @@ export interface TimerSession {
   focusSeconds: number; // actual counted work time (breaks excluded for pomodoro)
   startedAt: number;
   endedAt: number;
-  linkedKind?: "habit" | "task";
+  linkedKind?: "habit" | "task" | "goal";
   linkedId?: string;
+  /** Exact custom Goal item credited by this session. Present only for goal links. */
+  linkedItemId?: string;
   linkedLabel?: string;
 }
 
@@ -155,6 +214,7 @@ export interface Db {
   habits: Habit[];
   logs: Record<string, HabitLog>; // `${habitId}|${dateKey}`
   tasks: Task[];
+  goals: Goal[];
   timerSessions: TimerSession[];
   journal: Record<string, JournalEntry>; // dateKey
   feedback: Feedback[];
@@ -208,6 +268,7 @@ export function defaultDb(categories: Category[]): Db {
     habits: [],
     logs: {},
     tasks: [],
+    goals: [],
     timerSessions: [],
     journal: {},
     feedback: [],

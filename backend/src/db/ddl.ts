@@ -69,12 +69,12 @@ create table if not exists records (
   seq bigint not null,
   primary key (user_id, kind, id),
   constraint records_kind_valid check (kind in
-    ('categories','habits','habitMonths','tasks','timerSessions','journal','taskMonths'))
+    ('categories','habits','habitMonths','tasks','goals','timerSessions','journal','taskMonths'))
 );
 delete from records where kind = 'settings';
 alter table records drop constraint if exists records_kind_valid;
 alter table records add constraint records_kind_valid check (kind in
-  ('categories','habits','habitMonths','tasks','timerSessions','journal','taskMonths'));
+  ('categories','habits','habitMonths','tasks','goals','timerSessions','journal','taskMonths'));
 
 -- Storage-only codec. Legacy objects remain valid; compact arrays are decoded
 -- before business logic or wire serialization. Identity fields are derived
@@ -89,6 +89,9 @@ as $function$
 declare
   v_extras jsonb;
   v_cells jsonb;
+  v_item jsonb;
+  v_compact jsonb;
+  v_item_extras jsonb;
 begin
   if p_kind = 'taskMonths' then return p_data; end if;
   if jsonb_typeof(p_data) = 'null' then return p_data; end if;
@@ -140,10 +143,56 @@ begin
       return jsonb_build_array(p_data->'dateKey', p_data->'title', p_data->'type',
         p_data->'target', p_data->'value', p_data->'done') ||
         case when v_extras = '{}'::jsonb then '[]'::jsonb else jsonb_build_array(v_extras) end;
+    when 'goals' then
+      v_extras := '{}'::jsonb ||
+        case when p_data ? 'description' then jsonb_build_object('description', p_data->'description') else '{}'::jsonb end ||
+        case when p_data ? 'categoryId' then jsonb_build_object('categoryId', p_data->'categoryId') else '{}'::jsonb end ||
+        case when p_data ? 'reminderAt' then jsonb_build_object('reminderAt', p_data->'reminderAt') else '{}'::jsonb end ||
+        case when p_data ? 'deadlineAt' then jsonb_build_object('deadlineAt', p_data->'deadlineAt') else '{}'::jsonb end ||
+        case when p_data ? 'completedAt' then jsonb_build_object('completedAt', p_data->'completedAt') else '{}'::jsonb end;
+      v_cells := '[]'::jsonb;
+      for v_item in select value from jsonb_array_elements(p_data->'items') loop
+        if v_item->>'kind' = 'source' then
+          v_compact := jsonb_build_array('source', v_item->'id', v_item->'sourceType',
+            v_item->'sourceId', v_item->'sourceTitleSnapshot', v_item->'measure', v_item->'target',
+            v_item->'linkedAt', v_item->'linkedDateKey', v_item->'baselineValue');
+          v_item_extras := v_item - array['kind','id','sourceType','sourceId',
+            'sourceTitleSnapshot','measure','target','linkedAt','linkedDateKey','baselineValue'];
+        elsif v_item->>'kind' = 'custom' then
+          case v_item->>'measure'
+            when 'binary' then
+              v_compact := jsonb_build_array('binary', v_item->'id', v_item->'title', v_item->'value');
+              v_item_extras := v_item - array['kind','measure','id','title','value'];
+            when 'count' then
+              v_compact := jsonb_build_array('count', v_item->'id', v_item->'title',
+                v_item->'value', v_item->'target');
+              v_item_extras := v_item - array['kind','measure','id','title','value','target'];
+            when 'time' then
+              v_compact := jsonb_build_array('time', v_item->'id', v_item->'title',
+                v_item->'valueMinutes', v_item->'targetMinutes');
+              v_item_extras := v_item - array['kind','measure','id','title','valueMinutes','targetMinutes'];
+            else raise exception 'invalid goal item';
+          end case;
+        else raise exception 'invalid goal item';
+        end if;
+        v_cells := v_cells || jsonb_build_array(v_compact ||
+          case when v_item_extras = '{}'::jsonb then '[]'::jsonb else jsonb_build_array(v_item_extras) end);
+      end loop;
+      v_compact := jsonb_build_array(p_data->'title', p_data->'priority', p_data->'status',
+        v_cells, p_data->'createdAt') ||
+        case when v_extras = '{}'::jsonb then '[]'::jsonb else jsonb_build_array(v_extras) end;
+      -- Avoid losing TOAST compression when a smaller representation crosses
+      -- below its threshold. The dual reader accepts either representation.
+      v_item := jsonb_set(v_compact, '{3}', p_data->'items');
+      if pg_column_size(v_item) > 2000 and pg_column_size(v_compact) < 2048 then
+        return v_item;
+      end if;
+      return v_compact;
     when 'timerSessions' then
       v_extras := '{}'::jsonb ||
         case when p_data ? 'linkedKind' then jsonb_build_object('linkedKind', p_data->'linkedKind') else '{}'::jsonb end ||
         case when p_data ? 'linkedId' then jsonb_build_object('linkedId', p_data->'linkedId') else '{}'::jsonb end ||
+        case when p_data ? 'linkedItemId' then jsonb_build_object('linkedItemId', p_data->'linkedItemId') else '{}'::jsonb end ||
         case when p_data ? 'linkedLabel' then jsonb_build_object('linkedLabel', p_data->'linkedLabel') else '{}'::jsonb end;
       return jsonb_build_array(p_data->'mode', p_data->'focusSeconds', p_data->'startedAt',
         p_data->'endedAt') ||
@@ -170,6 +219,9 @@ as $function$
 declare
   v_length integer;
   v_cells jsonb;
+  v_item jsonb;
+  v_compact jsonb;
+  v_item_length integer;
 begin
   if p_kind = 'taskMonths' then return p_data; end if;
   if jsonb_typeof(p_data) = 'null' then return p_data; end if;
@@ -226,6 +278,46 @@ begin
       return jsonb_build_object('id', p_id, 'dateKey', p_data->0, 'title', p_data->1,
         'type', p_data->2, 'target', p_data->3, 'value', p_data->4, 'done', p_data->5) ||
         case when v_length = 7 then p_data->6 else '{}'::jsonb end;
+    when 'goals' then
+      if v_length not between 5 and 6 then raise exception 'invalid compact goal'; end if;
+      v_cells := '[]'::jsonb;
+      for v_item in select value from jsonb_array_elements(p_data->3) loop
+        if jsonb_typeof(v_item) = 'object' then
+          v_compact := v_item; -- Earlier Goals storage remains readable.
+        elsif jsonb_typeof(v_item) = 'array' then
+          v_item_length := jsonb_array_length(v_item);
+          case v_item->>0
+            when 'source' then
+              if v_item_length not between 10 and 11 then raise exception 'invalid goal item'; end if;
+              v_compact := jsonb_build_object('kind','source','id',v_item->1,
+                'sourceType',v_item->2,'sourceId',v_item->3,'sourceTitleSnapshot',v_item->4,
+                'measure',v_item->5,'target',v_item->6,'linkedAt',v_item->7,
+                'linkedDateKey',v_item->8,'baselineValue',v_item->9) ||
+                case when v_item_length = 11 then v_item->10 else '{}'::jsonb end;
+            when 'binary' then
+              if v_item_length not between 4 and 5 then raise exception 'invalid goal item'; end if;
+              v_compact := jsonb_build_object('kind','custom','measure','binary',
+                'id',v_item->1,'title',v_item->2,'value',v_item->3) ||
+                case when v_item_length = 5 then v_item->4 else '{}'::jsonb end;
+            when 'count' then
+              if v_item_length not between 5 and 6 then raise exception 'invalid goal item'; end if;
+              v_compact := jsonb_build_object('kind','custom','measure','count',
+                'id',v_item->1,'title',v_item->2,'value',v_item->3,'target',v_item->4) ||
+                case when v_item_length = 6 then v_item->5 else '{}'::jsonb end;
+            when 'time' then
+              if v_item_length not between 5 and 6 then raise exception 'invalid goal item'; end if;
+              v_compact := jsonb_build_object('kind','custom','measure','time',
+                'id',v_item->1,'title',v_item->2,'valueMinutes',v_item->3,'targetMinutes',v_item->4) ||
+                case when v_item_length = 6 then v_item->5 else '{}'::jsonb end;
+            else raise exception 'invalid goal item';
+          end case;
+        else raise exception 'invalid goal item';
+        end if;
+        v_cells := v_cells || jsonb_build_array(v_compact);
+      end loop;
+      return jsonb_build_object('id', p_id, 'title', p_data->0, 'priority', p_data->1,
+        'status', p_data->2, 'items', v_cells, 'createdAt', p_data->4) ||
+        case when v_length = 6 then p_data->5 else '{}'::jsonb end;
     when 'timerSessions' then
       if v_length not between 4 and 5 then raise exception 'invalid compact timer session'; end if;
       return jsonb_build_object('id', p_id, 'mode', p_data->0, 'focusSeconds', p_data->1,

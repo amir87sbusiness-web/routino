@@ -22,6 +22,7 @@ export const SYNCABLE_TABLES = [
   "habits",
   "logs",
   "tasks",
+  "goals",
   "timerSessions",
   "journal",
 ] as const satisfies readonly SyncedTable[];

@@ -38,6 +38,28 @@ export function recordTimerCompletion(db: Db, item: TimerCompletion, cal: Calend
             : previous + Math.round(minutes);
       next = applyLog(next, habit, cal, { value, done: value >= habit.target }, dk).db;
     }
+  } else if (link?.kind === "goal") {
+    next = {
+      ...next,
+      goals: next.goals.map((goal) => {
+        if (goal.id !== link.id) return goal;
+        let changed = false;
+        const items = goal.items.map((goalItem) => {
+          if (
+            goalItem.id !== link.itemId ||
+            goalItem.kind !== "custom" ||
+            goalItem.measure !== "time"
+          )
+            return goalItem;
+          changed = true;
+          return {
+            ...goalItem,
+            valueMinutes: Math.round((goalItem.valueMinutes + minutes) * 100) / 100,
+          };
+        });
+        return changed ? { ...goal, items } : goal;
+      }),
+    };
   }
   return {
     ...next,
@@ -50,6 +72,7 @@ export function recordTimerCompletion(db: Db, item: TimerCompletion, cal: Calend
         endedAt: item.endedAt,
         linkedKind: link?.kind,
         linkedId: link?.id,
+        ...(link?.kind === "goal" ? { linkedItemId: link.itemId } : {}),
         linkedLabel: link?.label,
       },
       ...next.timerSessions,

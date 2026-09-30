@@ -128,6 +128,66 @@ export function Input({ className, ...props }: InputHTMLAttributes<HTMLInputElem
   );
 }
 
+/** One draft in both views: mobile typing gets a compact sheet, never a copy. */
+export function NoteField({ value, onChange, label, doneLabel, onSave, placeholder, maxLength = 4000, multiline = false, className }: {
+  value: string;
+  onChange: (value: string) => void;
+  label: string;
+  doneLabel: string;
+  onSave?: () => boolean;
+  placeholder?: string;
+  maxLength?: number;
+  multiline?: boolean;
+  className?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const editorRef = useRef<HTMLTextAreaElement>(null);
+  const inlineEditorRef = useRef<HTMLElement | null>(null);
+  const keyboardViewport = useKeyboardViewport();
+  useEffect(() => {
+    if (keyboardViewport && window.matchMedia?.("(pointer: coarse)").matches &&
+      document.activeElement === inlineEditorRef.current) setEditing(true);
+  }, [keyboardViewport]);
+  const openEditor = (element: HTMLElement) => {
+    inlineEditorRef.current = element;
+    keepFocusedFieldVisible(element);
+  };
+  const closeEditor = () => {
+    editorRef.current?.blur();
+    setEditing(false);
+  };
+  const fieldProps = {
+    value, placeholder, maxLength, "aria-label": label,
+    onChange: (event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onChange(event.target.value),
+    onFocus: (event: React.FocusEvent<HTMLElement>) => openEditor(event.currentTarget),
+    className: cn(className, "text-base sm:text-sm"),
+  };
+  return <>
+    {multiline ? <textarea {...fieldProps} /> : <Input {...fieldProps} />}
+    <Modal open={editing} onClose={closeEditor} title={label}>
+      <textarea
+        ref={editorRef}
+        autoFocus
+        aria-label={label}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        maxLength={maxLength}
+        className="h-28 max-h-[35dvh] w-full resize-none rounded-xl border border-input bg-background p-3 text-base leading-7 text-foreground outline-none placeholder:text-muted-foreground focus:border-ring"
+      />
+      <Button
+        type="button"
+        className="mt-3 w-full"
+        onPointerDown={(event) => event.preventDefault()}
+        onClick={() => {
+          if (onSave && !onSave()) return;
+          closeEditor();
+        }}
+      >{doneLabel}</Button>
+    </Modal>
+  </>;
+}
+
 export function Card({ className, children }: { className?: string; children: ReactNode }) {
   return <div className={cn("card-surface p-4", className)}>{children}</div>;
 }
@@ -149,7 +209,13 @@ export function Progress({
     return () => cancelAnimationFrame(id);
   }, [target]);
   return (
-    <div className={cn("h-2 w-full overflow-hidden rounded-full bg-secondary", className)}>
+    <div
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={target}
+      className={cn("h-2 w-full overflow-hidden rounded-full bg-secondary", className)}
+    >
       <div
         className="h-full rounded-full bg-primary transition-[width] duration-700 ease-out"
         style={{ width: `${w}%`, ...(color ? { backgroundColor: color } : {}) }}
@@ -171,15 +237,24 @@ export function Modal({
   children: ReactNode;
   wide?: boolean;
 }) {
+  const keyboardViewport = useKeyboardViewport(open);
   if (!open) return null;
   // Render into <body> via a portal so the overlay never gets trapped inside a
   // parent's stacking context. Settings cards animate in with a transform
   // (`page-item-in`), which creates a stacking context; a modal rendered inside
   // one of those cards would otherwise be painted *under* the later cards.
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+      style={keyboardViewport ? { top: keyboardViewport.offsetTop, height: keyboardViewport.height, bottom: "auto", alignItems: "flex-end" } : undefined}
+    >
       <button aria-label="close" className="absolute inset-0" onClick={onClose} />
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        style={keyboardViewport ? { maxHeight: Math.max(0, keyboardViewport.height - 24) } : undefined}
+        onFocusCapture={(event) => keepFocusedFieldVisible(event.target as HTMLElement)}
         className={cn(
           "animate-pop-in relative max-h-[90vh] max-h-[90dvh] w-full overflow-y-auto rounded-t-3xl bg-card px-5 pt-5 pb-modal-safe shadow-2xl sm:rounded-3xl",
           wide ? "sm:max-w-2xl" : "sm:max-w-md",
@@ -199,6 +274,74 @@ export function Modal({
     </div>,
     document.body,
   );
+}
+
+export function keepFocusedFieldVisible(element: HTMLElement) {
+  if (!isTypingField(element)) return;
+  window.setTimeout(() => {
+    if (element.isConnected && document.activeElement === element)
+      element.scrollIntoView?.({ behavior: "smooth", block: "center" });
+  }, 300);
+}
+
+function isTypingField(element: Element | null): element is HTMLElement {
+  return element instanceof HTMLElement && (
+    element.matches("textarea, input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=range]):not([type=color])") ||
+    element.isContentEditable
+  );
+}
+
+/** Only adapt to a keyboard; pinch zoom must not resize the app's sheets. */
+export function useKeyboardViewport(enabled = true) {
+  const [viewport, setViewport] = useState<{ height: number; offsetTop: number; inset: number } | null>(null);
+  const fullViewport = useRef({ width: 0, height: 0 });
+  useEffect(() => {
+    const visual = window.visualViewport;
+    if (visual) {
+      fullViewport.current = {
+        width: window.innerWidth,
+        height: Math.max(window.innerHeight, visual.height,
+          fullViewport.current.width === window.innerWidth ? fullViewport.current.height : 0),
+      };
+    }
+    if (!enabled || !visual) {
+      setViewport(null);
+      return;
+    }
+    const refresh = () => {
+      const active = document.activeElement;
+      // Android can resize both viewports; retain the height from before typing.
+      // A width change (rotation) starts a new baseline instead of using portrait height.
+      if (Math.abs(visual.scale - 1) < 0.01) {
+        fullViewport.current = {
+          width: window.innerWidth,
+          height: Math.max(window.innerHeight, visual.height,
+            fullViewport.current.width === window.innerWidth ? fullViewport.current.height : 0),
+        };
+      }
+      const inset = fullViewport.current.height - visual.height;
+      const next = isTypingField(active) && Math.abs(visual.scale - 1) < 0.01 && inset > 100
+        ? { height: visual.height, offsetTop: visual.offsetTop, inset }
+        : null;
+      setViewport((previous) =>
+        previous?.height === next?.height && previous?.offsetTop === next?.offsetTop && previous?.inset === next?.inset
+          ? previous : next,
+      );
+      if (next && isTypingField(active)) keepFocusedFieldVisible(active);
+    };
+    refresh();
+    visual.addEventListener("resize", refresh);
+    visual.addEventListener("scroll", refresh);
+    document.addEventListener("focusin", refresh);
+    document.addEventListener("focusout", refresh);
+    return () => {
+      visual.removeEventListener("resize", refresh);
+      visual.removeEventListener("scroll", refresh);
+      document.removeEventListener("focusin", refresh);
+      document.removeEventListener("focusout", refresh);
+    };
+  }, [enabled]);
+  return viewport;
 }
 
 export function SectionTitle({ children, action }: { children: ReactNode; action?: ReactNode }) {

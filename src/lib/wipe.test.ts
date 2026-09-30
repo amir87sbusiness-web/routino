@@ -45,6 +45,22 @@ function seededDb(): Db {
 }
 
 describe("wipeContent", () => {
+  it("removes goals with the rest of the user's synced content", () => {
+    const db = seededDb();
+    db.goals = [
+      {
+        id: "g1",
+        title: "Get fit",
+        priority: "normal",
+        status: "active",
+        items: [],
+        createdAt: 1,
+      },
+    ];
+
+    expect(wipeContent(db).goals).toEqual([]);
+  });
+
   it("erases user content and reseeds default categories", () => {
     const next = wipeContent(seededDb());
     expect(next.habits).toEqual([]);

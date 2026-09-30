@@ -75,6 +75,7 @@ export function diffDb(prev: Db | null, next: Db): Change[] {
   diffById("categories", prev?.categories, next.categories, out);
   diffById("habits", prev?.habits, next.habits, out);
   diffById("tasks", prev?.tasks, next.tasks, out);
+  diffById("goals", prev?.goals, next.goals, out);
   diffById("timerSessions", prev?.timerSessions, next.timerSessions, out);
   diffById("feedback", prev?.feedback, next.feedback, out);
   // Keyed collections have natural, device-stable keys (`habitId|dateKey`,

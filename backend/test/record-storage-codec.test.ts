@@ -85,6 +85,21 @@ const samples = [
     },
   ],
   [
+    "timerSessions",
+    "timer-goal-1",
+    {
+      id: "timer-goal-1",
+      mode: "free",
+      focusSeconds: 90,
+      startedAt: 1_725_000_000_000,
+      endedAt: 1_725_000_090_000,
+      linkedKind: "goal",
+      linkedId: "goal-1",
+      linkedItemId: "goal-time-1",
+      linkedLabel: "تمرکز · مطالعه",
+    },
+  ],
+  [
     "journal",
     "2026-09-14",
     {
