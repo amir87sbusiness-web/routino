@@ -10,9 +10,11 @@
 import { Capacitor } from "@capacitor/core";
 import { Browser } from "@capacitor/browser";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { BadgeCheck, LogIn, ShieldAlert, WifiOff } from "lucide-react";
+import { BadgeCheck, CreditCard, Landmark, LogIn, ShieldAlert, WifiOff } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Button, Input, Logo } from "@/components/ui";
+import { Button, Input, Logo, Modal } from "@/components/ui";
+import { CardTransferPage, type CardTransferDetails } from "@/components/CardTransferPage";
+import { toLocalPhone } from "@/lib/phone";
 import { ApiError } from "@/lib/api/client";
 import { entitlementToSubscription } from "@/lib/api/auth";
 import {
@@ -55,6 +57,8 @@ function SubscribePage() {
   const [checking, setChecking] = useState(false);
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState("");
+  const [methodsOpen, setMethodsOpen] = useState(false);
+  const [transfer, setTransfer] = useState<CardTransferDetails | null>(null);
   const [needsLogin, setNeedsLogin] = useState(false);
   const [freeSuccess, setFreeSuccess] = useState(false);
   const [clock, setClock] = useState(Date.now());
@@ -247,6 +251,7 @@ function SubscribePage() {
   };
 
   const pay = async () => {
+    setMethodsOpen(false);
     if (!plans.some((p) => p.id === selected)) return;
     // React state does not disable the button until the next render. This ref is
     // synchronous, so a double click cannot create two checkout requests.
@@ -383,6 +388,54 @@ function SubscribePage() {
       }
     }
   };
+
+  const openTransfer = () => {
+    const plan = plans.find((p) => p.id === selected);
+    if (!plan || paying || checking) return;
+    if (!db.auth?.phone) {
+      setMethodsOpen(false);
+      setNeedsLogin(true);
+      return;
+    }
+    const amount = priceOf(selected);
+    if (amount <= 0) {
+      setMethodsOpen(false);
+      setPayError(
+        t(
+          "برای پلن رایگان، گزینه فعال‌سازی از طریق درگاه را انتخاب کن؛ مبلغی دریافت نمی‌شود.",
+          "For a free plan, choose gateway activation; no charge is made.",
+        ),
+      );
+      return;
+    }
+    const codePrice = appliedCode?.finalPriceByPlan[selected];
+    setTransfer({
+      planName: lang === "fa" ? plan.nameFa : plan.nameEn,
+      months: plan.months,
+      basePrice: plan.price,
+      amount,
+      discountCode:
+        codePrice != null && codePrice <= (offerPrice(plan) ?? plan.price)
+          ? appliedCode!.code
+          : null,
+      phone: toLocalPhone(db.auth.phone),
+    });
+    setMethodsOpen(false);
+    window.scrollTo?.({ top: 0 });
+  };
+
+  if (transfer)
+    return (
+      <CardTransferPage
+        details={transfer}
+        t={t}
+        lang={lang}
+        onBack={() => {
+          setTransfer(null);
+          setMethodsOpen(true);
+        }}
+      />
+    );
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-md flex-col gap-4 bg-background px-5 py-screen-safe">
@@ -572,8 +625,11 @@ function SubscribePage() {
       ) : (
         <>
           <Button
-            onClick={() => void pay()}
-            disabled={paying || plans.length === 0}
+            onClick={() => {
+              setPayError("");
+              setMethodsOpen(true);
+            }}
+            disabled={paying || checking || plans.length === 0}
             className="py-3.5 text-base"
           >
             {paying
@@ -596,6 +652,49 @@ function SubscribePage() {
           {t("بازگشت به برنامه", "Back to app")}
         </Button>
       )}
+      <Modal
+        open={methodsOpen}
+        onClose={() => setMethodsOpen(false)}
+        title={t("انتخاب روش پرداخت", "Choose a payment method")}
+      >
+        <div className="flex flex-col gap-3" dir={lang === "fa" ? "rtl" : "ltr"}>
+          <Button
+            data-payment-method="gateway"
+            variant="outline"
+            disabled={paying || checking}
+            onClick={() => void pay()}
+            className="justify-start gap-3 py-4 text-start"
+          >
+            <Landmark className="h-5 w-5 shrink-0 text-primary" />
+            <span className="flex flex-col gap-1">
+              <span className="font-bold">{t("پرداخت از طریق درگاه", "Pay through gateway")}</span>
+              <span className="text-xs font-normal text-muted-foreground">
+                {t("پرداخت آنلاین و فعال‌سازی فوری", "Online payment and instant activation")}
+              </span>
+            </span>
+          </Button>
+          <Button
+            data-payment-method="card"
+            variant="outline"
+            disabled={paying || checking}
+            onClick={openTransfer}
+            className="justify-start gap-3 py-4 text-start"
+          >
+            <CreditCard className="h-5 w-5 shrink-0 text-primary" />
+            <span className="flex flex-col gap-1">
+              <span className="font-bold">
+                {t("پرداخت به صورت کارت به کارت", "Pay by card transfer")}
+              </span>
+              <span className="text-xs font-normal text-muted-foreground">
+                {t(
+                  "ارسال رسید در تلگرام؛ فعال‌سازی در ساعات کاری کمتر از ۱ ساعت",
+                  "Send receipt via Telegram; activation within 1 business hour",
+                )}
+              </span>
+            </span>
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

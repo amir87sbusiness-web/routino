@@ -56,6 +56,14 @@ async function click(button: HTMLButtonElement): Promise<void> {
     button.click();
     await Promise.resolve();
   });
+  if (button.textContent?.includes("پرداخت و فعال‌سازی")) {
+    const gateway = document.querySelector<HTMLButtonElement>('[data-payment-method="gateway"]');
+    if (gateway)
+      await act(async () => {
+        gateway.click();
+        await Promise.resolve();
+      });
+  }
 }
 
 describe("SubscribePage payment attempts", () => {
@@ -120,7 +128,8 @@ describe("SubscribePage payment attempts", () => {
         release = resolve;
       }),
     );
-    const button = paymentButton(host);
+    await act(async () => paymentButton(host).click());
+    const button = document.querySelector<HTMLButtonElement>('[data-payment-method="gateway"]')!;
 
     await act(async () => {
       button.click();
@@ -130,6 +139,76 @@ describe("SubscribePage payment attempts", () => {
 
     expect(payments.checkoutWithProviderBusyRetry).toHaveBeenCalledTimes(1);
     await act(async () => release({ free: false, paymentId: "payment-1" }));
+  });
+
+  it("offers two methods without creating a payment before choosing", async () => {
+    await act(async () => paymentButton(host).click());
+    expect(document.querySelector('[data-payment-method="gateway"]')).not.toBeNull();
+    expect(document.querySelector('[data-payment-method="card"]')).not.toBeNull();
+    expect(payments.checkoutWithProviderBusyRetry).not.toHaveBeenCalled();
+  });
+
+  it("uses the displayed price and phone for card transfer without any extra request or grant", async () => {
+    app.db!.auth = { phone: "989123456789", verifiedAt: Date.now() };
+    await act(async () => paymentButton(host).click());
+    await click(document.querySelector<HTMLButtonElement>('[data-payment-method="card"]')!);
+    expect(payments.fetchQuote).not.toHaveBeenCalled();
+    expect(payments.fetchPlans).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain("۵۴۹,۰۰۰");
+    expect(host.textContent).toContain("امیر صالحی");
+    expect(host.textContent).toContain("کمتر از ۱ ساعت");
+    expect(host.querySelector<HTMLInputElement>('[aria-label="شماره کارت"]')?.value).toBe(
+      "6219 8614 9021 5695",
+    );
+    expect(host.textContent).toContain("09123456789");
+    expect(host.querySelector("textarea")).toBeNull();
+    expect(payments.checkoutWithProviderBusyRetry).not.toHaveBeenCalled();
+    expect(app.applyEntitlement).not.toHaveBeenCalled();
+  });
+
+  it("copies the already applied discount into the transfer page without rechecking it", async () => {
+    app.db!.auth = { phone: "989123456789", verifiedAt: Date.now() };
+    payments.fetchQuote.mockImplementation(async (planId: string) => ({
+      quote: { finalToman: planId === "m3" ? 439200 : 100000 },
+      discount: { valid: true, code: "SAVE20" },
+    }));
+    const input = host.querySelector<HTMLInputElement>('input[placeholder="کد تخفیف"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+        input,
+        "SAVE20",
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await click(
+      [...host.querySelectorAll<HTMLButtonElement>("button")].find(
+        (b) => b.textContent === "اعمال",
+      )!,
+    );
+    const quoteCount = payments.fetchQuote.mock.calls.length;
+    await act(async () => paymentButton(host).click());
+    await click(document.querySelector<HTMLButtonElement>('[data-payment-method="card"]')!);
+    expect(payments.fetchQuote).toHaveBeenCalledTimes(quoteCount);
+    expect(host.textContent).toContain("۴۳۹,۲۰۰");
+    expect(host.textContent).toContain("SAVE20");
+    expect(host.querySelector("textarea")).toBeNull();
+    expect(payments.checkoutWithProviderBusyRetry).not.toHaveBeenCalled();
+  });
+
+  it("returns from card transfer to method selection without fetching anything or changing the selected plan", async () => {
+    app.db!.auth = { phone: "989123456789", verifiedAt: Date.now() };
+    await act(async () => paymentButton(host).click());
+    await click(document.querySelector<HTMLButtonElement>('[data-payment-method="card"]')!);
+    await click(
+      [...host.querySelectorAll<HTMLButtonElement>("button")].find((b) =>
+        b.textContent?.includes("بازگشت به روش پرداخت"),
+      )!,
+    );
+    expect(document.querySelector('[data-payment-method="gateway"]')).not.toBeNull();
+    expect(host.querySelector('[data-plan-id="m3"]')?.getAttribute("aria-pressed")).toBe("true");
+    expect(payments.fetchPlans).toHaveBeenCalledTimes(1);
+    expect(payments.fetchQuote).not.toHaveBeenCalled();
+    expect(payments.checkoutWithProviderBusyRetry).not.toHaveBeenCalled();
   });
 
   it("keeps plan cards visible while only price numbers load and defaults to three months", async () => {
