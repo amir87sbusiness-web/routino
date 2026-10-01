@@ -68,17 +68,25 @@ describe("contextual guide", () => {
     vi.restoreAllMocks();
   });
 
-  it("closes the entire section and resumes the saved step on the next visit", async () => {
+  it("keeps a section closed after X across visits and remounts until replay", async () => {
     await render(page());
     await click("بعدی");
     await click("بستن راهنما");
     expect(document.querySelector("[data-guide-card]")).toBeNull();
     await render(<GuideOverlay owner="a" lang="fa" />);
     await render(page());
-    expect(document.querySelector("[data-guide-card]")?.textContent).toContain(
-      "از این نوار روز را انتخاب کن",
-    );
+    expect(document.querySelector("[data-guide-card]")).toBeNull();
     expect(readGuide("a").progress.today.step).toBe("date");
+    expect(readGuide("a").progress.today.done).toBe(true);
+    expect(readGuide("a").progress["habit-form"]).toBeUndefined();
+    expect(readGuide("b").progress).toEqual({});
+    await render(<></>);
+    await render(page());
+    expect(document.querySelector("[data-guide-card]")).toBeNull();
+    await act(async () => replayGuide("a"));
+    expect(document.querySelector("[data-guide-card]")?.textContent).toContain(
+      "اینجا نمای روز توست",
+    );
   });
 
   it("marks completion and leaves existing accounts alone", async () => {
@@ -166,7 +174,7 @@ describe("contextual guide", () => {
     );
   });
 
-  it("resumes each analytics tab after closing it", async () => {
+  it("keeps only the dismissed analytics tab closed", async () => {
     const analytics = (tab: string) => (
       <>
         <div data-guide-scope={tab}>
@@ -184,7 +192,7 @@ describe("contextual guide", () => {
     await render(analytics("analytics-tasks"));
     expect(document.querySelector("[data-guide-card]")?.textContent).toContain("عملکرد کارها جدا");
     await render(analytics("analytics-habits"));
-    expect(document.querySelector("[data-guide-card]")?.textContent).toContain("در عملکرد کلی");
+    expect(document.querySelector("[data-guide-card]")).toBeNull();
   });
 
   it("shows one-step modal guides anchored on the modal itself", async () => {

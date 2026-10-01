@@ -74,7 +74,7 @@ Updated 2026-09-23. Read this first, then inspect only the source areas relevant
 
 - Automatic section/form guides enroll only from auth `isNew`, and activate after successful getting-started completion. Existing accounts can opt in with Settings replay.
 - Guide progress is device-local and account-scoped in `routino:guide:v1:<userId>`; never sync it or change product records for a tour.
-- X dismisses the current section visit and saves its step; next visit resumes. Got it completes that section. Replay resets only the current account's guide and opens Today.
+- X completes the current section so its automatic guide stays hidden on later visits. Escape/outside dismissal saves the step for the next visit. Got it also completes that section. Replay resets only the current account's guide and opens Today.
 - `ProductGuide` is mounted once beside the root Outlet. `data-guide-scope` and `data-guide` anchor the shared content; Modal `guide` scopes take priority. Help hints remain available to all accounts and pause automatic guides.
 
 ## Auth and payment invariants

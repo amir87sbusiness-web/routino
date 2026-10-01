@@ -195,7 +195,7 @@ export function GuideOverlay({ owner, lang }: { owner: string; lang: Lang }) {
   const anchor = help?.anchor ?? view?.anchor;
   const identity = help ? `help:${help.topic}` : view ? `${view.visit.id}:${view.index}` : null;
 
-  const dismiss = () => {
+  const dismiss = (completeSection = false) => {
     if (help) {
       keepFocus.current = true;
       help.anchor.focus({ preventScroll: true });
@@ -204,7 +204,12 @@ export function GuideOverlay({ owner, lang }: { owner: string; lang: Lang }) {
     }
     if (view) {
       view.visit.closed = true;
-      saveGuideProgress(owner, view.visit.id, GUIDE_SECTIONS[view.visit.id][view.index].id, false);
+      saveGuideProgress(
+        owner,
+        view.visit.id,
+        GUIDE_SECTIONS[view.visit.id][view.index].id,
+        completeSection,
+      );
       setView(null);
     }
     restoreFocus.current?.focus({ preventScroll: true });
@@ -366,7 +371,7 @@ export function GuideOverlay({ owner, lang }: { owner: string; lang: Lang }) {
           type="button"
           aria-label={translate("بستن راهنما", "Close guide")}
           className="guide-close"
-          onClick={dismiss}
+          onClick={() => dismiss(true)}
         >
           <X className="h-4 w-4" aria-hidden="true" />
         </button>

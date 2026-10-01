@@ -1,12 +1,12 @@
 {
   "format": "routino-android-release",
   "packageName": "com.routino.app",
-  "versionCode": 34,
-  "versionName": "1.0.23",
-  "bytes": 2906789,
-  "sha256": "f99142c1eb60613f2108050735d1ff778274ecc9f44ff8cb0a210c7864f7d5de",
+  "versionCode": 35,
+  "versionName": "1.0.24",
+  "bytes": 2909937,
+  "sha256": "6c96a3ea8f0cc7dc8e94247a3dc447852b67666f3ba037822df1199daedeb7b5",
   "certificateSha256": "f6a85982f185bdb7118241898c5572502fa93d07fcbe475604cad814aebf3747",
   "certificateDn": "CN=Routino, O=Routino, L=Tehran, C=IR",
   "apiUrl": "https://api.routino.me/v1",
-  "builtAt": "2026-09-30T22:10:21.919Z"
+  "builtAt": "2026-10-01T08:56:28.335Z"
 }

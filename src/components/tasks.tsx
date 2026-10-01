@@ -429,8 +429,7 @@ export function TaskFormModal({
         <div>
           <div data-guide="reminder" className="flex items-center justify-between gap-3">
             <p className="text-xs font-medium text-muted-foreground">
-              {t("یادآوری در همین روز", "Reminder on this day")}{" "}
-              <HelpHint topic="task-reminder" lang={lang} />
+              {t("یادآوری در همین روز", "Reminder on this day")}
             </p>
             <button
               type="button"

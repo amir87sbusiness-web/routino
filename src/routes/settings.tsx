@@ -1,4 +1,4 @@
-import { HelpHint, GuideReplayButton } from "@/components/ProductGuide";
+import { GuideReplayButton } from "@/components/ProductGuide";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
   AlertTriangle,
@@ -482,8 +482,7 @@ function SettingsPage() {
       <Card data-guide="notifications">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-sm font-bold text-foreground">
-            <Bell className="h-4 w-4 text-primary" /> {t("نوتیفیکیشن‌ها", "Notifications")}{" "}
-            <HelpHint topic="notifications" lang={lang} />
+            <Bell className="h-4 w-4 text-primary" /> {t("نوتیفیکیشن‌ها", "Notifications")}
           </div>
           <button
             type="button"
@@ -507,7 +506,6 @@ function SettingsPage() {
               <div>
                 <p className="text-xs font-bold text-foreground">
                   {t("صدای تکمیل", "Completion sound")}
-                  <HelpHint topic="sound" lang={lang} />
                 </p>
                 <p className="text-[10px] text-muted-foreground">
                   {t(
@@ -538,7 +536,6 @@ function SettingsPage() {
               <div>
                 <p className="text-xs font-bold text-foreground">
                   {t("بازخورد لمسی", "Haptic feedback")}
-                  <HelpHint topic="haptics" lang={lang} />
                 </p>
                 <p className="text-[10px] text-muted-foreground">
                   {t("روی گوشی‌های سازگار", "On supported phones")}
@@ -576,8 +573,7 @@ function SettingsPage() {
         )}
         <div className="mt-3">
           <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-            {t("ساعت یادآوری ژورنال", "Journal reminder time")}{" "}
-            <HelpHint topic="journal-reminder" lang={lang} />
+            {t("ساعت یادآوری ژورنال", "Journal reminder time")}
           </p>
           <button
             onClick={() => setJournalTimeOpen(true)}
@@ -885,14 +881,6 @@ function SettingsPage() {
           >
             <Trash2 className="h-3.5 w-3.5" /> {t("پاک کردن همهٔ داده‌ها", "Erase all data")}
           </Button>
-        </div>
-        <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-          <span>
-            {t("خروج از حساب", "Sign out")} <HelpHint topic="signout" lang={lang} />
-          </span>
-          <span>
-            {t("پاک کردن همهٔ داده‌ها", "Erase all data")} <HelpHint topic="erase" lang={lang} />
-          </span>
         </div>
       </Card>
 

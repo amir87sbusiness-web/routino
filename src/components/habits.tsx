@@ -882,8 +882,7 @@ export function HabitFormModal({
 
         <div data-guide="repeat">
           <p className="mb-1.5 text-xs font-medium text-muted-foreground">
-            {t("روزهای تکرار (حداقل یک روز)", "Repeat on (at least one day)")}{" "}
-            <HelpHint topic="repeat" lang={lang} />
+            {t("روزهای تکرار (حداقل یک روز)", "Repeat on (at least one day)")}
           </p>
           <div data-testid="habit-weekdays" className="grid grid-cols-7 gap-1">
             {pickerOrder.map((wd) => {
