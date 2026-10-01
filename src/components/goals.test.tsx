@@ -67,6 +67,15 @@ describe("Goals UI", () => {
     host.remove();
   });
 
+  it("provides stable guide anchors even before any goal is created", async () => {
+    const db = activeDb();
+    await act(async () => root.render(<GoalsListView db={db} update={() => true} t={t} lang="fa" cal="jalali" />));
+    expect(host.querySelector('[data-guide-scope="goals"]')).not.toBeNull();
+    for (const id of ["intro", "create", "summary", "filters", "list"]) {
+      expect(host.querySelector('[data-guide="' + id + '"]')).not.toBeNull();
+    }
+  });
+
   it("shows active goals before completed goals and creates a minimal goal", async () => {
     let db = activeDb();
     db.goals = [

@@ -47,6 +47,43 @@ export const GUIDE_SECTIONS = {
       "Use the bottom bar to switch sections. Settings and notifications are at the top.",
     ),
   ],
+  goals: [
+    s(
+      "intro",
+      "هدف‌ها، قدم به قدم",
+      "Goals, step by step",
+      "اینجا هدف‌های مهمت را به قدم‌های کوچک‌تر تبدیل کن و پیشرفتشان را دنبال کن.",
+      "Break your important goals into smaller steps and follow their progress here.",
+    ),
+    s(
+      "create",
+      "ساخت هدف",
+      "Create a goal",
+      "با «هدف جدید» عنوان هدفت را بنویس؛ دسته‌بندی، اولویت و مهلت را هم اگر خواستی مشخص کن.",
+      "Use New goal to give your goal a title. Category, priority and deadline are optional.",
+    ),
+    s(
+      "summary",
+      "پیشرفت در یک نگاه",
+      "Progress at a glance",
+      "این کارت پیشرفت کلی و تعداد هدف‌های فعال، انجام‌شده و عقب‌افتاده را نشان می‌دهد.",
+      "This card shows overall progress and counts of active, completed and overdue goals.",
+    ),
+    s(
+      "filters",
+      "پیدا کردن هدف‌ها",
+      "Find your goals",
+      "با این فیلترها همهٔ هدف‌ها یا فقط هدف‌های فعال، انجام‌شده و عقب‌افتاده را ببین.",
+      "Use these filters to see all goals or just active, completed or overdue ones.",
+    ),
+    s(
+      "list",
+      "قدم‌های هر هدف",
+      "Steps for each goal",
+      "هر هدف را باز کن تا عادت، کار یا آیتم دلخواه به آن اضافه کنی؛ پیشرفت قدم‌ها را همان‌جا دنبال کن.",
+      "Open a goal to add habits, tasks or custom items, then follow each step's progress there.",
+    ),
+  ],
   habits: [
     s(
       "intro",

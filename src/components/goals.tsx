@@ -483,21 +483,21 @@ export function GoalsListView({ db, update, t, lang, cal }: SharedProps) {
   };
 
   return (
-    <div className="page-stagger flex flex-col gap-5">
+    <div data-guide-scope="goals" className="page-stagger flex flex-col gap-5">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-black text-foreground">{t("هدف‌ها", "Goals")}</h1>
+          <h1 data-guide="intro" className="text-xl font-black text-foreground">{t("هدف‌ها", "Goals")}</h1>
           <p className="mt-1 text-xs text-muted-foreground">
             {t("چند قدم ساده برای رسیدن به چیزی که مهمه.", "Simple steps toward what matters.")}
           </p>
         </div>
-        <Button onClick={() => setOpen(true)}>
+        <Button data-guide="create" onClick={() => setOpen(true)}>
           <Plus className="h-4 w-4" />
           {t("هدف جدید", "New goal")}
         </Button>
       </div>
 
-      <Card className="overflow-hidden">
+      <Card data-guide="summary" className="overflow-hidden">
         <div className="flex items-end justify-between gap-4">
           <div>
             <h2 className="text-sm font-black text-foreground">{t("خلاصه هدف‌ها", "Goals overview")}</h2>
@@ -514,7 +514,7 @@ export function GoalsListView({ db, update, t, lang, cal }: SharedProps) {
         </div>
       </Card>
 
-      <div className="flex flex-col gap-2">
+      <div data-guide="filters" className="flex flex-col gap-2">
         <div className="flex gap-1 overflow-x-auto pb-1">
           {(["all", "active", "completed", "overdue"] as const).map((value) => (
             <button key={value} onClick={() => setStatusFilter(value)} className={`shrink-0 rounded-full border px-3 py-1.5 text-[10px] font-bold ${statusFilter === value ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground"}`}>
@@ -524,6 +524,7 @@ export function GoalsListView({ db, update, t, lang, cal }: SharedProps) {
         </div>
       </div>
 
+      <div data-guide="list" className="flex flex-col gap-5">
       {active.length === 0 ? (
         <Card>
           <EmptyState emoji="🎯" text={t("هنوز هدف فعالی نداری.", "No active goals yet.")} />
@@ -545,6 +546,8 @@ export function GoalsListView({ db, update, t, lang, cal }: SharedProps) {
           ))}
         </section>
       )}
+
+      </div>
 
       <Modal open={open} onClose={() => setOpen(false)} title={t("ساخت هدف", "Create goal")}>
         <div className="flex flex-col gap-3">

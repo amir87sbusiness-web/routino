@@ -68,6 +68,31 @@ describe("contextual guide", () => {
     vi.restoreAllMocks();
   });
 
+  it("walks through Goals and keeps X completion until replay", async () => {
+    const goalsPage = (
+      <>
+        <div data-guide-scope="goals">
+          {["intro", "create", "summary", "filters", "list"].map((id) => (
+            <div key={id} data-guide={id}>
+              {id}
+            </div>
+          ))}
+        </div>
+        <GuideOverlay owner="a" lang="fa" />
+      </>
+    );
+    await render(goalsPage);
+    expect(document.querySelector("[data-guide-card]")?.textContent).toContain("هدف‌ها");
+    for (let i = 0; i < 4; i++) await click("بعدی");
+    await click("بستن راهنما");
+    expect(readGuide("a").progress.goals).toEqual({ step: "list", done: true });
+    await render(<></>);
+    await render(goalsPage);
+    expect(document.querySelector("[data-guide-card]")).toBeNull();
+    await act(async () => replayGuide("a"));
+    expect(document.querySelector("[data-guide-card]")?.textContent).toContain("هدف‌ها");
+  });
+
   it("keeps a section closed after X across visits and remounts until replay", async () => {
     await render(page());
     await click("بعدی");
