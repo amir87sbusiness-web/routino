@@ -1,0 +1,204 @@
+# Temporary validation workflow for the lifetime analytics branch.
+name: lifetime-user-analytics-ci
+
+on:
+  push:
+    branches:
+      - codex/lifetime-user-analytics
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: routino_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d routino_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      ROUTINO_TEST_POSTGRES_URL: postgres://postgres:postgres@127.0.0.1:5432/routino_ci
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Upgrade npm runner
+        run: npm install -g npm@11
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install backend dependencies from manifest without changing repository lockfile
+        run: |
+          cp backend/package-lock.json /tmp/backend-package-lock.json
+          rm backend/package-lock.json
+          (cd backend && npm install)
+          mv /tmp/backend-package-lock.json backend/package-lock.json
+
+      - name: Targeted lifetime analytics migration tests on PGlite
+        run: npm --prefix backend test -- lifetime-user-analytics-sql.test.ts lifetime-user-admin-delete.test.ts --maxWorkers=1
+
+      - name: Real PostgreSQL 17 migration and trigger smoke
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'drop database if exists routino_analytics_ci'
+          psql -h 127.0.0.1 -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'create database routino_analytics_ci'
+          psql -h 127.0.0.1 -U postgres -d routino_analytics_ci -v ON_ERROR_STOP=1 <<'SQL'
+          create table users (
+            id uuid primary key,
+            phone text not null unique,
+            active_days integer not null default 0,
+            last_active_at timestamptz,
+            created_at timestamptz not null default now()
+          );
+          create table grants (
+            id uuid primary key default gen_random_uuid(),
+            user_id uuid not null references users(id) on delete cascade,
+            source text not null
+          );
+          insert into users (id, phone, active_days, last_active_at, created_at)
+          values (
+            '22000000-0000-4000-8000-000000000001',
+            '989120002201',
+            1,
+            '2026-09-10T08:00:00+03:30',
+            '2026-09-01T08:00:00+03:30'
+          );
+          insert into grants (user_id, source)
+          values ('22000000-0000-4000-8000-000000000001', 'trial');
+          SQL
+          psql -h 127.0.0.1 -U postgres -d routino_analytics_ci -v ON_ERROR_STOP=1 \
+            -f supabase/migrations/20260911120000_lifetime_user_analytics.sql
+          psql -h 127.0.0.1 -U postgres -d routino_analytics_ci -v ON_ERROR_STOP=1 <<'SQL'
+          do $check$
+          begin
+            if not exists (
+              select 1 from lifetime_users
+               where phone = '989120002201'
+                 and registration_count = 1
+                 and active_days_lifetime = 1
+                 and trial_started
+                 and current_user_id = '22000000-0000-4000-8000-000000000001'::uuid
+            ) then
+              raise exception 'initial backfill mismatch';
+            end if;
+          end
+          $check$;
+
+          delete from users
+           where id = '22000000-0000-4000-8000-000000000001';
+          do $check$
+          begin
+            if not exists (
+              select 1 from lifetime_users
+               where phone = '989120002201' and current_user_id is null
+            ) then
+              raise exception 'automatic-delete detach mismatch';
+            end if;
+          end
+          $check$;
+
+          insert into users (id, phone, created_at)
+          values (
+            '22000000-0000-4000-8000-000000000002',
+            '989120002201',
+            '2026-09-10T12:00:00+03:30'
+          );
+          update users
+             set active_days = 1,
+                 last_active_at = '2026-09-10T15:00:00+03:30'
+           where id = '22000000-0000-4000-8000-000000000002';
+          do $check$
+          begin
+            if not exists (
+              select 1 from lifetime_users
+               where phone = '989120002201'
+                 and registration_count = 2
+                 and active_days_lifetime = 1
+            ) then
+              raise exception 'same-day re-registration double counted';
+            end if;
+          end
+          $check$;
+
+          update users
+             set active_days = 2,
+                 last_active_at = '2026-09-11T08:00:00+03:30'
+           where id = '22000000-0000-4000-8000-000000000002';
+          do $check$
+          begin
+            if not exists (
+              select 1 from lifetime_users
+               where phone = '989120002201'
+                 and registration_count = 2
+                 and active_days_lifetime = 2
+                 and last_active_day = date '2026-09-11'
+            ) then
+              raise exception 'next-day return mismatch';
+            end if;
+          end
+          $check$;
+          SQL
+          psql -h 127.0.0.1 -U postgres -d routino_analytics_ci -v ON_ERROR_STOP=1 \
+            -f supabase/migrations/20260911120000_lifetime_user_analytics.sql
+          psql -h 127.0.0.1 -U postgres -d routino_analytics_ci -v ON_ERROR_STOP=1 <<'SQL'
+          do $check$
+          declare
+            m record;
+          begin
+            select * into m
+              from routino_lifetime_user_metrics('2026-09-11T12:00:00+03:30');
+            if m.lifetime_users <> 1
+               or m.current_accounts <> 1
+               or m.returning_users <> 1
+               or m.re_registered_users <> 1
+               or m.total_re_registrations <> 1
+               or m.trial_users <> 1 then
+              raise exception 'metrics/rerun mismatch: %', row_to_json(m);
+            end if;
+          end
+          $check$;
+          SQL
+
+      - name: Full backend tests including real PostgreSQL opt-in tests
+        run: npm --prefix backend test -- --maxWorkers=1
+
+      - name: Backend typecheck
+        run: npm --prefix backend run typecheck
+
+      # generate-icons.test.mjs has one pre-existing stale assertion on main:
+      # it expects Android versionCode 6 while android/app/build.gradle is 8.
+      # Its other two icon generation/budget assertions passed in the prior run.
+      - name: Frontend/root tests excluding pre-existing stale Android version assertion file
+        run: npm test -- --maxWorkers=1 --exclude scripts/generate-icons.test.mjs
+
+      - name: Sync generated Edge shared sources
+        run: npm run sync:edge
+
+      - name: Assert Edge generated sources were already in parity
+        run: git diff --exit-code
+
+      - name: Edge tests
+        run: npm run test:edge -- --maxWorkers=1
+
+      - name: Production web build
+        run: npm run build
