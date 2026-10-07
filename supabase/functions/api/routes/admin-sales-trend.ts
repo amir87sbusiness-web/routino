@@ -23,14 +23,12 @@ export async function adminSalesTrend(db: Database, now: Date, days = 30) {
     same_day_buyers: number | string | bigint;
     eligible_expirations: number | string | bigint;
     renewed_expirations: number | string | bigint;
-  };
-  type LifetimeRow = {
-    total_users: number | string | bigint;
-    paying_users: number | string | bigint;
-    eligible_expirations: number | string | bigint;
-    renewed_expirations: number | string | bigint;
-    true_renewals: number | string | bigint;
-    early_repeats: number | string | bigint;
+    lifetime_total_users: number | string | bigint;
+    lifetime_paying_users: number | string | bigint;
+    lifetime_eligible_expirations: number | string | bigint;
+    lifetime_renewed_expirations: number | string | bigint;
+    lifetime_true_renewals: number | string | bigint;
+    lifetime_early_repeats: number | string | bigint;
   };
 
   const result = await db.execute(sql`
@@ -195,117 +193,24 @@ export async function adminSalesTrend(db: Database, now: Date, days = 30) {
       coalesce(u.new_users, 0) as new_users,
       coalesce(u.same_day_buyers, 0) as same_day_buyers,
       coalesce(e.eligible_expirations, 0) as eligible_expirations,
-      coalesce(e.renewed_expirations, 0) as renewed_expirations
+      coalesce(e.renewed_expirations, 0) as renewed_expirations,
+      l.total_users as lifetime_total_users,
+      l.paying_users as lifetime_paying_users,
+      l.eligible_expirations as lifetime_eligible_expirations,
+      l.renewed_expirations as lifetime_renewed_expirations,
+      l.true_renewals as lifetime_true_renewals,
+      l.early_repeats as lifetime_early_repeats
     from calendar c
+    cross join lifetime l
     left join purchase_daily p on p.day = c.day
     left join user_daily u on u.day = c.day
     left join expiry_daily e on e.day = c.day
     order by c.day asc
   `);
 
-  const lifetimeResult = await db.execute(sql`
-    with bounds as (
-      select ${nowIso}::timestamptz as now_at
-    ), qualifying_paid as (
-      select
-        p.id,
-        p.user_id,
-        p.applied_at as paid_at,
-        row_number() over (
-          partition by p.user_id
-          order by p.applied_at, p.created_at, p.id
-        ) as purchase_number
-      from payments p
-      where p.status = 'paid'
-        and p.user_id is not null
-        and p.amount_toman > 0
-        and p.applied_at is not null
-    ), first_paid as (
-      select user_id, min(paid_at) as first_paid_at
-      from qualifying_paid
-      group by user_id
-    ), payment_events as (
-      select
-        q.id,
-        q.user_id,
-        q.paid_at,
-        q.purchase_number,
-        (
-          q.purchase_number > 1
-          and g.id is not null
-          and g.expires_before is not null
-          and g.expires_before <= g.created_at
-        ) as is_true_renewal
-      from qualifying_paid q
-      left join grants g
-        on g.payment_id = q.id
-       and g.source = 'payment'
-    ), grant_sequence as (
-      select
-        g.id,
-        g.user_id,
-        g.source,
-        g.payment_id,
-        g.created_at,
-        g.expires_after,
-        lead(g.created_at) over (
-          partition by g.user_id
-          order by g.created_at, g.id
-        ) as next_grant_at,
-        lead(g.source) over (
-          partition by g.user_id
-          order by g.created_at, g.id
-        ) as next_grant_source,
-        lead(g.payment_id) over (
-          partition by g.user_id
-          order by g.created_at, g.id
-        ) as next_payment_id
-      from grants g
-    ), expiry_events as (
-      select
-        g.user_id,
-        g.expires_after as expired_at,
-        g.next_grant_at,
-        g.next_grant_source,
-        g.next_payment_id
-      from grant_sequence g
-      cross join bounds b
-      where g.expires_after is not null
-        and g.expires_after <= b.now_at
-        and (g.next_grant_at is null or g.next_grant_at > g.expires_after)
-        and exists (
-          select 1
-          from qualifying_paid prior
-          where prior.user_id = g.user_id
-            and prior.paid_at <= g.created_at
-        )
-    )
-    select
-      (select count(*) from users) as total_users,
-      (select count(*) from first_paid) as paying_users,
-      (select count(*) from expiry_events) as eligible_expirations,
-      (
-        select count(*)
-        from expiry_events e
-        where e.next_grant_source = 'payment'
-          and e.next_grant_at > e.expired_at
-          and exists (
-            select 1
-            from qualifying_paid next_paid
-            where next_paid.id = e.next_payment_id
-          )
-      ) as renewed_expirations,
-      (select count(*) from payment_events where is_true_renewal) as true_renewals,
-      (
-        select count(*)
-        from payment_events
-        where purchase_number > 1
-          and not is_true_renewal
-      ) as early_repeats
-  `);
-
   const metric = (value: number | string | bigint | null | undefined) => Number(value ?? 0);
-  const points = rowsOf<TrendRow>(result).map((row) => {
+  const rows = rowsOf<TrendRow>(result);
+  const points = rows.map((row) => {
     const newUsers = metric(row.new_users);
     const sameDayBuyers = metric(row.same_day_buyers);
     const eligibleExpirations = metric(row.eligible_expirations);
@@ -346,14 +251,14 @@ export async function adminSalesTrend(db: Database, now: Date, days = 30) {
     },
   );
 
-  const lifetimeRow = rowsOf<LifetimeRow>(lifetimeResult)[0];
+  const first = rows[0];
   const lifetime = {
-    totalUsers: metric(lifetimeRow?.total_users),
-    payingUsers: metric(lifetimeRow?.paying_users),
-    eligibleExpirations: metric(lifetimeRow?.eligible_expirations),
-    renewedExpirations: metric(lifetimeRow?.renewed_expirations),
-    trueRenewals: metric(lifetimeRow?.true_renewals),
-    earlyRepeats: metric(lifetimeRow?.early_repeats),
+    totalUsers: metric(first?.lifetime_total_users),
+    payingUsers: metric(first?.lifetime_paying_users),
+    eligibleExpirations: metric(first?.lifetime_eligible_expirations),
+    renewedExpirations: metric(first?.lifetime_renewed_expirations),
+    trueRenewals: metric(first?.lifetime_true_renewals),
+    earlyRepeats: metric(first?.lifetime_early_repeats),
   };
 
   return {
