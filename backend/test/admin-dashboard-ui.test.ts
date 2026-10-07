@@ -3,21 +3,27 @@ import { ADMIN_PAGE } from "../src/lib/admin-page.js";
 import { withAdminDashboardUi } from "../src/routes/admin-dashboard-ui.js";
 
 describe("admin dashboard refresh", () => {
-  it("adds Sheetra-style interactive analytics with bounded conversion and renewal metrics", () => {
+  it("adds responsive CRM analytics with lifetime and range KPIs", () => {
     const page = withAdminDashboardUi(ADMIN_PAGE);
 
-    expect(page).toContain("داشبورد فروش و رشد");\n    expect(page).toContain("فروش و درآمد");
+    expect(page).toContain("داشبورد فروش و رشد");
+    expect(page).toContain("نرخ تبدیل کل");
+    expect(page).toContain("نرخ تمدید کل");
+    expect(page).toContain("عملکرد بازه انتخاب‌شده");
+    expect(page).toContain("فروش و درآمد");
     expect(page).toContain("رشد و تبدیل روزانه");
+    expect(page).toContain("کیفیت تمدید");
+    expect(page).toContain("وضعیت اشتراک‌ها");
+    expect(page).toContain("سلامت فروش");
+    expect(page).toContain("خرید زودهنگام");
+    expect(page).toContain("chart-tooltip");
+    expect(page).toContain('api("/sales-trend?days=90")');
+
     expect(page).toContain('data-analytics-range="today"');
     expect(page).toContain('data-analytics-range="yesterday"');
     expect(page).toContain('data-analytics-range="7"');
     expect(page).toContain('data-analytics-range="30"');
     expect(page).toContain('data-analytics-range="90"');
-    expect(page).toContain("۰۰:۰۰ تهران");
-    expect(page).toContain("linearGradient");
-    expect(page).toContain("خرید مجدد");
-    expect(page).toContain("سهم خرید مجدد از فروش");
-    expect(page).toContain('api("/sales-trend?days=90")');
 
     expect(page).toContain('id="tab-users"');
     expect(page).toContain('id="tab-payments"');
