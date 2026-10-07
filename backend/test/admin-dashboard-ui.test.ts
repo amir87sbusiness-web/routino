@@ -3,7 +3,7 @@ import { ADMIN_PAGE } from "../src/lib/admin-page.js";
 import { withAdminDashboardUi } from "../src/routes/admin-dashboard-ui.js";
 
 describe("admin dashboard refresh", () => {
-  it("adds Sheetra-style calendar ranges and charts without extra dashboard requests", () => {
+  it("adds Sheetra-style calendar ranges, charts, and the existing renewal trend", () => {
     const page = withAdminDashboardUi(ADMIN_PAGE);
 
     expect(page).toContain("نمودار درآمد و فروش");
@@ -15,7 +15,9 @@ describe("admin dashboard refresh", () => {
     expect(page).toContain('data-analytics-range="90"');
     expect(page).toContain("۰۰:۰۰ تهران");
     expect(page).toContain("linearGradient");
-    expect(page).not.toContain('api("/sales-trend?days="');
+    expect(page).toContain("خرید مجدد");
+    expect(page).toContain("سهم خرید مجدد از فروش");
+    expect(page).toContain('api("/sales-trend?days=90")');
 
     expect(page).toContain('id="tab-users"');
     expect(page).toContain('id="tab-payments"');
