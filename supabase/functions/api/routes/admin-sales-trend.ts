@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { rowsOf, type Database } from "../db/client.js";
+import { rowsOf, type Database } from "../shared/db/client.ts";
 
 const DAY_MS = 86_400_000;
 const MIN_DAYS = 7;
