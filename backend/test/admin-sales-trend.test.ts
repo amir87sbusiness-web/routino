@@ -83,7 +83,19 @@ describe("admin sales trend", () => {
       renewedExpirations: 1,
       renewalRate: 50,
     });
+    expect(result.lifetime).toMatchObject({
+      totalUsers: 5,
+      payingUsers: 4,
+      conversionRate: 80,
+      eligibleExpirations: 2,
+      renewedExpirations: 1,
+      renewalRate: 50,
+      trueRenewals: 1,
+      earlyRepeats: 1,
+    });
     expect(result.totals.conversionRate).toBeLessThanOrEqual(100);
     expect(result.totals.renewalRate).toBeLessThanOrEqual(100);
+    expect(result.lifetime.conversionRate).toBeLessThanOrEqual(100);
+    expect(result.lifetime.renewalRate).toBeLessThanOrEqual(100);
   });
 });
