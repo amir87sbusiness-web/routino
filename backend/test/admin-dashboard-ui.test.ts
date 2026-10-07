@@ -3,11 +3,11 @@ import { ADMIN_PAGE } from "../src/lib/admin-page.js";
 import { withAdminDashboardUi } from "../src/routes/admin-dashboard-ui.js";
 
 describe("admin dashboard refresh", () => {
-  it("adds Sheetra-style calendar ranges, charts, and the existing renewal trend", () => {
+  it("adds Sheetra-style interactive analytics with bounded conversion and renewal metrics", () => {
     const page = withAdminDashboardUi(ADMIN_PAGE);
 
-    expect(page).toContain("نمودار درآمد و فروش");
-    expect(page).toContain("کاربران جدید");
+    expect(page).toContain("درآمد، فروش و تمدید");
+    expect(page).toContain("ثبت‌نام و نرخ تبدیل");
     expect(page).toContain('data-analytics-range="today"');
     expect(page).toContain('data-analytics-range="yesterday"');
     expect(page).toContain('data-analytics-range="7"');
