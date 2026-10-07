@@ -14,7 +14,7 @@ const DASHBOARD_CSS = `
   .analytics-range button{min-width:52px;min-height:32px;padding:5px 9px;border:0;border-radius:8px;background:transparent;color:var(--mut);font:700 11px/1.2 inherit;cursor:pointer}
   .analytics-range button:hover{color:var(--txt)}.analytics-range button.on{background:var(--brand);color:#fff;box-shadow:0 2px 6px rgba(188,81,15,.18)}
   .overview-groups{gap:12px!important}.metric-group{box-shadow:none}
-  .overview-groups .metric-group.period .metric-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .overview-groups .metric-group.period .metric-grid{grid-template-columns:repeat(5,minmax(0,1fr))}
   .overview-groups .metric-group:not(.period):not(.attention) .metric-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
   .metric-group-head{min-height:39px;padding:8px 13px;background:#faf9f6}.metric{min-height:94px;padding:13px}.metric .v{font-size:clamp(18px,4.5vw,25px)}
   .charts-grid{display:grid;gap:14px}
@@ -22,10 +22,10 @@ const DASHBOARD_CSS = `
   .analytics-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:15px 16px 7px}
   .analytics-card-title h3{margin:0;font-size:14px;font-weight:900}.analytics-card-title p{margin:2px 0 0;color:var(--mut);font-size:11px}
   .analytics-legend{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px;color:var(--mut);font-size:10px;font-weight:700}
-  .analytics-legend span{display:inline-flex;align-items:center;gap:5px}.legend-mark{width:9px;height:9px;border-radius:3px}.legend-mark.revenue{background:#dd6d19}.legend-mark.sales{background:#4f75d8}.legend-mark.users{background:#7c3aed;border-radius:999px}
+  .analytics-legend span{display:inline-flex;align-items:center;gap:5px}.legend-mark{width:9px;height:9px;border-radius:3px}.legend-mark.revenue{background:#dd6d19}.legend-mark.sales{background:#4f75d8}.legend-mark.renewal{background:#15966f}.legend-mark.users{background:#7c3aed;border-radius:999px}
   .chart-host{min-height:250px;padding:2px 8px 12px}.analytics-chart{display:block;width:100%;height:auto;min-height:225px;overflow:visible}
   .analytics-chart text{font-family:Vazirmatn,Tahoma,Arial,sans-serif;fill:#8a8178;font-size:9.5px}.analytics-chart .grid{stroke:#ece8e1;stroke-width:1;vector-effect:non-scaling-stroke}
-  .analytics-chart .sales-bar{fill:#4f75d8;opacity:.2}.analytics-chart .revenue-line{fill:none;stroke:#dd6d19;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+  .analytics-chart .sales-bar{fill:#4f75d8;opacity:.2}.analytics-chart .renewal-bar{fill:#15966f;opacity:.82}.analytics-chart .revenue-line{fill:none;stroke:#dd6d19;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
   .analytics-chart .revenue-point{fill:#fff;stroke:#dd6d19;stroke-width:2;vector-effect:non-scaling-stroke}
   .analytics-chart .users-line{fill:none;stroke:#7c3aed;stroke-width:3;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
   .analytics-chart .users-point{fill:#fff;stroke:#7c3aed;stroke-width:2;vector-effect:non-scaling-stroke}
@@ -51,7 +51,7 @@ const DASHBOARD_OVERVIEW = `<section id="tab-overview" role="tabpanel" aria-labe
       <div class="overview-groups" id="ovCards" aria-live="polite"></div>
       <div class="charts-grid">
         <section class="analytics-card" aria-labelledby="salesChartTitle">
-          <div class="analytics-card-head"><div class="analytics-card-title"><h3 id="salesChartTitle">نمودار درآمد و فروش</h3><p id="salesChartSubtitle">امروز از ساعت ۰۰:۰۰ تهران</p><div class="analytics-legend"><span><i class="legend-mark revenue"></i>درآمد</span><span><i class="legend-mark sales"></i>فروش موفق</span></div></div></div>
+          <div class="analytics-card-head"><div class="analytics-card-title"><h3 id="salesChartTitle">نمودار درآمد و فروش</h3><p id="salesChartSubtitle">امروز از ساعت ۰۰:۰۰ تهران</p><div class="analytics-legend"><span><i class="legend-mark revenue"></i>درآمد</span><span><i class="legend-mark sales"></i>فروش موفق</span><span><i class="legend-mark renewal"></i>خرید مجدد</span></div></div></div>
           <div class="chart-host" id="salesChartHost" aria-live="polite"><div class="chart-empty">در حال دریافت آمار…</div></div>
         </section>
         <section class="analytics-card" aria-labelledby="usersChartTitle">
@@ -66,6 +66,9 @@ const DASHBOARD_SCRIPT = `<script>
 (function(){
   var selectedRange = "today";
   var latestOverview = null;
+  var latestRenewalTrend = [];
+  var renewalTrendState = "idle";
+  var renewalTrendRequest = null;
   var baseRenderOverview = renderOverview;
 
   function faNumber(value){ return Number(value || 0).toLocaleString("fa-IR"); }
@@ -87,8 +90,9 @@ const DASHBOARD_SCRIPT = `<script>
   function totals(points){
     return points.reduce(function(acc,p){
       acc.newUsers += Number(p.newUsers || 0); acc.paidPayments += Number(p.paidPayments || 0);
-      acc.revenueToman += Number(p.revenueToman || 0); acc.otpSent += Number(p.otpSent || 0); return acc;
-    },{newUsers:0,paidPayments:0,revenueToman:0,otpSent:0});
+      acc.revenueToman += Number(p.revenueToman || 0); acc.otpSent += Number(p.otpSent || 0);
+      acc.renewals += Number(p.renewals || 0); return acc;
+    },{newUsers:0,paidPayments:0,revenueToman:0,otpSent:0,renewals:0});
   }
   function group(title, items, tone){
     return '<section class="metric-group ' + (tone || "") + '"><div class="metric-group-head"><h3>' + safeText(title) + '</h3></div><div class="metric-grid">' + items.map(function(item){ return '<article class="metric ' + (item[2] || "") + '"><div class="k">' + item[0] + '</div><div class="v">' + item[1] + '</div></article>'; }).join("") + '</div></section>';
@@ -107,6 +111,36 @@ const DASHBOARD_SCRIPT = `<script>
     }
     return out;
   }
+  function mergeRenewals(points){
+    var renewalsByDate = {};
+    latestRenewalTrend.forEach(function(point){ renewalsByDate[point.date] = Number(point.renewals || 0); });
+    return points.map(function(point){ return Object.assign({}, point, { renewals: renewalsByDate[point.date] || 0 }); });
+  }
+  function renewalShare(period){
+    if (!period.paidPayments) return 0;
+    return Math.max(0,Math.min(100,(Number(period.renewals || 0) / Number(period.paidPayments || 1)) * 100));
+  }
+  function faPercent(value){
+    return Number(value || 0).toLocaleString("fa-IR",{maximumFractionDigits:1}) + "٪";
+  }
+  function loadRenewalTrend(force){
+    if (renewalTrendRequest) return renewalTrendRequest;
+    if (!force && renewalTrendState === "ready") return Promise.resolve(latestRenewalTrend);
+    renewalTrendState = "loading";
+    renewalTrendRequest = api("/sales-trend?days=90").then(function(result){
+      latestRenewalTrend = result && Array.isArray(result.points) ? result.points : [];
+      renewalTrendState = "ready";
+      return latestRenewalTrend;
+    }).catch(function(){
+      latestRenewalTrend = [];
+      renewalTrendState = "error";
+      return latestRenewalTrend;
+    }).then(function(result){
+      if (latestOverview) renderDashboard(latestOverview);
+      return result;
+    }).finally(function(){ renewalTrendRequest = null; });
+    return renewalTrendRequest;
+  }
   function renderSalesChart(points){
     var host = document.getElementById("salesChartHost"); if (!host) return;
     if (!points.length){ host.innerHTML = '<div class="chart-empty">داده‌ای برای این بازه نیست.</div>'; return; }
@@ -118,11 +152,17 @@ const DASHBOARD_SCRIPT = `<script>
     function ySales(v){ return top+plotH-(Number(v||0)/maxSales)*plotH; }
     var grid="";
     for(var i=0;i<=4;i++){ var gy=top+plotH*i/4; grid+='<line class="grid" x1="'+left+'" y1="'+gy.toFixed(1)+'" x2="'+(width-right)+'" y2="'+gy.toFixed(1)+'"></line>'; grid+='<text x="'+(left-8)+'" y="'+(gy+3).toFixed(1)+'" text-anchor="end">'+safeText(compact(maxRevenue*(4-i)/4))+'</text>'; grid+='<text x="'+(width-right+8)+'" y="'+(gy+3).toFixed(1)+'" text-anchor="start">'+safeText(faNumber(Math.round(maxSales*(4-i)/4)))+'</text>'; }
-    var step=points.length>1?plotW/(points.length-1):plotW,barWidth=Math.max(6,Math.min(22,step*.42)),bars="",dots="";
-    points.forEach(function(p,index){ var px=x(index),sy=ySales(p.paidPayments),title=safeText(dateLabel(p.date)+" — فروش: "+faNumber(p.paidPayments)+"، درآمد: "+faNumber(p.revenueToman)+" تومان"); bars+='<rect class="sales-bar" x="'+(px-barWidth/2).toFixed(1)+'" y="'+sy.toFixed(1)+'" width="'+barWidth.toFixed(1)+'" height="'+Math.max(0,top+plotH-sy).toFixed(1)+'" rx="4"><title>'+title+'</title></rect>'; dots+='<circle class="revenue-point" cx="'+px.toFixed(1)+'" cy="'+yRevenue(p.revenueToman).toFixed(1)+'" r="3.4"><title>'+title+'</title></circle>'; });
+    var step=points.length>1?plotW/(points.length-1):plotW,barWidth=Math.max(6,Math.min(22,step*.42)),renewalBarWidth=Math.max(3,barWidth*.46),bars="",dots="";
+    points.forEach(function(p,index){
+      var px=x(index),sy=ySales(p.paidPayments),ry=ySales(p.renewals);
+      var title=safeText(dateLabel(p.date)+" — فروش: "+faNumber(p.paidPayments)+"، خرید مجدد: "+faNumber(p.renewals)+"، درآمد: "+faNumber(p.revenueToman)+" تومان");
+      bars+='<rect class="sales-bar" x="'+(px-barWidth/2).toFixed(1)+'" y="'+sy.toFixed(1)+'" width="'+barWidth.toFixed(1)+'" height="'+Math.max(0,top+plotH-sy).toFixed(1)+'" rx="4"><title>'+title+'</title></rect>';
+      if (Number(p.renewals||0)>0) bars+='<rect class="renewal-bar" x="'+(px-renewalBarWidth/2).toFixed(1)+'" y="'+ry.toFixed(1)+'" width="'+renewalBarWidth.toFixed(1)+'" height="'+Math.max(0,top+plotH-ry).toFixed(1)+'" rx="3"><title>'+title+'</title></rect>';
+      dots+='<circle class="revenue-point" cx="'+px.toFixed(1)+'" cy="'+yRevenue(p.revenueToman).toFixed(1)+'" r="3.4"><title>'+title+'</title></circle>';
+    });
     var line=points.map(function(p,index){ return (index?"L":"M")+x(index).toFixed(1)+" "+yRevenue(p.revenueToman).toFixed(1); }).join(" ");
     var area=points.length>1 ? 'M'+x(0).toFixed(1)+' '+(top+plotH)+' '+points.map(function(p,index){ return 'L'+x(index).toFixed(1)+' '+yRevenue(p.revenueToman).toFixed(1); }).join(' ')+' L'+x(points.length-1).toFixed(1)+' '+(top+plotH)+' Z' : "";
-    host.innerHTML='<svg class="analytics-chart" viewBox="0 0 '+width+' '+height+'" role="img" aria-label="نمودار درآمد و فروش" preserveAspectRatio="xMidYMid meet" dir="ltr"><defs><linearGradient id="routinoRevenueFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#dd6d19" stop-opacity=".18"/><stop offset="100%" stop-color="#dd6d19" stop-opacity="0"/></linearGradient></defs>'+grid+chartLabels(points,width,left,plotW,height)+bars+(area?'<path d="'+area+'" fill="url(#routinoRevenueFill)"></path>':'')+'<path class="revenue-line" d="'+line+'"></path>'+dots+'</svg>';
+    host.innerHTML='<svg class="analytics-chart" viewBox="0 0 '+width+' '+height+'" role="img" aria-label="نمودار درآمد، فروش و خرید مجدد" preserveAspectRatio="xMidYMid meet" dir="ltr"><defs><linearGradient id="routinoRevenueFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#dd6d19" stop-opacity=".18"/><stop offset="100%" stop-color="#dd6d19" stop-opacity="0"/></linearGradient></defs>'+grid+chartLabels(points,width,left,plotW,height)+bars+(area?'<path d="'+area+'" fill="url(#routinoRevenueFill)"></path>':'')+'<path class="revenue-line" d="'+line+'"></path>'+dots+'</svg>';
   }
   function renderUsersChart(points){
     var host=document.getElementById("usersChartHost"); if(!host)return;
@@ -138,18 +178,22 @@ const DASHBOARD_SCRIPT = `<script>
   }
   function renderDashboard(o){
     if (!o || !Array.isArray(o.daily) || !o.daily.length){ baseRenderOverview(o); return; }
-    latestOverview=o; var meta=rangeMeta(),points=selectedPoints(o.daily),period=totals(points);
+    latestOverview=o;
+    var meta=rangeMeta(),points=mergeRenewals(selectedPoints(o.daily)),period=totals(points);
+    var renewalMetric = renewalTrendState === "ready" ? faPercent(renewalShare(period))+" · "+faNumber(period.renewals)+" خرید" : renewalTrendState === "error" ? "—" : "…";
     var title=document.getElementById("analyticsRangeTitle"); if(title)title.textContent=meta.label+" · "+meta.subtitle;
     var salesSubtitle=document.getElementById("salesChartSubtitle"); if(salesSubtitle)salesSubtitle.textContent=meta.label+" · "+meta.subtitle;
     var usersSubtitle=document.getElementById("usersChartSubtitle"); if(usersSubtitle)usersSubtitle.textContent=meta.label+" · "+meta.subtitle;
     document.getElementById("ovCards").innerHTML=
-      group(meta.label,[["کاربر جدید",faNumber(period.newUsers)],["فروش موفق",faNumber(period.paidPayments)],["درآمد (تومان)",faNumber(period.revenueToman)],["پیامک ارسال‌شده",faNumber(period.otpSent)]],"period")+
+      group(meta.label,[["کاربر جدید",faNumber(period.newUsers)],["فروش موفق",faNumber(period.paidPayments)],["درآمد (تومان)",faNumber(period.revenueToman)],["پیامک ارسال‌شده",faNumber(period.otpSent)],["سهم خرید مجدد از فروش",renewalMetric]],"period")+
       group("کسب‌وکار",[["کل کاربران",faNumber(o.users.total)],["اشتراک فعال",faNumber(o.activeSubscriptions)],["تریال فعال",faNumber(o.activeTrials)],["منقضی‌شده",faNumber(o.expiredUsers)],["دفعات شروع تریال",faNumber(o.trialStarts)],["کل پرداخت موفق",faNumber(o.payments.paidTotal)],["کل درآمد (تومان)",faNumber(o.payments.revenueToman)]])+
       group("نیاز به توجه",[["در انتظار درگاه",faNumber(o.payments.pending),o.payments.pending>0?"warn":""],["خطای تأیید پرداخت",faNumber(o.alerts.verifyFailed),o.alerts.verifyFailed>0?"danger":""]],"attention");
     renderSalesChart(points); renderUsersChart(points); setButtons();
+    if (renewalTrendState === "idle") void loadRenewalTrend(false);
   }
   renderOverview=function(o){renderDashboard(o);};
   document.querySelectorAll("[data-analytics-range]").forEach(function(button){button.addEventListener("click",function(){selectedRange=button.getAttribute("data-analytics-range")||"today";setButtons();if(latestOverview)renderDashboard(latestOverview);});});
+  ["refreshOverview","overviewRetry"].forEach(function(id){var button=document.getElementById(id);if(button)button.addEventListener("click",function(){renewalTrendState="idle";latestRenewalTrend=[];void loadRenewalTrend(true);});});
   setButtons();
 })();
 </script>`;
