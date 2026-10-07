@@ -45,6 +45,57 @@ export const ADMIN_PAGE = `<!doctype html>
   @media (min-width:680px){.topbar{padding-inline:max(24px,env(safe-area-inset-right))}.status{display:block}.overview-groups{gap:16px}.metric-grid{grid-template-columns:repeat(4,minmax(0,1fr))}.metric{min-height:112px;padding:16px}.metric-group.attention .metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.panel-head h2{font-size:23px}.section-surface{padding:16px}.toolbar{gap:8px}}
   @media (min-width:1024px){main{padding-top:28px}.overview-groups{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}.metric-group:first-child{grid-column:1/-1}.metric{min-height:118px}.metric .v{font-size:28px}.panel-head{margin-bottom:20px}nav{margin:0 0 20px;padding:0}.section-surface{padding:18px}}
   @media (max-width:679px){.toolbar .btn{min-width:42px;padding-inline:10px}.toolbar .btn .wide-label{display:none}.toolbar .btn .short-label{display:inline}.login-card{padding:24px 20px}.panel-head{align-items:flex-start;flex-direction:column}.panel-head .btn{width:100%}.detail-grid{grid-template-columns:1fr 1fr}.detail-head{display:block}.plans-note{align-items:flex-start;flex-direction:column}.plans-note .btn{width:100%}.responsive-table{overflow:visible;border:0;background:transparent}.responsive-table table,.responsive-table tbody{display:block;min-width:0}.responsive-table thead{display:none}.responsive-table .expandable-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-bottom:10px;padding:14px;border:1px solid var(--line);border-radius:16px;background:var(--surface);box-shadow:0 6px 18px rgba(62,47,33,.045)}.responsive-table .expandable-row td{display:block;min-width:0;padding:0;border:0;white-space:normal}.responsive-table .expandable-row td::before{display:block;margin-bottom:2px;color:var(--mut);content:attr(data-label);font-size:9px;font-weight:700}.responsive-table .expandable-row td:first-child{grid-column:1/-1}.responsive-table .detail-row{display:block;margin:-11px 0 12px}.responsive-table .detail-row[hidden]{display:none}.responsive-table .detail-row>td{display:block;border:1px solid var(--line);border-top:0;border-radius:0 0 16px 16px}.responsive-table .detail-shell{padding:15px}.detail-actions .btn{flex:1 1 130px}}
+
+  /* CRM workspaces for Users, Payments, Plans and Discounts */
+  .admin-workspace{display:grid;gap:14px}
+  .workspace-head{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:16px 17px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(135deg,#fff,#fcfaf7);box-shadow:0 6px 20px rgba(62,47,33,.035)}
+  .workspace-head h3{margin:0;font-size:17px;font-weight:900;letter-spacing:-.025em}.workspace-head p{max-width:62ch;margin:3px 0 0;color:var(--mut);font-size:10.5px}
+  .workspace-badge{flex:0 0 auto;display:inline-flex;align-items:center;min-height:27px;padding:3px 9px;border:1px solid #e9e4dd;border-radius:999px;background:#f8f6f2;color:#71685f;font-size:9px;font-weight:900}
+  .workspace-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px}.workspace-grid-users>.control-card:first-child{grid-column:span 7}.workspace-grid-users>.control-card:last-child{grid-column:span 5}
+  .control-card,.results-card{min-width:0;padding:15px;border:1px solid var(--line);border-radius:18px;background:var(--surface);box-shadow:0 6px 20px rgba(62,47,33,.035)}
+  .control-card-head,.results-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}.control-card-head h4,.results-card-head h4{margin:0;font-size:12px;font-weight:900}.control-card-head p,.results-card-head p{margin:2px 0 0;color:var(--mut);font-size:9.5px}
+  .smart-search{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px}.smart-search input{width:100%}.smart-search .btn{min-width:92px}
+  .control-note{margin-top:8px;color:#948b82;font-size:9px;line-height:1.8}
+  .account-form{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:8px;align-items:end}.account-form .form-field{display:grid;gap:5px}.account-form .form-field span{color:var(--mut);font-size:9px;font-weight:800}.account-form input{width:100%;min-width:0}.account-form .btn{min-width:74px}
+  .filter-bar{display:flex;align-items:end;justify-content:space-between;gap:12px;flex-wrap:wrap}.filter-field{display:grid;gap:5px;min-width:190px}.filter-field span{color:var(--mut);font-size:9px;font-weight:800}.filter-field select{min-width:190px}
+  .list-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin:0 0 10px}.list-kpi{padding:10px 11px;border:1px solid #eeeae4;border-radius:13px;background:#fcfbf9}.list-kpi span{display:block;color:var(--mut);font-size:8.5px}.list-kpi strong{display:block;margin-top:2px;overflow-wrap:anywhere;font-size:14px;font-variant-numeric:tabular-nums}
+  .results-card .result{margin-top:0}.results-meta{color:var(--mut);font-size:9px;font-weight:700}
+  .table-wrap{border-radius:14px}th{background:#faf9f6;font-weight:800}tbody tr{transition:background .14s ease}tbody tr:hover{background:#fdfaf7}
+  .pill.warn{background:#fff3d9;color:#8b5a00}.pill.info{background:#eef2ff;color:#4f46e5}
+  .detail-row>td{background:#fcfaf7}.detail-shell{padding:16px}.detail-head{padding-bottom:12px;border-bottom:1px solid #eeeae4}.detail-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;border:0;background:transparent}.detail-stat{border:1px solid #eeeae4;border-radius:12px;background:#fff}.detail-actions{display:grid;grid-template-columns:auto 90px 90px auto;gap:8px;align-items:center}.detail-actions strong{font-size:10px}.detail-section{padding-top:2px}.detail-section h4{font-size:11px}
+  .plans-note{padding:12px 13px;border:1px solid #eeeae4;border-radius:14px;background:#fcfbf9}.plans-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.plan-card{display:flex;flex-direction:column;padding:15px;border-radius:18px;box-shadow:0 7px 22px rgba(62,47,33,.045)}.plan-card-head{padding-bottom:11px;border-bottom:1px solid #eeeae4}.plan-card h3{font-size:15px}.plan-card p{font-size:9px}.plan-section-label{margin-top:13px;color:#746b62;font-size:9px;font-weight:900}.plan-price-fields{margin-top:7px}.plan-price-field{padding:8px;border:1px solid #eeeae4;border-radius:12px;background:#fcfbf9}.plan-price-field span{font-size:8.5px}.plan-price-field input,.plan-price-field select{min-height:38px;border-radius:9px;background:#fff}.plan-save,.offer-save{width:100%;margin-top:9px}.plan-result,.offer-result{min-height:18px;margin-top:6px;color:var(--mut);font-size:9px}.offer-master{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px;padding:12px 13px;border:1px solid #e8e2da;border-radius:14px;background:linear-gradient(135deg,#fffaf4,#fff)}.offer-master-copy strong{display:block;font-size:11px}.offer-master-copy span{display:block;margin-top:2px;color:var(--mut);font-size:8.5px}.switch{position:relative;display:inline-flex;width:44px;height:24px;align-items:center}.switch input{position:absolute;opacity:0;pointer-events:none}.switch-track{position:absolute;inset:0;border-radius:999px;background:#ded9d2;transition:.18s}.switch-track:after{position:absolute;top:3px;right:3px;width:18px;height:18px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.2);content:"";transition:.18s}.switch input:checked+.switch-track{background:#177c45}.switch input:checked+.switch-track:after{transform:translateX(-20px)}
+  .discount-create-grid{display:grid;grid-template-columns:1.1fr .65fr .85fr auto;gap:8px;align-items:end}.discount-create-grid .form-field{display:grid;gap:5px}.discount-create-grid .form-field span{color:var(--mut);font-size:9px;font-weight:800}.discount-create-grid input{width:100%}.discount-rule-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px!important;margin-top:10px}.discount-rule-card{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:9px;border:1px solid #eeeae4;border-radius:12px;background:#fcfbf9}.discount-rule-card strong{grid-column:1/-1;font-size:9px}.discount-rule-card select,.discount-rule-card input{width:100%;min-width:0;min-height:38px;border-radius:9px;background:#fff;font-size:10px}
+  .discount-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.discount-card{padding:13px;border:1px solid var(--line);border-radius:16px;background:#fff;box-shadow:0 5px 16px rgba(62,47,33,.035)}.discount-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}.discount-code{font:900 14px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.04em}.discount-rules{min-height:40px;margin-top:10px;padding:9px 10px;border-radius:11px;background:#faf9f6;color:#625a52;font-size:9.5px;line-height:1.8}.discount-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:9px}.discount-stat{padding:8px;border:1px solid #eeeae4;border-radius:10px}.discount-stat span{display:block;color:var(--mut);font-size:8px}.discount-stat strong{display:block;margin-top:1px;font-size:10px}.discount-actions{display:flex;gap:6px;margin-top:10px}.discount-actions .btn{flex:1}.discount-actions .btn.delete-action{color:var(--bad);border-color:#f1cfcb;background:#fff8f7}
+  @media(max-width:1023px){.workspace-grid-users>.control-card:first-child,.workspace-grid-users>.control-card:last-child{grid-column:1/-1}.plans-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.discount-rule-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.discount-list{grid-template-columns:1fr}.detail-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  @media(max-width:679px){.workspace-head{padding:13px 14px;border-radius:16px}.workspace-head h3{font-size:15px}.workspace-badge{display:none}.control-card,.results-card{padding:12px;border-radius:16px}.smart-search{grid-template-columns:1fr}.smart-search .btn{width:100%}.account-form{grid-template-columns:1fr}.account-form .btn{width:100%}.filter-bar{display:grid;grid-template-columns:1fr}.filter-field,.filter-field select{width:100%;min-width:0}.filter-bar .btn{width:100%}.list-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.detail-grid{grid-template-columns:1fr 1fr}.detail-actions{grid-template-columns:1fr 1fr}.detail-actions strong{grid-column:1/-1}.detail-actions .btn{grid-column:1/-1}.plans-grid{grid-template-columns:1fr}.discount-create-grid{grid-template-columns:1fr}.discount-rule-grid{grid-template-columns:1fr!important}.discount-list{grid-template-columns:1fr}.responsive-table .expandable-row{border-radius:14px}.responsive-table .expandable-row td:first-child{padding-bottom:8px;border-bottom:1px solid #eeeae4}.responsive-table .detail-row{margin-top:-11px}}
+
+
+  /* Compact mobile density: keep admin labels short, single-line and thumb-friendly. */
+  @media(max-width:679px){
+    body{font-size:12px;line-height:1.5}
+    .topbar{min-height:56px;padding-block:6px}.brand h1{font-size:13px;white-space:nowrap}.brand p{display:none}.toolbar{gap:4px}.toolbar .btn{min-height:34px;min-width:36px;padding:5px 8px;border-radius:9px;font-size:10px}
+    main{padding:10px 10px calc(24px + env(safe-area-inset-bottom))}
+    .panel-head{margin:0 0 9px;gap:8px}.panel-head h2{max-width:75vw;font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.panel-head p{display:none}.panel-head .btn{width:auto;min-height:34px;padding:5px 9px;font-size:9.5px}
+    nav{margin:0 0 10px;padding:3px;gap:3px;border-radius:11px}nav button{min-height:32px;padding:5px 9px;border-radius:8px;font-size:10px;white-space:nowrap}
+    .dashboard-shell,.admin-workspace{gap:9px}
+    .crm-hero,.workspace-head{min-height:auto;padding:10px 11px;border-radius:14px}.crm-eyebrow{display:none}.crm-hero h3,.workspace-head h3{max-width:100%;font-size:13px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.crm-hero p,.workspace-head p{display:none}
+    .analytics-range{gap:2px;padding:2px;border-radius:9px}.analytics-range button{min-width:0;min-height:29px;padding:4px 7px;border-radius:7px;font-size:9px;white-space:nowrap}
+    .crm-kpis{gap:6px}.crm-kpi{min-height:82px;padding:10px 9px;border-radius:13px}.crm-kpi-head{gap:4px}.crm-kpi-label{font-size:8.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.crm-kpi-badge{display:none}.crm-kpi-value{margin-top:5px;font-size:18px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.crm-kpi-sub{min-height:0;margin-top:3px;font-size:7.8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .period-panel{padding:10px;border-radius:14px}.section-heading{margin-bottom:8px}.section-heading h3{font-size:10.5px;white-space:nowrap}.section-heading p{display:none}.section-chip{padding:3px 6px;font-size:8px;white-space:nowrap}.period-grid{gap:5px}.period-stat{min-height:62px;padding:8px;border-radius:10px}.period-stat .k{font-size:7.8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.period-stat .v{margin-top:2px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.period-stat .s{font-size:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .crm-grid{gap:9px}.analytics-card,.crm-card{border-radius:14px}.analytics-card-head{padding:10px 10px 2px}.analytics-card-title h3,.crm-card-head h3{font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.analytics-card-title p,.crm-card-head p{display:none}.analytics-legend{gap:7px;margin-top:5px;font-size:7.8px;white-space:nowrap;overflow-x:auto;scrollbar-width:none}.analytics-legend::-webkit-scrollbar{display:none}.legend-mark{width:7px;height:7px}
+    .chart-host{min-height:202px}.analytics-chart{min-height:190px}.conversion-card .chart-host{min-height:194px}.conversion-card .analytics-chart{min-height:182px}.chart-hint{display:none}.analytics-chart text{font-size:8px}
+    .crm-card-head{padding:10px 10px 0}.crm-card-body{padding:9px 10px 10px}.renewal-summary{grid-template-columns:72px 1fr;gap:8px}.rate-ring{width:70px;height:70px}.rate-ring-inner{width:54px;height:54px}.rate-ring-inner strong{font-size:13px}.rate-ring-inner span{font-size:6.8px}.insight-list{gap:5px}.insight-row{padding-bottom:5px}.insight-row span{font-size:7.8px;white-space:nowrap}.insight-row strong{font-size:9.5px;white-space:nowrap}.definition-note{margin-top:7px;padding:7px;font-size:7px;line-height:1.55}
+    .pulse-grid{gap:5px}.pulse-item{padding:7px;border-radius:9px}.pulse-item span{font-size:7.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pulse-item strong{font-size:12px}.status-list{gap:6px}.status-row{padding:7px 8px;border-radius:9px}.status-copy strong{font-size:8.5px;white-space:nowrap}.status-copy span{display:none}.status-pill{padding:2px 6px;font-size:7.8px;white-space:nowrap}
+    .control-card,.results-card{padding:10px;border-radius:13px}.control-card-head,.results-card-head{margin-bottom:8px}.control-card-head h4,.results-card-head h4{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.control-card-head p,.results-card-head p{display:none}.results-meta{font-size:8px;white-space:nowrap}
+    input,select{min-height:36px;padding:6px 8px;border-radius:9px;font-size:10px}.btn{min-height:34px;padding:5px 9px;border-radius:9px;font-size:9.5px}.btn.mini{min-height:30px;padding:4px 7px;font-size:8.5px}
+    .smart-search,.account-form,.discount-create-grid{gap:6px}.control-note{display:none}.account-form .form-field span,.discount-create-grid .form-field span,.filter-field span{font-size:7.8px;white-space:nowrap}.filter-field{gap:3px}.filter-field select{min-height:36px}
+    .list-kpis{gap:5px;margin-bottom:7px}.list-kpi{min-height:55px;padding:7px 8px;border-radius:9px}.list-kpi span{font-size:7.4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.list-kpi strong{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .responsive-table .expandable-row{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-bottom:7px;padding:10px;border-radius:11px}.responsive-table .expandable-row td{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.responsive-table .expandable-row td::before{margin-bottom:1px;font-size:6.8px;white-space:nowrap}.responsive-table .expandable-row td:first-child{padding-bottom:5px}.identity{gap:6px}.identity-mark{width:28px;height:28px;flex-basis:28px;border-radius:8px;font-size:10px}.identity-copy{min-width:0;line-height:1.35}.identity-copy b,.identity-copy small{display:block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.identity-copy b{font-size:9px}.identity-copy small{font-size:7px}.pill{min-height:20px;padding:1px 6px;font-size:7.8px;white-space:nowrap}
+    .detail-shell{padding:10px}.detail-head{gap:7px;padding-bottom:8px}.detail-head h3{max-width:68vw;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.detail-head p{font-size:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.detail-grid{gap:5px;margin-top:8px}.detail-stat{padding:7px;border-radius:9px}.detail-stat span{font-size:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.detail-stat strong{margin-top:1px;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.detail-actions{margin-top:8px;padding:8px;border-radius:10px;gap:5px}.detail-actions strong{font-size:8px}.detail-section{margin-top:10px}.detail-section h4{margin-bottom:5px;font-size:9px}.detail-section th,.detail-section td{padding:7px;font-size:8px}
+    .plans-note{margin-bottom:8px;padding:8px;border-radius:10px}.plans-note p{font-size:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.plans-note .btn{width:auto}.plans-grid{gap:8px}.plan-card{padding:10px;border-radius:13px}.plan-card-head{padding-bottom:7px}.plan-card h3{font-size:11px;white-space:nowrap}.plan-card p{font-size:7.5px;white-space:nowrap}.plan-section-label{margin-top:8px;font-size:7.8px}.plan-price-fields{gap:5px;margin-top:5px}.plan-price-field{gap:3px;padding:6px;border-radius:9px}.plan-price-field span{font-size:7px;white-space:nowrap}.plan-price-field input,.plan-price-field select{min-height:34px;font-size:9px}.plan-result,.offer-result{min-height:14px;margin-top:4px;font-size:7.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.offer-master{margin-bottom:8px;padding:8px 9px;border-radius:10px}.offer-master-copy strong{font-size:9px;white-space:nowrap}.offer-master-copy span{display:none}.switch{width:38px;height:21px}.switch-track:after{top:3px;width:15px;height:15px}.switch input:checked+.switch-track:after{transform:translateX(-17px)}
+    .discount-rule-grid{gap:5px!important;margin-top:7px}.discount-rule-card{gap:4px;padding:6px;border-radius:9px}.discount-rule-card strong{font-size:7.5px;white-space:nowrap}.discount-rule-card select,.discount-rule-card input{min-height:33px;font-size:8.5px}.discount-list{gap:7px}.discount-card{padding:9px;border-radius:12px}.discount-code{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.discount-card-head .muted{font-size:7px;white-space:nowrap}.discount-rules{min-height:0;margin-top:6px;padding:7px;font-size:7.8px;line-height:1.55}.discount-stats{gap:4px;margin-top:6px}.discount-stat{padding:6px;border-radius:8px}.discount-stat span{font-size:6.8px;white-space:nowrap}.discount-stat strong{font-size:8.5px;white-space:nowrap}.discount-actions{gap:4px;margin-top:7px}
+  }
+
 </style>
 </head>
 <body>
@@ -85,27 +136,74 @@ export const ADMIN_PAGE = `<!doctype html>
   <section id="tab-overview" role="tabpanel" aria-labelledby="tab-button-overview"><div class="overview-groups" id="ovCards" aria-live="polite"></div></section>
 
   <section id="tab-users" role="tabpanel" aria-labelledby="tab-button-users" style="display:none">
-    <div class="section-surface">
-      <div class="row"><input id="uq" placeholder="جستجو با شماره یا نام کاربری…" aria-label="جستجو با شماره یا نام کاربری" dir="auto"><button class="btn" type="button" id="uSearch">جستجو</button></div>
-      <form class="helper row" id="resetPasswordForm"><strong>تنظیم یا ریست رمز عبور</strong><input id="spPhone" name="phone" placeholder="شماره (مثل 09…)" aria-label="شماره برای تنظیم رمز" autocomplete="tel" inputmode="tel" dir="ltr"><input id="spPass" name="password" type="password" placeholder="رمز عبور جدید" aria-label="رمز عبور جدید" autocomplete="new-password" dir="ltr"><button class="btn" type="submit" id="spGo">اعمال</button><span class="muted">برای شمارهٔ تازه، حساب آزمایشی ساخته می‌شود.</span></form>
-      <div class="err" id="spErr" role="alert"></div>
-      <div class="result" id="uResults" aria-live="polite"></div>
+    <div class="admin-workspace">
+      <div class="workspace-head"><div><h3>مدیریت کاربران</h3><p>جستجو، بررسی وضعیت اشتراک و مدیریت دسترسی کاربران از یک محل.</p></div><span class="workspace-badge">CRM کاربران</span></div>
+      <div class="workspace-grid workspace-grid-users">
+        <section class="control-card">
+          <div class="control-card-head"><div><h4>جستجوی کاربر</h4><p>با شماره موبایل یا نام کاربری پیدا کن.</p></div></div>
+          <div class="smart-search"><input id="uq" placeholder="شماره یا نام کاربری…" aria-label="جستجو با شماره یا نام کاربری" dir="auto"><button class="btn" type="button" id="uSearch">جستجو</button></div>
+          <div class="control-note">برای دیدن پرداخت‌ها، تاریخچه دسترسی و اصلاح اشتراک، روی هر کاربر بزن.</div>
+        </section>
+        <section class="control-card">
+          <div class="control-card-head"><div><h4>دسترسی حساب</h4><p>تنظیم یا ریست رمز؛ برای شماره تازه حساب آزمایشی ساخته می‌شود.</p></div></div>
+          <form class="account-form" id="resetPasswordForm">
+            <label class="form-field"><span>شماره موبایل</span><input id="spPhone" name="phone" placeholder="09…" aria-label="شماره برای تنظیم رمز" autocomplete="tel" inputmode="tel" dir="ltr"></label>
+            <label class="form-field"><span>رمز جدید</span><input id="spPass" name="password" type="password" placeholder="رمز عبور" aria-label="رمز عبور جدید" autocomplete="new-password" dir="ltr"></label>
+            <button class="btn" type="submit" id="spGo">اعمال</button>
+          </form>
+          <div class="err" id="spErr" role="alert"></div>
+        </section>
+      </div>
+      <section class="results-card">
+        <div class="results-card-head"><div><h4>فهرست کاربران</h4><p>نتایج فعلی و وضعیت دسترسی کاربران.</p></div><span class="results-meta" id="userResultMeta">—</span></div>
+        <div class="result" id="uResults" aria-live="polite"></div>
+      </section>
     </div>
   </section>
 
   <section id="tab-payments" role="tabpanel" aria-labelledby="tab-button-payments" style="display:none">
-    <div class="section-surface"><div class="row"><label class="field-label" for="pStatus" style="margin:0">وضعیت پرداخت</label><select id="pStatus"><option value="">همه</option><option value="paid">موفق</option><option value="redirected">در درگاه</option><option value="pending">در انتظار</option><option value="canceled">لغوشده</option><option value="failed">ناموفق</option><option value="verify_failed">خطای تأیید</option></select><button class="btn" type="button" id="pReload">به‌روزرسانی</button></div><div class="result" id="pResults" aria-live="polite"></div></div>
+    <div class="admin-workspace">
+      <div class="workspace-head"><div><h3>مدیریت پرداخت‌ها</h3><p>مرور تراکنش‌ها، فیلتر وضعیت و دسترسی سریع به سابقه هر خریدار.</p></div><span class="workspace-badge">Sales Ops</span></div>
+      <section class="control-card">
+        <div class="filter-bar">
+          <label class="filter-field"><span>فیلتر وضعیت</span><select id="pStatus"><option value="">همه پرداخت‌ها</option><option value="paid">موفق</option><option value="redirected">در درگاه</option><option value="pending">در انتظار</option><option value="canceled">لغوشده</option><option value="failed">ناموفق</option><option value="verify_failed">خطای تأیید</option></select></label>
+          <button class="btn secondary" type="button" id="pReload">تازه‌سازی پرداخت‌ها</button>
+        </div>
+      </section>
+      <section class="results-card">
+        <div class="results-card-head"><div><h4>تراکنش‌ها</h4><p>خلاصه مربوط به همین فهرست نمایش‌داده‌شده است.</p></div><span class="results-meta" id="paymentResultMeta">—</span></div>
+        <div class="result" id="pResults" aria-live="polite"></div>
+      </section>
+    </div>
   </section>
 
   <section id="tab-plans" role="tabpanel" aria-labelledby="tab-button-plans" style="display:none">
-    <div class="section-surface">
-      <div class="plans-note"><p class="muted">قیمت‌ها به تومان و مستقیماً از سرور خوانده می‌شوند. نمایش قیمت جدید در صفحه خرید ممکن است به‌دلیل کش تا ۵ دقیقه زمان ببرد.</p><button class="btn secondary" type="button" id="plansReload">تازه‌سازی پلن‌ها</button></div>
+    <div class="admin-workspace">
+      <div class="workspace-head"><div><h3>قیمت‌گذاری و پلن‌ها</h3><p>قیمت فروش، قیمت مرجع و Offer خرید اول را بدون تغییر سایر بخش‌های اپ مدیریت کن.</p></div><span class="workspace-badge">Pricing</span></div>
+      <div class="plans-note"><p class="muted">قیمت‌ها مستقیماً از سرور خوانده می‌شوند. نمایش قیمت جدید در صفحه خرید ممکن است به‌دلیل کش تا ۵ دقیقه زمان ببرد.</p><button class="btn secondary" type="button" id="plansReload">تازه‌سازی پلن‌ها</button></div>
       <div id="plansResults" aria-live="polite"></div>
     </div>
   </section>
 
   <section id="tab-discounts" role="tabpanel" aria-labelledby="tab-button-discounts" style="display:none">
-    <div class="section-surface"><div class="row"><input id="dCode" placeholder="کد (مثل EID1405)" aria-label="کد تخفیف" dir="ltr"><input id="dMax" type="number" min="1" placeholder="سقف استفاده" aria-label="سقف استفاده" style="width:118px"><input id="dExp" type="date" title="تاریخ انقضا" aria-label="تاریخ انقضا"><button class="btn" type="button" id="dCreate">ساخت کد</button></div><p class="muted">برای هر پلن، نوع تخفیف و مقدارش را وارد کن؛ خالی یعنی این کد برای آن پلن نیست.</p><div id="dPlanRules" class="row"></div><div class="err" id="dErr" role="alert"></div><div class="result" id="dResults" aria-live="polite"></div></div>
+    <div class="admin-workspace">
+      <div class="workspace-head"><div><h3>کدهای تخفیف</h3><p>ساخت، محدودسازی و فعال/غیرفعال‌کردن کدها با قانون جداگانه برای هر پلن.</p></div><span class="workspace-badge">Promotions</span></div>
+      <section class="control-card">
+        <div class="control-card-head"><div><h4>ساخت کد جدید</h4><p>مقدار خالی برای هر پلن یعنی این کد روی آن پلن اعمال نمی‌شود.</p></div></div>
+        <div class="discount-create-grid">
+          <label class="form-field"><span>کد تخفیف</span><input id="dCode" placeholder="مثلاً EID1405" aria-label="کد تخفیف" dir="ltr"></label>
+          <label class="form-field"><span>سقف استفاده</span><input id="dMax" type="number" min="1" placeholder="نامحدود" aria-label="سقف استفاده"></label>
+          <label class="form-field"><span>تاریخ انقضا</span><input id="dExp" type="date" title="تاریخ انقضا" aria-label="تاریخ انقضا"></label>
+          <button class="btn" type="button" id="dCreate">ساخت کد</button>
+        </div>
+        <div id="dPlanRules" class="discount-rule-grid"></div>
+        <div class="err" id="dErr" role="alert"></div>
+      </section>
+      <section class="results-card">
+        <div class="results-card-head"><div><h4>کدهای موجود</h4><p>وضعیت استفاده و قوانین هر کد.</p></div><span class="results-meta" id="discountResultMeta">—</span></div>
+        <div class="result" id="dResults" aria-live="polite"></div>
+      </section>
+    </div>
   </section>
 </main>
 
@@ -343,15 +441,30 @@ function loadOverview() {
 async function loadUsers() {
   loading("uResults", 3);
   const q = $("#uq").value.trim();
+  $("#userResultMeta").textContent = "در حال دریافت…";
   try {
     const result = await api("/users" + (q ? "?q=" + encodeURIComponent(q) : ""));
-    if (!result.users.length) { $("#uResults").innerHTML = emptyState(q ? "کاربری با این شماره یا نام کاربری پیدا نشد." : "هنوز کاربری برای نمایش نیست."); return; }
+    const users = result.users || [];
+    $("#userResultMeta").textContent = q ? fa(users.length) + " نتیجه" : fa(users.length) + " کاربر در این فهرست";
+    if (!users.length) { $("#uResults").innerHTML = emptyState(q ? "کاربری با این شماره یا نام کاربری پیدا نشد." : "هنوز کاربری برای نمایش نیست."); return; }
+    const activeSubscriptions = users.filter((u) => u.subscriptionActive).length;
+    const activeRecently = users.filter((u) => u.lastActiveAt && Date.now() - new Date(u.lastActiveAt).getTime() <= 7 * 86400000).length;
+    const totalRecords = users.reduce((sum, u) => sum + Number(u.syncRecordCount || 0), 0);
     openDetailByTarget.uResults = null;
-    $("#uResults").innerHTML = '<div class="table-wrap responsive-table"><table><thead><tr><th>کاربر</th><th>روز فعال</th><th>آخرین حضور</th><th>حجم داده</th><th>رکورد</th><th>اشتراک</th><th>انقضا</th></tr></thead><tbody>' + result.users.map((u) => expandablePair([
-      identityCell(u.phone, u.username), fa(u.activeDays), dt(u.lastActiveAt), formatBytes(u.syncDataBytes), fa(u.syncRecordCount), u.subscriptionActive ? "<span class='pill ok'>" + esc(u.planId || "فعال") + "</span>" : "<span class='pill mut'>غیرفعال</span>", dt(u.expiresAt)
-    ], ["کاربر", "روز فعال", "آخرین حضور", "حجم داده", "رکورد", "اشتراک", "انقضا"], u.id, "user-" + u.id, 7)).join("") + "</tbody></table></div>";
+    const summary = '<div class="list-kpis">' +
+      '<div class="list-kpi"><span>نتایج</span><strong>' + fa(users.length) + '</strong></div>' +
+      '<div class="list-kpi"><span>اشتراک فعال</span><strong>' + fa(activeSubscriptions) + '</strong></div>' +
+      '<div class="list-kpi"><span>فعال در ۷ روز اخیر</span><strong>' + fa(activeRecently) + '</strong></div>' +
+      '<div class="list-kpi"><span>رکورد همگام‌شده</span><strong>' + fa(totalRecords) + '</strong></div>' +
+      '</div>';
+    $("#uResults").innerHTML = summary + '<div class="table-wrap responsive-table"><table><thead><tr><th>کاربر</th><th>اشتراک</th><th>آخرین حضور</th><th>روز فعال</th><th>رکورد</th><th>حجم داده</th><th>انقضا</th></tr></thead><tbody>' + users.map((u) => expandablePair([
+      identityCell(u.phone, u.username), u.subscriptionActive ? "<span class='pill ok'>" + esc(u.planId || "فعال") + "</span>" : "<span class='pill mut'>غیرفعال</span>", dt(u.lastActiveAt), fa(u.activeDays), fa(u.syncRecordCount), formatBytes(u.syncDataBytes), dt(u.expiresAt)
+    ], ["کاربر", "اشتراک", "آخرین حضور", "روز فعال", "رکورد", "حجم داده", "انقضا"], u.id, "user-" + u.id, 7)).join("") + "</tbody></table></div>";
     bindExpandableRows("uResults");
-  } catch (error) { errorState("uResults", error.message || "فهرست کاربران دریافت نشد", loadUsers); }
+  } catch (error) {
+    $("#userResultMeta").textContent = "خطا";
+    errorState("uResults", error.message || "فهرست کاربران دریافت نشد", loadUsers);
+  }
 }
 $("#uSearch").onclick = loadUsers;
 $("#uq").addEventListener("keydown", (event) => event.key === "Enter" && loadUsers());
@@ -455,18 +568,43 @@ function bindExpandableRows(targetId) {
 async function loadPayments() {
   loading("pResults", 3);
   const status = $("#pStatus").value;
+  $("#paymentResultMeta").textContent = "در حال دریافت…";
   try {
     const result = await api("/payments" + (status ? "?status=" + status : ""));
-    if (!result.payments.length) { $("#pResults").innerHTML = emptyState("پرداختی با این وضعیت وجود ندارد."); return; }
+    const payments = result.payments || [];
+    $("#paymentResultMeta").textContent = fa(payments.length) + " تراکنش";
+    if (!payments.length) { $("#pResults").innerHTML = emptyState("پرداختی با این وضعیت وجود ندارد."); return; }
+    const paid = payments.filter((p) => p.status === "paid").length;
+    const issues = payments.filter((p) => ["failed","verify_failed","canceled"].includes(p.status)).length;
+    const amount = payments.filter((p) => p.status === "paid").reduce((sum, p) => sum + Number(p.amountToman || 0), 0);
+    const discounted = payments.filter((p) => p.discountCode).length;
     openDetailByTarget.pResults = null;
-    $("#pResults").innerHTML = '<div class="table-wrap responsive-table"><table><thead><tr><th>کاربر</th><th>تاریخ</th><th>پلن</th><th>مبلغ</th><th>کد تخفیف</th><th>وضعیت</th><th>پلتفرم</th><th>پیگیری</th></tr></thead><tbody>' + result.payments.map((p) => expandablePair([
-      identityCell(p.phone, p.username), dt(p.createdAt), esc(p.planId), fa(p.amountToman) + " تومان", '<span dir="ltr">' + esc(p.discountCode || "—") + '</span>', statusPill(p.status), esc(p.platform || "—"), '<span dir="ltr">' + esc(p.refNumber || "—") + '</span>'
-    ], ["کاربر", "تاریخ", "پلن", "مبلغ", "کد تخفیف", "وضعیت", "پلتفرم", "پیگیری"], p.userId, "payment-" + p.id, 8)).join("") + "</tbody></table></div>";
+    const summary = '<div class="list-kpis">' +
+      '<div class="list-kpi"><span>تراکنش این فهرست</span><strong>' + fa(payments.length) + '</strong></div>' +
+      '<div class="list-kpi"><span>موفق</span><strong>' + fa(paid) + '</strong></div>' +
+      '<div class="list-kpi"><span>مبلغ موفق</span><strong>' + fa(amount) + ' ت</strong></div>' +
+      '<div class="list-kpi"><span>دارای کد تخفیف</span><strong>' + fa(discounted) + '</strong></div>' +
+      '</div>';
+    $("#pResults").innerHTML = summary + '<div class="table-wrap responsive-table"><table><thead><tr><th>کاربر</th><th>وضعیت</th><th>مبلغ</th><th>پلن</th><th>تاریخ</th><th>کد تخفیف</th><th>پلتفرم</th><th>پیگیری</th></tr></thead><tbody>' + payments.map((p) => expandablePair([
+      identityCell(p.phone, p.username), statusPill(p.status), fa(p.amountToman) + " تومان", esc(p.planId), dt(p.createdAt), '<span dir="ltr">' + esc(p.discountCode || "—") + '</span>', esc(p.platform || "—"), '<span dir="ltr">' + esc(p.refNumber || "—") + '</span>'
+    ], ["کاربر", "وضعیت", "مبلغ", "پلن", "تاریخ", "کد تخفیف", "پلتفرم", "پیگیری"], p.userId, "payment-" + p.id, 8)).join("") + "</tbody></table></div>";
     bindExpandableRows("pResults");
-  } catch (error) { errorState("pResults", error.message || "پرداخت‌ها دریافت نشدند", loadPayments); }
+  } catch (error) {
+    $("#paymentResultMeta").textContent = "خطا";
+    errorState("pResults", error.message || "پرداخت‌ها دریافت نشدند", loadPayments);
+  }
 }
-function statusPill(status) { if (status === "paid") return "<span class='pill ok'>موفق</span>"; if (status === "verify_failed") return "<span class='pill bad'>خطای تأیید</span>"; if (status === "failed") return "<span class='pill bad'>ناموفق</span>"; if (status === "canceled") return "<span class='pill mut'>لغو</span>"; return "<span class='pill mut'>" + esc(status) + "</span>"; }
+function statusPill(status) {
+  if (status === "paid") return "<span class='pill ok'>موفق</span>";
+  if (status === "verify_failed") return "<span class='pill bad'>خطای تأیید</span>";
+  if (status === "failed") return "<span class='pill bad'>ناموفق</span>";
+  if (status === "canceled") return "<span class='pill mut'>لغو</span>";
+  if (status === "pending") return "<span class='pill warn'>در انتظار</span>";
+  if (status === "redirected") return "<span class='pill info'>در درگاه</span>";
+  return "<span class='pill mut'>" + esc(status) + "</span>";
+}
 $("#pReload").onclick = loadPayments;
+$("#pStatus").onchange = loadPayments;
 
 let plansData = null;
 function renderPlans(plans) {
@@ -474,7 +612,17 @@ function renderPlans(plans) {
     ? "از " + fa(original) + " به " + fa(sale) + " تومان · " + fa(Math.round((original - sale) * 100 / original)) + "٪ تخفیف"
     : "قیمت فروش: " + fa(sale) + " تومان";
   const offerField = (stage, kind, value) => '<label class="plan-price-field"><span>روزهای ' + (stage === 1 ? '۱ تا ۳' : '۴ تا ۷') + '</span><select class="offer-kind-' + stage + '"><option value="percent"' + (kind === 'percent' ? ' selected' : '') + '>درصدی</option><option value="fixed"' + (kind === 'fixed' ? ' selected' : '') + '>مبلغ ثابت تومانی</option></select><input class="offer-value-' + stage + '" type="number" min="0" step="1" value="' + esc(value) + '"></label>';
-  $("#plansResults").innerHTML = '<div><label><input id="offerEnabled" type="checkbox"' + (plans[0]?.offerEnabled ? ' checked' : '') + '> فعال بودن پیشنهاد خرید اول</label> <span id="offerStatus" class="muted"></span></div><div class="plans-grid">' + plans.map((plan) => '<article class="plan-card" data-plan-id="' + esc(plan.id) + '"><div class="plan-card-head"><div><h3>' + esc(plan.nameFa) + '</h3><p class="muted">' + fa(plan.months) + ' ماه · ' + esc(plan.nameEn) + '</p></div><span class="pill ok">فعال</span></div><div class="plan-price-fields"><label class="plan-price-field"><span>قیمت قبل از تخفیف</span><input class="plan-original-price" type="number" min="1000" max="1000000000" step="1000" value="' + esc(plan.compareAtPriceToman ?? "") + '" placeholder="بدون تخفیف" aria-label="قیمت قبلی ' + esc(plan.nameFa) + ' به تومان"></label><label class="plan-price-field"><span>قیمت فروش</span><input class="plan-sale-price" type="number" min="1000" max="1000000000" step="1000" value="' + esc(plan.priceToman) + '" aria-label="قیمت فروش ' + esc(plan.nameFa) + ' به تومان"></label></div><button class="btn mini plan-save" type="button" disabled>ذخیره قیمت‌ها</button><div class="plan-result" aria-live="polite">' + summary(plan.priceToman, plan.compareAtPriceToman) + '</div><div class="plan-price-fields">' + offerField(1, plan.offerFirstKind, plan.offerFirstValue) + offerField(2, plan.offerSecondKind, plan.offerSecondValue) + '</div><button class="btn mini offer-save" type="button">ذخیره پیشنهاد این پلن</button><div class="offer-result" aria-live="polite"></div></article>').join("") + '</div>';
+  $("#plansResults").innerHTML =
+    '<div class="offer-master"><div class="offer-master-copy"><strong>پیشنهاد خرید اول</strong><span>فعال یا غیرفعال‌بودن Offer برای همه پلن‌ها.</span></div><label class="switch" aria-label="فعال بودن پیشنهاد خرید اول"><input id="offerEnabled" type="checkbox"' + (plans[0]?.offerEnabled ? ' checked' : '') + '><span class="switch-track"></span></label><span id="offerStatus" class="muted"></span></div>' +
+    '<div class="plans-grid">' + plans.map((plan) => {
+      const discount = plan.compareAtPriceToman != null && plan.compareAtPriceToman > plan.priceToman ? Math.round((plan.compareAtPriceToman - plan.priceToman) * 100 / plan.compareAtPriceToman) : 0;
+      return '<article class="plan-card" data-plan-id="' + esc(plan.id) + '">' +
+        '<div class="plan-card-head"><div><h3>' + esc(plan.nameFa) + '</h3><p class="muted">' + fa(plan.months) + ' ماه · ' + esc(plan.nameEn) + '</p></div><span class="pill ' + (discount ? 'info' : 'ok') + '">' + (discount ? fa(discount) + '٪ تخفیف' : 'فعال') + '</span></div>' +
+        '<div class="plan-section-label">قیمت‌گذاری</div><div class="plan-price-fields"><label class="plan-price-field"><span>قیمت مرجع</span><input class="plan-original-price" type="number" min="1000" max="1000000000" step="1000" value="' + esc(plan.compareAtPriceToman ?? "") + '" placeholder="بدون قیمت مرجع" aria-label="قیمت قبلی ' + esc(plan.nameFa) + ' به تومان"></label><label class="plan-price-field"><span>قیمت فروش</span><input class="plan-sale-price" type="number" min="1000" max="1000000000" step="1000" value="' + esc(plan.priceToman) + '" aria-label="قیمت فروش ' + esc(plan.nameFa) + ' به تومان"></label></div>' +
+        '<button class="btn mini plan-save" type="button" disabled>ذخیره قیمت‌ها</button><div class="plan-result" aria-live="polite">' + summary(plan.priceToman, plan.compareAtPriceToman) + '</div>' +
+        '<div class="plan-section-label">Offer خرید اول</div><div class="plan-price-fields">' + offerField(1, plan.offerFirstKind, plan.offerFirstValue) + offerField(2, plan.offerSecondKind, plan.offerSecondValue) + '</div>' +
+        '<button class="btn secondary mini offer-save" type="button">ذخیره Offer این پلن</button><div class="offer-result" aria-live="polite"></div></article>';
+    }).join("") + '</div>';
   $("#offerEnabled").onchange = async (event) => {
     const enabled = event.target.checked;
     try { await api("/offer", { method: "POST", body: { enabled } }); plansData = plans.map((p) => ({ ...p, offerEnabled: enabled })); $("#offerStatus").textContent = "ذخیره شد"; }
@@ -483,17 +631,14 @@ function renderPlans(plans) {
   $("#plansResults").querySelectorAll(".plan-card").forEach((card) => {
     const plan = plans.find((item) => item.id === card.dataset.planId);
     const saleInput = card.querySelector(".plan-sale-price"), originalInput = card.querySelector(".plan-original-price"), button = card.querySelector(".plan-save"), result = card.querySelector(".plan-result");
-    const values = () => ({
-      sale: Number(saleInput.value),
-      original: originalInput.value.trim() === "" ? null : Number(originalInput.value),
-    });
+    const values = () => ({ sale: Number(saleInput.value), original: originalInput.value.trim() === "" ? null : Number(originalInput.value) });
     const refresh = () => {
       const { sale, original } = values();
       const validSale = Number.isInteger(sale) && sale >= 1000 && sale <= 1000000000;
       const validOriginal = original == null || (Number.isInteger(original) && original > sale && original <= 1000000000);
       const changed = sale !== plan.priceToman || original !== plan.compareAtPriceToman;
       button.disabled = !validSale || !validOriginal || !changed;
-      result.textContent = !validSale ? "قیمت فروش معتبر نیست." : !validOriginal ? "قیمت قبل باید بیشتر از قیمت فروش باشد." : summary(sale, original);
+      result.textContent = !validSale ? "قیمت فروش معتبر نیست." : !validOriginal ? "قیمت مرجع باید بیشتر از قیمت فروش باشد." : summary(sale, original);
     };
     saleInput.oninput = refresh;
     originalInput.oninput = refresh;
@@ -531,12 +676,24 @@ $("#plansReload").onclick = () => { plansData = null; loadPlans(true); };
 
 async function loadDiscounts() {
   loading("dResults", 3);
+  $("#discountResultMeta").textContent = "در حال دریافت…";
   try {
     const result = await api("/discounts");
-    if (!result.discounts.length) { $("#dResults").innerHTML = emptyState("هنوز کد تخفیفی ساخته نشده است."); return; }
-    const ruleText = (d) => Object.entries(d.planRules || {}).map(([id, rule]) => esc(id) + ": " + fa(rule.value) + (rule.kind === "fixed" ? " تومان" : "٪")).join("<br>") || fa(d.percent) + "٪ برای همه";
-    $("#dResults").innerHTML = '<div class="table-wrap"><table><thead><tr><th>کد</th><th>تخفیف پلن‌ها</th><th>استفاده</th><th>سقف</th><th>انقضا</th><th>وضعیت</th><th><span class="muted">عمل</span></th></tr></thead><tbody>' + result.discounts.map((d) => "<tr><td dir='ltr'><b>" + esc(d.code) + "</b></td><td>" + ruleText(d) + "</td><td>" + fa(d.usedCount) + "</td><td>" + (d.maxUses == null ? "∞" : fa(d.maxUses)) + "</td><td>" + dt(d.expiresAt) + "</td><td>" + (d.active ? "<span class='pill ok'>فعال</span>" : "<span class='pill mut'>خاموش</span>") + "</td><td><button class='btn secondary mini' type='button' onclick='toggleDiscount(&quot;" + esc(d.code) + "&quot;," + !d.active + ")'>" + (d.active ? "غیرفعال کن" : "فعال کن") + "</button> <button class='btn secondary mini' type='button' onclick='deleteDiscount(&quot;" + esc(d.code) + "&quot;)'>حذف</button></td></tr>").join("") + "</tbody></table></div>";
-  } catch (error) { errorState("dResults", error.message || "کدهای تخفیف دریافت نشدند", loadDiscounts); }
+    const discounts = result.discounts || [];
+    $("#discountResultMeta").textContent = fa(discounts.length) + " کد";
+    if (!discounts.length) { $("#dResults").innerHTML = emptyState("هنوز کد تخفیفی ساخته نشده است."); return; }
+    const ruleText = (d) => Object.entries(d.planRules || {}).map(([id, rule]) => '<span><b>' + esc(id) + '</b> · ' + fa(rule.value) + (rule.kind === "fixed" ? " تومان" : "٪") + '</span>').join("<br>") || fa(d.percent) + "٪ برای همه";
+    $("#dResults").innerHTML = '<div class="discount-list">' + discounts.map((d) => {
+      const max = d.maxUses == null ? "∞" : fa(d.maxUses);
+      return '<article class="discount-card"><div class="discount-card-head"><div><div class="discount-code" dir="ltr">' + esc(d.code) + '</div><div class="muted">' + (d.expiresAt ? "انقضا: " + dt(d.expiresAt) : "بدون تاریخ انقضا") + '</div></div>' + (d.active ? "<span class='pill ok'>فعال</span>" : "<span class='pill mut'>خاموش</span>") + '</div>' +
+        '<div class="discount-rules">' + ruleText(d) + '</div>' +
+        '<div class="discount-stats"><div class="discount-stat"><span>استفاده‌شده</span><strong>' + fa(d.usedCount) + '</strong></div><div class="discount-stat"><span>سقف</span><strong>' + max + '</strong></div><div class="discount-stat"><span>باقی‌مانده</span><strong>' + (d.maxUses == null ? "∞" : fa(Math.max(0, Number(d.maxUses) - Number(d.usedCount || 0)))) + '</strong></div></div>' +
+        '<div class="discount-actions"><button class="btn secondary mini" type="button" onclick="toggleDiscount(&quot;' + esc(d.code) + '&quot;,' + !d.active + ')">' + (d.active ? "غیرفعال کن" : "فعال کن") + '</button><button class="btn secondary mini delete-action" type="button" onclick="deleteDiscount(&quot;' + esc(d.code) + '&quot;)">حذف</button></div></article>';
+    }).join("") + '</div>';
+  } catch (error) {
+    $("#discountResultMeta").textContent = "خطا";
+    errorState("dResults", error.message || "کدهای تخفیف دریافت نشدند", loadDiscounts);
+  }
 }
 window.toggleDiscount = async (code, active) => { if (!active && !confirm("این کد تخفیف غیرفعال شود؟")) return; await api("/discounts/" + encodeURIComponent(code), { method: "POST", body: { active } }); loadDiscounts(); };
 window.deleteDiscount = async (code) => { if (!confirm("خود کد حذف می‌شود؛ سابقه پرداخت‌ها می‌ماند و بعداً می‌توانی همین کد را دوباره بسازی. ادامه؟")) return; try { await api("/discounts/" + encodeURIComponent(code), { method: "DELETE" }); loadDiscounts(); } catch (error) { $("#dErr").textContent = error.message || "حذف کد ممکن نشد"; } };
@@ -544,7 +701,7 @@ async function loadDiscountRuleInputs() {
   if ($("#dPlanRules").children.length) return;
   try {
     const result = await api("/plans");
-    $("#dPlanRules").innerHTML = result.plans.map((p) => '<label class="field-label">' + esc(p.nameFa) + '<select data-rule-kind="' + esc(p.id) + '"><option value="percent">درصد</option><option value="fixed">مبلغ تومان</option></select><input data-rule-value="' + esc(p.id) + '" type="number" min="1" placeholder="خالی = ندارد"></label>').join("");
+    $("#dPlanRules").innerHTML = result.plans.map((p) => '<label class="discount-rule-card"><strong>' + esc(p.nameFa) + '</strong><select data-rule-kind="' + esc(p.id) + '"><option value="percent">درصدی</option><option value="fixed">مبلغ تومان</option></select><input data-rule-value="' + esc(p.id) + '" type="number" min="1" placeholder="بدون تخفیف"></label>').join("");
   } catch (error) { $("#dErr").textContent = error.message || "پلن‌ها دریافت نشدند"; }
 }
 $("#dCreate").onclick = async () => {
