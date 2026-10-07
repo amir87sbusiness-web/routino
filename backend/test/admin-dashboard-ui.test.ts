@@ -6,8 +6,8 @@ describe("admin dashboard refresh", () => {
   it("adds Sheetra-style interactive analytics with bounded conversion and renewal metrics", () => {
     const page = withAdminDashboardUi(ADMIN_PAGE);
 
-    expect(page).toContain("درآمد، فروش و تمدید");
-    expect(page).toContain("ثبت‌نام و نرخ تبدیل");
+    expect(page).toContain("داشبورد فروش و رشد");\n    expect(page).toContain("فروش و درآمد");
+    expect(page).toContain("رشد و تبدیل روزانه");
     expect(page).toContain('data-analytics-range="today"');
     expect(page).toContain('data-analytics-range="yesterday"');
     expect(page).toContain('data-analytics-range="7"');
