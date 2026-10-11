@@ -51,31 +51,12 @@ const esc = (s) =>
     .replace(/"/g, "&quot;");
 
 /**
- * A configured HTTPS URL can override the signed APK shipped with the site.
- * Without either, keep the button disabled instead of linking to a missing file.
+ * The public website sends new downloads to Habinoo. Existing Routino APK
+ * files and update metadata stay available to installed clients.
  */
-export function renderAndroidDownload(rawUrl) {
-  const value = String(rawUrl ?? "").trim();
-  if (!value) {
-    return (
-      '          <button type="button" class="btn ghost soon" id="android-btn" disabled>\n' +
-      '            <svg class="ic" aria-hidden="true"><use href="#i-droid" /></svg>\n' +
-      '            دانلود اندروید <span class="tag">بعد از انتشار</span>\n' +
-      "          </button>"
-    );
-  }
-
-  let url;
-  try {
-    url = new URL(value);
-  } catch {
-    throw new Error("ANDROID_DOWNLOAD_URL باید یک آدرس HTTPS معتبر باشد");
-  }
-  if (url.protocol !== "https:") {
-    throw new Error("ANDROID_DOWNLOAD_URL باید با HTTPS شروع شود");
-  }
+export function renderAndroidDownload() {
   return (
-    `              <a class="btn download-btn download-btn-primary" id="android-btn" href="${esc(url.href)}" download="routino-android-1.0.apk" rel="noreferrer">\n` +
+    '              <a class="btn download-btn download-btn-primary" id="android-btn" href="https://habinoo.com/#get" rel="noreferrer">\n' +
     '            <svg class="ic" aria-hidden="true"><use href="#i-droid" /></svg>\n' +
     "                <span>دانلود</span>\n" +
     "              </a>"
@@ -336,17 +317,15 @@ async function main() {
   );
   const apkName = "routino-android-1.0.apk";
   const bundledApk = join(ROOT, "landing", "downloads", apkName);
-  let androidUrl = process.env.ANDROID_DOWNLOAD_URL;
   if (existsSync(bundledApk)) {
     mkdirSync(join(OUT_DIR, "downloads"), { recursive: true });
     copyFileSync(bundledApk, join(OUT_DIR, "downloads", apkName));
-    androidUrl ||= `${SITE}/downloads/${apkName}`;
   }
 
   // ── صفحه‌ی اصلی ──────────────────────────────────────────
   // مهر اینماد عیناً درج می‌شود، بدون escape — باید همان HTMLی باشد که صادر شده.
   const homeHtml = fill("index.template.html", {
-    "<!--ANDROID-DOWNLOAD-->": renderAndroidDownload(androidUrl),
+    "<!--ANDROID-DOWNLOAD-->": renderAndroidDownload(),
     "<!--ENAMAD-->": ENAMAD_SEAL,
   });
   writeFileSync(join(OUT_DIR, "index.html"), homeHtml);

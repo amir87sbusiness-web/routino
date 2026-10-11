@@ -85,7 +85,7 @@ describe("landing build script", () => {
       assert.equal(homeHtml.match(/<use href="#i-pwa" \/>/g)?.length, 2);
       assert.match(
         homeHtml,
-        /<a class="btn download-btn download-btn-primary" id="android-btn" href="https:\/\/routino\.me\/downloads\/routino-android-1\.0\.apk" download="routino-android-1\.0\.apk" rel="noreferrer">/,
+        /<a class="btn download-btn download-btn-primary" id="android-btn" href="https:\/\/habinoo\.com\/#get" rel="noreferrer">/,
       );
       assert.match(homeHtml, /<span>دانلود<\/span>/);
       assert.equal(/<(?:link|script)[^>]+routino-android-1\.0\.apk/i.test(homeHtml), false);
