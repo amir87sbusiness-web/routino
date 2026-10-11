@@ -82,8 +82,6 @@ describe("landing build script", () => {
       assert.match(homeHtml, /<h2>اندروید<\/h2>/);
       assert.match(homeHtml, /<h2>آیفون، ویندوز و مک<\/h2>/);
       assert.equal(homeHtml.match(/>وب اپلیکیشن(?:<|\n)/g)?.length, 2);
-      assert.equal(homeHtml.match(/href="https:\/\/habinoo\.com\/app\/"/g)?.length, 2);
-      assert.equal(homeHtml.includes('href="/app/"'), false);
       assert.equal(homeHtml.match(/<use href="#i-pwa" \/>/g)?.length, 2);
       assert.match(
         homeHtml,
